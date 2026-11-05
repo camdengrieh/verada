@@ -85,6 +85,13 @@ contract CauseRegistry is ICauseRegistry, Ownable2Step {
     }
 
     /// @inheritdoc ICauseRegistry
+    function orgOf(bytes32 causeId) external view returns (bytes32 orgId, address orgAddress) {
+        if (!_exists[causeId]) revert CauseNotFound(causeId);
+        Cause storage c = _causes[causeId];
+        return (c.orgId, c.orgAddress);
+    }
+
+    /// @inheritdoc ICauseRegistry
     function isActive(bytes32 causeId) external view returns (bool) {
         return _causes[causeId].active;
     }

@@ -49,6 +49,10 @@ interface ICauseRegistry {
     /// @notice Returns a cause.
     function getCause(bytes32 causeId) external view returns (Cause memory);
 
+    /// @notice Endaoment org id and org address of a cause, without its metadata string. Reverts
+    ///         `CauseNotFound` for an unknown cause (deactivated causes still resolve).
+    function orgOf(bytes32 causeId) external view returns (bytes32 orgId, address orgAddress);
+
     /// @notice Whether `causeId` exists and is active.
     function isActive(bytes32 causeId) external view returns (bool);
 

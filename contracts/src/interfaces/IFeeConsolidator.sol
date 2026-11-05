@@ -23,10 +23,28 @@ interface IFeeConsolidator {
 
     event MaxSlippageBpsUpdated(uint256 maxSlippageBps);
 
+    /// @notice Emitted when a source's ERC-6909 claims were converted into the settlement asset.
+    /// @param source The source whose claims were burned.
+    /// @param currency The claim currency converted.
+    /// @param to Recipient of the settlement asset.
+    /// @param amountIn Claims burned.
+    /// @param settlementOut Settlement asset paid to `to`.
+    event ClaimsConverted(
+        address indexed source,
+        address indexed currency,
+        address indexed to,
+        uint256 amountIn,
+        uint256 settlementOut
+    );
+
     error NotAuthorized();
     error NothingToConsolidate(address token, address currency);
     error SlippageTooHigh(uint256 amountOut, uint256 minOut);
     error InvalidSlippage(uint256 bps);
+    /// @notice `convertClaims` needs the caller's already unlocked pool manager flow.
+    error PoolManagerLocked();
+    /// @notice A route hop goes through a hooked pool while only hookless hops are allowed.
+    error HookedRouteHop(uint256 hop);
 
     /// @notice Settlement asset all fees are converted to (USDC).
     function settlementAsset() external view returns (address);
@@ -41,6 +59,16 @@ interface IFeeConsolidator {
 
     /// @notice Raw fees held unconsolidated for `token` in `currency`.
     function heldFees(address token, address currency) external view returns (uint256);
+
+    /// @notice Converts `amount` ERC-6909 claims of `currency` held by the caller into the
+    ///         settlement asset along the quote registry route, under the route-pool guards, and
+    ///         pays `to`. Source only, inside the caller's unlocked pool manager flow. The caller
+    ///         must have made this contract its ERC-6909 operator. Reverts on any failure.
+    /// @param hooklessOnly Reject any route hop through a hooked pool.
+    /// @return settlementOut Settlement asset paid to `to`.
+    function convertClaims(address currency, uint256 amount, address to, bool hooklessOnly)
+        external
+        returns (uint256 settlementOut);
 
     /// @notice Maximum tolerated slippage versus the guard price, in basis points.
     function maxSlippageBps() external view returns (uint256);

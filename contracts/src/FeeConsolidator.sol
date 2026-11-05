@@ -360,6 +360,42 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         emit FeesConsolidated(token, currency, amount, out);
     }
 
+    /// @inheritdoc IFeeConsolidator
+    /// @dev For the live-donation hook, which holds its fees as ERC-6909 claims and converts them
+    ///      inside the pool manager flow it is already in (a swap, or its own unlock for retries).
+    ///      Burning the caller's claims as its operator credits this contract with `amount` of
+    ///      `currency`; every hop is the same `_hop` as consolidation (reference-tick guard,
+    ///      slippage and hop-fee bound, full fill, reference move), and the settlement asset is
+    ///      taken straight to `to`. Every pool manager delta of this contract is zero when it
+    ///      returns. Never calls `sync`; the only `settle` is the native one inside the WETH
+    ///      unwrap hop, so the caller must make sure no currency is synced (the live hook checks).
+    ///      The token-pool TWAP guard is not used: the claims are never in a launched token.
+    function convertClaims(address currency, uint256 amount, address to, bool hooklessOnly)
+        external
+        nonReentrant
+        returns (uint256 out)
+    {
+        if (!isSource[msg.sender]) revert NotAuthorized();
+        if (to == address(0)) revert ZeroAddress();
+        if (amount == 0) revert NothingToConsolidate(address(0), currency);
+        if (!poolManager.isUnlocked()) revert PoolManagerLocked();
+        PoolKey[] memory route = quoteRegistry.routeOf(currency);
+        if (route.length == 0) revert NoRoute(currency);
+
+        poolManager.burn(msg.sender, Currency.wrap(currency).toId(), amount);
+        address current = currency;
+        out = amount;
+        for (uint256 i; i < route.length; ++i) {
+            if (hooklessOnly && address(route[i].hooks) != address(0)) revert HookedRouteHop(i);
+            (current, out) = _hop(route[i], current, out, address(0), false);
+        }
+        if (current != settlementAsset) revert NoRoute(currency);
+        if (out == 0) revert SlippageTooHigh(0, 1);
+
+        poolManager.take(Currency.wrap(settlementAsset), to, out);
+        emit ClaimsConverted(msg.sender, currency, to, amount, out);
+    }
+
     // ------------------------------------------------------------------ unlock callback
 
     /// @inheritdoc IUnlockCallback
