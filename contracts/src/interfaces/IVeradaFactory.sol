@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {RotationPeriod} from "./IRotationGovernor.sol";
+
 /// @title IVeradaFactory
 /// @notice Deploys tokens, initializes their Uniswap v4 pool and locks single-sided liquidity.
 interface IVeradaFactory {
@@ -58,6 +60,27 @@ interface IVeradaFactory {
     error TokenAlreadyDeployed(address token);
     error QuoteAssetNotAllowed(address quoteAsset);
 
+    /// @notice Live-donation launch parameters.
+    /// @param initialCause Active CauseRegistry cause receiving the fees from launch.
+    /// @param rotationPeriod Rotation length chosen by the creator; holders can change it later
+    ///        by vote.
+    /// @param donationThreshold USDC (6 decimals) cause credit at which a swap pushes the
+    ///        donation to the cause; 0 pushes on every swap.
+    struct LiveParams {
+        bytes32 initialCause;
+        RotationPeriod rotationPeriod;
+        uint96 donationThreshold;
+    }
+
+    /// @notice Emitted once, when live-donation mode is enabled.
+    event LiveModeConfigured(address liveHook, address liveVault);
+
+    error LiveModeNotConfigured();
+    error LiveModeAlreadyConfigured();
+    error NotDeployer();
+    /// @dev The live hook is the weekly hook, or does not report `liveVault` as its vault.
+    error InvalidLiveMode(address liveHook, address liveVault);
+
     /// @notice Launches a token, initializes its pool and locks the liquidity.
     /// @return token The deployed token address.
     /// @return lpTokenId The locked position NFT id.
@@ -65,6 +88,25 @@ interface IVeradaFactory {
         external
         payable
         returns (address token, uint256 lpTokenId);
+
+    /// @notice Launches a live-donation token: same launch as `deployToken`, on the live hook. Every
+    ///         swap's fee is converted to USDC and credited to the cause active at that moment;
+    ///         holders rotate the cause by private vote every `live.rotationPeriod`.
+    /// @dev Reverts `LiveModeNotConfigured` until `configureLiveMode` was called.
+    function deployLiveToken(DeployParams calldata params, LiveParams calldata live)
+        external
+        payable
+        returns (address token, uint256 lpTokenId);
+
+    /// @notice Enables live-donation launches with `liveHook` and its vault `liveVault`.
+    ///         Callable once, by the factory deployer.
+    function configureLiveMode(address liveHook, address liveVault) external;
+
+    /// @notice The live-donation hook (zero until live mode is configured).
+    function liveHook() external view returns (address);
+
+    /// @notice The live-donation vault (zero until live mode is configured).
+    function liveVault() external view returns (address);
 
     /// @notice Predicts the token address for a creator and params.
     function predictTokenAddress(address creator, DeployParams calldata params)

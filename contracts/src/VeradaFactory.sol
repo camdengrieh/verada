@@ -16,11 +16,13 @@ import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 import {VeradaToken} from "./VeradaToken.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
+import {ILiveDonationVault} from "./interfaces/ILiveDonationVault.sol";
 import {ILpLocker} from "./interfaces/ILpLocker.sol";
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
 import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
 import {IVeradaFactory} from "./interfaces/IVeradaFactory.sol";
 import {IVeradaHook} from "./interfaces/IVeradaHook.sol";
+import {IVeradaLiveHook} from "./interfaces/IVeradaLiveHook.sol";
 import {IVeradaToken} from "./interfaces/IVeradaToken.sol";
 
 /// @dev Permit2 address as exposed by the v4 position manager.
@@ -38,7 +40,9 @@ interface IPermit2Allowance {
 ///         a registry-approved quote asset (WETH or an Ondo token) with the Verada hook, mints the whole supply as single-sided liquidity, sends
 ///         the position NFT to the locker and registers the token with the fee vault, the
 ///         epoch governor and the profile registry (its `<label>.verada.eth` name). The factory
-///         holds no tokens or positions after a launch.
+///         holds no tokens or positions after a launch. Once the deployer has configured live
+///         mode, `deployLiveToken` runs the same launch on the live-donation hook and registers
+///         the token with the live vault and rotation governor instead.
 /// @dev `startTick` in `DeployParams` is expressed in whole-token terms: the price of one whole
 ///      token (18 decimals) in whole units of the quote asset is 1.0001^startTick, whatever the
 ///      quote's decimals. The pool works in raw units, so the factory shifts the tick by
@@ -73,10 +77,16 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
     IFeeVault public immutable feeVault;
     IEpochGovernor public immutable governor;
     ITokenProfileRegistry internal immutable _profileRegistry;
+    /// @notice Account that deployed the factory; the only one allowed to configure live mode.
+    address public immutable deployer;
 
     uint256 public tokenCount;
     mapping(address token => bool) public isVeradaToken;
     mapping(address token => address) public quoteAssetOf;
+    /// @inheritdoc IVeradaFactory
+    address public liveHook;
+    /// @inheritdoc IVeradaFactory
+    address public liveVault;
 
     error ZeroAddress();
     error InvalidStartTick(int24 startTick);
@@ -109,6 +119,22 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         feeVault = feeVault_;
         governor = governor_;
         _profileRegistry = profileRegistry_;
+        deployer = msg.sender;
+    }
+
+    /// @inheritdoc IVeradaFactory
+    /// @dev Deployer only, once. The live hook must differ from the weekly hook and report
+    ///      `liveVault_` as its vault.
+    function configureLiveMode(address liveHook_, address liveVault_) external {
+        if (msg.sender != deployer) revert NotDeployer();
+        if (liveHook != address(0)) revert LiveModeAlreadyConfigured();
+        if (liveHook_ == address(0) || liveVault_ == address(0)) revert ZeroAddress();
+        if (liveHook_ == address(hook) || IVeradaLiveHook(liveHook_).vault() != liveVault_) {
+            revert InvalidLiveMode(liveHook_, liveVault_);
+        }
+        liveHook = liveHook_;
+        liveVault = liveVault_;
+        emit LiveModeConfigured(liveHook_, liveVault_);
     }
 
     /// @inheritdoc IVeradaFactory
@@ -130,6 +156,34 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         nonReentrant
         returns (address token, uint256 lpTokenId)
     {
+        LiveParams memory none;
+        return _deploy(params, hook, none);
+    }
+
+    /// @inheritdoc IVeradaFactory
+    /// @dev Same launch as `deployToken` on the live hook. The token is registered with the live
+    ///      vault (and through it the rotation governor) before the pool is initialized, and is
+    ///      not registered with the weekly fee vault or epoch governor.
+    function deployLiveToken(DeployParams calldata params, LiveParams calldata live)
+        external
+        payable
+        nonReentrant
+        returns (address token, uint256 lpTokenId)
+    {
+        address h = liveHook;
+        if (h == address(0)) revert LiveModeNotConfigured();
+        return _deploy(params, IVeradaHook(h), live);
+    }
+
+    /// @dev Shared launch body. `hook_` is the weekly hook or the live hook (both expose
+    ///      `configureToken(address,(uint24,uint24,uint32,uint40))`); `live` is read only for the
+    ///      live hook. The mode is derived from `hook_` rather than passed as a constant so the
+    ///      compiler keeps one copy of this body.
+    function _deploy(DeployParams calldata params, IVeradaHook hook_, LiveParams memory live)
+        private
+        returns (address token, uint256 lpTokenId)
+    {
+        bool isLive = hook_ != hook;
         if (msg.value != 0) revert UnexpectedValue();
         _validate(params);
         if (!_quoteRegistry.isAllowed(params.quoteAsset)) {
@@ -155,7 +209,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         // the launch cheaply.
         _profileRegistry.register(token, params.label, msg.sender, params.logoRef);
 
-        hook.configureToken(
+        hook_.configureToken(
             token,
             IVeradaHook.FeeConfig({
                 baseFeeBps: params.baseFeeBps,
@@ -164,8 +218,14 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
                 launchTimestamp: uint40(block.timestamp)
             })
         );
+        if (isLive) {
+            ILiveDonationVault(liveVault)
+                .registerToken(
+                    token, live.donationThreshold, live.initialCause, live.rotationPeriod
+                );
+        }
 
-        PoolKey memory key = _poolKey(token, params.quoteAsset);
+        PoolKey memory key = _poolKey(token, params.quoteAsset, hook_);
         bool tokenIsCurrency0 = Currency.unwrap(key.currency0) == token;
         int24 poolTick = _poolTick(params.startTick, quoteDecimals, tokenIsCurrency0);
         poolManager.initialize(key, TickMath.getSqrtPriceAtTick(poolTick));
@@ -173,8 +233,10 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         lpTokenId = _mintLiquidity(key, token, tokenIsCurrency0, poolTick);
 
         locker.lock(token, lpTokenId);
-        feeVault.registerToken(token);
-        governor.registerToken(token);
+        if (!isLive) {
+            feeVault.registerToken(token);
+            governor.registerToken(token);
+        }
 
         // Rounding in the liquidity math can leave a few wei of tokens behind; burn them so the
         // factory never holds a balance.
@@ -185,7 +247,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
             token,
             msg.sender,
             PoolId.unwrap(PoolIdLibrary.toId(key)),
-            address(hook),
+            address(hook_),
             lpTokenId,
             params.baseFeeBps,
             params.metadataURI
@@ -291,14 +353,18 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         return tokenIsCurrency0 ? tick : -tick;
     }
 
-    function _poolKey(address token, address quote) internal view returns (PoolKey memory) {
+    function _poolKey(address token, address quote, IVeradaHook hooks_)
+        internal
+        pure
+        returns (PoolKey memory)
+    {
         (address c0, address c1) = token < quote ? (token, quote) : (quote, token);
         return PoolKey({
             currency0: Currency.wrap(c0),
             currency1: Currency.wrap(c1),
             fee: 0x800000, // LPFeeLibrary.DYNAMIC_FEE_FLAG
             tickSpacing: TICK_SPACING,
-            hooks: IHooks(address(hook))
+            hooks: IHooks(address(hooks_))
         });
     }
 
