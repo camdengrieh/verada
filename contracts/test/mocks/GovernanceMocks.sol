@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {IBallotGovernor, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {
+    IBallotGovernor,
+    IOutcomeVotingScheme,
+    IVotingScheme,
+    NO_WINNER
+} from "../../src/interfaces/IVotingScheme.sol";
 
 /// @dev Plaintext voting scheme for tests. Ballots are `abi.encode(uint8 choice)`; the per-option
 ///      tally is kept live in storage and becomes final through `submitTally` (which overrides it
 ///      with the supplied cleartexts, proof ignored) or the `finalizeFromBallots` helper.
-contract MockVotingScheme is IVotingScheme {
+///      Outcome polls (`requestOutcome`) compute the winner like the FHE scheme from the counts
+///      (live, or supplied through `submitTally` as a test convenience) or take it verbatim from
+///      `submitOutcome`.
+contract MockVotingScheme is IOutcomeVotingScheme {
     uint8 public constant MAX_OPTIONS = 32;
 
     struct Poll {
@@ -17,6 +25,9 @@ contract MockVotingScheme is IVotingScheme {
         uint256 ballots;
         uint64[] counts;
         mapping(address voter => bool) voted;
+        bool outcomeOnly;
+        uint64 minWeight;
+        uint8 winner;
     }
 
     mapping(address governor => bool) private _governors;
@@ -99,7 +110,67 @@ contract MockVotingScheme is IVotingScheme {
         uint64[] memory counts = abi.decode(cleartexts, (uint64[]));
         p.counts = counts;
         p.isFinal = true;
+        if (p.outcomeOnly) {
+            p.winner = _winner(counts, p.minWeight);
+            emit OutcomeSubmitted(governor, token, scope, p.winner);
+        }
         emit TallySubmitted(governor, token, scope, counts);
+    }
+
+    /// @inheritdoc IOutcomeVotingScheme
+    function requestOutcome(address token, uint256 scope, uint64 minWeight) external {
+        if (!_governors[msg.sender]) revert NotGovernor(msg.sender);
+        Poll storage p = _polls[msg.sender][token][scope];
+        if (!p.opened) revert PollNotOpen(msg.sender, token, scope);
+        if (p.closed) revert PollClosed(msg.sender, token, scope);
+        p.closed = true;
+        p.outcomeOnly = true;
+        p.minWeight = minWeight;
+        emit OutcomeRequested(msg.sender, token, scope, minWeight);
+    }
+
+    /// @inheritdoc IOutcomeVotingScheme
+    /// @dev `cleartexts` is `abi.encode(uint8 winner)`; proof ignored.
+    function submitOutcome(
+        address governor,
+        address token,
+        uint256 scope,
+        bytes calldata cleartexts,
+        bytes calldata
+    ) external {
+        Poll storage p = _polls[governor][token][scope];
+        if (!p.closed) revert PollNotClosed(governor, token, scope);
+        if (!p.outcomeOnly) revert NotOutcomePoll(governor, token, scope);
+        if (p.isFinal) revert TallyAlreadyFinal(governor, token, scope);
+        p.winner = abi.decode(cleartexts, (uint8));
+        p.isFinal = true;
+        emit OutcomeSubmitted(governor, token, scope, p.winner);
+    }
+
+    /// @inheritdoc IOutcomeVotingScheme
+    function outcomeOf(address governor, address token, uint256 scope)
+        external
+        view
+        returns (bool isFinal, uint8 winner)
+    {
+        Poll storage p = _polls[governor][token][scope];
+        if (!p.outcomeOnly || !p.isFinal) return (false, NO_WINNER);
+        return (true, p.winner);
+    }
+
+    /// @dev The FHE scheme's rule: strict argmax from zero (ties to the lowest index), then the
+    ///      minimum weight.
+    function _winner(uint64[] memory counts, uint64 minWeight) internal pure returns (uint8 w) {
+        w = NO_WINNER;
+        uint64 best;
+        for (uint256 i; i < counts.length; ++i) {
+            if (counts[i] > best) {
+                best = counts[i];
+                // forge-lint: disable-next-line(unsafe-typecast)
+                w = uint8(i);
+            }
+        }
+        if (best < minWeight) w = NO_WINNER;
     }
 
     /// @dev Test helper: closes the poll if needed and publishes the live plaintext tally.
@@ -112,6 +183,10 @@ contract MockVotingScheme is IVotingScheme {
             emit TallyRequested(governor, token, scope);
         }
         p.isFinal = true;
+        if (p.outcomeOnly) {
+            p.winner = _winner(p.counts, p.minWeight);
+            emit OutcomeSubmitted(governor, token, scope, p.winner);
+        }
         emit TallySubmitted(governor, token, scope, p.counts);
     }
 

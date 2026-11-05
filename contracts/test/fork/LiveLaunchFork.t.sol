@@ -29,7 +29,7 @@ import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
-import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
@@ -116,7 +116,7 @@ contract LiveLaunchForkTest is Test, DeployLive {
         // Plaintext scheme for votes: the Zama scheme needs the relayer, which a fork lacks.
         mockScheme = new MockVotingScheme();
         mockScheme.setGovernor(l.rotationGovernor, true);
-        RotationGovernor(l.rotationGovernor).setScheme(IVotingScheme(address(mockScheme)));
+        RotationGovernor(l.rotationGovernor).setScheme(IOutcomeVotingScheme(address(mockScheme)));
         bytes32[] memory shortlist = new bytes32[](2);
         shortlist[0] = WIKI_CAUSE;
         shortlist[1] = FRESH_CAUSE;
@@ -282,30 +282,40 @@ contract LiveLaunchForkTest is Test, DeployLive {
         (address token, PoolKey memory key) =
             _launch(1_000_000e6, WIKI_CAUSE, RotationPeriod.OneHour);
         RotationGovernor gov = RotationGovernor(l.rotationGovernor);
-        _buyUntilConverted(key, token, 1 ether); // the trader's weight predates rotation 1
+        _buyUntilConverted(key, token, 1 ether); // the trader holds from launch
+        // A second holder: the deployment needs two ballots before a poll is decrypted.
+        address voter2 = makeAddr("voter2");
+        uint256 half = IERC20(token).balanceOf(trader) / 2;
+        vm.prank(trader);
+        IERC20(token).transfer(voter2, half);
 
-        vm.warp(gov.rotationStart(token, 1));
-        uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, 2);
+        // Hourly polls weigh holdings over the day before their snapshot: rotation 25 is the
+        // first whose hold window starts after launch.
+        uint64 r = 25;
+        vm.warp(gov.rotationStart(token, r));
+        uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, r + 1);
         vm.prank(trader);
         mockScheme.castBallot(address(gov), token, scope, abi.encode(uint8(1))); // FRESH_CAUSE
-        (,, uint40 voteEnd,,,,) = gov.roundOf(token, 2);
+        vm.prank(voter2);
+        mockScheme.castBallot(address(gov), token, scope, abi.encode(uint8(1)));
+        (,, uint40 voteEnd,,,,) = gov.roundOf(token, r + 1);
         vm.warp(voteEnd);
-        gov.closeRound(token, 2);
+        gov.closeRound(token, r + 1);
 
-        vm.warp(gov.rotationStart(token, 2) + 5 minutes);
+        vm.warp(gov.rotationStart(token, r + 1) + 5 minutes);
         mockScheme.finalizeFromBallots(address(gov), token, scope);
-        gov.finalizeRound(token, 2);
-        (IRotationGovernor.RoundStatus st,,,,, uint64 effectiveFrom,) = gov.roundOf(token, 2);
+        gov.finalizeRound(token, r + 1);
+        (IRotationGovernor.RoundStatus st,,,,, uint64 effectiveFrom,) = gov.roundOf(token, r + 1);
         assertEq(uint8(st), uint8(IRotationGovernor.RoundStatus.Applied));
-        assertEq(effectiveFrom, 3);
+        assertEq(effectiveFrom, r + 2);
 
         uint256 wikiBefore = _pending(token, WIKI_CAUSE);
         _buy(key, token, 0.5 ether);
-        assertGt(_pending(token, WIKI_CAUSE), wikiBefore, "rotation 2 keeps the prior cause");
+        assertGt(_pending(token, WIKI_CAUSE), wikiBefore, "rotation r + 1 keeps the prior cause");
         assertEq(_pending(token, FRESH_CAUSE), 0);
 
-        vm.warp(gov.rotationStart(token, 3));
+        vm.warp(gov.rotationStart(token, r + 2));
         _buy(key, token, 0.5 ether);
-        assertGt(_pending(token, FRESH_CAUSE), 0, "rotation 3 pays the winner");
+        assertGt(_pending(token, FRESH_CAUSE), 0, "rotation r + 2 pays the winner");
     }
 }

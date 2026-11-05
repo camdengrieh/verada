@@ -115,3 +115,48 @@ interface IVotingScheme {
     /// @notice Largest option count a poll may have.
     function MAX_OPTIONS() external view returns (uint8);
 }
+
+// Winner index an outcome poll reports when no option qualifies.
+uint8 constant NO_WINNER = type(uint8).max;
+
+/// @title IOutcomeVotingScheme
+/// @notice A voting scheme that can reveal only the outcome of a poll instead of its per-option
+///         counts. Per-option counts of a small poll give individual choices away (one voter, or
+///         a subset sum over the public weights); an outcome poll reveals a single option index.
+/// @dev `requestOutcome` closes the poll instead of `requestTally`; such a poll never publishes
+///      counts (`tallyOf` stays not final) and `submitTally` is refused for it.
+///      The winner is the option with the strictly greatest tally, the lowest index on ties,
+///      provided that tally is nonzero and at least `minWeight`; otherwise `NO_WINNER`.
+interface IOutcomeVotingScheme is IVotingScheme {
+    event OutcomeRequested(
+        address indexed governor, address indexed token, uint256 indexed scope, uint64 minWeight
+    );
+    event OutcomeSubmitted(
+        address indexed governor, address indexed token, uint256 indexed scope, uint8 winner
+    );
+
+    /// @notice The poll was closed for its outcome, so counts are never published.
+    error OutcomeOnlyPoll(address governor, address token, uint256 scope);
+    /// @notice The poll was not closed for its outcome.
+    error NotOutcomePoll(address governor, address token, uint256 scope);
+
+    /// @notice Closes the poll and asks for only its winner to be revealed. Governor only.
+    /// @param minWeight Smallest winning tally; a lower best tally yields `NO_WINNER`.
+    function requestOutcome(address token, uint256 scope, uint64 minWeight) external;
+
+    /// @notice Publishes the verified winner of a poll closed with `requestOutcome`.
+    ///         Permissionless; the scheme verifies `proof`.
+    function submitOutcome(
+        address governor,
+        address token,
+        uint256 scope,
+        bytes calldata cleartexts,
+        bytes calldata proof
+    ) external;
+
+    /// @notice Final winner of an outcome poll, if available (`NO_WINNER` when none qualified).
+    function outcomeOf(address governor, address token, uint256 scope)
+        external
+        view
+        returns (bool isFinal, uint8 winner);
+}

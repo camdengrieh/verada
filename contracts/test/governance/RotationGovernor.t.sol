@@ -9,7 +9,7 @@ import {VeradaToken} from "../../src/VeradaToken.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
-import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockEndaomentRegistry, MockOrgFactory, MockUSDC} from "../mocks/EndaomentMocks.sol";
@@ -64,7 +64,7 @@ abstract contract RotationGovernorBase is Test {
             ICauseRegistry(address(causes)),
             ITokenProfileRegistry(address(profiles)),
             pm,
-            IVotingScheme(address(scheme)),
+            IOutcomeVotingScheme(address(scheme)),
             _params()
         );
         scheme.setGovernor(address(gov), true);
@@ -76,6 +76,9 @@ abstract contract RotationGovernorBase is Test {
         gov.setDefaultShortlist(list);
 
         token = _newToken();
+        // Holders hold for a week before registration, so every hold window of the fixture's
+        // early rotations is covered.
+        vm.warp(block.timestamp + 7 days);
         t0 = block.timestamp;
         gov.registerToken(address(token), causeIds[0], period);
         profiles.register(address(token), controller);
@@ -257,11 +260,14 @@ contract RotationGovernorTest is RotationGovernorBase {
     }
 
     function test_rotationOne_hasNoWeight() public {
-        // The round for rotation 1 snapshots before launch, so nobody can vote in it.
-        vm.warp(t0 + 10);
+        // For a token registered as it is created (as the factory does), the round for
+        // rotation 1 snapshots before launch, so nobody can vote in it.
+        VeradaToken fresh = _newToken();
+        gov.registerToken(address(fresh), causeIds[0], RotationPeriod.OneDay);
+        vm.warp(block.timestamp + 10);
         vm.prank(alice);
         vm.expectRevert(IRotationGovernor.InvalidVote.selector);
-        scheme.castBallot(address(gov), address(token), _rot(1), abi.encode(uint8(1)));
+        scheme.castBallot(address(gov), address(fresh), _rot(1), abi.encode(uint8(1)));
     }
 
     function test_snapshot_buyThenVoteHasNoWeight() public {
@@ -326,7 +332,7 @@ contract RotationGovernorTest is RotationGovernorBase {
         gov.openRound(address(token));
         MockVotingScheme s2 = new MockVotingScheme();
         s2.setGovernor(address(gov), true);
-        gov.setScheme(IVotingScheme(address(s2)));
+        gov.setScheme(IOutcomeVotingScheme(address(s2)));
         _vote(alice, 2, 1); // still the old scheme
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IRotationGovernor.NotScheme.selector, address(s2)));
@@ -406,8 +412,8 @@ contract RotationGovernorTest is RotationGovernorBase {
         gov.closeRound(address(token), 2);
         vm.expectRevert(IRotationGovernor.TallyNotFinal.selector);
         gov.finalizeRound(address(token), 2);
-        uint64[] memory bad = new uint64[](2);
-        scheme.submitTally(address(gov), address(token), _rot(2), abi.encode(bad), "");
+        // A winner index outside the options.
+        scheme.submitOutcome(address(gov), address(token), _rot(2), abi.encode(uint8(3)), "");
         vm.expectRevert(IRotationGovernor.InvalidTally.selector);
         gov.finalizeRound(address(token), 2);
         vm.expectRevert(
@@ -581,9 +587,13 @@ contract RotationGovernorTest is RotationGovernorBase {
     // ------------------------------------------------------------------ period proposals
 
     function test_propose_rotationZero_noCirculatingSupply() public {
+        // A token registered as it is created (as the factory does) has no supply at start(0) - 1.
+        VeradaToken fresh = _newToken();
+        gov.registerToken(address(fresh), causeIds[0], RotationPeriod.OneDay);
+        vm.warp(block.timestamp + 1);
         vm.prank(alice);
         vm.expectRevert(IRotationGovernor.NoCirculatingSupply.selector);
-        gov.proposePeriod(address(token), RotationPeriod.OneHour);
+        gov.proposePeriod(address(fresh), RotationPeriod.OneHour);
     }
 
     function test_propose_quorumExcludesPoolManager_andThreshold() public {
@@ -592,6 +602,16 @@ contract RotationGovernorTest is RotationGovernorBase {
         vm.prank(carol);
         token.transfer(dave, 1e18);
         vm.warp(t0 + 2 days + 10);
+        // dave did not hold through the whole hold window, so his weight is zero.
+        vm.prank(dave);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IRotationGovernor.BelowProposalThreshold.selector, uint64(0), uint256(150_000_000)
+            )
+        );
+        gov.proposePeriod(address(token), RotationPeriod.OneHour);
+        // A day later the window [t0 + 2 days - 1, t0 + 3 days - 1] is covered: weight 1.
+        vm.warp(t0 + 3 days + 10);
         vm.prank(dave);
         vm.expectRevert(
             abi.encodeWithSelector(
@@ -612,10 +632,11 @@ contract RotationGovernorTest is RotationGovernorBase {
         RotationGovernor.PeriodProposal memory p = gov.getProposal(id);
         // Circulating = 30e9 whole tokens (the pool manager's 70e9 excluded): 10% quorum.
         assertEq(p.quorumWeight, 3e9);
-        assertEq(p.snapshot, t0 + 2 days - 1);
+        assertEq(p.snapshot, t0 + 3 days - 1);
+        assertEq(p.holdFrom, t0 + 2 days - 1);
         assertEq(p.token, address(token));
         assertEq(uint8(gov.proposalState(id)), uint8(IRotationGovernor.ProposalState.Active));
-        assertEq(gov.activeProposalOf(address(token)), id);
+        assertEq(gov.activeProposalOf(address(token), RotationPeriod.OneHour), id);
     }
 
     function test_propose_pendingCooldownSamePeriod() public {
@@ -625,18 +646,27 @@ contract RotationGovernorTest is RotationGovernorBase {
         gov.proposePeriod(address(token), RotationPeriod.OneDay);
         vm.prank(alice);
         uint64 id = gov.proposePeriod(address(token), RotationPeriod.OneHour);
+        // Same period: one active proposal at a time.
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IRotationGovernor.ProposalPending.selector, id));
-        gov.proposePeriod(address(token), RotationPeriod.OneWeek);
-        vm.prank(alice);
-        gov.cancelPeriodProposal(id);
+        gov.proposePeriod(address(token), RotationPeriod.OneHour);
+        // Another period can run side by side.
+        vm.prank(bob);
+        uint64 other = gov.proposePeriod(address(token), RotationPeriod.OneWeek);
+        assertEq(gov.activeProposalOf(address(token), RotationPeriod.OneWeek), other);
+
+        // A defeat starts that period's cooldown only.
+        vm.warp(gov.getProposal(id).end);
+        gov.closePeriodProposal(id);
         uint256 until = gov.getProposal(id).end + 7 days;
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IRotationGovernor.CooldownActive.selector, until));
-        gov.proposePeriod(address(token), RotationPeriod.OneWeek);
+        gov.proposePeriod(address(token), RotationPeriod.OneHour);
+        vm.prank(bob);
+        gov.proposePeriod(address(token), RotationPeriod.TwelveHours);
         vm.warp(until);
         vm.prank(bob);
-        gov.proposePeriod(address(token), RotationPeriod.OneWeek);
+        gov.proposePeriod(address(token), RotationPeriod.OneHour);
     }
 
     function test_cancel() public {
@@ -651,7 +681,7 @@ contract RotationGovernorTest is RotationGovernorBase {
         vm.prank(alice);
         gov.cancelPeriodProposal(id);
         assertEq(uint8(gov.proposalState(id)), uint8(IRotationGovernor.ProposalState.Canceled));
-        assertEq(gov.activeProposalOf(address(token)), 0);
+        assertEq(gov.activeProposalOf(address(token), RotationPeriod.OneHour), 0);
         vm.prank(bob);
         vm.expectRevert(IRotationGovernor.VotingClosed.selector);
         scheme.castBallot(address(gov), address(token), _per(id), abi.encode(uint8(1)));
@@ -706,7 +736,7 @@ contract RotationGovernorTest is RotationGovernorBase {
         vm.warp(gov.getProposal(id).end);
         gov.closePeriodProposal(id);
         assertEq(uint8(gov.proposalState(id)), uint8(IRotationGovernor.ProposalState.Defeated));
-        assertEq(gov.activeProposalOf(address(token)), 0);
+        assertEq(gov.activeProposalOf(address(token), RotationPeriod.OneHour), 0);
     }
 
     function test_proposal_defeated_againstOrBelowQuorum() public {
@@ -729,8 +759,6 @@ contract RotationGovernorTest is RotationGovernorBase {
         gov.closePeriodProposal(id);
         scheme.finalizeFromBallots(address(gov), address(token), _per(id));
         assertFalse(gov.executePeriodProposal(id));
-        RotationGovernor.PeriodProposal memory p = gov.getProposal(id);
-        assertEq(p.forWeight, 1e9);
         assertEq(uint8(gov.proposalState(id)), uint8(IRotationGovernor.ProposalState.Defeated));
     }
 
@@ -746,7 +774,7 @@ contract RotationGovernorTest is RotationGovernorBase {
         vm.warp(gov.getProposal(id).executionDeadline + 1);
         assertFalse(gov.executePeriodProposal(id));
         assertEq(uint8(gov.proposalState(id)), uint8(IRotationGovernor.ProposalState.Expired));
-        assertEq(gov.activeProposalOf(address(token)), 0);
+        assertEq(gov.activeProposalOf(address(token), RotationPeriod.OneHour), 0);
 
         vm.warp(block.timestamp + 7 days);
         vm.prank(alice);

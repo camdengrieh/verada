@@ -46,7 +46,8 @@ interface IRotationGovernor {
     /// @notice Period-change proposal parameters, captured per proposal when it is created.
     /// @param votingPeriod Seconds a proposal accepts ballots.
     /// @param executionWindow Seconds after the vote ends within which the result can execute.
-    /// @param cooldown Seconds after a proposal's vote end before the token can get a new one.
+    /// @param cooldown Seconds after a proposal's vote end before the token can get a new one for
+    ///        the same period (after a defeat or an expiry), or any new one (after an execution).
     /// @param quorumBps FOR weight needed, in basis points of the circulating supply.
     /// @param proposalThresholdBps Proposer weight needed, in basis points of the circulating supply.
     struct Params {
@@ -70,6 +71,7 @@ interface IRotationGovernor {
     event SchemeUpdated(address indexed scheme);
     event ParamsUpdated(Params params);
     event VaultSet(address indexed vault);
+    event MinVotersSet(uint32 minVoters);
 
     // ---- events: rotation polls
 
@@ -110,9 +112,8 @@ interface IRotationGovernor {
     );
     event PeriodVoteCast(address indexed token, uint64 indexed id, bytes32 ballotRef);
     event PeriodProposalClosed(uint64 indexed id, bool tallyRequested);
-    event PeriodProposalTallied(
-        uint64 indexed id, uint64 forWeight, uint64 againstWeight, bool passed
-    );
+    /// @notice Only the outcome is revealed; FOR and AGAINST weights stay encrypted.
+    event PeriodProposalTallied(uint64 indexed id, bool passed);
     event PeriodProposalExpired(uint64 indexed id);
     event PeriodChangeScheduled(
         address indexed token,
@@ -170,6 +171,8 @@ interface IRotationGovernor {
     error NotClosable(uint64 id, ProposalState state);
     error NotExecutable(uint64 id, ProposalState state);
     error NotCancelable(uint64 id, ProposalState state);
+    /// @notice A proposal that already received a ballot cannot be canceled.
+    error ProposalHasBallots(uint64 id);
     error InvalidParams();
 
     // ---- registration

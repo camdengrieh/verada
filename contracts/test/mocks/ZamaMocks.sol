@@ -3,7 +3,11 @@ pragma solidity ^0.8.26;
 
 import {FheType} from "@fhevm/solidity/lib/FheType.sol";
 
-import {IBallotGovernor, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {
+    IBallotGovernor,
+    IOutcomeVotingScheme,
+    IVotingScheme
+} from "../../src/interfaces/IVotingScheme.sol";
 
 /// @dev Addresses `ZamaConfig.getEthereumCoprocessorConfig()` returns on chain id 31337. Tests
 ///      `vm.etch` the mocks below at exactly these addresses.
@@ -31,6 +35,7 @@ contract MockFhevmExecutor {
     uint256 public eqs;
     uint256 public selects;
     uint256 public adds;
+    uint256 public comparisons;
     uint256 public verifyInputs;
 
     mapping(bytes32 handle => FheType) public typeOf;
@@ -56,6 +61,20 @@ contract MockFhevmExecutor {
         _requireOperand(lhs);
         if (scalarByte == 0x00) _requireOperand(rhs);
         result = _mint(abi.encode("eq", lhs, rhs, scalarByte), FheType.Bool);
+    }
+
+    function fheGt(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
+        ++comparisons;
+        _requireOperand(lhs);
+        if (scalarByte == 0x00) _requireOperand(rhs);
+        result = _mint(abi.encode("gt", lhs, rhs, scalarByte), FheType.Bool);
+    }
+
+    function fheGe(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
+        ++comparisons;
+        _requireOperand(lhs);
+        if (scalarByte == 0x00) _requireOperand(rhs);
+        result = _mint(abi.encode("ge", lhs, rhs, scalarByte), FheType.Bool);
     }
 
     function fheAdd(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
@@ -247,6 +266,10 @@ contract MockBallotGovernor is IBallotGovernor {
 
     function requestTally(address token, uint256 scope) external {
         scheme.requestTally(token, scope);
+    }
+
+    function requestOutcome(address token, uint256 scope, uint64 minWeight) external {
+        IOutcomeVotingScheme(address(scheme)).requestOutcome(token, scope, minWeight);
     }
 
     /// @inheritdoc IBallotGovernor

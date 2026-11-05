@@ -7,7 +7,11 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {ZamaVotingScheme} from "../../src/governance/ZamaVotingScheme.sol";
-import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {
+    IOutcomeVotingScheme,
+    IVotingScheme,
+    NO_WINNER
+} from "../../src/interfaces/IVotingScheme.sol";
 import {
     MockAcl,
     MockBallotGovernor,
@@ -570,5 +574,136 @@ contract ZamaVotingSchemeTest is Test {
 
     function _handlesOf(uint256 scope) internal view returns (bytes32[] memory) {
         return scheme.tallyHandles(address(gov), token, scope);
+    }
+
+    // ---- outcome-only polls (audit regression: per-option counts revealed individual choices)
+
+    function _closedOutcomePoll(uint8 options, uint64 minWeight) internal returns (bytes32 h) {
+        gov.open(token, SCOPE, options);
+        _cast(voter, HANDLE);
+        _cast(voter2, bytes32(uint256(1)));
+        gov.requestOutcome(token, SCOPE, minWeight);
+        h = scheme.outcomeHandle(address(gov), token, SCOPE);
+    }
+
+    function test_requestOutcome_onlyTheWinnerIsDecryptable() public {
+        gov.open(token, SCOPE, 3);
+        _cast(voter, HANDLE);
+        _cast(voter2, bytes32(uint256(1)));
+        bytes32[] memory tallies = _handles();
+        uint256 before = executor.comparisons();
+
+        vm.expectEmit(address(scheme));
+        emit IOutcomeVotingScheme.OutcomeRequested(address(gov), token, SCOPE, 1);
+        gov.requestOutcome(token, SCOPE, 1);
+
+        assertTrue(scheme.isClosed(address(gov), token, SCOPE));
+        bytes32 h = scheme.outcomeHandle(address(gov), token, SCOPE);
+        assertTrue(h != bytes32(0));
+        assertEq(uint8(executor.typeOf(h)), uint8(FheType.Uint8), "euint8 index");
+        assertEq(acl.decryptableCount(), 1, "a single decryptable ciphertext");
+        assertTrue(acl.isAllowedForDecryption(h));
+        for (uint256 i = 0; i < tallies.length; ++i) {
+            assertFalse(acl.isAllowedForDecryption(tallies[i]), "a count is decryptable");
+        }
+        assertEq(executor.comparisons() - before, 3, "one comparison per option");
+        (bool isFinal, uint64[] memory counts) = scheme.tallyOf(address(gov), token, SCOPE);
+        assertFalse(isFinal);
+        assertEq(counts.length, 0);
+    }
+
+    function test_requestOutcome_minWeightAddsOneComparison() public {
+        gov.open(token, SCOPE, 2);
+        _cast(voter, HANDLE);
+        uint256 before = executor.comparisons();
+        gov.requestOutcome(token, SCOPE, 500);
+        assertEq(executor.comparisons() - before, 3);
+    }
+
+    function test_requestOutcome_checks() public {
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(IVotingScheme.NotGovernor.selector, stranger));
+        scheme.requestOutcome(token, SCOPE, 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IVotingScheme.PollNotOpen.selector, address(gov), token, SCOPE)
+        );
+        gov.requestOutcome(token, SCOPE, 1);
+        gov.open(token, SCOPE, 2);
+        gov.requestOutcome(token, SCOPE, 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IVotingScheme.PollClosed.selector, address(gov), token, SCOPE)
+        );
+        gov.requestOutcome(token, SCOPE, 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IVotingScheme.PollClosed.selector, address(gov), token, SCOPE)
+        );
+        gov.requestTally(token, SCOPE);
+    }
+
+    function test_submitOutcome_verifiesAndStoresTheWinner() public {
+        bytes32 h = _closedOutcomePoll(3, 1);
+        bytes memory cleartexts = abi.encode(uint256(2));
+        bytes32[] memory handles = new bytes32[](1);
+        handles[0] = h;
+        vm.expectEmit(address(scheme));
+        emit PublicDecryptionVerified(handles, cleartexts);
+        vm.expectEmit(address(scheme));
+        emit IOutcomeVotingScheme.OutcomeSubmitted(address(gov), token, SCOPE, 2);
+        vm.prank(stranger);
+        scheme.submitOutcome(address(gov), token, SCOPE, cleartexts, _kmsProof());
+        assertEq(kms.lastHandles()[0], h, "the KMS proof covers the outcome handle only");
+        (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, SCOPE);
+        assertTrue(isFinal);
+        assertEq(winner, 2);
+        (isFinal,) = scheme.tallyOf(address(gov), token, SCOPE);
+        assertFalse(isFinal, "counts are never published");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IVotingScheme.TallyAlreadyFinal.selector, address(gov), token, SCOPE
+            )
+        );
+        scheme.submitOutcome(address(gov), token, SCOPE, cleartexts, _kmsProof());
+    }
+
+    function test_submitOutcome_noWinnerAndBounds() public {
+        _closedOutcomePoll(3, 1);
+        vm.expectRevert(IVotingScheme.InvalidTallyProof.selector);
+        scheme.submitOutcome(address(gov), token, SCOPE, abi.encode(uint256(3)), _kmsProof());
+        vm.expectRevert(IVotingScheme.InvalidTallyProof.selector);
+        scheme.submitOutcome(address(gov), token, SCOPE, abi.encode(uint256(1), 2), _kmsProof());
+        kms.setRejectSignatures(true);
+        vm.expectRevert();
+        scheme.submitOutcome(address(gov), token, SCOPE, abi.encode(uint256(1)), _kmsProof());
+        kms.setRejectSignatures(false);
+        scheme.submitOutcome(
+            address(gov), token, SCOPE, abi.encode(uint256(NO_WINNER)), _kmsProof()
+        );
+        (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, SCOPE);
+        assertTrue(isFinal);
+        assertEq(winner, NO_WINNER);
+    }
+
+    function test_outcomeAndTallyModesDoNotMix() public {
+        _closedOutcomePoll(2, 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOutcomeVotingScheme.OutcomeOnlyPoll.selector, address(gov), token, SCOPE
+            )
+        );
+        scheme.submitTally(address(gov), token, SCOPE, abi.encode(uint256(1), 1), _kmsProof());
+
+        uint256 other = SCOPE + 1;
+        gov.open(token, other, 2);
+        gov.requestTally(token, other);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IOutcomeVotingScheme.NotOutcomePoll.selector, address(gov), token, other
+            )
+        );
+        scheme.submitOutcome(address(gov), token, other, abi.encode(uint256(1)), _kmsProof());
+        (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, other);
+        assertFalse(isFinal);
+        assertEq(winner, NO_WINNER);
     }
 }

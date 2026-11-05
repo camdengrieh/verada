@@ -9,9 +9,23 @@ import {FullMath} from "v4-core/libraries/FullMath.sol";
 import {ICauseRegistry} from "./interfaces/ICauseRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "./interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
-import {IBallotGovernor, IVotingScheme} from "./interfaces/IVotingScheme.sol";
+import {
+    IBallotGovernor,
+    IOutcomeVotingScheme,
+    IVotingScheme,
+    NO_WINNER
+} from "./interfaces/IVotingScheme.sol";
 import {PollScopeLib} from "./libraries/PollScopeLib.sol";
 import {RotationScheduleLib} from "./libraries/RotationScheduleLib.sol";
+
+/// @dev Vote checkpoint accessors of `ERC20TimestampVotes` (live tokens are `VeradaToken`s).
+interface ICheckpointVotes {
+    function numCheckpoints(address account) external view returns (uint32);
+    function checkpoints(address account, uint32 pos)
+        external
+        view
+        returns (uint48 key, uint208 value);
+}
 
 /// @title RotationGovernor
 /// @notice Picks, rotation by rotation, the cause that receives a live-donation token's fees, and
@@ -21,21 +35,35 @@ import {RotationScheduleLib} from "./libraries/RotationScheduleLib.sol";
 ///      at registration, and a period change only ever applies from the next boundary, so rotation
 ///      indices, poll scopes and snapshots never collide across period changes.
 ///
+///      Weights. A voter's weight is the lowest vote checkpoint it had over the whole hold window
+///      `[snapshot - lookback, snapshot]`, with `snapshot = start(c) - 1` (before the poll can
+///      open) and `lookback = max(length of rotation c, 1 day)`. Tokens bought during the
+///      rotation carry no weight, and neither does a position held only around the (public)
+///      snapshot instant: it must be held through the whole window (no buy-vote-sell, no flash
+///      loans, no one-block holds). Polls of a token's first day therefore carry no weight.
+///
 ///      Rotation polls. During rotation `c`, holders vote on the cause for `target = c + 1` among the
-///      token's shortlist (or the default shortlist), frozen when the round opens. The snapshot is
-///      `start(c) - 1`, before the poll can open, so tokens bought during the rotation carry no
-///      weight (no buy-vote-sell, no flash loans). The poll closes `closeBuffer` before rotation
-///      `target` starts, leaving time to decrypt, submit and finalize the tally. A result
-///      finalized after `target` started applies from the next boundary instead, never
-///      retroactively. With no ballots, or no result yet, the current cause keeps receiving fees;
-///      there is no fallback cause. Rounds are plurality with no quorum (ties go to the lowest
-///      option index).
+///      token's shortlist (or the default shortlist), frozen when the round opens. The poll closes
+///      `closeBuffer` before rotation `target` starts, leaving time to decrypt, submit and
+///      finalize the result. A result finalized after `target` started applies from the next
+///      boundary instead, never retroactively. With fewer than `minVoters` ballots, or no result
+///      yet, the current cause keeps receiving fees; there is no fallback cause. Rounds are
+///      plurality with no quorum (ties go to the lowest option index).
+///
+///      Privacy. Polls are closed with `requestOutcome`: only the winning option index is ever
+///      decrypted, never per-option counts (which give individual choices away in small polls
+///      whose weights are public). A poll below `minVoters` is not decrypted at all.
 ///
 ///      Period proposals. Any holder above the proposal threshold can propose a new period. The
-///      yes/no poll uses the snapshot `start(c) - 1`; quorum is a share of the circulating supply
-///      at that snapshot (total supply minus the pool manager's checkpoint, which holds the pool
-///      liquidity and never votes). A passed proposal schedules the period from the next boundary
-///      and replaces any change not yet in effect. One active proposal per token, then a cooldown.
+///      yes/no poll uses the hold window ending at `start(c) - 1`; quorum is a share of the
+///      circulating supply at that snapshot (total supply minus the pool manager's checkpoint,
+///      which holds the pool liquidity and never votes). A passed proposal schedules the period
+///      from the next boundary and replaces any change not yet in effect. Proposals for different
+///      periods may run side by side (one active per token and period), so no holder can block
+///      the others by occupying a single slot. A proposal can be canceled only before its first
+///      ballot, and canceling starts no cooldown. A defeat or expiry starts a cooldown for that
+///      period; an execution starts it for every period, and any older proposal still pending
+///      is superseded (it expires instead of executing).
 ///
 ///      Scopes. Poll scopes are `PollScopeLib.encode(kind, id)`: rotation polls use the target
 ///      rotation, proposals use a global proposal id, and the kinds keep them disjoint.
@@ -44,8 +72,9 @@ import {RotationScheduleLib} from "./libraries/RotationScheduleLib.sol";
 ///       - G1/G2/G7: see `RotationScheduleLib`.
 ///       - G3: the active cause of rotation `n` is fixed once `n` started (`effectiveFrom > current`).
 ///       - G4: the active cause is the initial cause or the winner of an `Applied` round.
-///       - G5: one ballot per voter per poll; weights are vote checkpoints at a snapshot strictly
-///         before the poll could open, so their sum is at most the past total supply.
+///       - G5: one ballot per voter per poll; a weight is the lowest vote checkpoint over a hold
+///         window ending strictly before the poll could open, so the sum is at most the past
+///         total supply at the snapshot.
 ///       - G8: `lastAppliedTarget` is monotonic and `effectiveFrom >= rotationAt(finalize) + 1`.
 ///
 ///      Reentrancy: the only external calls are to the owner-set scheme (`open`, `requestTally`,
@@ -73,6 +102,13 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     uint32 internal constant MAX_COOLDOWN = 30 days;
     uint16 internal constant MIN_QUORUM_BPS = 100;
     uint16 internal constant MAX_QUORUM_BPS = 5000;
+    /// @notice Shortest hold window a weight is measured over.
+    uint256 public constant MIN_HOLD_LOOKBACK = 1 days;
+    /// @notice Most checkpoints read inside a hold window (newest first); older ones are covered
+    ///         by the window-start checkpoint only. Bounds the cost of a ballot.
+    uint256 public constant MAX_HOLD_SCAN = 128;
+    /// @notice Largest `minVoters`.
+    uint32 public constant MAX_MIN_VOTERS = 100;
 
     uint8 internal constant FLAG_CLOSED = 1;
     uint8 internal constant FLAG_DEFEATED = 2;
@@ -101,18 +137,20 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     /// @notice Rotation poll for one target rotation.
     struct Round {
-        IVotingScheme scheme;
+        IOutcomeVotingScheme scheme;
         uint40 snapshot;
         uint40 voteEnd;
         RoundStatus status;
         uint32 voters;
         uint64 effectiveFrom;
+        /// @dev Start of the hold window (`snapshot - lookback`).
+        uint40 holdFrom;
         bytes32 winner;
         bytes32[] options;
         mapping(address voter => bool) voted;
     }
 
-    /// @notice Period-change proposal (4 slots).
+    /// @notice Period-change proposal (4 slots). FOR and AGAINST weights are never revealed.
     struct PeriodProposal {
         address token;
         RotationPeriod newPeriod;
@@ -122,14 +160,16 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         address proposer;
         uint40 executionDeadline;
         uint32 voters;
-        IVotingScheme scheme;
+        IOutcomeVotingScheme scheme;
         uint64 quorumWeight;
-        uint64 forWeight;
-        uint64 againstWeight;
         uint64 fromRotation;
+        /// @dev Start of the hold window (`snapshot - lookback`).
+        uint40 holdFrom;
+        /// @dev `executions[token]` when proposed; a later execution supersedes this proposal.
+        uint32 executionsAtProposal;
     }
 
-    IVotingScheme internal _scheme;
+    IOutcomeVotingScheme internal _scheme;
     /// @notice The live-donation vault, the only registrar (set once).
     address public vault;
     Params internal _params;
@@ -143,10 +183,18 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     mapping(address token => mapping(uint64 target => Round)) internal _rounds;
     mapping(uint64 id => PeriodProposal) internal _proposals;
     mapping(uint64 id => mapping(address voter => bool)) internal _periodVoted;
-    /// @notice The token's proposal that has not reached a final state (0 if none).
-    mapping(address token => uint64 id) public activeProposalOf;
-    /// @notice Vote end of the token's latest proposal (start of its cooldown).
-    mapping(address token => uint40) public lastProposalEnd;
+    /// @notice Fewest ballots a poll needs to be decrypted; below it the poll changes nothing.
+    uint32 public minVoters;
+    /// @notice The token's proposal for `period` that has not reached a final state (0 if none).
+    mapping(address token => mapping(RotationPeriod period => uint64 id)) public activeProposalOf;
+    /// @notice Vote end of the token's latest defeated or expired proposal for `period` (start of
+    ///         that period's cooldown). Canceled proposals never set it.
+    mapping(address token => mapping(RotationPeriod period => uint40)) public lastProposalEnd;
+    /// @notice Vote end of the token's latest executed proposal (start of the cooldown of every
+    ///         period).
+    mapping(address token => uint40) public lastExecutedEnd;
+    /// @notice Number of executed period changes of the token (supersedes older proposals).
+    mapping(address token => uint32) public executions;
 
     /// @param initialOwner Admin: scheme, params, default shortlist, vault (once).
     /// @param causeRegistry_ Cause registry.
@@ -159,7 +207,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         ICauseRegistry causeRegistry_,
         ITokenProfileRegistry profileRegistry_,
         address poolManager_,
-        IVotingScheme scheme_,
+        IOutcomeVotingScheme scheme_,
         Params memory params_
     ) Ownable(initialOwner) {
         if (
@@ -171,6 +219,8 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         poolManager = poolManager_;
         _scheme = scheme_;
         _setParams(params_);
+        minVoters = 1;
+        emit MinVotersSet(1);
     }
 
     // ------------------------------------------------------------------ admin
@@ -184,7 +234,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     }
 
     /// @notice Replaces the voting scheme for polls opened from now on. Open polls keep theirs.
-    function setScheme(IVotingScheme scheme_) external onlyOwner {
+    function setScheme(IOutcomeVotingScheme scheme_) external onlyOwner {
         if (address(scheme_) == address(0)) revert ZeroAddress();
         _scheme = scheme_;
         emit SchemeUpdated(address(scheme_));
@@ -193,6 +243,15 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     /// @notice Sets the parameters of period proposals created from now on.
     function setParams(Params calldata params_) external onlyOwner {
         _setParams(params_);
+    }
+
+    /// @notice Sets the fewest ballots a poll needs to be decrypted (1 to `MAX_MIN_VOTERS`). A
+    ///         rotation poll below it ends as `NoChange`, a proposal below it as defeated, and
+    ///         neither is decrypted. Applies to polls closed from now on.
+    function setMinVoters(uint32 minVoters_) external onlyOwner {
+        if (minVoters_ == 0 || minVoters_ > MAX_MIN_VOTERS) revert InvalidParams();
+        minVoters = minVoters_;
+        emit MinVotersSet(minVoters_);
     }
 
     /// @notice Sets the shortlist used by tokens without their own. Empty clears it.
@@ -267,8 +326,9 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         return _authorizePeriod(token, scope, id, voter, ballotRef);
     }
 
-    /// @notice Closes the poll for `target` once voting ended. Without ballots the round ends as
-    ///         `NoChange`; otherwise the scheme is asked to reveal the tally. Permissionless.
+    /// @notice Closes the poll for `target` once voting ended. With fewer than `minVoters` ballots
+    ///         the round ends as `NoChange` (nothing is decrypted); otherwise the scheme is asked
+    ///         to reveal the winner only. Permissionless.
     function closeRound(address token, uint64 target) external {
         Round storage r = _rounds[token][target];
         RoundStatus st = r.status;
@@ -277,44 +337,39 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp < r.voteEnd) revert VotingNotEnded();
 
-        if (r.voters == 0) {
+        if (r.voters == 0 || r.voters < minVoters) {
             r.status = RoundStatus.NoChange;
             emit RoundClosed(token, target, false);
             emit RoundFinalized(token, target, RoundStatus.NoChange, bytes32(0), 0);
             return;
         }
         r.status = RoundStatus.Closed;
-        r.scheme.requestTally(token, PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target));
+        r.scheme.requestOutcome(token, PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target), 1);
         emit RoundClosed(token, target, true);
     }
 
-    /// @notice Applies the revealed tally of `target`. Permissionless.
-    /// @dev The winner is the strict argmax (ties to the lowest index). It applies from the
-    ///      rotation after the current one: `target` when finalized on time, later otherwise.
-    ///      A round older than the last applied one is recorded as `Stale`.
+    /// @notice Applies the revealed winner of `target`. Permissionless.
+    /// @dev The scheme reveals only the strict argmax (ties to the lowest index), or `NO_WINNER`
+    ///      when no option received weight. The winner applies from the rotation after the
+    ///      current one: `target` when finalized on time, later otherwise. A round older than the
+    ///      last applied one is recorded as `Stale`.
     function finalizeRound(address token, uint64 target) external {
         Round storage r = _rounds[token][target];
         if (r.status != RoundStatus.Closed) revert RoundNotClosed(token, target);
-        (bool isFinal, uint64[] memory counts) = r.scheme
-            .tallyOf(address(this), token, PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target));
+        (bool isFinal, uint8 index) = r.scheme
+            .outcomeOf(
+                address(this), token, PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target)
+            );
         if (!isFinal) revert TallyNotFinal();
         bytes32[] storage options = r.options;
-        uint256 n = options.length;
-        if (counts.length != n) revert InvalidTally();
-
-        uint256 best;
-        bytes32 winner;
-        for (uint256 i; i < n; ++i) {
-            if (counts[i] > best) {
-                best = counts[i];
-                winner = options[i];
-            }
-        }
+        bool none = index == NO_WINNER;
+        if (!none && index >= options.length) revert InvalidTally();
+        bytes32 winner = none ? bytes32(0) : options[index];
 
         CauseState storage cs = _causes[token];
         RoundStatus status;
         uint64 effectiveFrom;
-        if (best == 0) {
+        if (none) {
             status = RoundStatus.NoChange;
         } else if (target <= cs.lastAppliedTarget) {
             status = RoundStatus.Stale;
@@ -350,27 +405,28 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     /// @notice Proposes changing `token`'s rotation period to `newPeriod` from the next boundary
     ///         after execution.
-    /// @dev Requires a nonzero weight at the snapshot that also meets the proposal threshold, no
-    ///      other active proposal for the token and an elapsed cooldown. Not possible in rotation
-    ///      0 (the snapshot predates the token, so there is no circulating supply).
+    /// @dev Requires a nonzero hold weight that also meets the proposal threshold, no other
+    ///      active proposal for the token and this period, and elapsed cooldowns (this period's,
+    ///      and the token-wide one after an execution). Not possible in rotation 0 (the snapshot
+    ///      predates the token, so there is no circulating supply).
     /// @return id The proposal id.
     function proposePeriod(address token, RotationPeriod newPeriod) external returns (uint64 id) {
         if (!_causes[token].registered) revert TokenNotRegistered(token);
-        uint64 pending = activeProposalOf[token];
+        uint64 pending = activeProposalOf[token][newPeriod];
         if (pending != 0) revert ProposalPending(pending);
         Params memory p = _params;
-        uint256 until = uint256(lastProposalEnd[token]) + p.cooldown;
-        // forge-lint: disable-next-line(block-timestamp)
-        if (lastProposalEnd[token] != 0 && block.timestamp < until) revert CooldownActive(until);
+        _checkCooldown(lastProposalEnd[token][newPeriod], p.cooldown);
+        _checkCooldown(lastExecutedEnd[token], p.cooldown);
 
         RotationScheduleLib.Schedule memory s = _schedules[token];
         uint64 c = s.indexAt(block.timestamp);
         if (s.periodOf(c + 1) == newPeriod) revert SamePeriod();
         uint256 snapshot = s.startOf(c) - 1;
+        uint256 holdFrom = _holdFrom(snapshot, s.periodOf(c));
 
         uint256 circulating = _circulating(token, snapshot);
         if (circulating == 0) revert NoCirculatingSupply();
-        uint64 weight = _weightAt(token, snapshot, msg.sender);
+        uint64 weight = _holdWeight(token, holdFrom, snapshot, msg.sender);
         uint256 required = (circulating * p.proposalThresholdBps) / BPS;
         if (weight == 0 || weight < required) revert BelowProposalThreshold(weight, required);
         uint64 quorumWeight =
@@ -378,7 +434,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
         id = ++proposalCount;
         uint40 end = SafeCast.toUint40(block.timestamp + p.votingPeriod);
-        IVotingScheme sch = _scheme;
+        IOutcomeVotingScheme sch = _scheme;
         PeriodProposal storage pp = _proposals[id];
         pp.token = token;
         pp.newPeriod = newPeriod;
@@ -388,36 +444,43 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         pp.executionDeadline = end + p.executionWindow;
         pp.scheme = sch;
         pp.quorumWeight = quorumWeight;
-        activeProposalOf[token] = id;
-        lastProposalEnd[token] = end;
+        pp.holdFrom = SafeCast.toUint40(holdFrom);
+        pp.executionsAtProposal = executions[token];
+        activeProposalOf[token][newPeriod] = id;
 
         sch.open(token, PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id), 2);
         emit PeriodProposed(token, id, msg.sender, newPeriod, pp.snapshot, end, quorumWeight);
     }
 
-    /// @notice Closes an ended proposal: without ballots it is defeated, otherwise the scheme is
-    ///         asked to reveal the tally. Permissionless.
+    /// @notice Closes an ended proposal: with fewer than `minVoters` ballots it is defeated
+    ///         (nothing is decrypted), otherwise the scheme is asked to reveal the outcome only
+    ///         (FOR wins with `for > against` and `for >= quorumWeight`). Permissionless.
     function closePeriodProposal(uint64 id) external {
         PeriodProposal storage p = _proposals[id];
         ProposalState st = _state(p);
         if (st == ProposalState.None) revert UnknownProposal(id);
         if (st != ProposalState.Ended) revert NotClosable(id, st);
-        if (p.voters == 0) {
+        if (p.voters == 0 || p.voters < minVoters) {
             p.flags |= FLAG_CLOSED | FLAG_DEFEATED;
-            delete activeProposalOf[p.token];
+            _endProposal(p, false);
             emit PeriodProposalClosed(id, false);
-            emit PeriodProposalTallied(id, 0, 0, false);
+            emit PeriodProposalTallied(id, false);
             return;
         }
         p.flags |= FLAG_CLOSED;
-        p.scheme.requestTally(p.token, PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id));
+        p.scheme
+            .requestOutcome(
+                p.token, PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id), p.quorumWeight
+            );
         emit PeriodProposalClosed(id, true);
     }
 
-    /// @notice Applies the revealed tally of a closed proposal. Permissionless.
-    /// @dev Passes with `for >= quorumWeight && for > against`. A passed proposal executed within
-    ///      its window schedules the new period from the next boundary. Without a final tally it
-    ///      reverts `TallyNotFinal` until the window ends, then expires.
+    /// @notice Applies the revealed outcome of a closed proposal. Permissionless.
+    /// @dev Passes when the revealed winner is FOR (`for > against && for >= quorumWeight`). A
+    ///      passed proposal executed within its window schedules the new period from the next
+    ///      boundary, unless another proposal of the token was executed after this one was created
+    ///      (then it is superseded and expires). Without a final outcome it reverts
+    ///      `TallyNotFinal` until the window ends, then expires.
     /// @return executed Whether the period change was scheduled.
     function executePeriodProposal(uint64 id) external returns (bool executed) {
         PeriodProposal storage p = _proposals[id];
@@ -426,27 +489,23 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         if (st != ProposalState.Closed) revert NotExecutable(id, st);
         address token = p.token;
 
-        (bool isFinal, uint64[] memory counts) = p.scheme
-        .tallyOf(address(this), token, PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id));
+        (bool isFinal, uint8 index) = p.scheme
+            .outcomeOf(address(this), token, PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id));
         // forge-lint: disable-next-line(block-timestamp)
         bool late = block.timestamp > p.executionDeadline;
         if (!isFinal) {
             if (!late) revert TallyNotFinal();
             p.flags |= FLAG_EXPIRED;
-            delete activeProposalOf[token];
+            _endProposal(p, false);
             emit PeriodProposalExpired(id);
             return false;
         }
-        if (counts.length != 2) revert InvalidTally();
-        uint64 forWeight = counts[OPTION_FOR];
-        uint64 againstWeight = counts[OPTION_AGAINST];
-        p.forWeight = forWeight;
-        p.againstWeight = againstWeight;
-        bool passed = forWeight >= p.quorumWeight && forWeight > againstWeight;
+        if (index != NO_WINNER && index > OPTION_FOR) revert InvalidTally();
+        bool passed = index == OPTION_FOR;
 
         if (!passed) {
             p.flags |= FLAG_DEFEATED;
-        } else if (late) {
+        } else if (late || executions[token] != p.executionsAtProposal) {
             p.flags |= FLAG_EXPIRED;
             emit PeriodProposalExpired(id);
         } else {
@@ -458,19 +517,21 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
             executed = true;
             emit PeriodChangeScheduled(token, id, p.newPeriod, s.pendingFrom, s.switchAt());
         }
-        delete activeProposalOf[token];
-        emit PeriodProposalTallied(id, forWeight, againstWeight, passed);
+        _endProposal(p, executed);
+        emit PeriodProposalTallied(id, passed);
     }
 
-    /// @notice Cancels an active proposal. Proposer only.
+    /// @notice Cancels an active proposal that has no ballot yet. Proposer only. Starts no
+    ///         cooldown.
     function cancelPeriodProposal(uint64 id) external {
         PeriodProposal storage p = _proposals[id];
         ProposalState st = _state(p);
         if (st == ProposalState.None) revert UnknownProposal(id);
         if (msg.sender != p.proposer) revert NotProposer(msg.sender);
         if (st != ProposalState.Active) revert NotCancelable(id, st);
+        if (p.voters != 0) revert ProposalHasBallots(id);
         p.flags |= FLAG_CANCELED;
-        delete activeProposalOf[p.token];
+        delete activeProposalOf[p.token][p.newPeriod];
         emit PeriodProposalCanceled(id);
     }
 
@@ -601,6 +662,27 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         return _weightAt(token, snapshot, account);
     }
 
+    /// @notice Whole-token hold weight of `account`: its lowest vote checkpoint over
+    ///         `[holdFrom, snapshot]` (zero while the snapshot is not past).
+    function holdWeightAt(address token, uint256 holdFrom, uint256 snapshot, address account)
+        external
+        view
+        returns (uint64)
+    {
+        return _holdWeight(token, holdFrom, snapshot, account);
+    }
+
+    /// @notice Hold window `[holdFrom, snapshot]` of the rotation poll for `target` (zero if the
+    ///         round was never opened).
+    function roundHoldWindow(address token, uint64 target)
+        external
+        view
+        returns (uint40 holdFrom, uint40 snapshot)
+    {
+        Round storage r = _rounds[token][target];
+        return (r.holdFrom, r.snapshot);
+    }
+
     /// @inheritdoc IRotationGovernor
     function shortlistOf(address token) external view returns (bytes32[] memory) {
         bytes32[] storage own = _shortlists[token];
@@ -645,17 +727,21 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         (uint40 snapshot,, uint40 voteEnd) = _window(s, target);
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp >= voteEnd) revert VotingClosed();
+        uint256 holdFrom = _holdFrom(snapshot, s.periodOf(target - 1));
         bytes32[] storage source =
             _shortlists[token].length != 0 ? _shortlists[token] : _defaultShortlist;
         uint256 n = source.length;
         if (n == 0) revert NoShortlist(token);
-        IVotingScheme sch = _scheme;
+        IOutcomeVotingScheme sch = _scheme;
         uint256 max = _maxOptions(sch);
         if (n > max) revert TooManyOptions(n, max);
 
         Round storage r = _rounds[token][target];
         r.scheme = sch;
         r.snapshot = snapshot;
+        // `holdFrom <= snapshot`, which fits in 40 bits.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        r.holdFrom = uint40(holdFrom);
         r.voteEnd = voteEnd;
         r.status = RoundStatus.Open;
         r.options = source;
@@ -683,7 +769,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         else if (r.status != RoundStatus.Open || block.timestamp >= r.voteEnd) revert VotingClosed();
 
         if (r.voted[voter]) revert AlreadyVoted(voter);
-        weight = _weightAt(token, r.snapshot, voter);
+        weight = _holdWeight(token, r.holdFrom, r.snapshot, voter);
         if (weight == 0) revert InvalidVote();
         r.voted[voter] = true;
         unchecked {
@@ -704,13 +790,33 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         if (msg.sender != address(p.scheme)) revert NotScheme(msg.sender);
         if (_state(p) != ProposalState.Active) revert VotingClosed();
         if (_periodVoted[id][voter]) revert AlreadyVoted(voter);
-        weight = _weightAt(token, p.snapshot, voter);
+        weight = _holdWeight(token, p.holdFrom, p.snapshot, voter);
         if (weight == 0) revert InvalidVote();
         _periodVoted[id][voter] = true;
         unchecked {
             ++p.voters;
         }
         emit PeriodVoteCast(token, id, ballotRef);
+    }
+
+    /// @dev Frees the proposal's slot and starts its cooldown: token wide after an execution,
+    ///      for its period otherwise (defeat or expiry).
+    function _endProposal(PeriodProposal storage p, bool executed) private {
+        address token = p.token;
+        delete activeProposalOf[token][p.newPeriod];
+        if (executed) {
+            lastExecutedEnd[token] = p.end;
+            ++executions[token];
+        } else {
+            lastProposalEnd[token][p.newPeriod] = p.end;
+        }
+    }
+
+    function _checkCooldown(uint40 since, uint32 cooldown) private view {
+        if (since == 0) return;
+        uint256 until = uint256(since) + cooldown;
+        // forge-lint: disable-next-line(block-timestamp)
+        if (block.timestamp < until) revert CooldownActive(until);
     }
 
     function _state(PeriodProposal storage p) private view returns (ProposalState) {
@@ -772,6 +878,55 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         if (snapshot >= block.timestamp) return 0;
         uint256 whole = IVotes(token).getPastVotes(account, snapshot) / 1e18;
         // Capped just above, so the cast cannot truncate.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return whole > type(uint64).max ? type(uint64).max : uint64(whole);
+    }
+
+    /// @dev Start of the hold window ending at `snapshot` for a rotation of `p`.
+    function _holdFrom(uint256 snapshot, RotationPeriod p) private pure returns (uint256) {
+        uint256 lookback = RotationScheduleLib.length(p);
+        if (lookback < MIN_HOLD_LOOKBACK) lookback = MIN_HOLD_LOOKBACK;
+        return snapshot > lookback ? snapshot - lookback : 0;
+    }
+
+    /// @dev Whole-token lowest vote checkpoint of `account` over `[holdFrom, snapshot]`, capped
+    ///      to 64 bits; zero while the snapshot is not yet in the past. Reads the value in effect
+    ///      at `holdFrom` and at `snapshot`, then the checkpoints in between from the newest down,
+    ///      at most `MAX_HOLD_SCAN` of them.
+    function _holdWeight(address token, uint256 holdFrom, uint256 snapshot, address account)
+        private
+        view
+        returns (uint64)
+    {
+        // forge-lint: disable-next-line(block-timestamp)
+        if (snapshot >= block.timestamp) return 0;
+        uint256 low = IVotes(token).getPastVotes(account, snapshot);
+        if (low == 0) return 0;
+        uint256 atStart = IVotes(token).getPastVotes(account, holdFrom);
+        if (atStart < low) low = atStart;
+        if (low == 0) return 0;
+
+        ICheckpointVotes cv = ICheckpointVotes(token);
+        // Index one past the last checkpoint with `key <= snapshot`.
+        uint256 lo;
+        uint256 hi = cv.numCheckpoints(account);
+        while (lo < hi) {
+            uint256 mid = (lo + hi) / 2;
+            (uint48 key,) = cv.checkpoints(account, uint32(mid));
+            if (key > snapshot) hi = mid;
+            else lo = mid + 1;
+        }
+        for (uint256 scanned; lo != 0 && scanned < MAX_HOLD_SCAN; ++scanned) {
+            --lo;
+            (uint48 key, uint208 value) = cv.checkpoints(account, uint32(lo));
+            if (key <= holdFrom) break;
+            if (value < low) {
+                low = value;
+                if (low == 0) return 0;
+            }
+        }
+        uint256 whole = low / 1e18;
+        // Capped just below, so the cast cannot truncate.
         // forge-lint: disable-next-line(unsafe-typecast)
         return whole > type(uint64).max ? type(uint64).max : uint64(whole);
     }

@@ -521,31 +521,34 @@ contract LiveFactoryTest is LiveFactoryBase {
         _fund(trader, token);
         _fund(alice, token);
         _buyExactIn(key, t, 1e18);
-        _swapAs(alice, key, _quoteIs0(key, t), -1e21); // alice's weight predates rotation 1
+        _swapAs(alice, key, _quoteIs0(key, t), -1e21); // alice holds from launch
+        // The first rotation whose hold window starts after launch (the first day of an hourly
+        // token carries no vote weight).
+        uint64 r = _firstVotingRotation(t);
 
         (bytes32 cause, uint64 rotation,,,,) = _buyLogged(trader, key, t, 1e18);
         assertEq(cause, CAUSE_A);
         assertEq(rotation, 0);
 
-        _warpToRotation(t, 1);
+        _warpToRotation(t, r);
         (cause, rotation,,,,) = _buyLogged(trader, key, t, 1e18);
         assertEq(cause, CAUSE_A);
-        assertEq(rotation, 1);
+        assertEq(rotation, r);
 
-        _rotateTo(t, 2, 1); // CAUSE_B
-        assertLt(block.timestamp, rgov.rotationStart(t, 2), "settled inside rotation 1");
+        _rotateTo(t, r + 1, 1); // CAUSE_B
+        assertLt(block.timestamp, rgov.rotationStart(t, r + 1), "settled inside rotation r");
         (cause, rotation,,,,) = _buyLogged(trader, key, t, 1e18);
         assertEq(cause, CAUSE_A, "never retroactive");
-        assertEq(rotation, 1);
-        assertEq(rgov.activeCauseAt(t, rgov.rotationStart(t, 2)), CAUSE_B);
-        assertEq(rgov.activeCauseAt(t, rgov.rotationStart(t, 2) - 1), CAUSE_A);
+        assertEq(rotation, r);
+        assertEq(rgov.activeCauseAt(t, rgov.rotationStart(t, r + 1)), CAUSE_B);
+        assertEq(rgov.activeCauseAt(t, rgov.rotationStart(t, r + 1) - 1), CAUSE_A);
 
         uint256 pendingA = _pending(t, CAUSE_A);
-        _warpToRotation(t, 2);
+        _warpToRotation(t, r + 1);
         uint256 out;
         (cause, rotation,, out,,) = _buyLogged(trader, key, t, 1e18);
         assertEq(cause, CAUSE_B);
-        assertEq(rotation, 2);
+        assertEq(rotation, r + 1);
         assertEq(_pending(t, CAUSE_A), pendingA, "earlier credit stays with A");
         assertEq(_pending(t, CAUSE_B), _share(out));
 
@@ -598,36 +601,37 @@ contract LiveFactoryTest is LiveFactoryBase {
         _fund(trader, token);
         _fund(alice, token);
         _swapAs(alice, key, _quoteIs0(key, t), -1e21);
+        uint64 r = _firstVotingRotation(t);
 
-        _warpToRotation(t, 1);
-        _voteRotation(alice, t, 2, 2); // CAUSE_C
-        vm.warp(_roundEnd(t, 2));
-        rgov.closeRound(t, 2);
+        _warpToRotation(t, r);
+        _voteRotation(alice, t, r + 1, 2); // CAUSE_C
+        vm.warp(_roundEnd(t, r + 1));
+        rgov.closeRound(t, r + 1);
 
-        // The decryption lands after rotation 2 started.
-        vm.warp(rgov.rotationStart(t, 2) + 5 minutes);
+        // The decryption lands after rotation r + 1 started.
+        vm.warp(rgov.rotationStart(t, r + 1) + 5 minutes);
         (bytes32 cause, uint64 rotation,,,,) = _buyLogged(trader, key, t, 1e18);
         assertEq(cause, CAUSE_A, "no result yet");
-        assertEq(rotation, 2);
+        assertEq(rotation, r + 1);
         vm.expectRevert(IRotationGovernor.TallyNotFinal.selector);
-        rgov.finalizeRound(t, 2);
+        rgov.finalizeRound(t, r + 1);
 
-        scheme.finalizeFromBallots(address(rgov), t, _rotScope(2));
-        rgov.finalizeRound(t, 2);
+        scheme.finalizeFromBallots(address(rgov), t, _rotScope(r + 1));
+        rgov.finalizeRound(t, r + 1);
         (IRotationGovernor.RoundStatus st,,,, bytes32 winner, uint64 effectiveFrom,) =
-            rgov.roundOf(t, 2);
+            rgov.roundOf(t, r + 1);
         assertEq(uint8(st), uint8(IRotationGovernor.RoundStatus.Applied));
         assertEq(winner, CAUSE_C);
-        assertEq(effectiveFrom, 3, "next boundary, never retroactive");
+        assertEq(effectiveFrom, r + 2, "next boundary, never retroactive");
 
         (cause, rotation,,,,) = _buyLogged(trader, key, t, 1e18);
-        assertEq(cause, CAUSE_A, "rotation 2 keeps the prior cause");
-        assertEq(rotation, 2);
+        assertEq(cause, CAUSE_A, "rotation r + 1 keeps the prior cause");
+        assertEq(rotation, r + 1);
 
-        _warpToRotation(t, 3);
+        _warpToRotation(t, r + 2);
         (cause, rotation,,,,) = _buyLogged(trader, key, t, 1e18);
         assertEq(cause, CAUSE_C);
-        assertEq(rotation, 3);
+        assertEq(rotation, r + 2);
     }
 
     function test_periodChangeVote_appliesAtTheNextBoundary() public {
@@ -645,11 +649,13 @@ contract LiveFactoryTest is LiveFactoryBase {
         vm.expectRevert(IRotationGovernor.NoCirculatingSupply.selector);
         rgov.proposePeriod(t, RotationPeriod.OneDay);
 
-        vm.warp(rgov.rotationStart(t, 1) + 10);
+        uint64 r = _firstVotingRotation(t);
+        vm.warp(rgov.rotationStart(t, r) + 10);
         vm.prank(alice);
         uint64 id = rgov.proposePeriod(t, RotationPeriod.OneDay);
         uint256 snapshot = rgov.getProposal(id).snapshot;
-        assertEq(snapshot, rgov.rotationStart(t, 1) - 1);
+        assertEq(snapshot, rgov.rotationStart(t, r) - 1);
+        assertEq(rgov.getProposal(id).holdFrom, snapshot - 1 days);
         uint256 circulating =
             (token.getPastTotalSupply(snapshot) - token.getPastVotes(address(manager), snapshot))
                 / 1e18;
@@ -726,9 +732,10 @@ contract LiveFactoryTest is LiveFactoryBase {
         assertEq(_claims(address(hook), address(quote)), f, "held as claims");
 
         // The cause rotates to B before anyone retries.
-        _warpToRotation(t, 1);
-        _rotateTo(t, 2, 1);
-        _warpToRotation(t, 2);
+        uint64 r = _firstVotingRotation(t);
+        _warpToRotation(t, r);
+        _rotateTo(t, r + 1, 1);
+        _warpToRotation(t, r + 1);
         assertEq(_activeCause(t), CAUSE_B);
 
         // While the route is still broken, a retry reverts with the route's reason.

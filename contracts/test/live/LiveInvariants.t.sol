@@ -329,8 +329,9 @@ contract LiveInvariantsTest is LiveBase {
             owner: address(this)
         });
         handler = new LiveHandler(world, ts, ks, qs, causeList, trader, voter);
-        // Rotation 1 onwards: the voter's checkpoint predates the poll snapshots.
-        vm.warp(block.timestamp + 1 hours + 1);
+        // Rotation 25 onwards: the voter's checkpoint predates every hold window (one day
+        // before each poll snapshot).
+        vm.warp(block.timestamp + 1 days + 1 hours + 1);
         targetContract(address(handler));
     }
 

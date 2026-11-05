@@ -9,7 +9,7 @@ import {VeradaToken} from "../../src/VeradaToken.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
-import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {RotationScheduleLib} from "../../src/libraries/RotationScheduleLib.sol";
@@ -42,6 +42,8 @@ contract RotationHandler is Test {
     uint256 public appliedRounds;
     uint256 public badEffectiveFrom;
     uint256 public executedChanges;
+    /// @dev Latest proposal the handler created (the one it votes on and settles).
+    uint64 public pendingId;
 
     constructor(
         RotationGovernor gov_,
@@ -112,12 +114,14 @@ contract RotationHandler is Test {
         uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target);
         vm.prank(voter);
         try scheme.castBallot(address(gov), address(token), scope, abi.encode(uint8(choice % 3))) {
-            (, uint40 snap,,,,,) = gov.roundOf(address(token), target);
+            (uint40 holdFrom, uint40 snap) = gov.roundHoldWindow(address(token), target);
             _touch(scope, snap);
             assertFalse(voted[scope][voter], "G5 one ballot per voter");
             voted[scope][voter] = true;
             ++ballots[scope];
-            authorizedWeight[scope] += gov.weightAt(address(token), snap, voter);
+            uint64 w = gov.holdWeightAt(address(token), holdFrom, snap, voter);
+            assertLe(w, gov.weightAt(address(token), snap, voter), "G5 hold weight <= snapshot");
+            authorizedWeight[scope] += w;
         } catch {}
         _observe();
     }
@@ -161,12 +165,24 @@ contract RotationHandler is Test {
         vm.prank(voter);
         try gov.proposePeriod(address(token), RotationPeriod(periodSeed % 5)) returns (uint64 id) {
             _touch(PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id), gov.getProposal(id).snapshot);
+            pendingId = id;
         } catch {}
         _observe();
     }
 
+    function _pending() internal view returns (uint64 id) {
+        id = pendingId;
+        if (id == 0) return 0;
+        IRotationGovernor.ProposalState st = gov.proposalState(id);
+        if (
+            st != IRotationGovernor.ProposalState.Active
+                && st != IRotationGovernor.ProposalState.Ended
+                && st != IRotationGovernor.ProposalState.Closed
+        ) return 0;
+    }
+
     function voteProposal(uint8 voterSeed, bool support) external {
-        uint64 id = gov.activeProposalOf(address(token));
+        uint64 id = _pending();
         if (id == 0) return;
         address voter = voters[voterSeed % voters.length];
         uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id);
@@ -177,15 +193,16 @@ contract RotationHandler is Test {
             assertFalse(voted[scope][voter], "G5 one ballot per voter");
             voted[scope][voter] = true;
             ++ballots[scope];
+            RotationGovernor.PeriodProposal memory p = gov.getProposal(id);
             authorizedWeight[
                 scope
-            ] += gov.weightAt(address(token), gov.getProposal(id).snapshot, voter);
+            ] += gov.holdWeightAt(address(token), p.holdFrom, p.snapshot, voter);
         } catch {}
         _observe();
     }
 
     function settleProposal() external {
-        uint64 id = gov.activeProposalOf(address(token));
+        uint64 id = _pending();
         if (id == 0) return;
         RotationGovernor.PeriodProposal memory p = gov.getProposal(id);
         if (block.timestamp < p.end) vm.warp(p.end);
@@ -227,7 +244,7 @@ contract RotationInvariantsTest is Test {
             ICauseRegistry(address(causes)),
             ITokenProfileRegistry(address(new MockProfileRegistryLite())),
             makeAddr("pm"),
-            IVotingScheme(address(scheme)),
+            IOutcomeVotingScheme(address(scheme)),
             IRotationGovernor.Params({
                 votingPeriod: 1 hours,
                 executionWindow: 2 hours,
@@ -250,6 +267,8 @@ contract RotationInvariantsTest is Test {
         for (uint256 i; i < 4; ++i) {
             token.transfer(voters[i], share);
         }
+        // Holders hold for longer than any hold window (up to a week) before registration.
+        vm.warp(block.timestamp + 8 days);
         gov.registerToken(address(token), list[0], RotationPeriod.OneHour);
 
         handler = new RotationHandler(gov, scheme, token, voters, list[0]);
@@ -319,23 +338,26 @@ contract RotationInvariantsTest is Test {
         assertEq(gov.causeStateOf(address(token)).lastAppliedTarget, handler.lastApplied());
     }
 
-    /// At most one active proposal, and it is the one the governor reports.
+    /// At most one active proposal per period, and it is the one the governor reports.
     /// forge-config: default.invariant.runs = 48
     /// forge-config: default.invariant.depth = 120
-    function invariant_onePendingProposal() public view {
+    function invariant_onePendingProposalPerPeriod() public view {
         uint64 count = gov.proposalCount();
-        uint256 pending;
+        uint256[5] memory pending;
         for (uint64 id = 1; id <= count; ++id) {
             IRotationGovernor.ProposalState s = gov.proposalState(id);
+            RotationPeriod period = gov.getProposal(id).newPeriod;
             if (
                 s == IRotationGovernor.ProposalState.Active
                     || s == IRotationGovernor.ProposalState.Ended
                     || s == IRotationGovernor.ProposalState.Closed
             ) {
-                ++pending;
-                assertEq(gov.activeProposalOf(address(token)), id);
+                ++pending[uint8(period)];
+                assertEq(gov.activeProposalOf(address(token), period), id);
             }
         }
-        assertLe(pending, 1);
+        for (uint256 i; i < 5; ++i) {
+            assertLe(pending[i], 1);
+        }
     }
 }

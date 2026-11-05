@@ -16,7 +16,7 @@ import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
 import {IFeeConsolidator} from "../src/interfaces/IFeeConsolidator.sol";
 import {IRotationGovernor} from "../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
-import {IVotingScheme} from "../src/interfaces/IVotingScheme.sol";
+import {IOutcomeVotingScheme, IVotingScheme} from "../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {Deploy} from "./Deploy.s.sol";
 
@@ -43,12 +43,18 @@ import {Deploy} from "./Deploy.s.sol";
 ///        2. The owner sets the rotation governor's default shortlist
 ///           (`RotationGovernor.setDefaultShortlist`, 2 to 10 active causes).
 ///        3. The tally keeper (services/publisher) also follows the rotation governor's polls.
+///           These are outcome-only polls: it decrypts `ZamaVotingScheme.outcomeHandle` and
+///           relays it with `submitOutcome` (not `tallyHandles` / `submitTally`).
 contract DeployLive is Deploy {
     /// @dev Permission flags the live hook's address must encode.
     uint160 internal constant LIVE_HOOK_FLAGS = uint160(
         Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
             | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG
+            | Hooks.BEFORE_DONATE_FLAG
     );
+    /// @dev Fewest ballots a rotation poll or period proposal needs to be decrypted: a poll with
+    ///      a single ballot would reveal that voter's choice through its outcome.
+    uint32 internal constant ROTATION_MIN_VOTERS = 2;
 
     struct LiveDeployment {
         address rotationGovernor;
@@ -139,7 +145,7 @@ contract DeployLive is Deploy {
             ICauseRegistry(d.causeRegistry),
             ITokenProfileRegistry(d.profileRegistry),
             POOL_MANAGER,
-            IVotingScheme(d.votingScheme),
+            IOutcomeVotingScheme(d.votingScheme),
             defaultRotationParams()
         );
         LiveDonationVault vault = new LiveDonationVault(
@@ -160,6 +166,7 @@ contract DeployLive is Deploy {
         _deployHook(hookSalt, hookInit, hookAddr);
 
         gov.setVault(address(vault));
+        gov.setMinVoters(ROTATION_MIN_VOTERS);
         vault.setHook(hookAddr);
         FeeConsolidator(payable(d.feeConsolidator)).setSource(hookAddr, true);
         ZamaVotingScheme(d.votingScheme).setGovernor(address(gov), true);

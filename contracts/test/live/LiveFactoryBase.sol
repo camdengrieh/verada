@@ -36,7 +36,7 @@ import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationG
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
 import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
-import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockDistributor, MockOndoToken, MockWETH} from "../consolidator/ConsolidatorMocks.sol";
@@ -168,7 +168,7 @@ abstract contract LiveFactoryBase is LiveBase {
             ICauseRegistry(address(causes)),
             ITokenProfileRegistry(address(profileRegistry)),
             address(manager),
-            IVotingScheme(address(scheme)),
+            IOutcomeVotingScheme(address(scheme)),
             _defaultParams()
         );
         scheme.setGovernor(address(rgov), true);
@@ -307,5 +307,15 @@ abstract contract LiveFactoryBase is LiveBase {
 
     function _warpToRotation(address token, uint64 n) internal {
         vm.warp(rgov.rotationStart(token, n));
+    }
+
+    /// @dev First rotation whose poll weights cover holders since launch: the hold window
+    ///      `[start(c) - 1 - max(length, 1 day), start(c) - 1]` must start at or after launch.
+    function _firstVotingRotation(address token) internal view returns (uint64 c) {
+        uint256 s0 = rgov.rotationStart(token, 0);
+        uint256 len = rgov.rotationStart(token, 1) - s0;
+        uint256 lookback = len < 1 days ? 1 days : len;
+        c = 1;
+        while (rgov.rotationStart(token, c) < s0 + lookback + 1) ++c;
     }
 }

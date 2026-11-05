@@ -57,6 +57,7 @@ contract LiveFactoryHandler is Test {
     address[] internal voters;
 
     // ---- ghosts: accounting
+    mapping(address token => uint64) public pendingProposal;
     mapping(address token => uint256) public feeTaken;
     mapping(address token => uint256) public convertedIn;
     mapping(address token => uint256) public heldIn;
@@ -374,10 +375,19 @@ contract LiveFactoryHandler is Test {
     ///      proposal: close, tally, execute.
     function periodChange(uint8 tokenSeed, uint8 periodSeed) external observed {
         address token = tokens[tokenSeed % tokens.length];
-        uint64 id = w.gov.activeProposalOf(token);
+        uint64 id = pendingProposal[token];
+        if (id != 0) {
+            IRotationGovernor.ProposalState st = w.gov.proposalState(id);
+            if (
+                st != IRotationGovernor.ProposalState.Active
+                    && st != IRotationGovernor.ProposalState.Ended
+                    && st != IRotationGovernor.ProposalState.Closed
+            ) id = 0;
+        }
         if (id == 0) {
             vm.prank(voters[0]);
             try w.gov.proposePeriod(token, RotationPeriod(periodSeed % 5)) returns (uint64 newId) {
+                pendingProposal[token] = newId;
                 uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_PERIOD, newId);
                 for (uint256 v; v < 2; ++v) {
                     vm.prank(voters[v]);
@@ -482,7 +492,7 @@ contract LiveFactoryInvariantsTest is LiveFactoryBase {
         handler.seedBuy(address(handler), 0, 1e20);
         handler.seedBuy(address(handler), 1, 3e19);
 
-        // Three holders buy in rotation 0; they vote from rotation 1 on.
+        // Three holders buy in rotation 0; they vote once their hold windows cover it.
         address[3] memory holders = [alice, bob, carol];
         uint256[3] memory sizes = [uint256(5e20), 2e20, 5e19];
         for (uint256 h; h < 3; ++h) {
@@ -493,8 +503,9 @@ contract LiveFactoryInvariantsTest is LiveFactoryBase {
             handler.seedBuy(holders[h], 1, sizes[h] / 30);
         }
 
-        // Rotation 1: the holders' checkpoints predate every poll snapshot from here on.
-        vm.warp(block.timestamp + 1 hours + 1);
+        // Rotation 25: the holders' checkpoints predate every hold window (one day before each
+        // poll snapshot) from here on.
+        vm.warp(block.timestamp + 1 days + 1 hours + 1);
         bytes4[] memory selectors = new bytes4[](12);
         selectors[0] = LiveFactoryHandler.trade.selector;
         selectors[1] = LiveFactoryHandler.trade.selector; // trades weigh double

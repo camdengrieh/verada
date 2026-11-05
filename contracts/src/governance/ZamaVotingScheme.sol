@@ -6,7 +6,12 @@ import {FHE, ebool, euint64, euint8, externalEuint8} from "@fhevm/solidity/lib/F
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
-import {IBallotGovernor, IVotingScheme} from "../interfaces/IVotingScheme.sol";
+import {
+    IBallotGovernor,
+    IOutcomeVotingScheme,
+    IVotingScheme,
+    NO_WINNER
+} from "../interfaces/IVotingScheme.sol";
 
 /// @title ZamaVotingScheme
 /// @notice `IVotingScheme` whose ballots are Zama FHEVM ciphertexts. A voter submits an encrypted
@@ -14,12 +19,15 @@ import {IBallotGovernor, IVotingScheme} from "../interfaces/IVotingScheme.sol";
 ///         encrypted tally of every option under an encrypted equality test, so no party learns an
 ///         individual choice. When the governor closes the poll the per-option tallies are made
 ///         publicly decryptable; anyone then relays the KMS-signed cleartexts to `submitTally`.
+///         A governor can instead close a poll for its outcome only (`requestOutcome`): the
+///         winning index is computed under FHE and only that index becomes decryptable, so
+///         the per-option counts of small polls never give individual choices away.
 /// @dev Polls are keyed by `(governor, token, scope)`. Only allowlisted governors may open polls
 ///      and request tallies. The voter calls `castBallot` directly so that the input proof, which
 ///      the coprocessor binds to `msg.sender`, is checked against the voter; the governor is
 ///      consulted through `IBallotGovernor.authorizeBallot` and may open the poll lazily during
 ///      that call. Weights are whole tokens and tallies are `euint64`, matching the interface.
-contract ZamaVotingScheme is IVotingScheme, Ownable2Step {
+contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     /// @inheritdoc IVotingScheme
     uint8 public constant MAX_OPTIONS = 10;
 
@@ -32,6 +40,10 @@ contract ZamaVotingScheme is IVotingScheme, Ownable2Step {
         euint64[] tallies;
         uint64[] counts;
         mapping(address voter => bool) voted;
+        /// @dev Closed with `requestOutcome`: only `outcome` is decryptable.
+        bool outcomeOnly;
+        uint8 winner;
+        euint8 outcome;
     }
 
     /// @inheritdoc IVotingScheme
@@ -87,6 +99,39 @@ contract ZamaVotingScheme is IVotingScheme, Ownable2Step {
             FHE.makePubliclyDecryptable(poll.tallies[i]);
         }
         emit TallyRequested(msg.sender, token, scope);
+    }
+
+    /// @inheritdoc IOutcomeVotingScheme
+    /// @dev Strict running argmax from a zero best, so ties go to the lowest index and an
+    ///      all-zero poll yields `NO_WINNER`; then a best below `minWeight` yields `NO_WINNER`.
+    ///      About `2n + 1` comparisons and selects on ciphertexts (n <= 10). Only the resulting
+    ///      `euint8` is made publicly decryptable.
+    function requestOutcome(address token, uint256 scope, uint64 minWeight) external {
+        if (!isGovernor[msg.sender]) revert NotGovernor(msg.sender);
+        Poll storage poll = _polls[msg.sender][token][scope];
+        if (!poll.opened) revert PollNotOpen(msg.sender, token, scope);
+        if (poll.closed) revert PollClosed(msg.sender, token, scope);
+
+        poll.closed = true;
+        poll.outcomeOnly = true;
+        uint256 n = poll.optionCount;
+        euint64 best = FHE.asEuint64(0);
+        euint8 index = FHE.asEuint8(NO_WINNER);
+        for (uint256 i = 0; i < n; ++i) {
+            euint64 tally = poll.tallies[i];
+            ebool higher = FHE.gt(tally, best);
+            best = FHE.select(higher, tally, best);
+            // forge-lint: disable-next-line(unsafe-typecast)
+            index = FHE.select(higher, FHE.asEuint8(uint8(i)), index);
+        }
+        if (minWeight > 1) {
+            ebool enough = FHE.ge(best, minWeight);
+            index = FHE.select(enough, index, FHE.asEuint8(NO_WINNER));
+        }
+        FHE.allowThis(index);
+        FHE.makePubliclyDecryptable(index);
+        poll.outcome = index;
+        emit OutcomeRequested(msg.sender, token, scope, minWeight);
     }
 
     // ---- voter
@@ -148,6 +193,7 @@ contract ZamaVotingScheme is IVotingScheme, Ownable2Step {
     ) external {
         Poll storage poll = _polls[governor][token][scope];
         if (!poll.closed) revert PollNotClosed(governor, token, scope);
+        if (poll.outcomeOnly) revert OutcomeOnlyPoll(governor, token, scope);
         if (poll.isFinal) revert TallyAlreadyFinal(governor, token, scope);
         uint256 n = poll.optionCount;
         if (cleartexts.length != 32 * n) revert InvalidTallyProof();
@@ -170,7 +216,58 @@ contract ZamaVotingScheme is IVotingScheme, Ownable2Step {
         emit TallySubmitted(governor, token, scope, counts);
     }
 
+    /// @inheritdoc IOutcomeVotingScheme
+    /// @dev `cleartexts` is the ABI encoding of the decrypted winner (one 32-byte word) as returned
+    ///      by the relayer SDK `publicDecrypt([outcomeHandle])`, with `proof` the KMS proof.
+    function submitOutcome(
+        address governor,
+        address token,
+        uint256 scope,
+        bytes calldata cleartexts,
+        bytes calldata proof
+    ) external {
+        Poll storage poll = _polls[governor][token][scope];
+        if (!poll.closed) revert PollNotClosed(governor, token, scope);
+        if (!poll.outcomeOnly) revert NotOutcomePoll(governor, token, scope);
+        if (poll.isFinal) revert TallyAlreadyFinal(governor, token, scope);
+        if (cleartexts.length != 32) revert InvalidTallyProof();
+
+        bytes32[] memory handles = new bytes32[](1);
+        handles[0] = FHE.toBytes32(poll.outcome);
+        FHE.checkSignatures(handles, cleartexts, proof);
+
+        uint256 word = uint256(bytes32(cleartexts[0:32]));
+        if (word != NO_WINNER && word >= poll.optionCount) revert InvalidTallyProof();
+        // forge-lint: disable-next-line(unsafe-typecast)
+        uint8 winner = uint8(word);
+        poll.winner = winner;
+        poll.isFinal = true;
+        emit OutcomeSubmitted(governor, token, scope, winner);
+    }
+
     // ---- views
+
+    /// @inheritdoc IOutcomeVotingScheme
+    function outcomeOf(address governor, address token, uint256 scope)
+        external
+        view
+        returns (bool isFinal, uint8 winner)
+    {
+        Poll storage poll = _polls[governor][token][scope];
+        if (!poll.outcomeOnly) return (false, NO_WINNER);
+        return (poll.isFinal, poll.isFinal ? poll.winner : NO_WINNER);
+    }
+
+    /// @notice Ciphertext handle of the winner of an outcome poll (zero before
+    ///         `requestOutcome`). The keeper passes it to the relayer SDK `publicDecrypt` and
+    ///         relays the result to `submitOutcome`.
+    function outcomeHandle(address governor, address token, uint256 scope)
+        external
+        view
+        returns (bytes32)
+    {
+        return euint8.unwrap(_polls[governor][token][scope].outcome);
+    }
 
     /// @inheritdoc IVotingScheme
     function tallyOf(address governor, address token, uint256 scope)
@@ -179,6 +276,8 @@ contract ZamaVotingScheme is IVotingScheme, Ownable2Step {
         returns (bool isFinal, uint64[] memory counts)
     {
         Poll storage poll = _polls[governor][token][scope];
+        // An outcome poll never publishes counts.
+        if (poll.outcomeOnly) return (false, poll.counts);
         return (poll.isFinal, poll.counts);
     }
 

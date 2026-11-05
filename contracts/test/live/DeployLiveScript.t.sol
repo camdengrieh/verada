@@ -169,6 +169,7 @@ contract DeployLiveScriptTest is Test, DeployLive {
         assertTrue(ZamaVotingScheme(d.votingScheme).isGovernor(l.rotationGovernor));
         assertTrue(ZamaVotingScheme(d.votingScheme).isGovernor(d.epochGovernor), "weekly kept");
         assertEq(RotationGovernor(l.rotationGovernor).vault(), l.liveVault);
+        assertEq(RotationGovernor(l.rotationGovernor).minVoters(), 2, "outcome needs two ballots");
         assertEq(LiveDonationVault(l.liveVault).hook(), l.liveHook);
         assertEq(LiveDonationVault(l.liveVault).factory(), d.factory);
         assertEq(LiveDonationVault(l.liveVault).platformTreasury(), treasury);
