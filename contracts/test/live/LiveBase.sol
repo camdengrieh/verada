@@ -35,7 +35,7 @@ import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
-import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {
     MockDistributor,
@@ -60,7 +60,7 @@ abstract contract LiveBase is Deployers {
 
     uint160 internal constant LIVE_FLAGS = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
         | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-        | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
+        | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_DONATE_FLAG;
 
     int24 internal constant TOKEN_TICK = 69_060; // 0.001 quote per token
     int24 internal constant QUOTE_TICK = 230_280; // ~100 USDC per quote (raw units)
@@ -167,7 +167,7 @@ abstract contract LiveBase is Deployers {
             ICauseRegistry(address(causes)),
             ITokenProfileRegistry(address(profiles)),
             address(manager),
-            IVotingScheme(address(scheme)),
+            IOutcomeVotingScheme(address(scheme)),
             _defaultParams()
         );
         scheme.setGovernor(address(rgov), true);

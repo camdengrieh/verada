@@ -35,7 +35,7 @@ import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
-import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
+import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockDistributor, MockGovernor} from "../consolidator/ConsolidatorMocks.sol";
@@ -66,7 +66,7 @@ contract LiveDonationForkTest is Test {
 
     uint160 internal constant LIVE_FLAGS = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
         | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-        | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
+        | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_DONATE_FLAG;
 
     IEndaomentOrgFundFactory internal eFactory = IEndaomentOrgFundFactory(ENDAOMENT_FACTORY);
     QuoteRegistry internal registry;
@@ -119,7 +119,7 @@ contract LiveDonationForkTest is Test {
             ICauseRegistry(address(causes)),
             ITokenProfileRegistry(address(new MockProfileRegistryLite())),
             address(PM),
-            IVotingScheme(address(scheme)),
+            IOutcomeVotingScheme(address(scheme)),
             IRotationGovernor.Params(24 hours, 3 days, 7 days, 1000, 50)
         );
         scheme.setGovernor(address(gov), true);
@@ -279,22 +279,25 @@ contract LiveDonationForkTest is Test {
             _launch(1_000_000e6, causeDeployed, RotationPeriod.OneHour);
         address voter = makeAddr("voter");
         t.transfer(voter, 1e24);
-        vm.warp(block.timestamp + 1 hours + 60); // rotation 1
-        uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, 2);
+        // Hourly polls weigh holdings over the day before their snapshot: rotation 25 is the
+        // first whose hold window starts after launch.
+        uint64 r = 25;
+        vm.warp(gov.rotationStart(address(t), r) + 60);
+        uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, r + 1);
         vm.prank(voter);
         scheme.castBallot(address(gov), address(t), scope, abi.encode(uint8(1)));
-        (,, uint40 voteEnd,,,,) = gov.roundOf(address(t), 2);
+        (,, uint40 voteEnd,,,,) = gov.roundOf(address(t), r + 1);
         vm.warp(voteEnd);
-        gov.closeRound(address(t), 2);
+        gov.closeRound(address(t), r + 1);
         scheme.finalizeFromBallots(address(gov), address(t), scope);
-        vm.warp(gov.rotationStart(address(t), 2) + 60); // the tally arrives late
-        gov.finalizeRound(address(t), 2);
+        vm.warp(gov.rotationStart(address(t), r + 1) + 60); // the tally arrives late
+        gov.finalizeRound(address(t), r + 1);
 
-        _buy(k, address(t), 1 ether); // rotation 2: still the first cause
+        _buy(k, address(t), 1 ether); // rotation r + 1: still the first cause
         (uint256 pDeployed,) = vault.pendingOf(address(t), causeDeployed);
         assertGt(pDeployed, 0);
-        vm.warp(gov.rotationStart(address(t), 3));
-        _buy(k, address(t), 1 ether); // rotation 3: the winner
+        vm.warp(gov.rotationStart(address(t), r + 2));
+        _buy(k, address(t), 1 ether); // rotation r + 2: the winner
         (uint256 pFresh,) = vault.pendingOf(address(t), causeFresh);
         assertGt(pFresh, 0);
         (uint256 pDeployedAfter,) = vault.pendingOf(address(t), causeDeployed);

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Vm} from "forge-std/Vm.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
@@ -107,7 +108,8 @@ contract VeradaLiveHookTest is LiveBase {
         Hooks.Permissions memory p = hook.getHookPermissions();
         assertTrue(p.beforeInitialize && p.beforeSwap && p.afterSwap);
         assertTrue(p.beforeSwapReturnDelta && p.afterSwapReturnDelta);
-        assertFalse(p.afterInitialize || p.beforeAddLiquidity || p.beforeDonate);
+        assertFalse(p.afterInitialize || p.beforeAddLiquidity || p.afterDonate);
+        assertTrue(p.beforeDonate, "donations refused");
         assertEq(uint160(address(hook)) & uint160((1 << 14) - 1), LIVE_FLAGS);
         assertEq(hook.vault(), address(vault));
         assertEq(hook.usdc(), address(usdc));
@@ -525,8 +527,29 @@ contract VeradaLiveHookTest is LiveBase {
     function test_unusedCallbacks_revert() public {
         vm.expectRevert(IVeradaLiveHook.HookNotImplemented.selector);
         hook.afterInitialize(address(0), liveKey, 0, 0);
-        vm.expectRevert(IVeradaLiveHook.HookNotImplemented.selector);
+        vm.expectRevert(IVeradaLiveHook.DonateNotAllowed.selector);
         hook.beforeDonate(address(0), liveKey, 0, 0, "");
+    }
+
+    /// @dev Audit regression: `PoolManager.donate` to a live pool used to accrue fee growth to
+    ///      the locked position, which the LP locker can never collect for a live token (its
+    ///      forward to the consolidator reverts `UnknownToken`), locking the donation for good.
+    ///      The hook now refuses every donation.
+    function test_donate_toLivePool_reverts() public {
+        // Move price into the locked range first (any buy does), as the scenario requires.
+        _buyExactIn(liveKey, address(token), 1e18);
+        IERC20(address(quote)).approve(address(donateRouter), type(uint256).max);
+        IERC20(address(token)).approve(address(donateRouter), type(uint256).max);
+        bool quoteIs0 = _quoteIs0(liveKey, address(token));
+        uint256 a0 = quoteIs0 ? 1e18 : 0;
+        uint256 a1 = quoteIs0 ? 0 : 1e18;
+        vm.expectRevert(
+            _hookErr(
+                IHooks.beforeDonate.selector,
+                abi.encodeWithSelector(IVeradaLiveHook.DonateNotAllowed.selector)
+            )
+        );
+        donateRouter.donate(liveKey, a0, a1, "");
     }
 
     // ------------------------------------------------------------------ holds and retries
@@ -615,8 +638,14 @@ contract VeradaLiveHookTest is LiveBase {
 
     /// @dev Votes cause `target` in for the next rotation, then warps into it.
     function _rotateTo(address t, bytes32 target) internal {
-        // Rotation 1's snapshot predates the token, so vote in rotation 1 for rotation 2.
-        vm.warp(rgov.rotationStart(t, 1) + 1);
+        // Vote in the first rotation whose hold window starts after launch (the trader holds
+        // from launch).
+        uint256 s0 = rgov.rotationStart(t, 0);
+        uint256 len = rgov.rotationStart(t, 1) - s0;
+        uint256 lookback = len < 1 days ? 1 days : len;
+        uint64 c = 1;
+        while (rgov.rotationStart(t, c) < s0 + lookback + 1) ++c;
+        vm.warp(rgov.rotationStart(t, c) + 1);
         uint64 tgt = rgov.openRound(t);
         uint8 choice = target == CAUSE_A ? 0 : target == CAUSE_B ? 1 : 2;
         vm.prank(trader);

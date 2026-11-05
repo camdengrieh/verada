@@ -49,8 +49,10 @@ interface IConsolidatorRoutes {
 ///      (pure accounting: its delta becomes `-f`, cancelled when the pool manager applies the
 ///      hook's `+f` return delta). Then, unless a currency is synced (a router mid-settlement),
 ///      a gas-capped self call (`inlineConvert`) asks the consolidator to burn those claims and
-///      swap them along the quote's hookless registry route under the shared price guards, paying
-///      USDC to the vault, and credits the vault. If anything fails, the frame is rolled back and
+///      swap them along the quote's hookless registry route under the consolidator's in-swap price
+///      guards (tight deviation and slippage bounds, measured against the route reference, so a
+///      route pool pushed before the swap makes the conversion fail and the fee is held rather
+///      than sold cheaply), paying USDC to the vault, and credits the vault. If anything fails, the frame is rolled back and
 ///      the claims stay with the hook as `heldRaw[token][cause]`, attributed to the cause active
 ///      when they were earned; anyone can `retryHeld` them later.
 ///
@@ -67,7 +69,8 @@ interface IConsolidatorRoutes {
 ///         and the consolidator's and the vault's deltas are zero. The swap never ends with an
 ///         unsettled delta caused by this hook.
 ///       - H4: the only reverts this hook adds to a swap are `InsufficientGas`,
-///         `PartialFillNotSupported` and `SwapReentered`.
+///         `PartialFillNotSupported` and `SwapReentered`. Every `donate` to a live pool reverts
+///         (`DonateNotAllowed`), so the locked position never accrues anything to collect.
 ///       - H5: the swap path is O(1): at most `QuoteRegistry.MAX_ROUTE_LENGTH` (3) hops, one push,
 ///         O(1) governor reads, and it never calls `sync`.
 ///
@@ -200,6 +203,9 @@ contract VeradaLiveHook is IHooks, IVeradaLiveHook, IUnlockCallback {
         p.afterSwap = true;
         p.beforeSwapReturnDelta = true;
         p.afterSwapReturnDelta = true;
+        // Donations are refused: they would accrue to the locked position, whose fees the LP
+        // locker can never forward for a live token (the consolidator does not know it).
+        p.beforeDonate = true;
     }
 
     // ------------------------------------------------------------------ configuration
@@ -567,12 +573,14 @@ contract VeradaLiveHook is IHooks, IVeradaLiveHook, IUnlockCallback {
         revert HookNotImplemented();
     }
 
+    /// @dev Every donation to a live pool reverts. Support goes to causes through swaps (or
+    ///      directly to the cause), never into the locked position.
     function beforeDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)
         external
         pure
         returns (bytes4)
     {
-        revert HookNotImplemented();
+        revert DonateNotAllowed();
     }
 
     function afterDonate(address, PoolKey calldata, uint256, uint256, bytes calldata)

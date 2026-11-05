@@ -26,7 +26,7 @@ contract MineVeradaLiveHookSalt is Script {
         );
         uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
             | Hooks.AFTER_SWAP_FLAG | Hooks.BEFORE_SWAP_RETURNS_DELTA_FLAG
-            | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
+            | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG | Hooks.BEFORE_DONATE_FLAG;
         (hookAddress, salt) =
             HookMiner.find(deployer, flags, type(VeradaLiveHook).creationCode, args);
         console.log("live hook", hookAddress);

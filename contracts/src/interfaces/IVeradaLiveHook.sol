@@ -56,6 +56,9 @@ interface IVeradaLiveHook {
     error ZeroAddress();
     error SettlementMismatch();
     error HookNotImplemented();
+    /// @notice `PoolManager.donate` to a live pool is refused: the locked position could never
+    ///         collect the donation.
+    error DonateNotAllowed();
     error InvalidPool();
     error AlreadyConfigured(address token);
     error TokenNotConfigured(address token);
