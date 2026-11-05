@@ -52,10 +52,17 @@ interface IWETH {
 ///      inside a swap) nothing can be swapped yet, so the amount is simply held for `retry`.
 ///
 ///      Price guards, applied to every hop:
-///       1. execution must return at least `spot * (1 - maxSlippageBps - hopFee)`;
-///       2. spot must be within `maxDeviationTicks` of a reference: the hook's TWAP for the
-///          token's own pool, an owner seeded moving reference for registry route pools.
+///       1. spot must be within `maxDeviationTicks` of a reference: the hook's TWAP for the
+///          token's own pool, an owner seeded moving reference for registry route pools;
+///       2. execution must return at least `max(spot, reference) * (1 - maxSlippageBps - hopFee)`.
+///          The minimum is measured against the reference too, so pushing spot inside the
+///          deviation band cannot widen the slippage allowance (the band and the tolerance never
+///          add up).
+///      Claim conversions run inside a trader's swap (`convertClaims` with `inSwap`) use the
+///      tighter `inSwapMaxDeviationTicks` / `inSwapMaxSlippageBps` instead.
 ///      A failed guard fails closed (the raw balance is held), never executes at a bad price.
+///      References follow spot slowly (`_moveReference`), after each successful hop and through
+///      the permissionless `syncReference`, so a market that moved stays convertible.
 contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
     using StateLibrary for IPoolManager;
@@ -80,6 +87,10 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     uint32 public constant TWAP_WINDOW = 30 minutes;
     /// @notice Time over which a reference moves fully to spot after a successful hop.
     uint256 public constant REFERENCE_WINDOW = 1 days;
+    /// @notice Initial in-swap deviation bound, in ticks (about 3%).
+    uint256 public constant DEFAULT_IN_SWAP_DEVIATION_TICKS = 300;
+    /// @notice Initial in-swap slippage bound, in basis points.
+    uint256 public constant DEFAULT_IN_SWAP_SLIPPAGE_BPS = 100;
 
     IPoolManager public immutable poolManager;
     IConsolidatorRegistry public immutable quoteRegistry;
@@ -95,6 +106,12 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     uint256 public maxDeviationTicks;
     /// @notice Furthest the automatic reference may drift from its owner set anchor, in ticks.
     uint256 public maxDriftTicks;
+    /// @notice Deviation bound for claim conversions inside a trader's swap (the effective bound
+    ///         is the smaller of this and `maxDeviationTicks`).
+    uint256 public inSwapMaxDeviationTicks;
+    /// @notice Slippage bound for claim conversions inside a trader's swap (the effective bound
+    ///         is the smaller of this and `maxSlippageBps`).
+    uint256 public inSwapMaxSlippageBps;
 
     /// @notice The hook that registers pools.
     address public hook;
@@ -112,6 +129,8 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     event MaxDeviationTicksUpdated(uint256 ticks);
     event MaxDriftTicksUpdated(uint256 ticks);
     event ReferenceSet(PoolId indexed poolId, int24 tick);
+    event ReferenceSynced(PoolId indexed poolId, int24 spotTick, int24 tick);
+    event InSwapBoundsUpdated(uint256 maxDeviationTicks, uint256 maxSlippageBps);
     event Rescued(address indexed currency, address indexed to, uint256 amount);
 
     error ZeroAddress();
@@ -165,6 +184,8 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         maxDeviationTicks = maxDeviationTicks_;
         // Default drift band: a fraction of the deviation guard, so the guard stays meaningful.
         maxDriftTicks = maxDeviationTicks_ / 2;
+        inSwapMaxDeviationTicks = DEFAULT_IN_SWAP_DEVIATION_TICKS;
+        inSwapMaxSlippageBps = DEFAULT_IN_SWAP_SLIPPAGE_BPS;
     }
 
     receive() external payable {
@@ -210,6 +231,15 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         emit MaxDriftTicksUpdated(ticks);
     }
 
+    /// @notice Sets the deviation and slippage bounds of claim conversions run inside a trader's
+    ///         swap. Each is further capped by the general bound when used.
+    function setInSwapBounds(uint256 deviationTicks, uint256 slippageBps) external onlyOwner {
+        if (slippageBps > MAX_SLIPPAGE_CEILING_BPS) revert InvalidSlippage(slippageBps);
+        inSwapMaxDeviationTicks = deviationTicks;
+        inSwapMaxSlippageBps = slippageBps;
+        emit InSwapBoundsUpdated(deviationTicks, slippageBps);
+    }
+
     /// @notice Seeds the reference of route pools with their current spot tick.
     /// @dev Owner judgement: only seed while the pool trades at a fair price. Also used to
     ///      re-anchor a pool after a legitimate large move (for example an Ondo reopening gap).
@@ -228,6 +258,20 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         PoolId id = key.toId();
         references[id] = Reference(tick, uint40(block.timestamp), true, tick);
         emit ReferenceSet(id, tick);
+    }
+
+    /// @notice Moves the reference of route pool `key` toward its current spot, exactly as a
+    ///         successful hop would (time weighted, capped step, clamped to the anchor band).
+    ///         Permissionless, so a reference keeps following a market whose conversions fail the
+    ///         price guards. A single manipulated spot moves it by at most one capped step.
+    function syncReference(PoolKey calldata key) external nonReentrant returns (int24 tick) {
+        PoolId id = key.toId();
+        if (!references[id].set) revert ReferenceNotSet(id);
+        (uint160 sqrtPriceX96, int24 spot,,) = poolManager.getSlot0(id);
+        if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
+        _moveReference(id, spot);
+        tick = references[id].tick;
+        emit ReferenceSynced(id, spot, tick);
     }
 
     /// @notice Sends balances not owed to any token (dust, accidental transfers) to `to`.
@@ -365,12 +409,14 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     ///      inside the pool manager flow it is already in (a swap, or its own unlock for retries).
     ///      Burning the caller's claims as its operator credits this contract with `amount` of
     ///      `currency`; every hop is the same `_hop` as consolidation (reference-tick guard,
-    ///      slippage and hop-fee bound, full fill, reference move), and the settlement asset is
+    ///      slippage and hop-fee bound, full fill, reference move), with the in-swap bounds when
+    ///      `inSwap` (the trader chooses when an in-line conversion runs and can move route pools
+    ///      in the same transaction, so it gets the tightest guard), and the settlement asset is
     ///      taken straight to `to`. Every pool manager delta of this contract is zero when it
     ///      returns. Never calls `sync`; the only `settle` is the native one inside the WETH
     ///      unwrap hop, so the caller must make sure no currency is synced (the live hook checks).
     ///      The token-pool TWAP guard is not used: the claims are never in a launched token.
-    function convertClaims(address currency, uint256 amount, address to, bool hooklessOnly)
+    function convertClaims(address currency, uint256 amount, address to, bool inSwap)
         external
         nonReentrant
         returns (uint256 out)
@@ -386,8 +432,8 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         address current = currency;
         out = amount;
         for (uint256 i; i < route.length; ++i) {
-            if (hooklessOnly && address(route[i].hooks) != address(0)) revert HookedRouteHop(i);
-            (current, out) = _hop(route[i], current, out, address(0), false);
+            if (inSwap && address(route[i].hooks) != address(0)) revert HookedRouteHop(i);
+            (current, out) = _hop(route[i], current, out, address(0), false, inSwap);
         }
         if (current != settlementAsset) revert NoRoute(currency);
         if (out == 0) revert SlippageTooHigh(0, 1);
@@ -415,7 +461,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         address current = currencyIn;
         uint256 amount = amountIn;
         for (uint256 i; i < route.length; ++i) {
-            (current, amount) = _hop(route[i], current, amount, token, tokenHop && i == 0);
+            (current, amount) = _hop(route[i], current, amount, token, tokenHop && i == 0, false);
         }
         if (current != settlementAsset) revert NoRoute(currencyIn);
 
@@ -442,10 +488,15 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     }
 
     /// @dev Swaps `amount` of `current` exact-input through `key`, applying the price guards.
-    function _hop(PoolKey memory key, address current, uint256 amount, address token, bool tokenHop)
-        private
-        returns (address next, uint256 out)
-    {
+    ///      `inSwap` selects the in-swap deviation and slippage bounds.
+    function _hop(
+        PoolKey memory key,
+        address current,
+        uint256 amount,
+        address token,
+        bool tokenHop,
+        bool inSwap
+    ) private returns (address next, uint256 out) {
         address c0 = Currency.unwrap(key.currency0);
         address c1 = Currency.unwrap(key.currency1);
 
@@ -464,12 +515,20 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         (uint160 sqrtPriceX96, int24 tick,, uint24 lpFee) = poolManager.getSlot0(id);
         if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
 
-        _checkDeviation(key, id, tick, token, tokenHop);
+        uint256 slippage = maxSlippageBps;
+        uint256 deviation = maxDeviationTicks;
+        if (inSwap) {
+            if (inSwapMaxSlippageBps < slippage) slippage = inSwapMaxSlippageBps;
+            if (inSwapMaxDeviationTicks < deviation) deviation = inSwapMaxDeviationTicks;
+        }
+        int24 referenceTick = _checkDeviation(key, id, tick, token, tokenHop, deviation);
 
-        uint256 tolerance = maxSlippageBps + _hopFeeBps(key, lpFee, token, tokenHop);
-        uint256 expected = zeroForOne
-            ? FullMath.mulDiv(FullMath.mulDiv(amount, sqrtPriceX96, 1 << 96), sqrtPriceX96, 1 << 96)
-            : FullMath.mulDiv(FullMath.mulDiv(amount, 1 << 96, sqrtPriceX96), 1 << 96, sqrtPriceX96);
+        // Expected output at the better of spot and the reference: a spot pushed below the
+        // reference (inside the band) does not lower the minimum.
+        uint256 expected = _quote(amount, sqrtPriceX96, zeroForOne);
+        uint256 atReference = _quote(amount, TickMath.getSqrtPriceAtTick(referenceTick), zeroForOne);
+        if (atReference > expected) expected = atReference;
+        uint256 tolerance = slippage + _hopFeeBps(key, lpFee, token, tokenHop);
         uint256 minOut = (expected * (BPS - tolerance)) / BPS;
 
         BalanceDelta delta = poolManager.swap(
@@ -495,14 +554,26 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         next = zeroForOne ? c1 : c0;
     }
 
+    /// @dev Output of `amount` at price `sqrtPriceX96`, before fees and impact.
+    function _quote(uint256 amount, uint160 sqrtPriceX96, bool zeroForOne)
+        private
+        pure
+        returns (uint256)
+    {
+        return zeroForOne
+            ? FullMath.mulDiv(FullMath.mulDiv(amount, sqrtPriceX96, 1 << 96), sqrtPriceX96, 1 << 96)
+            : FullMath.mulDiv(FullMath.mulDiv(amount, 1 << 96, sqrtPriceX96), 1 << 96, sqrtPriceX96);
+    }
+
+    /// @dev Reverts unless `spotTick` is within `maxTicks` of the hop's reference; returns it.
     function _checkDeviation(
         PoolKey memory key,
         PoolId id,
         int24 spotTick,
         address token,
-        bool tokenHop
-    ) private view {
-        int24 referenceTick;
+        bool tokenHop,
+        uint256 maxTicks
+    ) private view returns (int24 referenceTick) {
         if (tokenHop) {
             (bool ok, int24 twap,) = IHookOracle(address(key.hooks)).twapTick(token, TWAP_WINDOW);
             if (!ok) revert OracleUnavailable(token);
@@ -513,7 +584,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
             referenceTick = ref.tick;
         }
         int256 diff = int256(spotTick) - int256(referenceTick);
-        if (uint256(diff < 0 ? -diff : diff) > maxDeviationTicks) {
+        if (uint256(diff < 0 ? -diff : diff) > maxTicks) {
             revert PriceDeviation(spotTick, referenceTick);
         }
     }
@@ -522,12 +593,16 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     ///      each step capped at a tenth of `maxDeviationTicks` and the result clamped to the owner
     ///      anchor band. Repeated manipulation therefore cannot walk the reference away from the
     ///      anchor by more than `maxDriftTicks`.
+    ///      When the step truncates to zero while spot differs, `updatedAt` is kept, so elapsed
+    ///      time accumulates until a whole tick is due: frequent updates (an in-line conversion on
+    ///      every swap) cannot freeze the reference.
     function _moveReference(PoolId id, int24 spotTick) private {
         Reference storage ref = references[id];
         uint256 dt = block.timestamp - ref.updatedAt;
         if (dt > REFERENCE_WINDOW) dt = REFERENCE_WINDOW;
-        int256 step =
-            ((int256(spotTick) - int256(ref.tick)) * int256(dt)) / int256(REFERENCE_WINDOW);
+        int256 diff = int256(spotTick) - int256(ref.tick);
+        int256 step = (diff * int256(dt)) / int256(REFERENCE_WINDOW);
+        if (step == 0 && diff != 0) return;
         int256 cap = int256(maxDeviationTicks / 10);
         if (step > cap) step = cap;
         if (step < -cap) step = -cap;

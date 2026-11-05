@@ -335,12 +335,13 @@ contract FeeConsolidatorTest is ConsolidatorBase {
         int24 spot = _spotTick(quoteKey);
         assertLe(_abs(int256(spot) - int256(anchor)), int256(MAX_DEVIATION_TICKS));
 
-        // An attacker repeats a tiny successful hop once a day; the reference may follow spot
-        // only up to the band edge, and by at most a tenth of the deviation guard per hop.
+        // An attacker moves the reference toward the parked spot once a day (`syncReference`,
+        // which a successful hop also does); the reference may follow spot only up to the band
+        // edge, and by at most a tenth of the deviation guard per step.
         int24 prev = anchor;
         for (uint256 i; i < 40; ++i) {
             vm.warp(block.timestamp + 1 days);
-            _deliverQuote(1e12);
+            cons.syncReference(quoteKey);
             (int24 t,,,) = _refTick(quoteKey);
             assertLe(_abs(int256(t) - int256(anchor)), int256(band), "outside anchor band");
             assertLe(_abs(int256(t) - int256(prev)), int256(MAX_DEVIATION_TICKS / 10), "step");

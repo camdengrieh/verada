@@ -64,9 +64,11 @@ interface IFeeConsolidator {
     ///         settlement asset along the quote registry route, under the route-pool guards, and
     ///         pays `to`. Source only, inside the caller's unlocked pool manager flow. The caller
     ///         must have made this contract its ERC-6909 operator. Reverts on any failure.
-    /// @param hooklessOnly Reject any route hop through a hooked pool.
+    /// @param inSwap The conversion runs inside a trader's swap (the live hook's in-line
+    ///        conversion): every route hop must be hookless, and the tighter in-swap deviation
+    ///        and slippage bounds apply instead of the general ones.
     /// @return settlementOut Settlement asset paid to `to`.
-    function convertClaims(address currency, uint256 amount, address to, bool hooklessOnly)
+    function convertClaims(address currency, uint256 amount, address to, bool inSwap)
         external
         returns (uint256 settlementOut);
 
