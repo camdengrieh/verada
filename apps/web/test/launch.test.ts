@@ -11,7 +11,7 @@ const valid: LaunchInput = {
   baseFeeBps: "300",
   sniperFeeStartBps: "5000",
   sniperDecaySeconds: "60",
-  startTick: "-100",
+  startTick: "-200",
   quoteAsset: "",
   label: "varada-test",
   logoRef: "",
@@ -26,7 +26,7 @@ describe("parseLaunchInput", () => {
     if (r.ok) {
       expect(r.params.salt).toMatch(/^0x[0-9a-f]{64}$/);
       expect(r.params.baseFeeBps).toBe(300);
-      expect(r.params.startTick).toBe(-100);
+      expect(r.params.startTick).toBe(-200);
       // No focus ticked: any cause, any region.
       expect(r.params.categoryMask).toBe((1n << 21n) - 1n);
       expect(r.params.regionMask).toBe(0xff);
