@@ -8,7 +8,7 @@ import { SwapError, type SwapReason } from "./errors.js";
 import { readVaradaFee } from "./fee.js";
 import { poolIdOf, varadaPoolKey, type ReadClient } from "./pool.js";
 import { applySlippage, pickBestQuote, type QuoteContext } from "./quote.js";
-import { describeRoute, discoverPools, enumerateRoutes, resolveRoutingConfig, routingNodes, type RoutingConfig } from "./routing.js";
+import { describeRoute, discoverPools, enumerateRoutes, rankRoutes, resolveRoutingConfig, routingNodes, type RoutingConfig } from "./routing.js";
 import { VARADA_TOKEN_DECIMALS } from "./constants.js";
 import type { PoolState, QuoteMode, RouteQuote, SwapAsset, TradeSide, VaradaFeeInfo, VaradaMarketToken } from "./types.js";
 
@@ -91,10 +91,13 @@ export async function quoteTrade(client: ReadClient, req: TradeRequest, ctx: Tra
   if (!tokenPool) throw new SwapError("pool-not-initialized", "This token's pool has no liquidity");
 
   const [from, to] = req.side === "buy" ? [req.asset.address, token.address] : [token.address, req.asset.address];
-  const routes = enumerateRoutes(pools, from, to, { weth: cfg.env.weth, maxHops: cfg.maxHops, poolsPerPair: cfg.poolsPerPair, maxCandidates: cfg.maxCandidates });
-  if (routes.length === 0) throw new SwapError("no-route");
+  const candidates = enumerateRoutes(pools, from, to, { weth: cfg.env.weth, maxHops: cfg.maxHops, poolsPerPair: cfg.poolsPerPair, maxCandidates: cfg.maxCandidates });
+  if (candidates.length === 0) throw new SwapError("no-route");
 
   const states = new Map(pools.map((p) => [p.poolId, p] as const));
+  // Each quoter call simulates the whole route, which is costly over a slow RPC: estimate every candidate
+  // from the pools' liquidity and price first and quote only the most promising ones.
+  const routes = rankRoutes(candidates, states, req.amount, mode, cfg.quoteTop, new Map([[tokenPoolId, fee.feeBps]]));
   const context: QuoteContext = {
     env: cfg.env,
     tokenIn: payAsset,

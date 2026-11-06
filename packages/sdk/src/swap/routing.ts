@@ -22,8 +22,10 @@ export interface RoutingConfig {
   maxHops?: number;
   /** Pools kept per asset pair, deepest first. Default 2. */
   poolsPerPair?: number;
-  /** Most candidate routes handed on to the quoter. Default 10. */
+  /** Most candidate routes enumerated. Default 10. */
   maxCandidates?: number;
+  /** Candidates (best estimate first) that are sent to the quoter. Default 4. */
+  quoteTop?: number;
 }
 
 type ResolvedRouting = Required<Omit<RoutingConfig, "extraHubs">> & { extraHubs: readonly SwapAsset[] };
@@ -37,6 +39,7 @@ export function resolveRoutingConfig(cfg: RoutingConfig = {}): ResolvedRouting {
     maxHops: Math.min(cfg.maxHops ?? MAX_ROUTE_POOL_HOPS, MAX_ROUTE_POOL_HOPS),
     poolsPerPair: cfg.poolsPerPair ?? 2,
     maxCandidates: cfg.maxCandidates ?? 10,
+    quoteTop: cfg.quoteTop ?? 4,
   };
 }
 
@@ -226,4 +229,72 @@ export function describeRoute(route: Route, symbolOf: (a: Address) => string): s
   const parts = [symbolOf(route.currencyIn)];
   for (const s of route.steps) parts.push(symbolOf(s.currencyOut));
   return parts.join(" > ");
+}
+
+/**
+ * A cheap estimate of what `amount` gets along `route`, without any RPC: each pool step is treated as a
+ * constant-product pool with the virtual reserves of its current liquidity and price (the liquidity of the
+ * active tick range, so crossing ticks is ignored) after its fee. Exact-in returns the output, exact-out the
+ * input. Only used to choose which candidates are worth a quoter call; the quoter gives the real number.
+ * Raw units, floating point; null when a pool of the route is unknown.
+ */
+export function estimateRoute(
+  route: Route,
+  states: ReadonlyMap<string, PoolState>,
+  amount: bigint,
+  mode: "exactIn" | "exactOut",
+  feeBps?: ReadonlyMap<string, number>,
+): number | null {
+  const steps = route.steps.filter((s): s is Extract<RouteStep, { kind: "pool" }> => s.kind === "pool");
+  const hop = (s: Extract<RouteStep, { kind: "pool" }>, value: number, forward: boolean): number | null => {
+    const st = states.get(s.poolId);
+    if (!st || !st.initialized || st.liquidity === 0n) return null;
+    const sqrtP = Number(st.sqrtPriceX96) / 2 ** 96;
+    const L = Number(st.liquidity);
+    const reserveIn = s.zeroForOne ? L / sqrtP : L * sqrtP;
+    const reserveOut = s.zeroForOne ? L * sqrtP : L / sqrtP;
+    const fee = (feeBps?.get(s.poolId) !== undefined ? (feeBps.get(s.poolId) as number) / 10_000 : st.lpFee / 1_000_000);
+    if (forward) {
+      const inAfterFee = value * (1 - fee);
+      return (reserveOut * inAfterFee) / (reserveIn + inAfterFee);
+    }
+    if (value >= reserveOut) return Number.POSITIVE_INFINITY;
+    return ((reserveIn * value) / (reserveOut - value)) / (1 - fee);
+  };
+  let v = Number(amount);
+  if (mode === "exactIn") {
+    for (const s of steps) {
+      const r = hop(s, v, true);
+      if (r === null) return null;
+      v = r;
+    }
+  } else {
+    for (const s of [...steps].reverse()) {
+      const r = hop(s, v, false);
+      if (r === null) return null;
+      v = r;
+    }
+  }
+  return v;
+}
+
+/**
+ * Orders `routes` by their {@link estimateRoute} (best first) and keeps the `keep` best: highest estimated
+ * output for exact-in, lowest estimated input for exact-out. Routes that cannot be estimated sort last.
+ */
+export function rankRoutes(
+  routes: readonly Route[],
+  states: ReadonlyMap<string, PoolState>,
+  amount: bigint,
+  mode: "exactIn" | "exactOut",
+  keep: number,
+  feeBps?: ReadonlyMap<string, number>,
+): Route[] {
+  const scored = routes.map((r, i) => ({ r, i, est: estimateRoute(r, states, amount, mode, feeBps) }));
+  scored.sort((a, b) => {
+    if (a.est === null || b.est === null) return a.est === b.est ? a.i - b.i : a.est === null ? 1 : -1;
+    const d = mode === "exactIn" ? b.est - a.est : a.est - b.est;
+    return d !== 0 ? d : a.i - b.i;
+  });
+  return scored.slice(0, keep).map((x) => x.r);
 }

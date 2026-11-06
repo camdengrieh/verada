@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ETH, NATIVE_CURRENCY, USDC, USDT, WETH, describeRoute, enumerateRoutes, poolHops, segmentRoute, varadaPoolKey, candidatePoolKeys, routingNodes, DEFAULT_FEE_TIERS, poolIdOf, type PoolState } from "../../src/index.js";
+import { ETH, NATIVE_CURRENCY, USDC, USDT, WETH, describeRoute, enumerateRoutes, estimateRoute, rankRoutes, poolHops, segmentRoute, varadaPoolKey, candidatePoolKeys, routingNodes, DEFAULT_FEE_TIERS, poolIdOf, type PoolState } from "../../src/index.js";
 import { HOOK, OTHER, TOKEN, fakePool } from "./helpers.js";
 
 const weth = WETH.address;
@@ -101,5 +101,57 @@ describe("segments, labels and candidates", () => {
 
   it("builds the Varada pool key used by the engine", () => {
     expect(varadaPoolKey(TOKEN, weth, HOOK).hooks.toLowerCase()).toBe(HOOK);
+  });
+});
+
+describe("estimateRoute and rankRoutes", () => {
+  // price 1 (sqrtPrice 2^96): virtual reserves of a pool with liquidity L are L on each side
+  const deep = fakePool(weth, USDC.address, 500, 10, 10n ** 12n, { lpFee: 0 });
+  const shallow = fakePool(weth, USDC.address, 3000, 60, 10n ** 6n, { lpFee: 0 });
+  const states = new Map([deep, shallow].map((p) => [p.poolId, p]));
+  const routes = enumerateRoutes([deep, shallow], weth, USDC.address, { weth, poolsPerPair: 2 });
+
+  it("matches constant product on the pool's virtual reserves", () => {
+    const route = routes.find((r) => (r.steps[0] as { poolId: string }).poolId === deep.poolId)!;
+    // reserves 1e12 each: swapping 1e11 gets 1e12 * 1e11 / (1e12 + 1e11)
+    expect(estimateRoute(route, states, 10n ** 11n, "exactIn")).toBeCloseTo((1e12 * 1e11) / 1.1e12, 0);
+    // exact-out inverse: to take 1e11 out you pay 1e12 * 1e11 / (1e12 - 1e11)
+    expect(estimateRoute(route, states, 10n ** 11n, "exactOut")).toBeCloseTo((1e12 * 1e11) / 0.9e12, 0);
+    expect(estimateRoute(route, states, 10n ** 12n, "exactOut")).toBe(Number.POSITIVE_INFINITY);
+  });
+
+  it("charges the pool fee, or the override for a hook pool", () => {
+    const fee = fakePool(weth, USDC.address, 10_000, 200, 10n ** 12n, { lpFee: 10_000 }); // 1%
+    const r = enumerateRoutes([fee], weth, USDC.address, { weth })[0]!;
+    const st = new Map([[fee.poolId, fee]]);
+    expect(estimateRoute(r, st, 10n ** 6n, "exactIn")).toBeCloseTo(0.99e6 * (1e12 / (1e12 + 0.99e6)), 0);
+    expect(estimateRoute(r, st, 10n ** 6n, "exactIn", new Map([[fee.poolId, 0]]))).toBeCloseTo(1e6 * (1e12 / (1e12 + 1e6)), 0);
+  });
+
+  it("returns null when a pool is unknown", () => {
+    expect(estimateRoute(routes[0]!, new Map(), 1000n, "exactIn")).toBeNull();
+  });
+
+  it("ranks the deep pool first for exact-in and exact-out, and keeps only the best", () => {
+    const deepId = deep.poolId;
+    const first = (r: typeof routes) => (r[0]!.steps[0] as { poolId: string }).poolId;
+    expect(first(rankRoutes(routes, states, 10n ** 9n, "exactIn", 5))).toBe(deepId);
+    expect(first(rankRoutes(routes, states, 10n ** 9n, "exactOut", 5))).toBe(deepId);
+    expect(rankRoutes(routes, states, 10n ** 9n, "exactIn", 1)).toHaveLength(1);
+    // unknown pools sort last instead of being dropped
+    const mixed = rankRoutes(routes, new Map([[deep.poolId, deep]]), 10n ** 9n, "exactIn", 5);
+    expect(mixed).toHaveLength(2);
+    expect((mixed[0]!.steps[0] as { poolId: string }).poolId).toBe(deepId);
+  });
+
+  it("a multi-hop route through a shallow pool ranks below a direct deep one", () => {
+    const usdt = fakePool(weth, USDT.address, 500, 10, 10n ** 6n, { lpFee: 0 });
+    const usdtUsdc = fakePool(USDT.address, USDC.address, 100, 1, 10n ** 6n, { lpFee: 0 });
+    const all = [deep, usdt, usdtUsdc];
+    const st = new Map(all.map((p) => [p.poolId, p]));
+    const rs = enumerateRoutes(all, weth, USDC.address, { weth });
+    expect(rs).toHaveLength(2);
+    const ranked = rankRoutes(rs, st, 10n ** 9n, "exactIn", 2);
+    expect(ranked[0]!.steps).toHaveLength(1);
   });
 });
