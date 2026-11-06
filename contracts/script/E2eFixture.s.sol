@@ -143,6 +143,22 @@ contract E2eFixture is Deploy {
         vm.serializeAddress(k, "profileRegistry", d.profileRegistry);
         vm.serializeAddress(k, "curatorRegistry", d.curatorRegistry);
         vm.serializeAddress(k, "causeCatalog", d.causeCatalog);
+        // The rest of the deployment, for the indexer (pnpm dev:up wires services/indexer from this file).
+        vm.serializeAddress(k, "hook", d.hook);
+        vm.serializeAddress(k, "feeVault", d.feeVault);
+        vm.serializeAddress(k, "feeConsolidator", d.feeConsolidator);
+        vm.serializeAddress(k, "quoteRegistry", d.quoteRegistry);
+        vm.serializeAddress(k, "causeRegistry", d.causeRegistry);
+        vm.serializeAddress(k, "donationDistributor", d.donationDistributor);
+        vm.serializeAddress(k, "votingScheme", d.votingScheme);
+        // The rest of the deployment, for the indexer (pnpm dev:up wires services/indexer from this file).
+        vm.serializeAddress(k, "hook", d.hook);
+        vm.serializeAddress(k, "feeVault", d.feeVault);
+        vm.serializeAddress(k, "feeConsolidator", d.feeConsolidator);
+        vm.serializeAddress(k, "quoteRegistry", d.quoteRegistry);
+        vm.serializeAddress(k, "causeRegistry", d.causeRegistry);
+        vm.serializeAddress(k, "donationDistributor", d.donationDistributor);
+        vm.serializeAddress(k, "votingScheme", d.votingScheme);
         vm.serializeAddress(k, "mockScheme", address(mock));
         vm.serializeAddress(k, "token", token);
         vm.serializeAddress(k, "vault", vault);

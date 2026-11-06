@@ -67,6 +67,20 @@ export function Providers({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // `pnpm dev:up` only: DEV_WALLET_KEY is inlined as undefined in any other build, so this branch and
+  // the module behind it are dropped.
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    // The condition must test the variable directly: the bundler replaces it with undefined and drops the branch.
+    if (process.env.NEXT_PUBLIC_DEV_WALLET_KEY && config?.rpcUrl) {
+      const rpcUrl = config.rpcUrl;
+      void import("@/lib/dev-wallet").then((m) => {
+        dispose = m.installDevWallet(rpcUrl, process.env.NEXT_PUBLIC_DEV_WALLET_KEY as string, config.chainId).dispose;
+      });
+    }
+    return () => dispose?.();
+  }, [config]);
+
   const rpc = useMemo(() => (config ? new PrivateRpc(config.privateRpc) : null), [config]);
   useEffect(() => () => rpc?.close(), [rpc]);
 

@@ -8,6 +8,13 @@ const nextConfig = {
   trailingSlash: true,
   images: { unoptimized: true },
   poweredByHeader: false,
+  // Next only inlines NEXT_PUBLIC_* values that are defined at build time. Defining the dev wallet key as ""
+  // when unset makes `if (process.env.NEXT_PUBLIC_DEV_WALLET_KEY)` a constant false, so the bundler drops
+  // the wallet module from every normal build.
+  env: { NEXT_PUBLIC_DEV_WALLET_KEY: process.env.NEXT_PUBLIC_DEV_WALLET_KEY ?? "" },
+  // `*.dev.tsx` pages (the dev wallet helper) exist only in the `pnpm dev:up` stack: without the dev
+  // wallet key they are not routes, so a published export has no /dev-wallet page or reserved label.
+  pageExtensions: process.env.NEXT_PUBLIC_DEV_WALLET_KEY ? ["tsx", "ts", "jsx", "js", "dev.tsx"] : ["tsx", "ts", "jsx", "js"],
   reactStrictMode: true,
   // Intentionally no basePath / assetPrefix: both bake an absolute prefix into the
   // build, so the same output could not be served under /bzz/<hash>/, on a bzz

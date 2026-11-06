@@ -7,6 +7,17 @@ with an editable profile and a page on the Swarm-hosted app. A token can instead
 mode, where every swap's fee is converted to USDC and donated in the same swap to the current
 cause, and holders rotate that cause by private vote every hour, 12 hours, day, three days or week.
 
+## Quick start
+
+```sh
+pnpm install
+export FORK_RPC_URL=<a mainnet RPC URL>
+pnpm dev:up      # anvil fork + Varada deployed + indexer + web app + a test wallet; prints the URLs
+pnpm dev:down
+```
+
+Details, ports, readiness and cleanup: [`docs/OVERVIEW.md`](docs/OVERVIEW.md#one-command-pnpm-devup).
+
 ## Layout
 
 | Path | What it is |

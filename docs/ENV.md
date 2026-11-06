@@ -42,6 +42,20 @@ whole. Because the file sits in the published bundle, a release can be repointed
 Other variables read by web scripts: `BASE_URLS`, `INDEXER_URL` and `CHROME_PATH` (`scripts/e2e.mjs`,
 a browser check that is not part of `pnpm test`).
 
+## Local dev stack (`pnpm dev:up`)
+
+Read by `tools/dev/up.mjs` from the process environment (or a gitignored `.env.local` at the repository
+root); see [OVERVIEW.md](OVERVIEW.md#one-command-pnpm-devup).
+
+| Variable | Purpose |
+|---|---|
+| `FORK_RPC_URL` | Required. Mainnet RPC anvil forks from. Passed to anvil only and scrubbed from every log |
+| `FORK_BLOCK_NUMBER` | Optional fork block |
+| `DEV_ANVIL_PORT`, `DEV_INDEXER_PORT`, `DEV_WEB_PORT` | Optional fixed ports (default: random free ports above 20000) |
+| `NODE22_BIN` | Optional Node 22.12+ binary for Ponder when the running Node is older |
+| `NEXT_PUBLIC_DEV_STACK` | `true` makes the web app ignore `config.json`. Set by `dev:up`; never for a published build |
+| `NEXT_PUBLIC_DEV_WALLET_KEY` | Throwaway key of the dev wallet the app announces over EIP-6963. Set by `dev:up`; never for a published build |
+
 ## Indexer
 
 Required to run Ponder (full descriptions in the [README](../services/indexer/README.md#environment)):
