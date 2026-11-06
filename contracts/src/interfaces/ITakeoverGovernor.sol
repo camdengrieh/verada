@@ -119,14 +119,23 @@ interface ITakeoverGovernor {
     error UnknownProposal(uint256 proposalId);
     error InvalidParams();
     error ZeroAddress();
+    /// @dev `proposeAt` snapshot that is not in the past or is older than `MAX_SNAPSHOT_AGE`.
+    error InvalidSnapshot(uint256 snapshot);
 
     /// @notice Index of the AGAINST option in the poll.
     function AGAINST() external view returns (uint8);
     /// @notice Index of the FOR option in the poll.
     function FOR() external view returns (uint8);
 
-    /// @notice Opens a takeover proposal. The proposer must hold the proposal threshold.
+    /// @notice Opens a takeover proposal snapshotted one second ago. The proposer must hold the
+    ///         proposal threshold.
     function propose(address token, address newController) external returns (uint256 proposalId);
+    /// @notice `propose` with a caller-chosen recent snapshot, at most `MAX_SNAPSHOT_AGE` old. The
+    ///         window is then known in advance, so a proposer with very many checkpoints can run
+    ///         the threshold scan ahead (`advanceProposeScan`) and still fit in a block.
+    function proposeAt(address token, address newController, uint48 snapshot)
+        external
+        returns (uint256 proposalId);
 
     /// @notice Closes voting after the period ends and asks the scheme for the tally.
     function closeProposal(uint256 proposalId) external;
@@ -185,6 +194,12 @@ interface ITakeoverGovernor {
     ///         checkpoints fits in a block. Anyone may call it; it never changes a weight.
     /// @return done Whether the whole window has been read.
     function advanceHoldScan(uint256 proposalId, address account, uint256 maxReads)
+        external
+        returns (bool done);
+    /// @notice `advanceHoldScan` for the window a `proposeAt(token, _, snapshot)` would read,
+    ///         `[snapshot - lookback, snapshot]` under the current parameters. `snapshot` must be
+    ///         in the past.
+    function advanceProposeScan(address token, address account, uint48 snapshot, uint256 maxReads)
         external
         returns (bool done);
 }

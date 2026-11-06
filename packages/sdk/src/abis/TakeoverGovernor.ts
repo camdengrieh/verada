@@ -148,6 +148,19 @@ export const takeoverGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_SNAPSHOT_AGE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_TOKEN_AGE",
     "inputs": [],
     "outputs": [
@@ -282,6 +295,40 @@ export const takeoverGovernorAbi = [
         "name": "account",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "maxReads",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "done",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "advanceProposeScan",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "snapshot",
+        "type": "uint48",
+        "internalType": "uint48"
       },
       {
         "name": "maxReads",
@@ -730,6 +777,35 @@ export const takeoverGovernorAbi = [
         "name": "newController",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "proposeAt",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "newController",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "snapshot",
+        "type": "uint48",
+        "internalType": "uint48"
       }
     ],
     "outputs": [
@@ -1285,6 +1361,17 @@ export const takeoverGovernorAbi = [
     "type": "error",
     "name": "InvalidParams",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidSnapshot",
+    "inputs": [
+      {
+        "name": "snapshot",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

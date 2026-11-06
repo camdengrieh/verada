@@ -44,6 +44,8 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
     uint16 public constant MAX_QUORUM_BPS = 5000;
     /// @notice Lowest proposal threshold: proposing always takes a stake in the token.
     uint16 public constant MIN_PROPOSAL_THRESHOLD_BPS = 1;
+    /// @notice Oldest snapshot `proposeAt` accepts.
+    uint32 public constant MAX_SNAPSHOT_AGE = 1 days;
 
     uint8 private constant _OPTION_COUNT = 2;
     uint256 private constant _BPS = 10_000;
@@ -117,6 +119,25 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
 
     /// @inheritdoc ITakeoverGovernor
     function propose(address token, address newController) external returns (uint256 proposalId) {
+        return _propose(token, newController, SafeCast.toUint48(block.timestamp - 1));
+    }
+
+    /// @inheritdoc ITakeoverGovernor
+    function proposeAt(address token, address newController, uint48 snapshot)
+        external
+        returns (uint256 proposalId)
+    {
+        // forge-lint: disable-next-line(block-timestamp)
+        if (snapshot >= block.timestamp || uint256(snapshot) + MAX_SNAPSHOT_AGE < block.timestamp) {
+            revert InvalidSnapshot(snapshot);
+        }
+        return _propose(token, newController, snapshot);
+    }
+
+    function _propose(address token, address newController, uint48 snapshot)
+        private
+        returns (uint256 proposalId)
+    {
         if (!_registry.isRegistered(token)) revert TokenNotRegistered(token);
         Params memory p = _params;
 
@@ -139,7 +160,6 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
             revert InvalidNewController(newController);
         }
 
-        uint48 snapshot = SafeCast.toUint48(block.timestamp - 1);
         uint48 lookbackSnapshot = snapshot - p.lookback;
         uint64 circulatingWeight = _circulatingAt(token, snapshot);
         uint64 weight = _weightAt(token, msg.sender, snapshot, lookbackSnapshot);
@@ -391,6 +411,16 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
         if (p.token == address(0)) revert UnknownProposal(proposalId);
         return HoldWeightLib.advance(
             _holdScans, p.token, account, p.lookbackSnapshot, p.snapshot, maxReads
+        );
+    }
+
+    /// @inheritdoc ITakeoverGovernor
+    function advanceProposeScan(address token, address account, uint48 snapshot, uint256 maxReads)
+        external
+        returns (bool done)
+    {
+        return HoldWeightLib.advance(
+            _holdScans, token, account, snapshot - _params.lookback, snapshot, maxReads
         );
     }
 

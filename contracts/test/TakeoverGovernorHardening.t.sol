@@ -214,6 +214,67 @@ contract TakeoverGovernorHardeningTest is Test {
         assertEq(scheme.liveCounts(address(gov), token, id)[AGAINST], 10_000_000_000);
     }
 
+    /// Dust sent to a would-be proposer cannot keep them from proposing: more checkpoints than
+    /// a 16.7M-gas transaction can scan make `propose` fail, but the proposer picks a recent
+    /// snapshot, runs its scan ahead in chunks and proposes with `proposeAt`.
+    function test_proposeAt_dustPastTxGasCap_proposesAfterAdvancing() public {
+        uint256 cap = 16_777_216;
+        _distribute();
+        uint256 at = T0 + 2 days;
+        for (uint256 i; i < 5000; ++i) {
+            vm.warp(at + 10 + i);
+            vm.prank(mid);
+            assertTrue(tokenContract.transfer(proposer, 1));
+        }
+        uint256 t = at + 6000;
+        vm.warp(t);
+        // Checkpoints written in this test are warm; a real transaction reads them cold.
+        vm.cool(token);
+        vm.prank(proposer);
+        (bool ok,) = address(gov).call{gas: cap}(
+            abi.encodeCall(ITakeoverGovernor.propose, (token, newController))
+        );
+        assertFalse(ok, "propose scans past the tx gas cap");
+
+        uint48 snapshot = uint48(t - 1);
+        vm.expectRevert(abi.encodeWithSelector(HoldWeightLib.HoldWindowOpen.selector, t));
+        gov.advanceProposeScan(token, proposer, uint48(t), 10);
+        uint256 chunks;
+        bool done;
+        while (!done) {
+            vm.cool(token);
+            bytes memory ret;
+            vm.prank(nobody);
+            (ok, ret) = address(gov).call{gas: cap}(
+                abi.encodeCall(ITakeoverGovernor.advanceProposeScan, (token, proposer, snapshot, 2000))
+            );
+            assertTrue(ok, "each chunk fits");
+            done = abi.decode(ret, (bool));
+            ++chunks;
+        }
+        assertEq(chunks, 3);
+
+        t += 10 minutes;
+        vm.warp(t);
+        vm.startPrank(proposer);
+        vm.expectRevert(abi.encodeWithSelector(ITakeoverGovernor.InvalidSnapshot.selector, t));
+        gov.proposeAt(token, newController, uint48(t));
+        uint48 stale = uint48(t - 1 days - 1);
+        vm.expectRevert(abi.encodeWithSelector(ITakeoverGovernor.InvalidSnapshot.selector, stale));
+        gov.proposeAt(token, newController, stale);
+        bytes memory out;
+        vm.cool(token);
+        (ok, out) = address(gov).call{gas: cap}(
+            abi.encodeCall(ITakeoverGovernor.proposeAt, (token, newController, snapshot))
+        );
+        vm.stopPrank();
+        assertTrue(ok, "proposeAt fits after advancing");
+        uint256 id = abi.decode(out, (uint256));
+        assertEq(gov.getProposal(id).snapshot, snapshot);
+        assertEq(gov.getProposal(id).start, t);
+        assertEq(gov.weightOf(id, proposer), 2_000_000_000);
+    }
+
     // ---- proposal slots: a holder cannot keep others out, and proposing needs a stake
 
     /// A holder at the threshold who proposes again after every cooldown never blocks anyone
