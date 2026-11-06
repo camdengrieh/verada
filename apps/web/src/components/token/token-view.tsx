@@ -12,6 +12,7 @@ import { BallotSizeEditor } from "@/components/ballot-size-editor";
 import { EditProfilePanel } from "@/components/edit-profile-panel";
 import { EpochPanel } from "@/components/epoch-panel";
 import { useAppConfig, useDeps } from "@/components/providers";
+import { SendDonation } from "@/components/send-donation";
 import { ShortlistEditor } from "@/components/shortlist-editor";
 import { TakeoverPanel } from "@/components/takeover-panel";
 import { sameAddress } from "@/components/use-tx";
@@ -244,6 +245,7 @@ export function TokenView({ address, token, source }: { address: Address; token:
             </TabsContent>
             <TabsContent value="governance" className="flex flex-col gap-8">
               <EpochPanel token={address} detail={token} />
+              <SendDonation token={address} />
               <CuratedBy focus={token.focus} />
               <TakeoverPanel token={address} controller={profile?.controller ?? null} />
             </TabsContent>

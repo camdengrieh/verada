@@ -41,8 +41,14 @@ export interface AppConfig {
   factoryAddress?: Address;
   /** Block the factory was deployed at; bounds the chain-read log scan. */
   factoryDeployBlock?: bigint;
+  /** `FeeVault`. */
   vaultAddress?: Address;
   governorAddress?: Address;
+  /**
+   * `DonationDistributor`: with `vaultAddress` and `governorAddress`, the token page offers the
+   * permissionless steps that turn an ended week's fees into its donation. Hidden when unset.
+   */
+  donationDistributorAddress?: Address;
   /** Publisher service base URL (logo and metadata uploads to Swarm). */
   publisherUrl?: string;
   /** Public Swarm read gateway base, e.g. `https://gw.example` (logos load from `<base>/bzz/<ref>/`). */
@@ -119,6 +125,7 @@ export function envDefaults(): AppConfig {
     factoryDeployBlock: block && /^\d+$/.test(block) ? BigInt(block) : undefined,
     vaultAddress: addr(process.env.NEXT_PUBLIC_VAULT_ADDRESS),
     governorAddress: addr(process.env.NEXT_PUBLIC_GOVERNOR_ADDRESS),
+    donationDistributorAddress: addr(process.env.NEXT_PUBLIC_DONATION_DISTRIBUTOR_ADDRESS),
     publisherUrl: url(process.env.NEXT_PUBLIC_PUBLISHER_URL),
     swarmGatewayUrl: url(process.env.NEXT_PUBLIC_SWARM_GATEWAY_URL),
     assetPacks: { stocks: swarmRef(process.env.NEXT_PUBLIC_STOCK_LOGOS_REF) },
@@ -156,6 +163,7 @@ const runtimeSchema = z
     factoryDeployBlock: z.number().int().nonnegative(),
     vaultAddress: address,
     governorAddress: address,
+    donationDistributorAddress: address,
     publisherUrl: httpUrl,
     swarmGatewayUrl: httpUrl,
     assetPacks: z.object({ stocks: z.string().refine(isSwarmReference, "invalid swarm reference") }).partial(),
@@ -191,6 +199,7 @@ export function mergeRuntimeConfig(defaults: AppConfig, raw: unknown): AppConfig
     factoryDeployBlock: r.factoryDeployBlock !== undefined ? BigInt(r.factoryDeployBlock) : defaults.factoryDeployBlock,
     vaultAddress: addr(r.vaultAddress) ?? defaults.vaultAddress,
     governorAddress: addr(r.governorAddress) ?? defaults.governorAddress,
+    donationDistributorAddress: addr(r.donationDistributorAddress) ?? defaults.donationDistributorAddress,
     publisherUrl: url(r.publisherUrl) ?? defaults.publisherUrl,
     swarmGatewayUrl: url(r.swarmGatewayUrl) ?? defaults.swarmGatewayUrl,
     assetPacks: { stocks: swarmRef(r.assetPacks?.stocks) ?? defaults.assetPacks.stocks },

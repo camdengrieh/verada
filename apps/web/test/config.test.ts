@@ -4,6 +4,21 @@ import { envDefaults, loadRuntimeConfig, mergeRuntimeConfig } from "@/lib/config
 
 const addr = "0x00000000000000000000000000000000000000aa";
 
+describe("donation distributor config", () => {
+  it("is unset by default, read from the build environment and from config.json", () => {
+    expect(envDefaults().donationDistributorAddress).toBeUndefined();
+    vi.stubEnv("NEXT_PUBLIC_DONATION_DISTRIBUTOR_ADDRESS", addr.toLowerCase());
+    try {
+      expect(envDefaults().donationDistributorAddress).toBe(getAddress(addr));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(mergeRuntimeConfig(envDefaults(), { donationDistributorAddress: addr }).donationDistributorAddress).toBe(getAddress(addr));
+    const d = envDefaults();
+    expect(mergeRuntimeConfig(d, { donationDistributorAddress: "0x1" })).toBe(d);
+  });
+});
+
 describe("runtime config", () => {
   it("merges config.json over defaults and strips trailing slashes", () => {
     const merged = mergeRuntimeConfig(envDefaults(), { indexerUrls: ["https://a.example/", "https://b.example"], factoryAddress: addr, factoryDeployBlock: 5 });

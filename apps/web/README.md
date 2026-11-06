@@ -52,7 +52,7 @@ build-time defaults from `NEXT_PUBLIC_*` (see `.env.example`). Public values onl
   "chainId": 1,
   "indexerUrls": ["https://indexer-a.example", "https://indexer-b.example"],
   "rpcUrl": "https://...", "factoryAddress": "0x...", "factoryDeployBlock": 0,
-  "vaultAddress": "0x...", "governorAddress": "0x...",
+  "vaultAddress": "0x...", "governorAddress": "0x...", "donationDistributorAddress": "0x...",
   "publisherUrl": "https://publisher.example", "swarmGatewayUrl": "https://gw.example",
   "ensParentName": "varada.eth", "profileRegistryAddress": "0x...",
   "votingSchemeAddress": "0x...", "takeoverGovernorAddress": "0x...",
@@ -68,6 +68,7 @@ build-time defaults from `NEXT_PUBLIC_*` (see `.env.example`). Public values onl
 | `profileRegistryAddress` | `PROFILE_REGISTRY_ADDRESS` | `TokenProfileRegistry`: label availability, profile fallback reads, profile edits |
 | `votingSchemeAddress` | `VOTING_SCHEME_ADDRESS` | `ZamaVotingScheme`: ballots are sent here (an opened poll's own scheme wins) |
 | `takeoverGovernorAddress` | `TAKEOVER_GOVERNOR_ADDRESS` | `TakeoverGovernor`: the takeover panel |
+| `donationDistributorAddress` | `DONATION_DISTRIBUTOR_ADDRESS` | `DonationDistributor`: with `vaultAddress` (the `FeeVault`) and `governorAddress`, the token page's "Send this week's donation" card; hidden when any is unset |
 | `zamaRelayerUrl` | `ZAMA_RELAYER_URL` | Optional relayer override; otherwise the SDK's preset for the chain |
 | (build time only) | `DEV_PLAIN_BALLOTS` | `true` sends plaintext ballots to the mock scheme. Development only; `config.json` cannot set it |
 
