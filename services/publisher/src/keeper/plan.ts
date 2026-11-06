@@ -1,4 +1,4 @@
-import { periodPollScope, rotationPollScope, type RoundStatus } from "@varada/sdk";
+import { epochFinalizeNeedsOptions, epochNeedsTally as sdkEpochNeedsTally, periodPollScope, planEpochGovernor, rotationPollScope, type RoundStatus } from "@varada/sdk";
 import { zeroAddress, type Address } from "viem";
 import {
   sameAddress,
@@ -26,13 +26,14 @@ export type Step =
 const none = (reason: string, terminal = false): Step => ({ type: "none", reason, terminal });
 
 /** Finalizing an epoch with ballots needs its options (org ids) as calldata. */
-export const finalizeNeedsOptions = (v: EpochView) => v.opened && v.voterCount > 0n;
+export const finalizeNeedsOptions = (v: EpochView) => epochFinalizeNeedsOptions(v);
 
 /** The tally is only needed once the poll has ballots and is closed. */
-export const epochNeedsTally = (v: EpochView) => v.opened && v.closed && v.voterCount > 0n && !v.finalized;
+export const epochNeedsTally = (v: EpochView) => sdkEpochNeedsTally(v);
 
 /**
- * Next step for an ended epoch (`epoch < currentEpoch`) of a registered token.
+ * Next step for an ended epoch (`epoch < currentEpoch`) of a registered token: the SDK's
+ * `planEpochGovernor` (shared with the web app's donation card), as keeper actions.
  *
  * - finalized: nothing, ever again.
  * - never opened, or opened without ballots: `finalizeEpoch` (the default cause wins; reverts
@@ -50,13 +51,17 @@ export function planEpoch(
   tally: Tally | undefined,
   ctx: { epochGovernor: Address; zamaScheme: Address },
 ): Step {
-  if (v.finalized) return none("finalized", true);
-  if (!v.opened || v.voterCount === 0n) return { type: "send", action: { kind: "finalizeEpoch", token, epoch, orgIds: [] } };
-  if (!v.closed) return { type: "send", action: { kind: "closeEpoch", token, epoch } };
-  if (!tally) return none("tally not read");
-  if (tally.isFinal) return { type: "send", action: { kind: "finalizeEpoch", token, epoch, orgIds: [] } };
-  if (v.scheme === zeroAddress || !sameAddress(v.scheme, ctx.zamaScheme)) return none("epoch scheme is not the Zama scheme");
-  return { type: "decrypt", scheme: v.scheme, governor: ctx.epochGovernor, token, scope: epoch };
+  const step = planEpochGovernor(v, tally, ctx);
+  switch (step.type) {
+    case "none":
+      return none(step.reason, step.terminal);
+    case "closeEpoch":
+      return { type: "send", action: { kind: "closeEpoch", token, epoch } };
+    case "finalizeEpoch":
+      return { type: "send", action: { kind: "finalizeEpoch", token, epoch, orgIds: [] } };
+    case "decrypt":
+      return { type: "decrypt", scheme: step.scheme, governor: ctx.epochGovernor, token, scope: epoch };
+  }
 }
 
 export const proposalNeedsTally = (p: ProposalView) => p.state === "Closing" && p.closed && !p.tallied;

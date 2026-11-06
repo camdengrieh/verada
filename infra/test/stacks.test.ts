@@ -744,6 +744,8 @@ describe("publisher", () => {
       FACTORY_ADDRESS: A(1),
       START_BLOCK: "1000",
       FACTORY_DEPLOY_BLOCK: "1000",
+      FEE_VAULT_ADDRESS: A(2),
+      DONATION_DISTRIBUTOR_ADDRESS: A(5),
     });
   });
 

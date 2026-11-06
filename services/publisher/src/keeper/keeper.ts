@@ -5,6 +5,7 @@ import { Backoff } from "./backoff.js";
 import { KeeperRevert, redact, type ChainReader, type ChainWriter, type KeeperAction, type RotationReader } from "./chain.js";
 import { CuratedPicksUnavailable, type BallotPreparer, type RoundPreparer } from "./ballot.js";
 import { checkDecryption, type PublicDecryptor } from "./decrypt.js";
+import type { DonationPlanner } from "./donate.js";
 import {
   epochNeedsTally,
   finalizeNeedsOptions,
@@ -86,6 +87,11 @@ export interface KeeperDeps {
   maxIndexerLagSeconds?: number;
   /** Wall clock in ms (tests). */
   now?: () => number;
+  /**
+   * Settles and distributes finalized epochs (`FeeVault.settle`, `DonationDistributor.distribute`),
+   * which are then followed until donated or empty. Omitted: a finalized epoch is done.
+   */
+  donation?: DonationPlanner;
 }
 
 /** Tokens with recent activity (indexer `/api/active-tokens`). */
@@ -130,6 +136,8 @@ const describe = (a: KeeperAction): Record<string, unknown> => {
   switch (a.kind) {
     case "openEpoch":
     case "closeEpoch":
+    case "settle":
+    case "distribute":
       return { tx: a.kind, token: a.token, epoch: a.epoch };
     case "finalizeEpoch":
       return { tx: a.kind, token: a.token, epoch: a.epoch, options: a.orgIds.length };
@@ -588,6 +596,7 @@ export function createKeeper(deps: KeeperDeps) {
           const key = `epoch:${token.toLowerCase()}:${epoch}`;
           const r = await drive(key, { token, epoch }, async () => {
             const v = await deps.reader.epoch(token, epoch);
+            if (v.finalized && deps.donation) return deps.donation.plan(token, epoch);
             const tally = epochNeedsTally(v) ? await deps.reader.tallyOf(v.scheme, deps.epochGovernor, token, epoch) : undefined;
             const step = planEpoch(token, epoch, v, tally, { epochGovernor: deps.epochGovernor, zamaScheme: deps.zamaScheme });
             if (step.type === "send" && step.action.kind === "finalizeEpoch" && finalizeNeedsOptions(v)) {

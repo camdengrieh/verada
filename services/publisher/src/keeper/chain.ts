@@ -135,7 +135,11 @@ export type KeeperAction =
   | { kind: "executePeriodProposal"; id: bigint }
   | { kind: "closeProposal"; id: bigint }
   | { kind: "recordTally"; id: bigint }
-  | { kind: "execute"; id: bigint };
+  | { kind: "execute"; id: bigint }
+  /** `FeeVault.settle`: moves a finalized epoch's cause pool to the donation distributor. */
+  | { kind: "settle"; token: Address; epoch: bigint }
+  /** `DonationDistributor.distribute`: donates a settled epoch to its winning org. */
+  | { kind: "distribute"; token: Address; epoch: bigint };
 
 export interface TxResult {
   hash: Hex;
