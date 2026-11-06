@@ -42,6 +42,12 @@ describe("readEnv", () => {
     }
     expect(readEnv(base).takeoverGovernor).toBe(base.TAKEOVER_GOVERNOR_ADDRESS);
   });
+  it("treats the rotation governor as optional", () => {
+    expect(readEnv(base).rotationGovernor).toBe("0x0000000000000000000000000000000000000000");
+    const gov = "0x000000000000000000000000000000000000000e";
+    expect(readEnv({ ...base, ROTATION_GOVERNOR_ADDRESS: gov }).rotationGovernor).toBe(gov);
+    expect(() => readEnv({ ...base, ROTATION_GOVERNOR_ADDRESS: "0x12" })).toThrow(/ROTATION_GOVERNOR_ADDRESS/);
+  });
   it("rejects a zero start block", () => {
     expect(() => readEnv({ ...base, START_BLOCK: "0" })).toThrow(/START_BLOCK/);
   });

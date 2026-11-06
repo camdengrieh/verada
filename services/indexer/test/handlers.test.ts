@@ -798,7 +798,20 @@ describe("registrations", () => {
       expect(abi, contract).toBeDefined();
       expect(abi!.some((x) => x.type === "event" && x.name === name), `${contract}:${name}`).toBe(true);
     }
-    for (const event of ["FeeVault:FeesAttributed", "FeeVault:Settled", "EpochGovernor:LaunchSnapshotSet", "EpochGovernor:CuratedPicksUsed"]) {
+    for (const event of [
+      "FeeVault:FeesAttributed",
+      "FeeVault:Settled",
+      "EpochGovernor:LaunchSnapshotSet",
+      "EpochGovernor:CuratedPicksUsed",
+      "Factory:LiveModeConfigured",
+      "FeeConsolidator:ClaimsConverted",
+      "VeradaLiveHook:FeeTaken",
+      "VeradaLiveHook:HeldRetried",
+      "LiveDonationVault:Credited",
+      "LiveDonationVault:Donated",
+      "RotationGovernor:CauseScheduled",
+      "RotationGovernor:PeriodChangeScheduled",
+    ]) {
       expect(handlers.some((m) => `${m[1]}:${m[2]}` === event), event).toBe(true);
     }
   });

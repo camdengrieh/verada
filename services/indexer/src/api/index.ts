@@ -6,6 +6,7 @@ import { readApiConfig } from "./config";
 import { repo } from "./repo";
 import { swarmReportFetcher } from "./agents";
 import { agentsRepo } from "./agents-repo";
+import { liveRepo } from "./live-repo";
 import { createCatalogStore } from "./catalog";
 import { createCauseSearch } from "./search";
 
@@ -39,6 +40,7 @@ const app = createApi({
   }),
   catalog: createCatalogStore(config.catalogSource, { log: (m) => console.info(m) }),
   agents: agentsRepo,
+  live: liveRepo,
   reports: swarmReportFetcher(config.swarmGatewayUrl),
 });
 

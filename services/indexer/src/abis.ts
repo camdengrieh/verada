@@ -13,5 +13,8 @@ export {
   tokenProfileRegistryAbi as TokenProfileRegistryAbi,
   zamaVotingSchemeAbi as ZamaVotingSchemeAbi,
   takeoverGovernorAbi as TakeoverGovernorAbi,
+  veradaLiveHookAbi as VeradaLiveHookAbi,
+  liveDonationVaultAbi as LiveDonationVaultAbi,
+  rotationGovernorAbi as RotationGovernorAbi,
   veradaTokenAbi as VeradaTokenAbi,
 } from "@verada/sdk/abis";

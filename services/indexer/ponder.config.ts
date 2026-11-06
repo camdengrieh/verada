@@ -9,10 +9,13 @@ import {
   EpochGovernorAbi,
   FeeConsolidatorAbi,
   FeeVaultAbi,
+  LiveDonationVaultAbi,
   QuoteRegistryAbi,
+  RotationGovernorAbi,
   TakeoverGovernorAbi,
   TokenProfileRegistryAbi,
   VeradaFactoryAbi,
+  VeradaLiveHookAbi,
   ZamaVotingSchemeAbi,
 } from "./src/abis";
 import { MAINNET_CHAIN_ID, readEnv } from "./src/env";
@@ -106,6 +109,35 @@ export default createConfig({
       abi: TakeoverGovernorAbi,
       chain: "mainnet",
       address: env.takeoverGovernor,
+      startBlock: env.startBlock,
+    },
+    // Live-donation mode: the hook and vault are found through the factory's one-time
+    // `LiveModeConfigured`, so nothing is indexed for them until live mode is enabled.
+    VeradaLiveHook: {
+      abi: VeradaLiveHookAbi,
+      chain: "mainnet",
+      address: factory({
+        address: env.factory,
+        event: getAbiItem({ abi: VeradaFactoryAbi, name: "LiveModeConfigured" }),
+        parameter: "liveHook",
+      }),
+      startBlock: env.startBlock,
+    },
+    LiveDonationVault: {
+      abi: LiveDonationVaultAbi,
+      chain: "mainnet",
+      address: factory({
+        address: env.factory,
+        event: getAbiItem({ abi: VeradaFactoryAbi, name: "LiveModeConfigured" }),
+        parameter: "liveVault",
+      }),
+      startBlock: env.startBlock,
+    },
+    // Optional (ROTATION_GOVERNOR_ADDRESS); the zero address indexes nothing.
+    RotationGovernor: {
+      abi: RotationGovernorAbi,
+      chain: "mainnet",
+      address: env.rotationGovernor,
       startBlock: env.startBlock,
     },
   },

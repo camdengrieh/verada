@@ -30,6 +30,7 @@ Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck 
 | `CURATOR_REGISTRY_ADDRESS` | `CuratorRegistry` (curator agents, weekly curations; their `AgentVault`s are found through `AgentRegistered`) |
 | `VOTING_SCHEME_ADDRESS` | `ZamaVotingScheme`, shared by both governors |
 | `TAKEOVER_GOVERNOR_ADDRESS` | `TakeoverGovernor` |
+| `ROTATION_GOVERNOR_ADDRESS` | `RotationGovernor` of live-donation tokens. Optional: unset indexes nothing for it. `VeradaLiveHook` and `LiveDonationVault` need no variable; they are found through the factory's `LiveModeConfigured` |
 | `START_BLOCK` | Deployment block; every contract is indexed from it |
 | `DATABASE_URL`, `DATABASE_SCHEMA` | Postgres (PGlite when unset) |
 
@@ -63,6 +64,15 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 | `takeover_token` | `token` | `TakeoverSuperseded` (emitted on every execution): `executions`, `lastExecutedProposalId` |
 | `takeover_vote` | `voteRef` | `TakeoverVoteCast` |
 | `vote` | event id | `VoteCast` |
+| `live_mode` | `id` | Factory `LiveModeConfigured`: the live hook and vault |
+| `live_token` | `token` | Live-donation token: hook `TokenConfigured` (fee config), vault `LiveTokenRegistered` (`threshold`, `initialCause`, `initialPeriod`), hook `PoolRegistered` (`quote`, `poolId`); all emitted before `TokenCreated` |
+| `live_cause_total` | `token, causeId` | Vault `Credited` (`gross`, `platform`, `causeShare`), `Donated` (`donated`), `DonationDeferred` (`deferrals`, `lastDeferReason`); hook `FeeTaken` not converted adds to `heldQuote`, `HeldRetried` subtracts. Undonated credit is `causeShare - donated` |
+| `live_fee`, `live_held_retry`, `live_donation` | event id | Hook `FeeTaken`, `HeldRetried`; vault `Donated` (`inSwap`, `orgDeployed`) |
+| `live_vault_total` | `id` | Platform share accrued (`Credited`) and withdrawn (`PlatformWithdrawn`), skim count |
+| `claims_conversion` | event id | Consolidator `ClaimsConverted` (`convertClaims`, used by the live hook) |
+| `live_schedule` | `token` | Rotation schedule mirroring `RotationScheduleLib`: governor `TokenRegistered` (anchor, period), `PeriodChangeScheduled` (pending period from `pendingFrom`) |
+| `live_cause_schedule` | `token, fromRotation` | Designated cause from a rotation on: the initial cause at rotation 0, then each `CauseScheduled` |
+| `live_round` | `token, target` | `RoundFinalized`: `status` (`RoundStatus` name), `winner`, `effectiveFrom` |
 
 **Epoch timing.** `epochZeroStart` is an immutable aligned to a whole week since unix time 0.
 `EpochOpened` and `VoteCast` only happen during the epoch they name, so the first of them gives
@@ -88,6 +98,12 @@ otherwise from the next one. The governor returns that epoch as `effectiveFrom`,
 epoch at the event is at least `effectiveFrom - 1`: a stored list scheduled from before that has
 applied and becomes `previousCauseIds`; a list that has not applied yet is simply replaced. The API
 resolves the list in effect from the epoch clock and the server time.
+
+**Live rotations.** Only the RotationGovernor events that move the designated cause or the
+rotation period are indexed (`TokenRegistered`, `CauseScheduled`, `RoundFinalized`,
+`PeriodChangeScheduled`); ballots and period proposals are not. The API derives the current
+rotation from `live_schedule` with the same arithmetic as `RotationScheduleLib`, and the
+designated cause is the `live_cause_schedule` row with the highest `fromRotation` at or below it.
 
 **Takeover reads.** `TakeoverProposed` does not carry the execution deadline, lookback snapshot
 or circulating weight. The handler reads `getProposal(id)` at the proposal block (exact, since
@@ -121,6 +137,7 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/takeovers/:token` | `{ items: Proposal[] }`, newest first (at most 100) |
 | `/api/takeovers/:token/:id` | `Proposal`; 404 if the id belongs to another token |
 | `/api/polls/:governor/:token/:scope` | Raw `poll` row |
+| `/api/live/:token` | Live-donation token: `rotation` (current index, period, `startedAt`, `nextRotationAt`, `pendingPeriodChange`), `designatedCause`, `nextCause`, `causes` (credited, donated, pending, held per cause), `totals`, `recentDonations`; computed at the server time. 404 for a token that is not live |
 | `/api/stats` | USDC totals (6 decimals) |
 | `/api/catalog` | Loaded catalogue: `root`, taxonomy version, org and entry counts, per-category and per-region org counts, `bucketSizes` |
 | `/api/catalog/search?q&categories&regions&offset&limit` | `{ items: CatalogOrg[], total }` (comma-separated slugs; none means any) |
