@@ -176,6 +176,7 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
     notices.push(
       <p key="route" className="m-0 text-[13px] text-ink-muted">
         Route: {quote.routeLabel}
+        {quote.venues && quote.venues.some((v) => v !== "v4") ? ` via Uniswap ${quote.venues.join(" + ")}` : ""}
         {quote.alternatives.length > 1 ? ` (best of ${quote.alternatives.length})` : ""}
       </p>,
     );

@@ -4,6 +4,7 @@ import { DEFAULT_ENVIRONMENT, MAX_UINT128 } from "./constants.js";
 import { SwapError, mapSwapError } from "./errors.js";
 import { adjustPrice, rawMidPrice, type ReadClient } from "./pool.js";
 import { segmentRoute, type RouteSegment } from "./routing.js";
+import { quoteV2Segment, quoteV3Segment } from "./venues.js";
 import type { PoolState, QuoteMode, Route, RouteQuote, RouteStep, SwapAsset, SwapEnvironment } from "./types.js";
 
 type PoolStep = Extract<RouteStep, { kind: "pool" }>;
@@ -59,6 +60,13 @@ async function quoteSegment(client: ReadClient, seg: Extract<RouteSegment, { kin
   }
 }
 
+/** One segment of any venue through its quoter. */
+function quoteAnySegment(client: ReadClient, seg: Exclude<RouteSegment, { kind: "wrap" | "unwrap" }>, mode: QuoteMode, amount: bigint, env: SwapEnvironment) {
+  if (seg.kind === "v3") return quoteV3Segment(client, seg.steps, mode, amount, env);
+  if (seg.kind === "v2") return quoteV2Segment(client, seg.steps, mode, amount, env);
+  return quoteSegment(client, seg, mode, amount, env);
+}
+
 /** Fee fraction (0..1) of one pool step. */
 function stepFee(s: PoolStep, ctx: QuoteContext): number {
   const override = ctx.feeBps?.get(s.poolId);
@@ -82,7 +90,7 @@ export function routeMidPrice(route: Route, states: ReadonlyMap<string, PoolStat
   return adjustPrice(raw, decimalsIn, decimalsOut);
 }
 
-/** Quotes one route through the V4Quoter (exact-in or exact-out). Wrap and unwrap steps convert 1:1. */
+/** Quotes one route segment by segment: V4Quoter, v3 QuoterV2, v2 Router02 (exact-in or exact-out). Wrap and unwrap steps convert 1:1. */
 export async function quoteRoute(client: ReadClient, route: Route, mode: QuoteMode, amount: bigint, ctx: QuoteContext): Promise<RouteQuote> {
   const env = ctx.env ?? DEFAULT_ENVIRONMENT;
   const segments = segmentRoute(route);
@@ -92,8 +100,8 @@ export async function quoteRoute(client: ReadClient, route: Route, mode: QuoteMo
   if (mode === "exactIn") {
     let a = amount;
     for (const seg of segments) {
-      if (seg.kind !== "v4") continue;
-      const r = await quoteSegment(client, seg, "exactIn", a, env);
+      if (seg.kind === "wrap" || seg.kind === "unwrap") continue;
+      const r = await quoteAnySegment(client, seg, "exactIn", a, env);
       a = r.amount;
       gas += r.gas;
     }
@@ -102,8 +110,8 @@ export async function quoteRoute(client: ReadClient, route: Route, mode: QuoteMo
   } else {
     let a = amount;
     for (const seg of [...segments].reverse()) {
-      if (seg.kind !== "v4") continue;
-      const r = await quoteSegment(client, seg, "exactOut", a, env);
+      if (seg.kind === "wrap" || seg.kind === "unwrap") continue;
+      const r = await quoteAnySegment(client, seg, "exactOut", a, env);
       a = r.amount;
       gas += r.gas;
     }

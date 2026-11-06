@@ -8,9 +8,10 @@ import { SwapError, mapSwapError, type SwapReason } from "./errors.js";
 import { readVaradaFee } from "./fee.js";
 import { poolIdOf, varadaPoolKey, type ReadClient } from "./pool.js";
 import { applySlippage, pickBestQuote, type BestQuote, type QuoteContext } from "./quote.js";
-import { describeRoute, discoverPools, enumerateRoutes, rankRoutes, resolveRoutingConfig, routingNodes, type RoutingConfig } from "./routing.js";
+import { describeRoute, discoverPools, enumerateRoutes, movingCurrencies, rankRoutes, resolveRoutingConfig, routingNodes, type RoutingConfig } from "./routing.js";
+import { routeVenues } from "./venues.js";
 import { VARADA_TOKEN_DECIMALS } from "./constants.js";
-import type { PoolState, QuoteMode, RouteQuote, SwapAsset, TradeSide, VaradaFeeInfo, VaradaMarketToken } from "./types.js";
+import type { PoolState, QuoteMode, RouteQuote, SwapAsset, SwapVenue, TradeSide, VaradaFeeInfo, VaradaMarketToken } from "./types.js";
 
 export interface TradeRequest {
   token: VaradaMarketToken;
@@ -42,6 +43,8 @@ export interface TradeQuote {
   /** Other routes that quoted, best first (includes `best`). */
   alternatives: RouteQuote[];
   routeLabel: string;
+  /** Venues the best route trades on ("v4", "v3", "v2"), in order of use. */
+  venues: SwapVenue[];
   /** The asset the user pays / receives and the token, in trade order. */
   payAsset: SwapAsset;
   receiveAsset: SwapAsset;
@@ -68,8 +71,9 @@ export interface TradeQuote {
 /**
  * Ondo checks for the tokens of a route. A paused token blocks the trade when it is the one the user pays or
  * receives or the token's quote asset (the pool prices against it, and the live hook converts fees in it). An Ondo
- * token that is only an intermediate hop never moves as an ERC-20 (the pool manager nets its flow to zero inside the
- * swap, checked on a fork), so a pause there is reported as a warning and the user's blocklist status does not matter.
+ * token that is only an intermediate hop inside a v4 segment never moves as an ERC-20 (the pool manager nets its flow
+ * to zero inside the swap, checked on a fork), so a pause there is reported as a warning. A token between two segments
+ * or a hop of a v3 / v2 pool is really transferred: `binding` includes those (`movingCurrencies`), so a pause blocks.
  */
 async function checkRouteOndo(client: ReadClient, routeCurrencies: readonly Address[], binding: readonly Address[], opts?: ComplianceOptions): Promise<ComplianceReport> {
   const bindingSet = new Set(binding.map((a) => a.toLowerCase()));
@@ -89,8 +93,8 @@ async function checkRouteOndo(client: ReadClient, routeCurrencies: readonly Addr
 
 /**
  * Quotes a buy or sell of a Varada token in any hub asset: reads the token's fee from its hook,
- * discovers which Uniswap v4 pools exist among the hubs, enumerates 1-3 hop routes, quotes each
- * through the V4Quoter and keeps the best (highest output / lowest input). Also runs the Ondo
+ * discovers which Uniswap v4, v3 and v2 pools exist among the hubs, enumerates 1-3 hop routes (mixing venues), quotes
+ * each through the V4Quoter / v3 QuoterV2 / v2 Router02 and keeps the best (highest output / lowest input). Also runs the Ondo
  * pause / compliance checks for the Ondo tokens on the route.
  *
  * Throws {@link SwapError} (`no-route`, `insufficient-liquidity`, `pool-not-initialized`, ...) when
@@ -149,7 +153,7 @@ export async function quoteTrade(client: ReadClient, req: TradeRequest, ctx: Tra
 
   const limits = applySlippage(best, req.slippageBps);
   const currencies = best.route.steps.flatMap((s) => [s.currencyIn, s.currencyOut]);
-  const compliance = await checkRouteOndo(client, currencies, [payAsset.address, receiveAsset.address, token.quote.address], ctx.compliance);
+  const compliance = await checkRouteOndo(client, currencies, [payAsset.address, receiveAsset.address, token.quote.address, ...movingCurrencies(best.route)], ctx.compliance);
   const blockers: SwapReason[] = compliance.blockers.map((b) => b.reason);
   if (best.priceImpactPct >= (ctx.maxImpactPct ?? DEFAULT_MAX_PRICE_IMPACT_PCT)) blockers.push("price-impact");
 
@@ -161,6 +165,7 @@ export async function quoteTrade(client: ReadClient, req: TradeRequest, ctx: Tra
     best,
     alternatives: all,
     routeLabel,
+    venues: routeVenues(best.route),
     payAsset,
     receiveAsset,
     amountIn: best.amountIn,
