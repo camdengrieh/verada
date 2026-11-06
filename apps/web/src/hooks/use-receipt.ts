@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import type { Hex, TransactionReceipt } from "viem";
+import type { Hex, PublicClient, TransactionReceipt } from "viem";
 import { usePublicClient } from "wagmi";
 import { friendlyTxError } from "@/lib/tx-errors";
 
@@ -22,6 +22,23 @@ function reasonOf(e: unknown): string | undefined {
 }
 
 /**
+ * Imperative form of the receipt wait, for flows that are not React state (the swap state machine).
+ * Returns the receipt even when it reverted; for a revert, `revertError` is the error from replaying
+ * the call at the mined block (carries the revert data), or undefined when the node gave none.
+ */
+export async function waitForReceipt(client: Pick<PublicClient, "waitForTransactionReceipt" | "getTransaction" | "call">, hash: Hex): Promise<{ receipt: TransactionReceipt; revertError?: unknown }> {
+  const receipt = await client.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "reverted") return { receipt };
+  try {
+    const t = await client.getTransaction({ hash });
+    await client.call({ account: t.from, to: t.to ?? undefined, data: t.input, value: t.value, gas: t.gas, blockNumber: receipt.blockNumber });
+  } catch (e) {
+    return { receipt, revertError: e };
+  }
+  return { receipt };
+}
+
+/**
  * Waits for a transaction's receipt through the public client. wagmi's own waitForTransactionReceipt
  * throws when the receipt says "reverted", which would hide the revert behind a read failure; viem's
  * returns it, so `data.status === "reverted"` is reachable, and the call is replayed at the mined
@@ -38,18 +55,9 @@ export function useReceipt(hash: Hex | undefined, chainId: number): ReceiptState
     setState({ hash, error: null });
     void (async () => {
       try {
-        const data = await client.waitForTransactionReceipt({ hash });
+        const { receipt: data, revertError } = await waitForReceipt(client, hash);
         if (cancelled) return;
-        let revertReason: string | undefined;
-        if (data.status === "reverted") {
-          try {
-            const t = await client.getTransaction({ hash });
-            await client.call({ account: t.from, to: t.to ?? undefined, data: t.input, value: t.value, gas: t.gas, blockNumber: data.blockNumber });
-          } catch (e) {
-            revertReason = reasonOf(e);
-          }
-          if (cancelled) return;
-        }
+        const revertReason = revertError === undefined ? undefined : reasonOf(revertError);
         setState({ hash, data, error: null, revertReason });
       } catch (e) {
         if (!cancelled) setState({ hash, error: e instanceof Error ? e : new Error(String(e)) });
