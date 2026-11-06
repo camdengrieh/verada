@@ -29,10 +29,13 @@ import { HoldersTab } from "./holders-tab";
 import { ImpactTab } from "./impact-tab";
 import { MarketSection, useMarketFigures, useNowSec } from "./market-section";
 import { TokenHero } from "./token-hero";
-import { TradeAside, TradeSheet, TRADE_READY } from "./trade-surface";
+import { TradeAside, TradeSheet, useLiquidityMetric } from "./trade-surface";
 import { TradesTab } from "./trades-tab";
 import { useHolders, useHolderSummary, useMarket, useTradeTape } from "./use-token-data";
 import { useEpochView } from "@/components/epoch-panel";
+import { useCatalogNames } from "@/components/catalog-browser";
+import { CAUSE_SHORT_LABELS } from "@varada/ui/components/varada/cause-icon";
+import { focusCauseNames } from "@/lib/token-data";
 
 const TEXT_KEYS = [TOKEN_TEXT_KEYS.description, TOKEN_TEXT_KEYS.url, TOKEN_TEXT_KEYS.twitter, TOKEN_TEXT_KEYS.telegram, TOKEN_TEXT_KEYS.discord, TOKEN_TEXT_KEYS.github];
 
@@ -139,6 +142,17 @@ export function TokenView({ address, token, source }: { address: Address; token:
     raisedUsd,
   };
 
+  const liquidity = useLiquidityMetric(address, symbol);
+  const causes = focusCauseNames(token.focus);
+  const causeIcon = causes.length === 1 ? causes[0] : undefined;
+  const designated = live.data?.designatedCause?.toLowerCase();
+  const designatedName = useCatalogNames(designated ? [designated] : []).data?.get(designated ?? "")?.name;
+  const causeName = causeIcon ? CAUSE_SHORT_LABELS[causeIcon] : designatedName ?? (live.data ? "the designated cause" : "the cause holders vote for");
+  const onSwapped = useCallback(() => {
+    const a = address.toLowerCase();
+    void qc.invalidateQueries({ predicate: (q) => JSON.stringify(q.queryKey).toLowerCase().includes(a) });
+  }, [qc, address]);
+
   const canManage = sameAddress(account, profile?.controller) || sameAddress(account, profile?.editor);
   const [tab, setTab] = useState<TabId>("trades");
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -178,7 +192,7 @@ export function TokenView({ address, token, source }: { address: Address; token:
         live={live.data ?? null}
         quote={quote}
         stats={heroStats}
-        onTrade={TRADE_READY ? openTrade : undefined}
+        onTrade={openTrade}
         tradeLabel={`Buy $${symbol}`}
       />
 
@@ -196,13 +210,14 @@ export function TokenView({ address, token, source }: { address: Address; token:
             feeTotals={feeTotals}
             trades={tape.trades}
             nowSec={nowSec}
-            onTrade={TRADE_READY ? openTrade : undefined}
+            onTrade={openTrade}
+            extraMetrics={liquidity}
           />
         </div>
 
         <aside aria-label="Trade and giving" className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-24 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:self-start">
           <div id="trade" className="scroll-mt-24 empty:hidden">
-            <TradeAside token={address} symbol={symbol} />
+            {wide ? <TradeAside token={address} symbol={symbol} causeName={causeName} causeIcon={causeIcon} onSwapped={onSwapped} /> : null}
           </div>
           {live.data ? <LiveSummary live={live.data} /> : <PoolSummary token={address} detail={token} onVote={() => showTab("governance")} />}
           <FeeSplit feeTotals={feeTotals} />
@@ -219,7 +234,7 @@ export function TokenView({ address, token, source }: { address: Address; token:
               {canManage ? <TabsTrigger value="manage">Manage</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="trades">
-              <TradesTab symbol={symbol} quote={quote} quoteDecimals={quoteDecimals} tape={tape} onTrade={TRADE_READY ? openTrade : undefined} />
+              <TradesTab symbol={symbol} quote={quote} quoteDecimals={quoteDecimals} tape={tape} onTrade={openTrade} />
             </TabsContent>
             <TabsContent value="holders">
               <HoldersTab symbol={symbol} holders={holders} summary={summary} />
@@ -255,14 +270,14 @@ export function TokenView({ address, token, source }: { address: Address; token:
           {body}
         </PullToRefresh>
       )}
-      {TRADE_READY && !wide ? (
+      {!wide ? (
         <>
           <StickyActionBar
             aboveTabBar={!tabBarHidden}
             primary={{ label: `Trade $${symbol}`, onClick: openTrade }}
             note={heroStats.price ? <span className="num">{heroStats.price}</span> : undefined}
           />
-          <TradeSheet token={address} symbol={symbol} open={sheet} onOpenChange={setSheet} />
+          <TradeSheet token={address} symbol={symbol} causeName={causeName} causeIcon={causeIcon} onSwapped={onSwapped} open={sheet} onOpenChange={setSheet} />
         </>
       ) : null}
     </>

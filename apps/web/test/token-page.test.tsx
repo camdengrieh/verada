@@ -194,6 +194,26 @@ vi.mock("wagmi", () => ({
   useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));
 
+// The swap engine has its own tests: here the ticket is a stand-in that shows what the page hands it.
+const ticket = vi.fn((_p: unknown) => {});
+vi.mock("@/components/swap", () => ({
+  ConnectedTradePanel: (p: { token: { address: string; symbol: string }; causeName?: string; causeIcon?: string; onSwapped?: () => void }) => {
+    ticket(p);
+    return (
+      <div data-testid="ticket" data-cause={p.causeName} data-icon={p.causeIcon}>
+        Ticket for {p.token.symbol} at {p.token.address}
+        <button onClick={p.onSwapped}>Swapped</button>
+      </div>
+    );
+  },
+}));
+vi.mock("@/hooks/use-swap-market", () => ({
+  usePoolMarket: () => ({ market: { tvlUsd: 123_456, tvlQuote: 50, quote: { symbol: "WETH" } }, quoteUsd: 2400, loading: false, error: null, refresh: vi.fn() }),
+  useUsdPrices: () => ({ data: new Map() }),
+}));
+const viewport = { wide: true };
+window.matchMedia = ((q: string) => ({ matches: viewport.wide && /min-width/.test(q), media: q, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
+
 const cast = vi.fn(async (_args: unknown) => {});
 const castState = { phase: "idle" as "idle" | "encrypting" | "signing" | "sent" | "error", error: undefined as string | undefined };
 vi.mock("@/components/use-cast-ballot", () => ({
@@ -220,6 +240,8 @@ describe("token page", () => {
   beforeEach(() => {
     fetchMock.mockClear();
     accountRead.mockClear();
+    ticket.mockClear();
+    viewport.wide = true;
     window.history.replaceState(null, "", `/token/?address=${TOKEN}`);
   });
 
@@ -242,8 +264,46 @@ describe("token page", () => {
     // Weekly pool, the pool's quote asset from the market.
     expect(screen.getAllByText(/Weekly pool/i).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.getAllByText(/WETH/).length).toBeGreaterThan(0));
-    // No trade panel until the swap engine lands, and no inert stand-in either.
-    expect(screen.queryByRole("button", { name: /^Buy/ })).toBeNull();
+  });
+
+  it("mounts the trade ticket in the desktop aside with the token, its cause and a refresh hook", async () => {
+    account.address = undefined;
+    wrap(<TokenDetail />);
+    await heading();
+    const aside = screen.getByRole("complementary", { name: "Trade and giving" });
+    const ticketEl = await within(aside).findByTestId("ticket");
+    expect(ticketEl).toHaveTextContent(`Ticket for MCAT at ${TOKEN}`);
+    // A single focus cause names the fee split and gives its icon.
+    expect(ticketEl).toHaveAttribute("data-cause", "Hunger");
+    expect(ticketEl).toHaveAttribute("data-icon", "hunger");
+    expect(screen.getAllByTestId("ticket")).toHaveLength(1);
+    // The hero's buy action scrolls to it, and there is no sticky bar or sheet on a wide screen.
+    expect(screen.getByRole("button", { name: "Buy $MCAT" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Trade $MCAT" })).toBeNull();
+    // A mined swap refetches the page's data for this token.
+    const before = fetchMock.mock.calls.length;
+    fireEvent.click(within(ticketEl).getByRole("button", { name: "Swapped" }));
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(before));
+  });
+
+  it("on a phone the ticket opens from the sticky action bar in a sheet, and is mounted once", async () => {
+    viewport.wide = false;
+    account.address = undefined;
+    wrap(<TokenDetail />);
+    await heading();
+    expect(screen.queryByTestId("ticket")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Trade $MCAT" }));
+    const sheet = await screen.findByRole("dialog", { name: /Trade \$MCAT/ });
+    expect(within(sheet).getByTestId("ticket")).toHaveTextContent(`Ticket for MCAT at ${TOKEN}`);
+    expect(screen.getAllByTestId("ticket")).toHaveLength(1);
+  });
+
+  it("shows the pool's liquidity next to the market metrics", async () => {
+    account.address = undefined;
+    wrap(<TokenDetail />);
+    await heading();
+    expect(await screen.findByText("Liquidity")).toBeInTheDocument();
+    expect(await screen.findByText(/\$123\.46K|\$123,456/)).toBeInTheDocument();
   });
 
   it("shows the market: price in the quote asset, 24h change, volume, holders, fees and a chart with candles", async () => {
