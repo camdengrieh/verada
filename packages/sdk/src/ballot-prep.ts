@@ -18,7 +18,11 @@ export interface BallotReader {
   poolOf(token: Address, epoch: bigint): Promise<{ version: number; poolSize: bigint }>;
   /** Cause ids pinned for the epoch (`shortlistFor`). */
   pinned(token: Address, epoch: bigint): Promise<readonly Hex[]>;
-  ballotSize(): Promise<number>;
+  /**
+   * `EpochGovernor.ballotSizeFor(token, epoch)`: the epoch's ballot size, the token's own choice
+   * bounded by the protocol cap and the scheme (the cap alone when it made none).
+   */
+  ballotSize(token: Address, epoch: bigint): Promise<number>;
   focusOf(token: Address): Promise<{ categoryMask: bigint; regionMask: number }>;
   bucketSizes(version: number): Promise<readonly number[]>;
   catalogRoot(version: number): Promise<Hex>;
@@ -134,7 +138,7 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
   const [{ version, poolSize }, pinnedAll, size, focus] = await Promise.all([
     r.poolOf(token, epoch),
     r.pinned(token, epoch),
-    r.ballotSize(),
+    r.ballotSize(token, epoch),
     r.focusOf(token),
   ]);
   const open: BallotStep = { type: "send", action: { kind: "openEpoch", token, epoch } };
@@ -298,7 +302,7 @@ export function createBallotReader(client: BallotReadClient, epochGovernor: Addr
       return { version: Number(version), poolSize };
     },
     pinned: (token, epoch) => read<readonly Hex[]>(eg, epochGovernorAbi, "shortlistFor", [token, epoch]),
-    ballotSize: async () => Number(await read<bigint>(eg, epochGovernorAbi, "ballotSize")),
+    ballotSize: async (token, epoch) => Number(await read<bigint>(eg, epochGovernorAbi, "ballotSizeFor", [token, epoch])),
     async focusOf(token) {
       const { profiles } = await links();
       const [categoryMask, regionMask] = await read<readonly [bigint, number]>(profiles, tokenProfileRegistryAbi, "focusOf", [token]);

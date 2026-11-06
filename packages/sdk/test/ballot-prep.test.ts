@@ -61,8 +61,9 @@ describe("createBallotReader", () => {
             return true;
           case "poolOf":
             return [2, 40n];
-          case "ballotSize":
-            return 32n;
+          case "ballotSizeFor":
+            // Per token and epoch: the token's own size, not the protocol's.
+            return a.args?.[1] === 1n ? 9n : 32n;
           case "profileRegistry":
             return "0x00000000000000000000000000000000000000f1";
           case "catalog":
@@ -85,7 +86,9 @@ describe("createBallotReader", () => {
     const r = createBallotReader(client as never, EG);
     expect(await r.isPrepared(T, 1n)).toBe(true);
     expect(await r.poolOf(T, 1n)).toEqual({ version: 2, poolSize: 40n });
-    expect(await r.ballotSize()).toBe(32);
+    expect(await r.ballotSize(T, 1n)).toBe(9);
+    expect(await r.ballotSize(T, 2n)).toBe(32);
+    expect(calls).toContain(`${EG}:ballotSizeFor`);
     expect(await r.focusOf(T)).toEqual({ categoryMask: 4n, regionMask: 1 });
     expect(await r.curationSkipAt!(T, 1n)).toBe(22_600n);
     expect(await r.now!()).toBe(2000n);

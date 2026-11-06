@@ -1,11 +1,35 @@
 import { decodeAbiParameters, encodeAbiParameters, type Hex } from "viem";
 import { EPOCH_LENGTH, epochStart } from "./epoch.js";
 
-/** Largest number of options a poll may have (`IVotingScheme.MAX_OPTIONS`). */
+/**
+ * Largest number of options a poll may have (`IVotingScheme.MAX_OPTIONS`, `EpochGovernor.MAX_OPTIONS`):
+ * the hard ceiling of every ballot size. A token's weekly ballot may be smaller (`effectiveBallotSize`).
+ */
 export const MAX_BALLOT_OPTIONS = 32;
+
+/** Smallest ballot that opens a poll (`EpochGovernor.MIN_OPTIONS`), and the smallest ballot size. */
+export const MIN_BALLOT_OPTIONS = 2;
 
 /** Largest number of causes a token's controller may pin (`EpochGovernor.PINNED_MAX`). */
 export const PINNED_MAX = 8;
+
+/** Whether `size` is a ballot size the cap or a token may take (`MIN_BALLOT_OPTIONS..MAX_BALLOT_OPTIONS`). */
+export function isBallotSize(size: number): boolean {
+  return Number.isInteger(size) && size >= MIN_BALLOT_OPTIONS && size <= MAX_BALLOT_OPTIONS;
+}
+
+/**
+ * Ballot size of a token's next unprepared weekly epoch. Mirrors `EpochGovernor._sizeOf`: the token's
+ * own choice (`ballotSizeChoiceOf`, 0 to follow the cap), at most the protocol cap (`ballotSizeCap`),
+ * and at most the scheme's `MAX_OPTIONS` (32 for `ZamaVotingScheme`). A prepared epoch keeps the size
+ * it was prepared with (`ballotSizeFor`).
+ */
+export function effectiveBallotSize(input: { cap: number; choice: number; schemeMax?: number }): number {
+  let size = input.cap;
+  if (input.choice !== 0 && input.choice < size) size = input.choice;
+  const schemeMax = input.schemeMax ?? MAX_BALLOT_OPTIONS;
+  return schemeMax < size ? schemeMax : size;
+}
 
 /** Packed tally layout of `ZamaVotingScheme`: 40-bit counters, three per `euint128` word. */
 export const TALLY_COUNTER_BITS = 40n;
@@ -14,6 +38,27 @@ export const TALLY_COUNTERS_PER_WORD = 3;
 /** Number of packed tally words (decryption handles) of a poll with `optionCount` options. */
 export function tallyWordCount(optionCount: number): number {
   return Math.ceil(optionCount / TALLY_COUNTERS_PER_WORD);
+}
+
+/**
+ * Approximate gas a voter's `castBallot` spends per packed tally word on `ZamaVotingScheme` (one
+ * encrypted compare, select and add per word), so every 3 fewer options save each voter about this
+ * much per ballot.
+ */
+export const BALLOT_GAS_PER_TALLY_WORD = 86_000;
+
+/**
+ * Gas hint for a ballot of `size` options: its tally words, the counters left unused in its last
+ * word (0 for multiples of 3, the most efficient sizes) and the approximate gas each voter saves per
+ * ballot against a full `MAX_BALLOT_OPTIONS` ballot.
+ */
+export function ballotGasHint(size: number): { words: number; unusedCounters: number; savedPerVoter: number } {
+  const words = tallyWordCount(size);
+  return {
+    words,
+    unusedCounters: words * TALLY_COUNTERS_PER_WORD - size,
+    savedPerVoter: (tallyWordCount(MAX_BALLOT_OPTIONS) - words) * BALLOT_GAS_PER_TALLY_WORD,
+  };
 }
 
 /** Per-option counts from decrypted packed tally words, as `ZamaVotingScheme.submitTally` unpacks. */
