@@ -31,6 +31,9 @@ const TONE: Record<HolderTone, string> = {
   muted: "bg-line-strong",
 };
 
+/** Shares (percent of supply) at which holdings count as concentrated; HolderInsights uses them too. */
+export const CONCENTRATION = { top10: 50, creator: 10 } as const;
+
 export interface HolderShares {
   /** Supply in the pool, percent. */
   pool: number;
@@ -72,7 +75,7 @@ const pct = (n: number) => `${n < 10 ? n.toFixed(1) : Math.round(n)}%`;
 const count = new Intl.NumberFormat("en-US");
 
 /** Who holds the supply: a stacked bar with tooltips and a written legend, flagged when concentrated. */
-export function HolderDistribution({ segments, totalHolders, title = "Holder distribution", headingLevel = 3, warnTop10At = 50, warnCreatorAt = 10, className }: HolderDistributionProps) {
+export function HolderDistribution({ segments, totalHolders, title = "Holder distribution", headingLevel = 3, warnTop10At = CONCENTRATION.top10, warnCreatorAt = CONCENTRATION.creator, className }: HolderDistributionProps) {
   const id = useId();
   const reduced = useReducedMotion();
   const Heading = `h${headingLevel}` as "h2" | "h3" | "h4";

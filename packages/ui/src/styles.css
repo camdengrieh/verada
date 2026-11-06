@@ -179,6 +179,7 @@
   --animate-marquee: marquee var(--marquee-duration, 40s) linear infinite;
   --animate-step-in: step-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
   --animate-flash: flash 1.2s ease-out;
+  --animate-flash-loss: flash-loss 1.2s ease-out;
 
   @keyframes marquee {
     from { transform: translateX(0); }
@@ -190,6 +191,10 @@
   }
   @keyframes flash {
     from { background-color: var(--sage-tint); }
+    to { background-color: transparent; }
+  }
+  @keyframes flash-loss {
+    from { background-color: var(--terracotta-tint); }
     to { background-color: transparent; }
   }
 }
