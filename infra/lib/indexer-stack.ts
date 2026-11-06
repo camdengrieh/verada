@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as ecr from "aws-cdk-lib/aws-ecr";
@@ -23,7 +24,23 @@ export interface IndexerStackProps extends cdk.StackProps {
 }
 
 export const INDEXER_PORT = 42069;
+/** Liveness: 200 as soon as the HTTP server is up, also while the backfill runs. */
 export const INDEXER_HEALTH_PATH = "/health";
+/** Readiness: 503 until the historical backfill is complete. The load balancer routes only to ready tasks. */
+export const INDEXER_READY_PATH = "/ready";
+/** A task may backfill this long before the load balancer's readiness check can fail it. */
+export const INDEXER_READY_GRACE_SECONDS = 3600;
+
+/**
+ * Ponder refuses to start on a schema that a build with a different id used before, and a second
+ * `ponder start` on a live schema exits after waiting for its lock. So every distinct build (image tag
+ * or chain values) gets its own schema: the new task backfills beside the serving one, becomes ready,
+ * and only then takes traffic. Old `varada_*` schemas are dropped by hand after a rollout.
+ */
+export function indexerSchema(imageTag: string, chain: Readonly<Record<string, string>>): string {
+  const canonical = JSON.stringify([imageTag, Object.entries(chain).sort(([a], [b]) => (a < b ? -1 : 1))]);
+  return `varada_${createHash("sha256").update(canonical).digest("hex").slice(0, 12)}`;
+}
 /** Header CloudFront adds to every origin request; the ALB forwards only requests that carry it. */
 export const INDEXER_ORIGIN_HEADER = "X-Varada-Origin";
 
@@ -121,7 +138,7 @@ export class IndexerStack extends cdk.Stack {
       circuitBreaker: { enable: true, rollback: true },
       minHealthyPercent: 100,
       maxHealthyPercent: 200,
-      healthCheckGracePeriod: cdk.Duration.seconds(120),
+      healthCheckGracePeriod: cdk.Duration.seconds(INDEXER_READY_GRACE_SECONDS),
       taskImageOptions: {
         image: ecs.ContainerImage.fromEcrRepository(this.repository, config.indexerImageTag),
         containerName: "indexer",
@@ -147,7 +164,7 @@ export class IndexerStack extends cdk.Stack {
           NODE_ENV: "production",
           PORT: String(INDEXER_PORT),
           DATABASE_NAME: props.dbName,
-          DATABASE_SCHEMA: "varada",
+          DATABASE_SCHEMA: indexerSchema(config.indexerImageTag, config.indexerChain),
           ...(config.indexerCorsOrigins ? { CORS_ALLOWED_ORIGINS: config.indexerCorsOrigins } : {}),
           ...(config.indexerCatalogSource ? { CATALOG_SOURCE: config.indexerCatalogSource } : {}),
           // Curator reports are read from the same Swarm gateway the publisher uploads through.
@@ -175,7 +192,7 @@ export class IndexerStack extends cdk.Stack {
     this.service.loadBalancer.setAttribute("routing.http.drop_invalid_header_fields.enabled", "true");
 
     this.service.targetGroup.configureHealthCheck({
-      path: INDEXER_HEALTH_PATH,
+      path: INDEXER_READY_PATH,
       healthyHttpCodes: "200",
       interval: cdk.Duration.seconds(30),
       timeout: cdk.Duration.seconds(10),
@@ -184,7 +201,7 @@ export class IndexerStack extends cdk.Stack {
     });
     this.service.targetGroup.setAttribute("deregistration_delay.timeout_seconds", "30");
 
-    // Container-level health check hits the same endpoint. The image is node:22-slim (no wget/curl),
+    // The container-level check is liveness only (/health): a backfilling task must not be restarted. The image is node:22-slim (no wget/curl),
     // so use node, mirroring the Dockerfile HEALTHCHECK.
     const cfnTask = this.service.taskDefinition.node.defaultChild as ecs.CfnTaskDefinition;
     cfnTask.addPropertyOverride("ContainerDefinitions.0.HealthCheck", {

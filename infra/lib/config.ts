@@ -282,6 +282,9 @@ function loadCorsOrigins(node: Node, isProd: boolean, key = "indexerCorsOrigins"
       if (isProd) throw new Error(`"*" is not allowed in ${key} for prod; list the exact origins`);
       continue;
     }
+    // Wildcard-suffix patterns the indexer's CORS matcher understands: "*.eth.limo", "https://*.bzz.link".
+    // Subdomains only (the bare suffix does not match), so an ENS gateway can be allowed as a whole.
+    if (/^(?:https?:\/\/)?\*\.[a-z0-9-]+(\.[a-z0-9-]+)+$/i.test(o)) continue;
     let u: URL;
     try {
       u = new URL(o);
@@ -641,6 +644,12 @@ export function loadConfig(node: Node): VaradaConfig {
   }
 
   const indexerDesiredCount = num(node, "indexerDesiredCount", 1);
+  // `ponder start` holds a database lock on its schema, so a second writer exits after waiting for it.
+  // Availability comes from running a second, independent environment (a mirror) and listing both
+  // URLs in the web app's indexerUrls, not from more tasks.
+  if (indexerDesiredCount > 1 || num(node, "indexerMaxCount", indexerDesiredCount) > 1) {
+    throw new Error('context "indexerDesiredCount"/"indexerMaxCount" must be 0 or 1 (one Ponder writer per schema); run a second environment as a mirror');
+  }
   return {
     account,
     region,

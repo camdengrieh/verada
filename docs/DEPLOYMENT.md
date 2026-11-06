@@ -170,5 +170,66 @@ applying: it re-checks every hop and skips (and logs) what has gone.
 - Move ownership to a multisig when it is ready: `transferOwnership(multisig)` on each owned
   contract, then `acceptOwnership()` from the multisig.
 
+## 5. Deploy the indexer
+
+The indexer (`services/indexer`) is the only always-on read path. Its AWS stacks are in `infra/`; the
+full parameter list and secrets are in [`infra/README.md`](../infra/README.md). Nothing below runs
+until you hold an AWS session for the target account; the offline checks need none.
+
+**Start block and addresses.** Generate them from the deployment records instead of copying them:
+
+```sh
+pnpm --filter @varada/indexer deployment-env --dir ../../contracts/deployments --format cdk   # -c flags for infra
+pnpm --filter @varada/indexer deployment-env --dir ../../contracts/deployments --format env   # services/indexer/.env.local
+```
+
+`START_BLOCK` is `deployBlock` from `1.json`, the block of the first deployment transaction, so the
+backfill covers the whole system and nothing earlier. `ROTATION_GOVERNOR_ADDRESS` comes from
+`1-live.json`; the live hook and vault are found through the factory.
+
+**Offline checks** (no credentials):
+
+```sh
+cd infra && pnpm test && pnpm typecheck
+npx cdk synth -c account=111111111111 -c region=us-east-1 -c availabilityZones=us-east-1a,us-east-1b \
+  -c envName=prod -c indexerDomainName=<host> -c indexerCertificateArn=<arn> \
+  -c indexerCorsOrigins=<origins> $(pnpm --silent --filter @varada/indexer deployment-env --dir ../../contracts/deployments --format cdk)
+```
+
+**Deploy order** (prerequisites and commands in `infra/README.md`, "Deploy"): bootstrap, RPC secret,
+`Network`, `Data` and `Indexer` with `indexerDesiredCount=0`, push the image, redeploy with
+`indexerImageTag` and the chain values from above, then point DNS at `LoadBalancerDnsName`.
+
+**Behaviour to rely on:**
+
+- *One writer.* `ponder start` locks its database schema, so `indexerDesiredCount` and
+  `indexerMaxCount` are capped at 1. For availability run a second, independent environment (a
+  mirror) and list both URLs in the web app's `indexerUrls` (`NEXT_PUBLIC_INDEXER_URLS`, or
+  `config.json`). The client tries them in order and fails over on network errors and 5xx.
+- *Schema per build.* `DATABASE_SCHEMA` is `varada_<hash of image tag and chain values>`. A new image
+  backfills into a new schema while the old task serves, and the load balancer sends it traffic only
+  once `/ready` answers 200 (up to one hour of grace). The container health check is `/health`
+  (liveness only), so a backfilling task is not restarted. After a rollout, drop the previous
+  schema: `DROP SCHEMA varada_<old> CASCADE`.
+- *Reorgs.* Ponder reverts unfinalized blocks itself; the indexer needs no extra handling. Use an RPC
+  provider with `eth_getLogs` over wide block ranges; several URLs (comma-separated in the RPC
+  secret) are load-balanced.
+- *CORS.* `indexerCorsOrigins` lists the origins that may read the API: the exact site origins
+  (`https://varada.eth.limo`) and suffix patterns for gateways (`*.eth.limo`, `https://*.bzz.link`).
+  `*` is refused in prod. Other origins receive no CORS headers.
+- *Rate limits and caching.* Per-IP token bucket (`RATE_LIMIT_RPS`, `RATE_LIMIT_BURST`, with
+  `TRUST_PROXY_HOPS=1` behind the ALB); `/api/*` answers carry `Cache-Control` and a weak `ETag`.
+  No access logs are kept (docs/PRIVACY.md).
+
+**Verify after deploy:**
+
+```sh
+curl -fsS https://<indexer>/health                       # 200 as soon as the process is up
+curl -fsS -o /dev/null -w '%{http_code}\n' https://<indexer>/ready   # 200 once the backfill is done
+curl -fsS -H 'Origin: https://varada.eth.limo' -D- https://<indexer>/api/stats | grep -i 'access-control\|cache-control\|etag'
+```
+
+Compare `/status` with the chain head to see how far behind the indexer is.
+
 See [Security and audit coverage](SECURITY.md) for what has been reviewed and the operational
 requirements the contracts rely on.
