@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ContractFunctionRevertedError, encodeErrorResult, zeroAddress, type Abi } from "viem";
-import { ballotCommitment } from "@verada/sdk";
-import { donationDistributorAbi, feeVaultAbi } from "@verada/sdk/abis";
+import { ballotCommitment } from "@varada/sdk";
+import { donationDistributorAbi, feeVaultAbi } from "@varada/sdk/abis";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
 import { IndexerClient } from "@/lib/indexer";

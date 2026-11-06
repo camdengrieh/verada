@@ -18,8 +18,8 @@ import {
   type DonationStage,
   type DonationState,
   type DonationStep,
-} from "@verada/sdk";
-import { epochGovernorAbi } from "@verada/sdk/abis";
+} from "@varada/sdk";
+import { epochGovernorAbi } from "@varada/sdk/abis";
 import { isHex, zeroAddress, type Abi, type Address, type Hex } from "viem";
 import type { AppConfig } from "./config";
 import type { DataDeps } from "./data";

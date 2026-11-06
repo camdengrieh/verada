@@ -1,4 +1,4 @@
-import { createDonationReader, type DonationReader } from "@verada/sdk";
+import { createDonationReader, type DonationReader } from "@varada/sdk";
 import type { Hex } from "viem";
 import type { KeeperConfig } from "../env.js";
 import type { IndexerClient } from "../indexer-client.js";

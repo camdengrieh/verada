@@ -3,7 +3,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
-import { remainingStages, type DonationStage, type DonationStep } from "@verada/sdk";
+import { remainingStages, type DonationStage, type DonationStep } from "@varada/sdk";
+import { Button } from "@varada/ui/components/ui/button";
 import { usdcText } from "@/components/agent-common";
 import { useCatalogNames } from "@/components/catalog-browser";
 import { causeName, useCauses } from "@/components/epoch-panel";
@@ -20,6 +21,11 @@ import {
   stepLabel,
   waitText,
 } from "@/lib/donation-push";
+
+const CARD = "grid grid-cols-1 gap-3 rounded-2xl border border-line bg-paper-card p-4";
+const HEADING = "m-0 text-lg font-semibold";
+const TEXT = "m-0 text-sm text-ink-soft";
+const NOTE = "m-0 rounded-xl px-3 py-2 text-sm";
 
 const isZero = (h: Hex) => /^0x0*$/.test(h);
 const dateOf = (seconds: bigint) => formatTime(Number(seconds)).slice(0, 10);
@@ -46,11 +52,15 @@ const sameStep = (a: DonationStep, b: DonationStep) =>
 export function SendDonation({ token }: { token: Address }) {
   const config = useAppConfig();
   const deps = useDeps();
-  const tx = useTx();
+  const [sent, setSent] = useState<Sent>();
+  const tx = useTx({
+    kind: sent?.stage === "distribute" ? "donation" : "transaction",
+    description: sent?.label,
+    titles: sent?.stage === "distribute" ? { pending: "Sending the donation…", success: "Donation sent", error: "Donation not sent" } : undefined,
+  });
   const addrs = donationAddresses(config);
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string>();
-  const [sent, setSent] = useState<Sent>();
   const [donated, setDonated] = useState(false);
 
   const week = useQuery({
@@ -84,9 +94,11 @@ export function SendDonation({ token }: { token: Address }) {
   if (!w) {
     if (!donated) return null;
     return (
-      <section aria-label="Send this week's donation">
-        <h2>Send this week&apos;s donation</h2>
-        <p role="status">The donation was sent. Thank you for paying the gas.</p>
+      <section aria-label="Send this week's donation" className={CARD}>
+        <h2 className={HEADING}>Send this week&apos;s donation</h2>
+        <p role="status" className={`${NOTE} bg-sage-tint text-sage-ink`}>
+          The donation was sent. Thank you for paying the gas.
+        </p>
         <TxStatus tx={tx} label={sent?.label ?? stageLabel("distribute", "the charity")} />
       </section>
     );
@@ -134,48 +146,52 @@ export function SendDonation({ token }: { token: Address }) {
   }
 
   return (
-    <section aria-label="Send this week's donation">
-      <h2>Send this week&apos;s donation</h2>
-      <p>
+    <section aria-label="Send this week's donation" className={CARD}>
+      <h2 className={HEADING}>Send this week&apos;s donation</h2>
+      <p className={TEXT}>
         The week of {dateOf(state.epochStart)} to {dateOf(state.epochEnd)} has ended, but its donation has not gone out yet
         {amount > 0n ? ` (${usdcText(amount)} for the cause so far)` : ""}.
       </p>
       {stages.length > 0 && (
         <>
-          <p>What is left:</p>
-          <ol aria-label="Steps left">
+          <p className={TEXT}>What is left:</p>
+          <ol aria-label="Steps left" className="m-0 grid list-decimal gap-1 pl-5 text-sm text-ink-soft">
             {stages.map((s) => (
-              <li key={s} aria-current={s === current ? "step" : undefined}>
+              <li key={s} aria-current={s === current ? "step" : undefined} className={s === current ? "font-semibold text-ink" : undefined}>
                 {s === current && step.type === "send" ? stepLabel(step, charity, defaultCharity) : stageLabel(s, charity)}
               </li>
             ))}
           </ol>
         </>
       )}
-      <p>
+      <p className={TEXT}>
         Anyone can do these steps, not only the platform. Each one is checked on chain: the money can only go to{" "}
         {fallback ? "the default charity" : "the week's winning charity"}, never to you or anyone else, and you pay the gas.
       </p>
-      {fallback && <p role="note">{fallbackText(defaultCharity)}</p>}
+      {fallback && <p role="note" className={`${NOTE} bg-ochre-tint text-ochre-ink`}>{fallbackText(defaultCharity)}</p>}
       {step.type === "send" && (
-        <button type="button" onClick={() => void sendNext()} disabled={busy}>
-          {planning || week.isFetching ? "Checking the chain" : stepLabel(step, charity, defaultCharity)}
-        </button>
+        <div>
+          <Button type="button" variant="cause" onClick={() => void sendNext()} disabled={busy}>
+            {planning || week.isFetching ? "Checking the chain" : stepLabel(step, charity, defaultCharity)}
+          </Button>
+        </div>
       )}
       {unconfirmed && tx.receiptError && (
-        <button
+        <Button
           type="button"
+          variant="outline"
+          className="justify-self-start"
           onClick={() => {
             void tx.refetchReceipt?.();
             void refetch();
           }}
         >
           Check again
-        </button>
+        </Button>
       )}
-      {waiting && <p role="status">{waiting}</p>}
-      {blocked && <p role="alert">{blocked}</p>}
-      {error && <p role="alert">{error}</p>}
+      {waiting && <p role="status" className={`${NOTE} bg-sand text-ink-soft`}>{waiting}</p>}
+      {blocked && <p role="alert" className={`${NOTE} bg-terracotta-tint text-terracotta-strong`}>{blocked}</p>}
+      {error && <p role="alert" className={`${NOTE} bg-terracotta-tint text-terracotta-strong`}>{error}</p>}
       {sent && <TxStatus tx={tx} label={sent.epoch === w.epoch ? sent.label : `${sent.label} (week of ${dateOf(sent.weekStart)})`} />}
     </section>
   );

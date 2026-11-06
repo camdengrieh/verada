@@ -1,4 +1,4 @@
-import { ballotCommitment, type DonationReader, type DonationState } from "@verada/sdk";
+import { ballotCommitment, type DonationReader, type DonationState } from "@varada/sdk";
 import { type Address, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { readConfig } from "../src/env.js";

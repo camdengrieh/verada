@@ -1,4 +1,4 @@
-import { planDonation, type DonationReader, type DonationStep } from "@verada/sdk";
+import { planDonation, type DonationReader, type DonationStep } from "@varada/sdk";
 import type { Address } from "viem";
 import type { Log } from "../jobs/types.js";
 import type { Step } from "./plan.js";
