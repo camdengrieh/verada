@@ -15,6 +15,7 @@ import { ETH, ONDO_TOKENS, REASON_LABEL, isOndoToken, ondoSymbolOf, type SwapAss
 import { useAppConfig, useDeps } from "@/components/providers";
 import { useBalances } from "@/hooks/use-swap-balances";
 import { useSwapClients } from "@/hooks/use-swap-clients";
+import { useRegistryAssets } from "@/hooks/use-swap-registry";
 import { usePoolMarket, useUsdPrices } from "@/hooks/use-swap-market";
 import { useSwapQuote } from "@/hooks/use-swap-quote";
 import { useSwap } from "@/hooks/use-swap";
@@ -76,11 +77,14 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
   const [slippagePct, setSlippagePct] = useState(1);
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const assets = useMemo(() => (token ? tradeAssets(token.quote) : []), [token]);
+  const registry = useRegistryAssets();
+  const registryAssets = registry.data;
+  const assets = useMemo(() => (token ? tradeAssets(token.quote, registryAssets) : []), [token, registryAssets]);
+  const routing = useMemo(() => ({ extraHubs: registryAssets ?? [] }), [registryAssets]);
   const tokenAsset: SwapAsset | null = token ? { address: token.address, symbol: token.symbol, decimals: token.decimals ?? 18 } : null;
 
   const swap = useSwap();
-  const q = useSwapQuote({ token, side, asset, amountText, slippagePct });
+  const q = useSwapQuote({ token, side, asset, amountText, slippagePct, routing });
   const { market, quoteUsd } = usePoolMarket(token);
   const balances = useBalances(useMemo(() => (tokenAsset ? [...assets, tokenAsset] : assets), [assets, tokenAsset?.address])); // eslint-disable-line react-hooks/exhaustive-deps
   const usd = useUsdPrices(assets);
@@ -104,7 +108,7 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
       const ref = DEFAULT_IMPACT_SIZES[0]! / payUsdPrice!;
       const decimals = side === "buy" ? asset.decimals : (token!.decimals ?? 18);
       const refText = ref.toFixed(Math.min(decimals, 8));
-      const quote = await requestTradeQuote({ chain: clients.chain }, { token: token!, side, asset, amountText: refText, slippagePct });
+      const quote = await requestTradeQuote({ chain: clients.chain }, { token: token!, side, asset, amountText: refText, slippagePct, routing });
       if (!quote) return [];
       return quoteImpactLadder(clients.chain, quote, payUsdPrice!, DEFAULT_IMPACT_SIZES);
     },

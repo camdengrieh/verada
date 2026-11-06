@@ -3,6 +3,7 @@ import { ETH, ONDO_TOKENS, USDC, WETH, type SwapAsset } from "@varada/sdk";
 import { formatDisplay, formatPercent, formatRaw, formatUsd, parseAmount, slippageToBps } from "@/lib/swap/amounts";
 import { knownAsset, resolveMarketToken, tradeAssets } from "@/lib/swap/tokens";
 import { loadPoolMarket } from "@/lib/swap/market";
+import { loadRegistryAssets } from "@/lib/swap/registry";
 import { isStable } from "@/lib/swap/usd";
 import { payAmountRaw } from "@/lib/swap/trade";
 
@@ -59,6 +60,9 @@ describe("assets", () => {
     expect(tradeAssets(WETH).map((a) => a.symbol)).toEqual(["ETH", "WETH", "USDC", "USDT", "DAI", "WBTC"]);
     expect(tradeAssets(amzn).map((a) => a.symbol).at(-1)).toBe("AMZNon");
     expect(tradeAssets(amzn)).toHaveLength(7);
+    // registry assets are added once, after the hubs and the quote asset
+    const aapl: SwapAsset = { address: ONDO_TOKENS.AAPLon.address, symbol: "AAPLon", decimals: 18 };
+    expect(tradeAssets(WETH, [aapl, amzn, aapl]).map((a) => a.symbol)).toEqual(["ETH", "WETH", "USDC", "USDT", "DAI", "WBTC", "AAPLon", "AMZNon"]);
   });
   it("treats dollar stablecoins as stable", () => {
     expect(isStable(USDC)).toBe(true);
@@ -174,5 +178,23 @@ describe("loadPoolMarket", () => {
     expect(m.change24hPct).toBeNull();
     expect(m.reserves).toBeNull();
     expect(m.source.stats).toBe("none");
+  });
+});
+
+describe("loadRegistryAssets", () => {
+  it("returns the active allowlisted assets without the hubs", async () => {
+    const REGISTRY = "0x6666666666666666666666666666666666666666";
+    const list = [WETH.address, ONDO_TOKENS.AMZNon.address, ONDO_TOKENS.AAPLon.address, USDC.address];
+    const chain = {
+      readContract: async (a: { functionName: string; args?: unknown[] }) => {
+        if (a.functionName === "quoteRegistry") return REGISTRY;
+        if (a.functionName === "quoteAssetCount") return BigInt(list.length);
+        if (a.functionName === "quoteAssetAt") return list[Number(a.args![0])];
+        if (a.functionName === "isAllowed") return a.args![0] !== ONDO_TOKENS.AAPLon.address; // AAPLon was deactivated
+        throw new Error("unexpected " + a.functionName);
+      },
+    } as never;
+    const assets = await loadRegistryAssets(chain, FACTORY);
+    expect(assets.map((a) => a.symbol)).toEqual(["AMZNon"]);
   });
 });

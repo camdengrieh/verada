@@ -40,10 +40,13 @@ export function knownAsset(address: string): SwapAsset | null {
   return null;
 }
 
-/** The assets offered for paying (buy) and receiving (sell): the hubs plus the token's quote asset. */
-export function tradeAssets(quote: SwapAsset): SwapAsset[] {
+/**
+ * The assets offered for paying (buy) and receiving (sell): the hubs, the token's quote asset and any
+ * `extra` assets (the quote registry's allowlisted ones), without duplicates.
+ */
+export function tradeAssets(quote: SwapAsset, extra: readonly SwapAsset[] = []): SwapAsset[] {
   const list = [...DEFAULT_HUBS];
-  if (!list.some((a) => a.address.toLowerCase() === quote.address.toLowerCase())) list.push(quote);
+  for (const a of [quote, ...extra]) if (!list.some((x) => x.address.toLowerCase() === a.address.toLowerCase())) list.push(a);
   return list;
 }
 

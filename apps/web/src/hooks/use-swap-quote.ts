@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { mapSwapError, type SwapAsset, type SwapError, type TradeQuote, type TradeSide, type VaradaMarketToken } from "@varada/sdk";
+import { mapSwapError, type RoutingConfig, type SwapAsset, type SwapError, type TradeQuote, type TradeSide, type VaradaMarketToken } from "@varada/sdk";
 import { requestTradeQuote } from "@/lib/swap/trade";
 import { useSwapClients } from "./use-swap-clients";
 
@@ -15,6 +15,8 @@ export interface UseSwapQuoteParams {
   amountText: string;
   /** Slippage tolerance in percent. */
   slippagePct: number;
+  /** Routing options (extra hubs such as the registry's Ondo assets). Keep the object stable between renders. */
+  routing?: RoutingConfig;
   /** Wait this long after the last keystroke before quoting. Default 350 ms. */
   debounceMs?: number;
   /** Re-quote this often while a quote is showing (prices, the fading sniper fee). Default 15 s; 0 disables. */
@@ -42,7 +44,7 @@ export interface SwapQuoteState {
  * connected address uses the account client, so the address never leaves the private RPC.
  */
 export function useSwapQuote(params: UseSwapQuoteParams): SwapQuoteState {
-  const { token, side, asset, amountText, slippagePct, debounceMs = 350, refreshMs = 15_000 } = params;
+  const { token, side, asset, amountText, slippagePct, routing, debounceMs = 350, refreshMs = 15_000 } = params;
   const clients = useSwapClients();
   const [state, setState] = useState<Omit<SwapQuoteState, "refresh">>({ status: "idle", quote: null, error: null, stale: false, updatedAt: null });
   const generation = useRef(0);
@@ -65,7 +67,7 @@ export function useSwapQuote(params: UseSwapQuoteParams): SwapQuoteState {
       const myId = background ? generation.current : id;
       if (!background) setState((s) => ({ ...s, status: "loading", stale: s.quote !== null, error: null }));
       try {
-        const q = await requestTradeQuote(clientsRef.current, { token, side, asset, amountText, slippagePct });
+        const q = await requestTradeQuote(clientsRef.current, { token, side, asset, amountText, slippagePct, routing });
         if (myId !== generation.current) return;
         if (q === null) setState({ status: "idle", quote: null, error: null, stale: false, updatedAt: null });
         else setState({ status: "ready", quote: q, error: null, stale: false, updatedAt: q.quotedAt });
@@ -87,7 +89,7 @@ export function useSwapQuote(params: UseSwapQuoteParams): SwapQuoteState {
       timer = undefined;
     };
     // `clients` is read through a ref: a new account client must not restart typing, only the account address does
-  }, [token, side, asset, amountText, slippagePct, debounceMs, refreshMs, tick, account]);
+  }, [token, side, asset, amountText, slippagePct, routing, debounceMs, refreshMs, tick, account]);
 
   return { ...state, refresh };
 }

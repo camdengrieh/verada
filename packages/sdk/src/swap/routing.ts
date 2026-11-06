@@ -50,13 +50,19 @@ export function routingNodes(cfg: RoutingConfig, endpoints: readonly Address[]):
   return [...seen.values()];
 }
 
-/** Every hook-less pool key among `nodes` in the configured fee tiers. */
-export function candidatePoolKeys(nodes: readonly Address[], feeTiers: readonly { fee: number; tickSpacing: number }[] = DEFAULT_FEE_TIERS): PoolKey[] {
+/**
+ * Every hook-less pool key among `nodes` in the configured fee tiers. With `core`, only pairs that
+ * include a core node are generated: the satellites (a user's Ondo token, the quote asset, registry
+ * assets) connect to the hubs, not to each other, which keeps the number of reads linear in them.
+ */
+export function candidatePoolKeys(nodes: readonly Address[], feeTiers: readonly { fee: number; tickSpacing: number }[] = DEFAULT_FEE_TIERS, core?: readonly Address[]): PoolKey[] {
+  const coreSet = core ? new Set(core.map(key)) : null;
   const keys: PoolKey[] = [];
   for (let i = 0; i < nodes.length; i++) {
     for (let j = i + 1; j < nodes.length; j++) {
       const a = nodes[i]!;
       const b = nodes[j]!;
+      if (coreSet && !coreSet.has(key(a)) && !coreSet.has(key(b))) continue;
       for (const t of feeTiers) keys.push(buildPoolKey({ currencyA: a, currencyB: b, fee: t.fee, tickSpacing: t.tickSpacing }));
     }
   }
@@ -77,7 +83,8 @@ export function clearDiscoveryCache(): void {
 
 /**
  * Finds which candidate pools exist (initialized, with liquidity) via `StateView`, in one batched
- * read. Also reads the `extra` pool keys (the Varada token's own pool). Cached for 30 s per node set.
+ * read: pools between hubs, and between each other node and the hubs. Also reads the `extra` pool keys (the
+ * Varada token's own pool). Cached for 30 s per node set.
  */
 export async function discoverPools(
   client: ReadClient,
@@ -87,7 +94,7 @@ export async function discoverPools(
   opts: { now?: number; bypassCache?: boolean } = {},
 ): Promise<PoolState[]> {
   const c = resolveRoutingConfig(cfg);
-  const keys = [...candidatePoolKeys(nodes, c.feeTiers), ...extra];
+  const keys = [...candidatePoolKeys(nodes, c.feeTiers, c.hubs.map((h) => h.address)), ...extra];
   const cacheKey = keys.map((k) => poolIdOf(k)).join(",") + c.env.stateView;
   const now = opts.now ?? Date.now();
   const hit = discoveryCache.get(cacheKey);

@@ -90,6 +90,15 @@ describe("segments, labels and candidates", () => {
     expect(new Set(keys.map(poolIdOf)).size).toBe(keys.length);
   });
 
+  it("pairs satellites with the core hubs only, so reads stay linear", () => {
+    const nodes = [USDC.address, weth, OTHER, TOKEN];
+    const keys = candidatePoolKeys(nodes, DEFAULT_FEE_TIERS, [USDC.address, weth]);
+    expect(keys).toHaveLength(5 * DEFAULT_FEE_TIERS.length); // USDC/WETH, USDC/x, WETH/x for two satellites
+    const ids = new Set(keys.map(poolIdOf));
+    expect(ids.has(poolIdOf(candidatePoolKeys([OTHER, TOKEN])[0]!))).toBe(false); // no satellite / satellite pool
+    expect(candidatePoolKeys(nodes)).toHaveLength(6 * DEFAULT_FEE_TIERS.length); // without a core: every pair
+  });
+
   it("builds the Varada pool key used by the engine", () => {
     expect(varadaPoolKey(TOKEN, weth, HOOK).hooks.toLowerCase()).toBe(HOOK);
   });

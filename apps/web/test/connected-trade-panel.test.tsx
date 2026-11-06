@@ -16,11 +16,13 @@ const h = vi.hoisted(() => ({
   balances: new Map<string, bigint>(),
   quoteParams: [] as unknown[],
   resolved: null as unknown,
+  registry: [] as unknown[],
 }));
 
 vi.mock("wagmi", () => ({ useAccount: () => ({ isConnected: h.connected, address: h.connected ? "0x00000000000000000000000000000000000000aa" : undefined }), useConnect: () => ({ connectors: [{ id: "x" }], connect: h.connect }) }));
 vi.mock("@/components/providers", () => ({ useAppConfig: () => ({}), useDeps: () => ({ indexer: {} }) }));
 vi.mock("@/hooks/use-swap-clients", () => ({ useSwapClients: () => ({ chain: {}, account: "0x00000000000000000000000000000000000000aa" }) }));
+vi.mock("@/hooks/use-swap-registry", () => ({ useRegistryAssets: () => ({ data: h.registry }) }));
 vi.mock("@/hooks/use-swap-quote", () => ({ useSwapQuote: (p: unknown) => (h.quoteParams.push(p), h.quote) }));
 vi.mock("@/hooks/use-swap", () => ({ useSwap: () => h.swap }));
 vi.mock("@/hooks/use-swap-balances", () => ({ useBalances: () => ({ balances: h.balances, balanceOf: (a: { address: string }) => h.balances.get(a.address.toLowerCase()), loading: false, error: null, refresh: vi.fn() }) }));
@@ -63,6 +65,7 @@ beforeEach(() => {
   h.balances = new Map([[ETH.address, 5n * 10n ** 18n]]);
   h.quoteParams = [];
   h.resolved = market();
+  h.registry = [];
 });
 
 const renderPanel = (props = {}) => render(wrapper(<ConnectedTradePanel token={{ address: TOKEN, symbol: "TKN" }} causeName="Wildlife rescue" {...props} />));
@@ -175,6 +178,16 @@ describe("ConnectedTradePanel", () => {
     expect(await screen.findByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("$120,000");
     expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("Locked forever");
     await waitFor(() => expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("0.04%"));
+  });
+
+  it("offers the registry's Ondo assets as extra pay assets and routing nodes", async () => {
+    const amzn = { address: ONDO_TOKENS.AMZNon.address, symbol: "AMZNon", decimals: 18 };
+    h.registry = [amzn];
+    renderPanel();
+    await screen.findByLabelText("You pay");
+    expect((h.quoteParams.at(-1) as { routing: { extraHubs: unknown[] } }).routing.extraHubs).toEqual([amzn]);
+    fireEvent.keyDown(screen.getAllByRole("button", { name: /Pay with ETH, change/ })[0]!, { key: "Enter" });
+    expect(await screen.findByRole("menuitemradio", { name: /AMZNon/ })).toBeInTheDocument();
   });
 
   it("can hide the details", async () => {
