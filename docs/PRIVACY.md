@@ -39,6 +39,7 @@ their whole on-chain history.
 | `src/lib/wagmi.ts` | wagmi transport | wagmi reads go through the private RPC, isolated under the connected account. |
 | `src/lib/chain-reads.ts` | `createChainClient` | Public-scope chain reads (the indexer fallback). |
 | `src/components/privacy-status.tsx` | header | Shows connection state, allows a retry, and lets the user route indexer traffic privately too. |
+| `src/components/connection-settings.tsx`, `src/lib/effective-rpc-config.ts` | header, Connection settings | The user's own RPCs, network choice and direct mode, applied on top of the build's config. |
 
 The harness checks the worker bundle against a keccak256 hash pinned in an on-chain specifier
 contract, and only then runs it. The worker runs in a Web Worker inside a null-origin iframe with
@@ -114,6 +115,35 @@ Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/we
   The indexer sees the IP and which token pages were viewed while serving the request, but never
   a wallet address, and it keeps no access logs. Users can
   turn on "Also route Varada API requests" to hide their IP from Varada as well.
+
+### Your own RPC and the walk-away test
+
+The app must keep working if Hisoka, Nym or the public RPCs it lists disappear, without anyone
+shipping a new build. The privacy pill in the header has **Connection settings** with three
+settings:
+
+- **Network.** Pick Nox, Nym, Tor or the passthrough reference worker instead of the build's
+  default. The passthrough worker is marked as not hiding the IP.
+- **Your RPC endpoints.** Up to five URLs, one per line: `https://` only (`http://` only for
+  `localhost`, `127.0.0.1` and `[::1]`), no credentials in the URL and no query string. The private
+  network tries these first, then the configured list.
+- **Direct to my RPC.** Only available once an endpoint is saved. Every chain read, account reads
+  included, goes straight to the user's endpoints. No worker starts, so nothing depends on Hisoka,
+  Nym, the specifier contract, its resolvers or the bootstrap RPC. This is the mode to use when the
+  private network is unavailable, and the pill says "Direct to your RPC" while it is on.
+
+What each third party learns:
+
+| Mode | RPC provider | Exit node / network | Varada's servers |
+|---|---|---|---|
+| Private (default), with or without the user's endpoints | The request, from an exit node's IP | The request it forwards; not the user's IP at the exit | Nothing changes |
+| Direct to my RPC | The user's own provider sees the user's IP and every address looked up | Not used | Nothing changes |
+
+The settings live only in this browser's `localStorage` (`varada:privacy`) and are never sent
+anywhere. They apply at once: the app rebuilds its private RPC and wagmi config, and the wallet
+reconnects on its own. Direct mode is never switched on by the app itself, only by the user, and
+turning it off returns to the fail-closed default. In direct mode the "route Varada API requests"
+switch is hidden, because there is no private route to send them through.
 
 ## Trades and holders
 
@@ -237,9 +267,10 @@ Status as of 2026-11-07. Gaps are listed with the change that would close each o
 | Static export served from Swarm/ENS with relative paths; no app server to take down | Met |
 | Indexer failover list, with chain reads as the fallback for core data | Met |
 | RPC failover across several providers, all reached through anon-rpc | Met |
+| Walk-away test: the app keeps working if the default network or public RPCs disappear | Met: users add their own RPCs, switch network or go direct to their own RPC from Connection settings, with no new build |
 | Indexer runs on a single AWS account | Gap: publish the indexer image and config so others can run mirrors, and list them in `indexerUrls` |
 | The anon-rpc worker bundle is served from the resolvers the specifier owner lists | Gap, upstream: the specifier owner controls resolvers. We could publish our own specifier with extra resolvers |
-| The default network's specifier (Nox) is on Sepolia and its node registry on Arbitrum Sepolia | Gap, upstream: testnet state can be reset. Nym and Tor (mainnet specifiers) are a one-line config switch, and `specifier` can point at a mainnet pin once Hisoka publishes one |
+| The default network's specifier (Nox) is on Sepolia and its node registry on Arbitrum Sepolia | Partial, upstream: testnet state can be reset. Users can switch to Nym or Tor (mainnet specifiers), or go direct to their own RPC, from Connection settings; `specifier` can point at a mainnet pin once Hisoka publishes one |
 | Curator picks cannot keep an epoch closed: picks that are never served block that epoch's ballots in the agent's focus until the registry owner voids them (`voidCurations`), and then ballots open with rotation; a paused agent's picks are ignored. Published picks cannot be left off by the first preparer (no permissionless skip) | Partial: unblocking needs the owner within the epoch; an epoch left unprepared pays its fees to the default cause |
 | Curator agents run on one account's scheduled routines with one key custodian (1Claw); only the registry owner registers signers | Gap: pins and rotation keep ballots working without the agents; the report schema and pick format are public, so an independent curator could be registered later |
 | Curator data is free per epoch; x402 sells only packaged views of it | Met |
@@ -256,7 +287,7 @@ Status as of 2026-11-07. Gaps are listed with the change that would close each o
 
 | Item | Status |
 |---|---|
-| Chain reads via anon-rpc, per-account isolation, account reads fail closed | Met |
+| Chain reads via anon-rpc, per-account isolation, account reads fail closed | Met; direct mode (the user's own RPC, opt-in, labelled as not private) is the only exception |
 | No analytics, third-party fonts or WalletConnect relay | Met |
 | Optional private routing for indexer traffic | Met |
 | Ballot choices are hidden (Zama FHE scheme); voter and weight are public | Met; trust in Zama's threshold KMS. Interfold or a self-hosted scheme can replace it behind `IVotingScheme` |

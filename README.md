@@ -66,6 +66,9 @@ What this gives users:
 - Requests to the Varada indexer can go through the mixnet as well (a switch in the privacy pill),
   so Varada does not see the user's IP either.
 - Nym and Tor run on the same plumbing behind one setting (`NEXT_PUBLIC_ANON_RPC_NETWORK`).
+- Users can add their own RPC endpoints, pick another network, or switch to a direct mode to their
+  own RPC from Connection settings in the privacy pill, so the app keeps working if the default
+  network goes away. These settings stay in the browser.
 
 The header pill shows the live state. `pnpm --filter @varada/web check:private-rpc` drives the app
 in headless Chrome and confirms a read completes through Nox. The route-by-route account of what
@@ -98,7 +101,8 @@ every known gap are in [`docs/PRIVACY.md`](docs/PRIVACY.md).
   What we run that users depend on is the indexer (one AWS account): without it, core data falls
   back to chain reads, and the client takes a list of indexer mirrors. The anon-rpc worker bundle
   comes from resolvers the network operator lists, and the default mixnet's specifier contract is
-  on Sepolia today; Nym and Tor (mainnet specifiers) are a configuration switch.
+  on Sepolia today; Nym and Tor (mainnet specifiers) are a configuration switch, and users can add
+  their own RPCs or go direct to them from the privacy pill if the default network disappears.
 - **O**pen source. MIT, see [`LICENSE`](LICENSE). Everything builds and runs from this repository
   alone: follow Getting started, then `pnpm --filter @varada/web dev` for the app, `pnpm test` for
   the TypeScript suites and `forge test` in `contracts/`. The published site is a plain static
