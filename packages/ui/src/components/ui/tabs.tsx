@@ -120,7 +120,7 @@ export function TabsList({ className, onPointerLeave, scrollable = false, scroll
       }}
       className={cn(
         "inline-flex max-w-full items-center",
-        scrollable ? "w-max" : "w-fit overflow-x-auto",
+        scrollable ? "w-max" : "relative w-fit overflow-x-auto",
         LIST[variant],
         className,
       )}
@@ -196,7 +196,7 @@ function ScrollShell({ children, labels }: { children: ReactNode; labels?: { pre
       <motion.div
         ref={viewport}
         layoutScroll
-        className="overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+        className="relative overflow-x-auto overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={edges.overflow ? { maskImage: fade, WebkitMaskImage: fade } : undefined}
         onFocusCapture={(e) => {
           if (e.target instanceof HTMLElement && e.target.getAttribute("role") === "tab") reveal(e.target);

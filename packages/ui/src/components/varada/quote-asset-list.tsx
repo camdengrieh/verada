@@ -268,7 +268,7 @@ export function QuoteAssetList(props: QuoteAssetListProps) {
             <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={searchPlaceholder} aria-label={searchLabel} autoComplete="off" />
           </InputGroup>
           {kindFilters.length > 2 ? (
-            <ToggleGroup type="single" value={kind} onValueChange={(v) => setKind(v as QuoteKindFilter)} aria-label="Asset kind" className="w-full max-w-full overflow-x-auto @xl:w-fit">
+            <ToggleGroup type="single" value={kind} onValueChange={(v) => setKind(v as QuoteKindFilter)} aria-label="Asset kind" className="relative w-full max-w-full overflow-x-auto @xl:w-fit">
               {kindFilters.map(([k, label]) => (
                 <ToggleGroupItem key={k} value={k} aria-label={`${label}, ${counts[k]}`} className="flex-1 gap-1 px-2.5 @xl:flex-none @xl:px-4">
                   {label} <span className="num hidden text-xs font-medium text-ink-muted @sm:inline">{counts[k]}</span>

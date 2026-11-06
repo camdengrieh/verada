@@ -107,6 +107,8 @@ export function Sparkline({
       viewBox={`0 0 ${width} ${height}`}
       width={width}
       height={height}
+      // Stretch to the box when CSS sizes it; the stroke stays crisp (non-scaling) either way.
+      preserveAspectRatio="none"
       role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}
@@ -114,6 +116,15 @@ export function Sparkline({
       className={cn("overflow-visible", TONE[resolved], className)}
       {...props}
     >
+      {draw ? (
+        <defs>
+          {/* Draw-in by revealing left to right: works at any rendered size, unlike pathLength
+              dashes, which are measured in screen units under non-scaling-stroke. */}
+          <clipPath id={`${gradientId}-reveal`}>
+            <motion.rect x={0} y={-strokeWidth * 4} height={height + strokeWidth * 8} initial={{ width: 0 }} animate={{ width: width + strokeWidth * 4 }} transition={{ duration: 0.9, ease: [0.65, 0, 0.35, 1] }} />
+          </clipPath>
+        </defs>
+      ) : null}
       {area ? (
         <>
           <defs>
@@ -139,9 +150,7 @@ export function Sparkline({
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
-        initial={draw ? { pathLength: 0 } : false}
-        animate={{ pathLength: 1 }}
-        transition={{ duration: 0.9, ease: [0.65, 0, 0.35, 1] }}
+        clipPath={draw ? `url(#${gradientId}-reveal)` : undefined}
       />
       {endDot ? <circle cx={end[0]} cy={end[1]} r={strokeWidth + 1} fill="currentColor" /> : null}
     </svg>

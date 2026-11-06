@@ -98,7 +98,9 @@ export function Marquee({
       aria-label={reduced ? label : undefined}
       tabIndex={reduced ? 0 : undefined}
       className={cn(
-        "group/marquee flex overflow-hidden motion-reduce:overflow-x-auto",
+        // contain:inline-size keeps the long track from setting the marquee's intrinsic width, so
+        // grid/flex parents never grow (and the page never scrolls sideways) because of it.
+        "group/marquee relative flex w-full min-w-0 max-w-full overflow-hidden [contain:inline-size] motion-reduce:overflow-x-auto",
         reduced && "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
         className,
       )}

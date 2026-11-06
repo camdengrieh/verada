@@ -145,7 +145,7 @@ export function TradingMetricsBar({ metrics, narrow = "grid", animate = true, la
   return (
     <section data-slot="trading-metrics-bar" aria-label={label} className={cn("@container overflow-hidden rounded-2xl border border-line bg-card", className)}>
       {scroll ? (
-        <div tabIndex={0} role="region" aria-label={`${label}, scrolls sideways`} className="snap-x snap-mandatory overflow-x-auto outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 @4xl:overflow-visible">
+        <div tabIndex={0} role="region" aria-label={`${label}, scrolls sideways`} className="relative snap-x snap-mandatory overflow-x-auto outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35 @4xl:overflow-visible">
           {list}
         </div>
       ) : (
