@@ -125,7 +125,7 @@ A complete local stack on a fork of mainnet, for trying the app end to end:
 
 ```sh
 export FORK_RPC_URL=<a mainnet RPC URL>    # or put FORK_RPC_URL=... in a gitignored .env.local at the repo root
-pnpm dev:up      # about 1 minute warm; the first run also installs dependencies and compiles the contracts (10+ minutes)
+pnpm dev:up      # under 2 minutes warm; a clean clone also installs, fetches submodules and compiles (about 3 minutes with a warm pnpm store, longer on a cold network)
 pnpm dev:down    # stops everything it started
 ```
 

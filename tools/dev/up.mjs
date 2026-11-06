@@ -5,7 +5,7 @@
 // Needs FORK_RPC_URL (environment, or a gitignored .env.local at the repository root): a mainnet
 // archive-capable RPC. It is passed to anvil only and scrubbed from every log and message.
 import { execFileSync, spawn } from "node:child_process";
-import { chmodSync, copyFileSync, createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { delimiter, dirname, join } from "node:path";
 import {
   DEV_DIR, KEY_FILE, ROOT, findNode22, forkRpcUrl, httpOk, isOurs, pidAlive, readState, redact, resolvePort, rpcCall, secretsOf,
@@ -66,15 +66,15 @@ function preflight() {
 async function ensureDeps(node22) {
   // pnpm must run under the Node that will run Ponder: an install under Node 20 does not fetch Rolldown's native binding.
   const env = { ...process.env, PATH: `${dirname(node22)}${delimiter}${process.env.PATH}` };
+  // Rolldown's native binding for this platform, which only an install under Node 22 fetches.
   const ponderOk = () => {
     try {
-      execFileSync(node22, ["-e", "require('rolldown')"], { cwd: join(ROOT, "services", "indexer"), stdio: "ignore", env });
-      return true;
+      return readdirSync(join(ROOT, "node_modules", ".pnpm")).some((n) => n.startsWith(`@rolldown+binding-${process.platform}-${process.arch}`));
     } catch {
       return false;
     }
   };
-  if (!existsSync(join(ROOT, "node_modules", ".pnpm")) || (withIndexer && !ponderOk())) {
+  if (!ponderOk() && (withIndexer || !existsSync(join(ROOT, "node_modules", ".pnpm")))) {
     say("installing workspace dependencies (pnpm install, Node 22)...");
     await run("pnpm-install", "pnpm", ["install", "--prefer-offline"], { env });
   }
