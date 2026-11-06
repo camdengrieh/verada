@@ -290,7 +290,7 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
             quote={{ symbol: token.quote.symbol, name: quoteName(token.quote), kind: assetKind(token.quote), description: `${assetKind(token.quote) === "crypto" ? "Wrapped ether" : "Tokenized asset"} · ${token.quote.decimals} decimals` }}
             poolLiquidity={market?.depthUsd != null ? formatUsd(market.depthUsd) : market?.depthQuote != null ? `${market.depthQuote.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${token.quote.symbol}` : "—"}
             quotePrice={quoteUsd != null ? formatUsd(quoteUsd) : "—"}
-            routeDepth={depth.data ? `${formatPercent(depth.data.impactPct)} at ${formatUsd(depth.data.sizeUsd)}` : "—"}
+            routeDepth={depth.data ? (depth.data.impactPct === null ? `Can't fill ${formatUsd(depth.data.sizeUsd)}` : `${formatPercent(depth.data.impactPct)} at ${formatUsd(depth.data.sizeUsd)}`) : "—"}
             lpStatus="Locked forever"
             route={`Fees convert ${token.quote.symbol} to USDC before they go to the cause. Trades route through existing Uniswap v4 pools when you pay in another asset.`}
             warning={ondoInvolved && marketSession.session !== "open" ? true : undefined}

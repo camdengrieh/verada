@@ -9,6 +9,7 @@ const HOOK = "0x2222222222222222222222222222222222222222";
 const market = (quote = WETH) => ({ address: TOKEN, symbol: "TKN", hook: HOOK, quote, decimals: 18, mode: "weekly" }) as const;
 
 const h = vi.hoisted(() => ({
+  depth: { sizeUsd: 10_000, impactPct: 0.04 } as { sizeUsd: number; impactPct: number | null },
   connected: true,
   connect: vi.fn(),
   quote: { status: "idle", quote: null, error: null, stale: false, updatedAt: null, refresh: vi.fn() } as Record<string, unknown>,
@@ -32,7 +33,7 @@ vi.mock("@/hooks/use-swap-market", () => ({
 }));
 vi.mock("@/lib/swap/tokens", async (orig) => ({ ...(await orig<typeof import("@/lib/swap/tokens")>()), resolveMarketToken: async () => { if (h.resolved instanceof Error) throw h.resolved; return h.resolved; } }));
 vi.mock("@/lib/swap/trade", async (orig) => ({ ...(await orig<typeof import("@/lib/swap/trade")>()), requestTradeQuote: async () => null, quoteImpactLadder: async () => [] }));
-vi.mock("@/lib/swap/depth", () => ({ loadQuoteRouteDepth: async () => ({ sizeUsd: 10_000, impactPct: 0.04 }) }));
+vi.mock("@/lib/swap/depth", () => ({ loadQuoteRouteDepth: async () => h.depth }));
 
 import { ConnectedTradePanel } from "@/components/swap/connected-trade-panel";
 
@@ -66,6 +67,7 @@ beforeEach(() => {
   h.quoteParams = [];
   h.resolved = market();
   h.registry = [];
+  h.depth = { sizeUsd: 10_000, impactPct: 0.04 };
 });
 
 const renderPanel = (props = {}) => render(wrapper(<ConnectedTradePanel token={{ address: TOKEN, symbol: "TKN" }} causeName="Wildlife rescue" {...props} />));
@@ -180,6 +182,12 @@ describe("ConnectedTradePanel", () => {
     expect(await screen.findByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("$120,000");
     expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("Locked forever");
     await waitFor(() => expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("0.04%"));
+  });
+
+  it("says so when the quote asset's way to USDC cannot fill the reference size (a thin pool)", async () => {
+    h.depth = { sizeUsd: 10_000, impactPct: null };
+    renderPanel();
+    await waitFor(() => expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("Can't fill $10,000"));
   });
 
   it("offers the registry's Ondo assets as extra pay assets and routing nodes", async () => {
