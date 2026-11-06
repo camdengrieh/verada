@@ -36,6 +36,8 @@ const {
   takeoverToken,
   causePoolAttribution,
   trade,
+  liveCauseTotal,
+  liveDonation,
 } = schema;
 
 /** Byte-wise collation so SQL ordering matches the JS string comparison used for cursors. */
@@ -538,6 +540,14 @@ export const repo: Repo = {
         .select({ n: count(), amount: sql<string>`coalesce(sum(${donation.amount}), 0)` })
         .from(donation),
     );
+    const liveShare = await one(
+      db.select({ amount: sql<string>`coalesce(sum(${liveCauseTotal.causeShare}), 0)` }).from(liveCauseTotal),
+    );
+    const liveDonated = await one(
+      db
+        .select({ n: count(), amount: sql<string>`coalesce(sum(${liveDonation.amount}), 0)` })
+        .from(liveDonation),
+    );
     const votes = await one(db.select({ n: count() }).from(vote));
     const finalized = await one(
       db.select({ n: count() }).from(epoch).where(isNotNull(epoch.finalizedAt)),
@@ -550,6 +560,9 @@ export const repo: Repo = {
       consolidatedUsdc: big(consolidated.out),
       donatedUsdc: big(donated.amount),
       donations: Number(donated.n),
+      liveCauseShare: big(liveShare.amount),
+      liveDonatedUsdc: big(liveDonated.amount),
+      liveDonations: Number(liveDonated.n),
       votes: Number(votes.n),
       epochsFinalized: Number(finalized.n),
       causes: Number(causes.n),

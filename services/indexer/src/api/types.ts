@@ -242,6 +242,10 @@ export interface Stats {
   consolidatedUsdc: bigint;
   donatedUsdc: bigint;
   donations: number;
+  /** Live-donation tokens: cause share credited, and what was already pushed to the causes. */
+  liveCauseShare: bigint;
+  liveDonatedUsdc: bigint;
+  liveDonations: number;
   votes: number;
   epochsFinalized: number;
   causes: number;

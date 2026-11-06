@@ -507,7 +507,7 @@ describe("epochs, causes, stats", () => {
     const { app } = mkApp();
     expect((await (await get(app, "/api/causes")).json()).items).toHaveLength(1);
     const s = await (await get(app, "/api/stats")).json();
-    expect(s).toMatchObject({ decimals: 6, currency: "USDC", donatedUsdc: "5000000", tokens: 3 });
+    expect(s).toMatchObject({ decimals: 6, currency: "USDC", donatedUsdc: "5000000", tokens: 3, liveCauseShare: "4500000", liveDonatedUsdc: "4000000", liveDonations: 3 });
   });
 });
 
