@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
-import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 
 import {ICauseCatalog} from "./interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "./interfaces/ICauseRegistry.sol";
@@ -11,6 +10,7 @@ import {ICuratorRegistry} from "./interfaces/ICuratorRegistry.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
 import {IBallotGovernor, IVotingScheme} from "./interfaces/IVotingScheme.sol";
+import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
 
 /// @title EpochGovernor
 /// @notice Weekly epochs in which holders pick the cause that receives a token's cause pool.
@@ -29,6 +29,8 @@ import {IBallotGovernor, IVotingScheme} from "./interfaces/IVotingScheme.sol";
 ///      An epoch whose tally never arrives (scheme outage, governor delisted) finalizes to the
 ///      default cause once `TALLY_GRACE` has passed, so its cause pool cannot be stranded.
 contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
+    using CatalogBallotLib for CatalogBallotLib.Ballot;
+
     /// @inheritdoc IEpochGovernor
     uint256 public constant EPOCH_LENGTH = 7 days;
 
@@ -39,10 +41,10 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     uint8 public constant MIN_OPTIONS = 2;
 
     /// @inheritdoc IEpochGovernor
-    uint8 public constant PINNED_MAX = 8;
+    uint8 public constant PINNED_MAX = CatalogBallotLib.PINNED_MAX;
 
     /// @inheritdoc IEpochGovernor
-    uint256 public constant DRAW_FACTOR = 3;
+    uint256 public constant DRAW_FACTOR = CatalogBallotLib.DRAW_FACTOR;
 
     /// @inheritdoc IEpochGovernor
     uint256 public constant TALLY_GRACE = 14 days;
@@ -173,7 +175,9 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         if (msg.sender != profileRegistry.controllerOf(token)) {
             revert NotController(token, msg.sender);
         }
-        (bytes32[] memory orgs, bytes32[] memory causes) = _validatePins(token, pins);
+        (uint64 categoryMask, uint16 regionMask) = profileRegistry.focusOf(token);
+        (bytes32[] memory orgs, bytes32[] memory causes) =
+            CatalogBallotLib.validatePins(_catalog, registry, categoryMask, regionMask, pins);
         // Until the current epoch's ballot is prepared the new pins may still apply to it.
         uint256 effectiveFrom =
             _schedule(_shortlists[token], orgs, !_epochs[token][currentEpoch()].prepared);
@@ -315,7 +319,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
             (TallyStatus status, uint64[] memory counts) = _finalCounts(s.scheme, token, epoch, n);
             if (status == TallyStatus.Valid) {
                 for (uint256 i; i < n; ++i) {
-                    bytes32 causeId = _causeIdOf(options[i]);
+                    bytes32 causeId = CatalogBallotLib.causeIdOf(options[i]);
                     _tally[token][epoch][causeId] = counts[i];
                     // Strictly greater, so ties go to the lowest index.
                     if (counts[i] > best) {
@@ -379,12 +383,12 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
 
     /// @inheritdoc IEpochGovernor
     function shortlistOf(address token) external view returns (bytes32[] memory) {
-        return _causeIds(_listAt(_shortlists[token], currentEpoch()));
+        return CatalogBallotLib.causeIds(_listAt(_shortlists[token], currentEpoch()));
     }
 
     /// @inheritdoc IEpochGovernor
     function shortlistFor(address token, uint256 epoch) external view returns (bytes32[] memory) {
-        return _causeIds(_listAt(_shortlists[token], epoch));
+        return CatalogBallotLib.causeIds(_listAt(_shortlists[token], epoch));
     }
 
     /// @inheritdoc IEpochGovernor
@@ -394,7 +398,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         returns (bytes32[] memory causes, uint256 effectiveFrom)
     {
         (bytes32[] memory orgs, uint256 from) = _pending(_shortlists[token]);
-        return (_causeIdsMem(orgs), from);
+        return (CatalogBallotLib.causeIds(orgs), from);
     }
 
     /// @inheritdoc IEpochGovernor
@@ -434,7 +438,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         pure
         returns (uint256)
     {
-        return uint256(keccak256(abi.encode(token, epoch, version, k))) % poolSize;
+        return CatalogBallotLib.drawIndex(token, epoch, version, k, poolSize);
     }
 
     /// @inheritdoc IEpochGovernor
@@ -455,7 +459,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
 
     /// @inheritdoc IEpochGovernor
     function epochOptions(address token, uint256 epoch) external view returns (bytes32[] memory) {
-        return _causeIds(_epochs[token][epoch].options);
+        return CatalogBallotLib.causeIds(_epochs[token][epoch].options);
     }
 
     /// @inheritdoc IEpochGovernor
@@ -522,16 +526,8 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         if (s.prepared) revert BallotAlreadyPrepared(token, epoch);
     }
 
-    /// @dev A ballot being built: cause ids (for repeats and events) and org ids (stored).
-    struct Ballot {
-        bytes32[] options;
-        bytes32[] orgs;
-        uint256 n;
-        uint256 size;
-    }
-
-    /// @dev Fixes the epoch's ballot (pins, then curated picks, then rotation draws) and opens its
-    ///      poll when it has at least `MIN_OPTIONS` options.
+    /// @dev Fixes the epoch's ballot (pins, then curated picks, then rotation draws; see
+    ///      `CatalogBallotLib`) and opens its poll when it has at least `MIN_OPTIONS` options.
     function _prepare(
         address token,
         uint256 epoch,
@@ -540,49 +536,40 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     ) private {
         EpochState storage s = _epochs[token][epoch];
         uint32 version = _catalog.versionAt(epochStart(epoch));
-        Ballot memory b;
-        b.size = ballotSize();
-        b.options = new bytes32[](b.size);
-        b.orgs = new bytes32[](b.size);
-
-        bytes32[] storage pins = _listAt(_shortlists[token], epoch);
-        for (uint256 i; i < pins.length && b.n < b.size; ++i) {
-            bytes32 causeId = _causeIdOf(pins[i]);
-            if (registry.isBlocked(causeId)) continue;
-            b.orgs[b.n] = pins[i];
-            b.options[b.n++] = causeId;
-        }
-        // Pins are capped at PINNED_MAX, which fits a uint8.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        uint8 pinned = uint8(b.n);
+        CatalogBallotLib.Ballot memory b = CatalogBallotLib.create(ballotSize());
+        uint8 pinned = b.addPins(_listAt(_shortlists[token], epoch), registry);
 
         uint256 pool;
         uint256 used;
         uint256 curatedUsed;
         if (version != 0) {
             (uint64 categoryMask, uint16 regionMask) = profileRegistry.focusOf(token);
-            (uint16[] memory buckets, uint32[] memory sizes) =
-                _catalog.focusBuckets(version, categoryMask, regionMask);
-            for (uint256 i; i < sizes.length; ++i) {
-                pool += sizes[i];
-            }
+            uint16[] memory buckets;
+            uint32[] memory sizes;
+            (buckets, sizes, pool) =
+                CatalogBallotLib.focusPool(_catalog, version, categoryMask, regionMask);
+            bytes32 root = _catalog.rootOf(version);
             if (address(curators) != address(0) && b.n < b.size && buckets.length != 0) {
-                curatedUsed = _curate(token, epoch, version, buckets, sizes, curated, b);
+                ICuratorRegistry.Curation[] memory cs =
+                    curators.curationsFor(epoch, version, buckets);
+                uint256 included;
+                (curatedUsed, included) =
+                    b.curate(root, registry, token, epoch, buckets, sizes, cs, curated);
+                if (curatedUsed != 0) {
+                    // Both are bounded by the ballot size (at most 32).
+                    // forge-lint: disable-next-line(unsafe-typecast)
+                    emit CuratedPicksUsed(token, epoch, uint8(curatedUsed), uint8(included));
+                }
             }
             if (pool != 0 && b.n < b.size) {
-                used = _draw(token, epoch, version, pool, buckets, sizes, draws, b);
+                used = b.draw(root, registry, token, epoch, version, pool, buckets, sizes, draws);
             }
         }
         if (curated.length != curatedUsed) revert TooManyCuratedDraws(curated.length, curatedUsed);
         if (draws.length != used) revert TooManyDraws(draws.length, used);
 
-        bytes32[] memory options = b.options;
-        bytes32[] memory orgs = b.orgs;
-        uint256 n = b.n;
-        assembly ("memory-safe") {
-            mstore(options, n)
-            mstore(orgs, n)
-        }
+        (bytes32[] memory options, bytes32[] memory orgs) = b.seal();
+        uint256 n = options.length;
         s.prepared = true;
         s.catalogVersion = version;
         s.poolSize = pool;
@@ -597,211 +584,6 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
             _scheme.open(token, epoch, uint8(n));
             emit EpochOpened(token, epoch, options);
         }
-    }
-
-    /// @dev Curated phase: splits the free slots across the focus buckets' curations by weight
-    ///      (`curatedQuotas`), then takes ranks `0..quota-1` of each bucket in bucket order. A pick
-    ///      whose catalogue entry is another org, or whose index is past the bucket, is skipped.
-    ///      Returns the number of curated draws consumed.
-    function _curate(
-        address token,
-        uint256 epoch,
-        uint32 version,
-        uint16[] memory buckets,
-        uint32[] memory sizes,
-        CuratedDraw[] memory curated,
-        Ballot memory b
-    ) private returns (uint256 k) {
-        ICuratorRegistry.Curation[] memory cs = curators.curationsFor(epoch, version, buckets);
-        uint256[] memory quotas = _quotas(b.size - b.n, cs);
-        bytes32 root = _catalog.rootOf(version);
-        uint256 included;
-        for (uint256 i; i < cs.length; ++i) {
-            for (uint256 rank; rank < quotas[i]; ++rank) {
-                if (k >= curated.length) revert IncompleteCuratedBallot(token, epoch, k);
-                CuratedDraw memory d = curated[k];
-                if (!MerkleProof.verify(
-                        d.pickProof, cs[i].picksRoot, _pickLeaf(rank, d.catalogIndex, d.pickOrgId)
-                    )) {
-                    revert InvalidCuratedDraw(k);
-                }
-                ++k;
-                if (d.catalogIndex >= sizes[i]) continue;
-                if (!MerkleProof.verify(
-                        d.entryProof, root, _leaf(buckets[i], d.catalogIndex, d.entryOrgId)
-                    )) {
-                    revert InvalidCuratedDraw(k - 1);
-                }
-                if (d.entryOrgId != d.pickOrgId) continue;
-                bytes32 causeId = _causeIdOf(d.pickOrgId);
-                if (
-                    b.n >= b.size || registry.isBlocked(causeId)
-                        || _contains(b.options, b.n, causeId)
-                ) {
-                    continue;
-                }
-                b.orgs[b.n] = d.pickOrgId;
-                b.options[b.n++] = causeId;
-                ++included;
-            }
-        }
-        // Both are bounded by the ballot size (at most 32).
-        // forge-lint: disable-next-line(unsafe-typecast)
-        if (k != 0) emit CuratedPicksUsed(token, epoch, uint8(k), uint8(included));
-    }
-
-    /// @dev Slots per curation: `min(count, slots * weight / totalWeight)`, then leftovers one at a
-    ///      time to buckets below their count, in order, round after round. Mirrors the SDK's
-    ///      `curatedQuotas`.
-    function _quotas(uint256 slots, ICuratorRegistry.Curation[] memory cs)
-        private
-        pure
-        returns (uint256[] memory q)
-    {
-        q = new uint256[](cs.length);
-        uint256 total;
-        for (uint256 i; i < cs.length; ++i) {
-            if (cs[i].count != 0) total += cs[i].weight;
-        }
-        if (slots == 0 || total == 0) return q;
-        uint256 assigned;
-        for (uint256 i; i < cs.length; ++i) {
-            if (cs[i].count == 0 || cs[i].weight == 0) continue;
-            uint256 share = (slots * cs[i].weight) / total;
-            q[i] = share < cs[i].count ? share : cs[i].count;
-            assigned += q[i];
-        }
-        uint256 rest = slots - assigned;
-        while (rest != 0) {
-            bool progressed;
-            for (uint256 i; i < cs.length && rest != 0; ++i) {
-                if (cs[i].weight != 0 && q[i] < cs[i].count) {
-                    ++q[i];
-                    --rest;
-                    progressed = true;
-                }
-            }
-            if (!progressed) break;
-        }
-    }
-
-    /// @dev Rotation: consumes draws until the ballot is full or the draw budget is spent. With a
-    ///      pool no larger than the free slots, walks the whole pool in order instead.
-    function _draw(
-        address token,
-        uint256 epoch,
-        uint32 version,
-        uint256 pool,
-        uint16[] memory buckets,
-        uint32[] memory sizes,
-        Draw[] memory draws,
-        Ballot memory b
-    ) private view returns (uint256 k) {
-        bytes32 root = _catalog.rootOf(version);
-        uint256 slots = b.size - b.n;
-        bool sequential = pool <= slots;
-        uint256 budget = sequential ? pool : DRAW_FACTOR * slots;
-        for (; k < budget && b.n < b.size; ++k) {
-            if (k >= draws.length) revert IncompleteBallot(token, epoch, k);
-            uint256 idx = sequential ? k : drawIndex(token, epoch, version, k, pool);
-            (uint16 bucket, uint32 index) = _locate(buckets, sizes, idx);
-            bytes32 orgId = draws[k].orgId;
-            if (!MerkleProof.verify(draws[k].proof, root, _leaf(bucket, index, orgId))) {
-                revert InvalidDraw(k);
-            }
-            bytes32 causeId = _causeIdOf(orgId);
-            if (registry.isBlocked(causeId) || _contains(b.options, b.n, causeId)) continue;
-            b.orgs[b.n] = orgId;
-            b.options[b.n++] = causeId;
-        }
-    }
-
-    /// @dev Distinct, unblocked catalogue entries inside the token's focus, at most PINNED_MAX.
-    ///      Returns their org ids and cause ids.
-    function _validatePins(address token, Pin[] calldata pins)
-        private
-        view
-        returns (bytes32[] memory orgs, bytes32[] memory causes)
-    {
-        uint256 n = pins.length;
-        if (n > PINNED_MAX) revert InvalidShortlist();
-        orgs = new bytes32[](n);
-        causes = new bytes32[](n);
-        if (n == 0) return (orgs, causes);
-        uint32 version = _catalog.latestVersion();
-        if (version == 0) revert NotInCatalog(pins[0].orgId);
-        bytes32 root = _catalog.rootOf(version);
-        uint32[] memory sizes = _catalog.bucketSizesOf(version);
-        (uint64 categoryMask, uint16 regionMask) = profileRegistry.focusOf(token);
-        for (uint256 i; i < n; ++i) {
-            Pin calldata p = pins[i];
-            if (!_catalog.inFocus(p.bucket, categoryMask, regionMask)) {
-                revert OutOfFocus(p.orgId, p.bucket);
-            }
-            if (
-                p.bucket >= sizes.length || p.index >= sizes[p.bucket]
-                    || !MerkleProof.verifyCalldata(p.proof, root, _leaf(p.bucket, p.index, p.orgId))
-            ) revert NotInCatalog(p.orgId);
-            bytes32 causeId = _causeIdOf(p.orgId);
-            if (registry.isBlocked(causeId)) revert InactiveCause(causeId);
-            if (_contains(causes, i, causeId)) revert InvalidShortlist();
-            causes[i] = causeId;
-            orgs[i] = p.orgId;
-        }
-    }
-
-    function _locate(uint16[] memory buckets, uint32[] memory sizes, uint256 poolIndex)
-        private
-        pure
-        returns (uint16, uint32)
-    {
-        uint256 rest = poolIndex;
-        uint256 i;
-        while (rest >= sizes[i]) {
-            rest -= sizes[i];
-            ++i;
-        }
-        // `rest < sizes[i]`, a uint32.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return (buckets[i], uint32(rest));
-    }
-
-    function _pickLeaf(uint256 rank, uint32 catalogIndex, bytes32 orgId)
-        private
-        pure
-        returns (bytes32)
-    {
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return keccak256(bytes.concat(keccak256(abi.encode(uint8(rank), catalogIndex, orgId))));
-    }
-
-    function _leaf(uint16 bucket, uint32 index, bytes32 orgId) private pure returns (bytes32) {
-        return keccak256(bytes.concat(keccak256(abi.encode(bucket, index, orgId))));
-    }
-
-    function _causeIdOf(bytes32 orgId) private pure returns (bytes32) {
-        return keccak256(abi.encode(orgId));
-    }
-
-    function _causeIds(bytes32[] storage orgs) private view returns (bytes32[] memory out) {
-        out = new bytes32[](orgs.length);
-        for (uint256 i; i < out.length; ++i) {
-            out[i] = _causeIdOf(orgs[i]);
-        }
-    }
-
-    function _causeIdsMem(bytes32[] memory orgs) private pure returns (bytes32[] memory out) {
-        out = new bytes32[](orgs.length);
-        for (uint256 i; i < out.length; ++i) {
-            out[i] = _causeIdOf(orgs[i]);
-        }
-    }
-
-    function _contains(bytes32[] memory list, uint256 n, bytes32 x) private pure returns (bool) {
-        for (uint256 i; i < n; ++i) {
-            if (list[i] == x) return true;
-        }
-        return false;
     }
 
     /// @dev Whole-token vote checkpoint of `account` at `snapshot`, capped to 64 bits; zero while
