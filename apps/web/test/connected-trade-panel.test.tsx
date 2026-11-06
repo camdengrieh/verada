@@ -27,7 +27,7 @@ vi.mock("@/hooks/use-swap-quote", () => ({ useSwapQuote: (p: unknown) => (h.quot
 vi.mock("@/hooks/use-swap", () => ({ useSwap: () => h.swap }));
 vi.mock("@/hooks/use-swap-balances", () => ({ useBalances: () => ({ balances: h.balances, balanceOf: (a: { address: string }) => h.balances.get(a.address.toLowerCase()), loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock("@/hooks/use-swap-market", () => ({
-  usePoolMarket: () => ({ market: { priceUsd: 5, tvlUsd: 120_000, tvlQuote: 48 }, quoteUsd: 2500, loading: false, error: null, refresh: vi.fn() }),
+  usePoolMarket: () => ({ market: { priceUsd: 5, tvlUsd: 9_000_000, tvlQuote: 3600, depthUsd: 120_000, depthQuote: 48 }, quoteUsd: 2500, loading: false, error: null, refresh: vi.fn() }),
   useUsdPrices: () => ({ data: new Map([[ETH.address, 2500], [WETH.address.toLowerCase(), 2500], [USDC.address.toLowerCase(), 1]]) }),
 }));
 vi.mock("@/lib/swap/tokens", async (orig) => ({ ...(await orig<typeof import("@/lib/swap/tokens")>()), resolveMarketToken: async () => { if (h.resolved instanceof Error) throw h.resolved; return h.resolved; } }));
