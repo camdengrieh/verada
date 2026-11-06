@@ -2,8 +2,39 @@
 
 Static-export Next.js app (app router). There is no web server: the `out/` folder is published to
 Ethereum Swarm and resolved through an ENS name's contenthash. The only always-on backend is the
-indexer; browsers call it over HTTPS and fall back to direct chain reads (wagmi/viem) when it is down.
+indexer; browsers call it over HTTPS and fall back to direct chain reads (wagmi/viem) when it is down
+(market, trades and holders have no chain fallback and show an empty state instead).
 Images ship only as optimised copies under `assets/`, within a size budget (see Art and assets).
+
+How this app relates to `@varada/ui`, `@varada/sdk` and the indexer, and how to run the whole stack:
+[`docs/OVERVIEW.md`](../../docs/OVERVIEW.md). Every variable and `config.json` key:
+[`docs/ENV.md`](../../docs/ENV.md).
+
+## Run it locally
+
+```sh
+pnpm install                                                              # once, from the repository root
+pnpm --filter @varada/indexer serve:fixtures 42069   # mock indexer, terminal 1
+pnpm --filter @varada/web dev                         # terminal 2, http://localhost:3000
+```
+
+`public/config.json` points at the indexer on 42069 and the publisher on 42070. The mock indexer serves
+three fixture tokens, activity, and synthetic trades, holders and market rows, so the home list and token
+pages render with no RPC key (it does not serve `/api/discover` or `/api/agents`: the home list falls back
+to `/api/tokens` and agent pages have no data); wallet actions and live chain reads need `rpcUrl` and the contract addresses (see Runtime
+configuration). To use another port, change `indexerUrls` in `public/config.json` (local edit, do not
+commit); `NEXT_PUBLIC_INDEXER_URLS` is ignored while the file sets `indexerUrls`.
+
+To see the exported site the way Swarm serves it (exact paths, directory indexes, `404.html` as the
+error document, optionally under a `/bzz/<ref>/` prefix):
+
+```sh
+pnpm --filter @varada/web build            # next build, then scripts/postexport.mjs; writes out/
+pnpm --filter @varada/web verify:export
+node apps/web/scripts/serve-static.mjs 8080 /bzz/abc123      # http://localhost:8080/bzz/abc123/
+```
+
+`dev` serves from `/`, so run the exported build to test prefix handling.
 
 ## Routes
 
@@ -15,6 +46,7 @@ Images ship only as optimised copies under `assets/`, within a size budget (see 
 | `/causes/` | Cause categories with catalogue counts and totals, the most-given-to leaderboard (`GET /api/causes/leaderboard`), the catalogue browser (category x region x name, offset paging, a filter sheet on phones) and Endaoment search (`GET /api/causes/search`). Filters live in `?category=&region=&q=` |
 | `/governance/` | The platform vote: epoch clock, every token's ballot and status, the viewer's weight (account-scoped chain reads), the selected token's ballot with the encrypted vote flow (dialog, bottom sheet on phones), curator picks, takeover polls, results and past winners (`?token=0x...` links a token) |
 | `/agent/`, `/agent/<label>/`, `/agent/<label>/<region>/` | The 20 curator agents (`<cause>.agent.<parent>`): vault balances, weekly report with Merkle proofs, donate dialog, credited donors and gifts, ENS identity |
+| `/design/` | The `@varada/ui` gallery: every component and state, with the Direction A tokens |
 | `/404.html` | Swarm error document (self-contained, no external assets); `/<label>` redirects to `token/?label=<label>` |
 
 ## Static export and Swarm
@@ -37,10 +69,27 @@ not serve under `/bzz/<hash>/`, on a bzz gateway subdomain and at an ENS gateway
 - Navigation uses plain relative anchors (`components/nav.tsx`), not `next/link`, which would push absolute
   paths. Runtime URLs (`config.json`) resolve against `siteBase()` in `src/lib/base.ts`.
 
-Publishing (done outside this repo, never by CI here): upload `out/` as a Swarm collection with
-index document `index.html` and error document `404.html`. For the ENS name, the contenthash is an EIP-1577
-value: `0xe4` (swarm-ns) + `01` (CIDv1) + `fa01` (swarm-manifest) + `1b` (keccak-256) + `20` (32 bytes) +
-the 32-byte Swarm reference, i.e. `0xe40101fa011b20<reference>` (text form `bzz://<reference>`).
+### Hosting on Swarm and ENS
+
+Publishing is a manual step done with `packages/publish`, never by CI here (CI only builds, validates
+and dry-runs the upload). Upload `out/` as a Swarm collection with index document `index.html` and error
+document `404.html`:
+
+```sh
+node packages/publish/bin/varada-publish.mjs build            # build + validate
+node packages/publish/bin/varada-publish.mjs upload --ttl-days 90   # dry run: size, stamp depth, cost
+```
+
+`upload --execute` needs your own Bee node and postage batch (`BEE_URL`, `BEE_POSTAGE_BATCH_ID`). The ENS
+contenthash is an EIP-1577 value: `0xe4` (swarm-ns) + `01` (CIDv1) + `fa01` (swarm-manifest) + `1b`
+(keccak-256) + `20` (32 bytes) + the 32-byte Swarm reference, i.e. `0xe40101fa011b20<reference>` (text form
+`bzz://<reference>`). Varada serves one site for `varada.eth` and every `<label>.varada.eth` through its own
+resolver, whose default contenthash points at a Swarm feed manifest, so a release is a feed update, not an
+on-chain transaction. The tool prints the calldata and never signs. Full runbook:
+[`packages/publish/README.md`](../../packages/publish/README.md).
+
+Because one build is served from a gateway root, a `/bzz/<ref>/` path and a label host
+(`pepe.varada.eth.limo`), any new code must keep URLs relative (see Hostname routing).
 
 ## Runtime configuration
 
@@ -54,11 +103,15 @@ build-time defaults from `NEXT_PUBLIC_*` (see `.env.example`). Public values onl
   "rpcUrl": "https://...", "factoryAddress": "0x...", "factoryDeployBlock": 0,
   "vaultAddress": "0x...", "governorAddress": "0x...",
   "publisherUrl": "https://publisher.example", "swarmGatewayUrl": "https://gw.example",
+  "assetPacks": { "stocks": "<swarm reference>" },
   "ensParentName": "varada.eth", "profileRegistryAddress": "0x...",
   "votingSchemeAddress": "0x...", "takeoverGovernorAddress": "0x...",
-  "zamaRelayerUrl": "https://..."
+  "curatorRegistryAddress": "0x...", "zamaRelayerUrl": "https://..."
 }
 ```
+
+Also accepted: `walletConnectProjectId` and `privateRpc` (`network`, `rpcUrls`, ...). The complete key to
+`NEXT_PUBLIC_*` mapping, with defaults, is in [`docs/ENV.md`](../../docs/ENV.md#web-app).
 
 | Key | `NEXT_PUBLIC_*` | Purpose |
 |---|---|---|
@@ -87,9 +140,12 @@ ships a local-development default (indexer on 42069, publisher on 42070).
 
 ## Data layer
 
-- `src/lib/indexer.ts`: client for the indexer contract (`/health`, `/api/tokens`, `/api/activity`,
-  `/api/causes[/search]`, `/api/epochs/...`, `/api/stats`), cursor pagination, ordered failover across
-  `indexerUrls` (network errors and 5xx fail over, 4xx does not), bigint values kept as decimal strings.
+- `src/lib/indexer.ts`: client for the indexer contract (`/health`, `/api/tokens`, `/api/discover`,
+  `/api/activity`, `/api/causes[/search|/leaderboard]`, `/api/epochs/...`, `/api/stats`, `/api/live/:token`,
+  `/api/catalog/...`, `/api/agents/...`, and per token `/trades`, `/holders`, `/holders/summary` and
+  `/market`), cursor pagination, ordered failover across `indexerUrls` (network errors and 5xx fail
+  over, 4xx does not), bigint values kept as decimal strings. Every response is validated and mapped to
+  plain types in this file. Route shapes: the [indexer README](../../services/indexer/README.md#http-api).
 - `src/lib/activity-stream.ts`: Server-Sent Events subscription with Last-Event-ID resume (browser
   default), dropping to polling `/api/activity` after repeated SSE errors or without `EventSource`.
 - `src/lib/chain-reads.ts` / `src/lib/data.ts`: core reads (token list/detail from `TokenCreated` logs,
@@ -119,12 +175,24 @@ ships a local-development default (indexer on 42069, publisher on 42070).
 
 ## Token page
 
-`components/token-detail.tsx` composes:
+`components/token-detail.tsx` resolves the token (address, `?label=`, or hostname) and loads its detail,
+then renders `components/token/token-view.tsx`, which composes:
 
-- `token-profile-view.tsx`: name/symbol, logo `<img>` from the Swarm gateway, ENS name and eth.limo
-  link, text records (`url`, `description`, `com.twitter`, `org.telegram`, `com.discord`, `com.github`)
-  from the indexer profile, read through ENS (`getTokenTextRecord`) when the indexer has none,
-  controller and editor.
+- `token/token-hero.tsx`, `token/market-section.tsx`: name, symbol, logo from the Swarm gateway, ENS name,
+  headline market figures (price, 24h change, volume, liquidity in the coin's quote asset) and the
+  `PriceChart`, all from `GET /api/tokens/:address/market`.
+- `token/trade-surface.tsx`: the trade ticket. On desktop it is an aside, on phones a bottom sheet; both
+  mount `components/swap/ConnectedTradePanel`, which wires the SDK swap engine (route, quote, Permit2,
+  swap, the 90/10 fee split, the anti-sniper surcharge countdown, price impact ladder, liquidity panel)
+  to the library `TradePanel`. Engine behaviour: [`docs/SWAP.md`](../../docs/SWAP.md). A swap refreshes the
+  trade tape.
+- Tabs: `trades-tab.tsx` (trade tape from `/trades` with paging, "my trades" filtered in the browser),
+  `holders-tab.tsx` (top holders from `/holders`, concentration and holder history from `/holders/summary`),
+  `impact-tab.tsx` (donations), a governance tab (`epoch-panel.tsx` below) and `about-tab.tsx` (text
+  records `url`, `description`, `com.twitter`, `org.telegram`, `com.discord`, `com.github` from the indexer
+  profile, read through ENS with `getTokenTextRecord` when the indexer has none, plus creator,
+  controller, editor, fee and metadata). A Manage tab appears for the controller or editor.
+  The data hooks are in `token/use-token-data.ts`.
 - `epoch-panel.tsx`: current epoch, options with cause names from `/api/causes` and the catalogue
   (`/api/catalog/causes`), a "ballot not prepared yet" state (only the pins are known until the
   rotation draws are made), poll state, per-option totals once the tally is decrypted, the connected
@@ -262,7 +330,12 @@ the UI shows a lettered badge instead.
 
 ## Scripts
 
-`pnpm --filter @varada/web typecheck | lint | test | build | verify:export | build:verify | assets`
+`pnpm --filter @varada/web dev | typecheck | lint | test | build | verify:export | build:verify | assets | e2e`
+
+`e2e` (`scripts/e2e.mjs`) drives a built `out/` in Chrome through `playwright-core`, once at the root and
+once under a `/bzz/<ref>/` prefix. It expects `scripts/serve-static.mjs` on `BASE_URLS` and an indexer
+(for example the mock) at `INDEXER_URL`, needs a Chrome binary (`CHROME_PATH`) and `playwright-core`,
+which is not a dependency of this package (install it yourself), and is not part of CI.
 
 `verify:export` (or `node scripts/verify-export.mjs --build`) checks `out/`: binaries only as budgeted
 assets under `assets/` (see Size budget), `index.html` for every route, `404.html` and `config.json` present, no root-absolute `/_next/`

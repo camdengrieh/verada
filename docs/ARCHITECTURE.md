@@ -14,17 +14,22 @@ A token can instead launch in live mode: every swap's fee is converted to USDC i
 donated to the cause active at that moment, and holders rotate that cause by private vote on a
 period the creator picks (hourly to weekly); see [Live donation mode](#live-donation-mode).
 
+This page covers the contracts and the protocol rules. For the off-chain code (web app, component
+library, SDK swap engine, indexer API) and how to run it, see [OVERVIEW.md](OVERVIEW.md); for
+trading, [SWAP.md](SWAP.md); for what each part can see, [PRIVACY.md](PRIVACY.md).
+
 ## Repository layout
 
 | Path | Contents |
 |---|---|
 | `contracts/` | Foundry project (solc 0.8.26, cancun). Dependencies under `contracts/lib` as git submodules. |
-| `packages/sdk` | ABIs, addresses, viem helpers, fee math. |
+| `packages/sdk` | ABIs, addresses, viem helpers, fee and ballot math, ENS and Swarm helpers, the swap engine (`src/swap`, see [SWAP.md](SWAP.md)). |
 | `packages/endaoment-client` | Typed Endaoment organization search client. |
 | `packages/cause-catalog` | Harvests Endaoment orgs, classifies them by cause and region, and builds the catalogue Merkle tree (`varada-catalog` CLI). |
 | `packages/curator` | Curator agent tooling (`varada-curator` CLI): weekly report schema (`varada.curation/v1`), pick trees, calldata, and the 1Claw signer. |
 | `services/indexer` | Ponder indexer and API over protocol events, plus the x402 paid data routes. |
-| `apps/web` | Next.js app built as a static export (token list, launch, token page, causes, governance, curator agents). |
+| `apps/web` | Next.js app built as a static export (token list, launch, token page with trade ticket, trades and holders, causes, governance, curator agents). |
+| `packages/ui` | `@varada/ui`, the component library and design tokens used by the app (gallery at `/design`). |
 | `packages/publish` | Swarm upload, site feed updates and ENS contenthash tooling (dry-run by default). |
 | `packages/arkiv-registry` | Arkiv entity schemas, reconcile planning and client for the token mirror. |
 | `services/publisher` | Logo/metadata uploads to Swarm, signed curator report uploads, stamp watch, Arkiv mirror, the ballot and tally keeper, and the mainnet x402 facilitator. |

@@ -35,7 +35,9 @@ Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck 
 | `DATABASE_URL`, `DATABASE_SCHEMA` | Postgres (PGlite when unset) |
 
 The browser-facing options (`CORS_ALLOWED_ORIGINS`, rate limits, SSE limits, Endaoment proxy)
-are documented in `.env.example`.
+are documented in `.env.example`. The remaining optional variables (`SWARM_GATEWAY_URL` for agent
+reports, `ENS_PARENT_NAME`, the `X402_*` paid routes) are listed with their defaults in
+[`docs/ENV.md`](../../docs/ENV.md#indexer).
 
 Only the configured voting scheme is indexed. If a governor switches to a new scheme, add that
 contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null`.
@@ -173,6 +175,10 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/catalog/pool?categories&regions` | `{ poolSize, buckets: [{ bucket, category, region, size }] }` |
 | `/api/catalog/entries?at=bucket:index,...&root=` | `{ root, items: [{ bucket, index, orgId, proof }] }`, at most 100 entries (what the keeper's `prepareBallot` and round preparation need). With `root` (optional), from the loaded snapshot with that root, or 404 `catalog_root_unavailable` when none has it |
 | `/api/catalog/causes?ids=0x..,...` | `{ items: CatalogOrg[] }` by cause id, at most 50 (names for ballot options) |
+| `/api/agents` | `{ items }`: the curator agents (label, ENS name, category, signer, vault, active flag, description) with `totals` and the `latest` report (`epoch`, `reportRef`, `catalogVersion`). 503 until the agents repository is wired |
+| `/api/agents/:label` | One agent with `totals`, up to 52 `reports`, `latestCurations` (region, count, weight, picks root), credited `donors` and `gifts`; 400 for an unknown label |
+| `/api/agents/:label/reports/:epoch` | The agent's signed weekly report fetched from Swarm (`SWARM_GATEWAY_URL`) and checked against the on-chain curations, per region; 404 `report_unavailable` when the report cannot be fetched |
+| `/api/agents/:label/picks/:epoch/:region` | Merkle proofs of the picks for one region; 404 `report_mismatch` when the report's picks root differs from the one on chain |
 | `/api/catalog/orgs/:id` | `{ root, org, entries }` by org id, cause id, EIN or Endaoment id, entries with proofs |
 
 The `/api/catalog/*` routes answer 503 `catalog_unavailable` until the snapshot at
