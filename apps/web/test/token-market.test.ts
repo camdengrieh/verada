@@ -154,15 +154,15 @@ describe("pressure and volume", () => {
   ];
 
   it("counts buys and sells over 6h, 24h and 7d", () => {
-    const [h6, h24, d7] = pressureWindows(rows, 18, NOW);
+    const [h6, h24, d7] = pressureWindows(rows, 18, NOW, true);
     expect(h6).toMatchObject({ key: "6h", buys: 3, sells: 3, buyVolumeUsd: 3, sellVolumeUsd: 3 });
     expect(h24).toMatchObject({ key: "24h", buys: 7, sells: 4 });
     expect(d7).toMatchObject({ key: "7d", buys: 7, sells: 4 });
   });
 
-  it("leaves volumes out when the quote's decimals are unknown", () => {
-    const [h6] = pressureWindows(rows, null, NOW);
-    expect(h6!.buyVolumeUsd).toBeUndefined();
+  it("leaves volumes out unless the quote is a dollar asset with known decimals", () => {
+    expect(pressureWindows(rows, null, NOW, true)[0]!.buyVolumeUsd).toBeUndefined();
+    expect(pressureWindows(rows, 18, NOW)[0]!.buyVolumeUsd).toBeUndefined();
   });
 
   it("draws 24 hourly bars ending now and 7 daily bars, in UTC", () => {

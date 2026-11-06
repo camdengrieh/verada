@@ -216,7 +216,7 @@ export function buildImpact(
     items: [...byCategory].map(([cause, v]) => ({ cause, amount: v.amount, charities: v.charities.size })),
     leaderboard: [...byOrg]
       .sort((a, b) => b[1].amount - a[1].amount)
-      .map(([id, v]) => ({ id, name: v.name, cause: v.cause, raised: v.amount })),
+      .map(([id, v]) => ({ id, name: v.name, cause: v.cause, raised: v.amount, moved: 0 })),
     timeline: sorted.map((r) => {
       const m = meta(r.causeId.toLowerCase());
       return { id: r.id, org: m.name, amount: usdcToUsd(r.amount), cause: m.cause, at: r.timestamp * 1000, coin: `$${symbol}`, via: r.via, txHref: r.txHash ? txUrl(r.txHash) : undefined };

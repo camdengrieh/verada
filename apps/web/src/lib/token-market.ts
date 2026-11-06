@@ -146,7 +146,8 @@ export function percentChange(now: number, before: number | null | undefined): n
 }
 
 /** Buy and sell counts over the last 6 hours, 24 hours and 7 days, for the pressure gauge. */
-export function pressureWindows(hourly: readonly MarketHour[], quoteDecimals: number | null, nowSec: number): PressureWindow[] {
+/** Volumes are set only for a dollar quote: the gauge prints them as dollars. */
+export function pressureWindows(hourly: readonly MarketHour[], quoteDecimals: number | null, nowSec: number, usdQuote = false): PressureWindow[] {
   const spans: [string, number][] = [["6h", 6], ["24h", 24], ["7d", 168]];
   return spans.map(([key, hours]) => {
     const cutoff = nowSec - hours * HOUR;
@@ -162,7 +163,7 @@ export function pressureWindows(hourly: readonly MarketHour[], quoteDecimals: nu
       sellQuote += h.sellQuote;
     }
     const w: PressureWindow = { key, buys, sells };
-    if (quoteDecimals !== null) {
+    if (usdQuote && quoteDecimals !== null) {
       w.buyVolumeUsd = toUnits(buyQuote, quoteDecimals);
       w.sellVolumeUsd = toUnits(sellQuote, quoteDecimals);
     }

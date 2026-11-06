@@ -119,7 +119,7 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabPr
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className={goal ? "grid gap-4 lg:grid-cols-2" : undefined}>
         <RaisedCounter
           value={raised}
           label="Raised for causes"
@@ -134,12 +134,7 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabPr
         />
         {goal ? (
           <DonationGoal raised={goal.raised} goal={goal.goal} label={goal.label} headingLevel={2} variant="jar" celebrate={false} />
-        ) : (
-          <div className="flex flex-col justify-center gap-3 rounded-2xl border border-line bg-card p-5">
-            <h2 className="m-0 font-sans text-base font-semibold">How each fee is split</h2>
-            <FeeSplitBar causeShare={90} causeAmount={usdText(raised)} platformAmount={usdText(feeTotals ? usdcToUsd(BigInt(feeTotals.platformAmount)) : 0)} />
-          </div>
-        )}
+        ) : null}
       </div>
       {impact.items.length > 0 ? (
         <div className="grid gap-4 lg:grid-cols-2">

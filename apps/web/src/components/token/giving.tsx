@@ -86,7 +86,7 @@ export function LiveSummary({ live }: { live: LiveView }) {
       )}
       {live.rotation && live.rotation.nextRotationAt > 0 ? (
         <div className="flex flex-col gap-1 text-sm">
-          <Countdown to={live.rotation.nextRotationAt * 1000} label="Next rotation in" variant="inline" doneText="Rotating now" />
+          <Countdown to={live.rotation.nextRotationAt * 1000} label="Next rotation in" variant="inline" doneText="Rotating now" className="[&_.kicker]:text-paper/70 [&_.num]:text-paper" />
           {next ? <span className="text-paper/75">Next: {name(next.causeId)}</span> : null}
         </div>
       ) : null}

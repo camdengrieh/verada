@@ -202,7 +202,7 @@ export function MarketSection({ address, symbol, quote, market, loading, error, 
         )}
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <BuySellPressure windows={pressureWindows(market.hourly, market.quoteDecimals, nowSec)} defaultValue="24h" basis="count" title="Buy and sell pressure" headingLevel={2} />
+        <BuySellPressure windows={pressureWindows(market.hourly, market.quoteDecimals, nowSec, Boolean(quote?.usd))} defaultValue="24h" basis="count" title="Buy and sell pressure" headingLevel={2} />
         <VolumeBars data={bars} title={barRange === "24H" ? `Volume by hour (${unitName}, UTC)` : `Volume by day (${unitName}, UTC)`} headingLevel={2} format={qFormat} height={120} />
       </div>
     </div>
