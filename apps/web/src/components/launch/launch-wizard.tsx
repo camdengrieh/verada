@@ -234,7 +234,7 @@ export function LaunchWizard() {
   }
 
   const sending = stage !== "idle" || tx.isPending || Boolean(tx.hash && !tx.receipt && !tx.receiptError);
-  const txError = launchError ?? (tx.error ? errorText(tx.error) : tx.receiptError ? `Could not read the receipt: ${errorText(tx.receiptError)}` : tx.receipt?.status === "reverted" ? `The launch reverted (${tx.hash})` : undefined);
+  const txError = launchError ?? (tx.error ? errorText(tx.error) : tx.receiptError ? `Could not read the receipt: ${errorText(tx.receiptError)}` : tx.receipt?.status === "reverted" ? `The launch reverted (${tx.hash})${tx.revertReason ? `: ${tx.revertReason}` : ""}` : undefined);
   const causeName = causesQuery.data?.find((c) => c.causeId === local.input.initialCause?.toLowerCase())?.name;
 
   const steps = [

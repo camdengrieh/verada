@@ -70,11 +70,12 @@ vi.mock("@/components/providers", () => ({
 }));
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: () => ({ readContract: accountRead }) }));
 vi.mock("@/components/connect-button", () => ({ ConnectButton: () => <button type="button">Connect wallet</button> }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: wallet.receipt, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: account.address, isConnected: Boolean(account.address), chainId: account.chainId }),
   useSwitchChain: () => ({ switchChain, isPending: false }),
   useWriteContract: () => ({ writeContractAsync, data: wallet.hash, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: wallet.receipt, error: null }),
 }));
 // Encryption is the Zama SDK's job (tested in ballot.test.ts); here it returns a fixed handle and proof.
 vi.mock("@/lib/ballot", async (orig) => ({

@@ -188,11 +188,12 @@ vi.mock("@varada/ui/components/data/price-chart", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: (_rpc: unknown, address: string) => ({ address, readContract: accountRead }) }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: undefined, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: account.address, chainId: 1, isConnected: Boolean(account.address) }),
   useSwitchChain: () => ({ switchChain: vi.fn(), isPending: false }),
   useWriteContract: () => ({ writeContractAsync: writeContract, data: undefined, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));
 
 // The swap engine has its own tests: here the ticket is a stand-in that shows what the page hands it.

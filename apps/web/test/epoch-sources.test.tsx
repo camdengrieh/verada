@@ -55,10 +55,11 @@ vi.mock("@/components/providers", () => ({
   useDeps: () => ({ indexer, chain: () => ({ readContract: chainRead }) }),
   usePrivateRpc: () => ({}),
 }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: undefined, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: undefined }),
   useWriteContract: () => ({ writeContractAsync: vi.fn(), data: undefined, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));
 
 const { EpochPanel, ballotMakeup, shownOptionSources } = await import("@/components/epoch-panel");
