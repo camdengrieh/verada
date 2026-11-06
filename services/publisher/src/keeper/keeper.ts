@@ -5,6 +5,7 @@ import { Backoff } from "./backoff.js";
 import { KeeperRevert, redact, type ChainReader, type ChainWriter, type KeeperAction, type RotationReader } from "./chain.js";
 import { CuratedPicksUnavailable, type BallotPreparer, type RoundPreparer } from "./ballot.js";
 import { checkDecryption, type PublicDecryptor } from "./decrypt.js";
+import type { DonationPlanner } from "./donate.js";
 import {
   epochNeedsTally,
   finalizeNeedsOptions,
@@ -86,6 +87,11 @@ export interface KeeperDeps {
   maxIndexerLagSeconds?: number;
   /** Wall clock in ms (tests). */
   now?: () => number;
+  /**
+   * Settles and distributes finalized epochs (`FeeVault.settle`, `DonationDistributor.distribute`),
+   * which are then followed until donated or empty. Omitted: a finalized epoch is done.
+   */
+  donation?: DonationPlanner;
 }
 
 /** Tokens with recent activity (indexer `/api/active-tokens`). */
@@ -130,6 +136,8 @@ const describe = (a: KeeperAction): Record<string, unknown> => {
   switch (a.kind) {
     case "openEpoch":
     case "closeEpoch":
+    case "settle":
+    case "distribute":
       return { tx: a.kind, token: a.token, epoch: a.epoch };
     case "finalizeEpoch":
       return { tx: a.kind, token: a.token, epoch: a.epoch, options: a.orgIds.length };
@@ -201,6 +209,13 @@ export function createKeeper(deps: KeeperDeps) {
    */
   const picksReported = new Map<string, { pagedAt: number; failures: number }>();
   const lookbackRounds = BigInt(deps.rotation?.lookbackRounds ?? 24);
+  /**
+   * A transaction of ours may still be in the mempool: set at start (a restart may follow a send
+   * whose receipt never came) and after a send or receipt failure, cleared once
+   * `writer.hasPendingTx` says the nonce is clear. Reads always see `latest`, so a step still in
+   * flight would otherwise plan, estimate and go out again at the next nonce, then revert.
+   */
+  let mayHavePendingTx = true;
 
   /** Lowercase addresses of active tokens, or null when every epoch should be opened. */
   async function activeSet(current: bigint): Promise<Set<string> | null> {
@@ -378,6 +393,23 @@ export function createKeeper(deps: KeeperDeps) {
           return "open";
         }
 
+        if (mayHavePendingTx && deps.writer.hasPendingTx) {
+          let pending: boolean;
+          try {
+            pending = await deps.writer.hasPendingTx();
+          } catch (err) {
+            fail(key, ref, "pendingTx", err);
+            s.halted = true;
+            return "open";
+          }
+          if (pending) {
+            deps.log("warn", "keeper has a transaction pending; not sending until it is mined or dropped", { ...describe(action), account: deps.writer.account });
+            s.halted = true;
+            return "open";
+          }
+          mayHavePendingTx = false;
+        }
+
         const limit = (gas * buffer) / 100n;
         try {
           s.txs++;
@@ -389,8 +421,10 @@ export function createKeeper(deps: KeeperDeps) {
           deps.log("info", "keeper tx mined", { ...describe(action), hash: r.hash, gasUsed: r.gasUsed });
           backoff.clear(key);
         } catch (err) {
-          // A send or receipt failure may leave a pending nonce: stop the run rather than stack more.
+          // A send or receipt failure may leave a pending nonce: stop the run rather than stack more,
+          // and check the nonce before the next send.
           fail(key, ref, action.kind, err);
+          mayHavePendingTx = true;
           s.halted = true;
           return "open";
         }
@@ -588,6 +622,7 @@ export function createKeeper(deps: KeeperDeps) {
           const key = `epoch:${token.toLowerCase()}:${epoch}`;
           const r = await drive(key, { token, epoch }, async () => {
             const v = await deps.reader.epoch(token, epoch);
+            if (v.finalized && deps.donation) return deps.donation.plan(token, epoch);
             const tally = epochNeedsTally(v) ? await deps.reader.tallyOf(v.scheme, deps.epochGovernor, token, epoch) : undefined;
             const step = planEpoch(token, epoch, v, tally, { epochGovernor: deps.epochGovernor, zamaScheme: deps.zamaScheme });
             if (step.type === "send" && step.action.kind === "finalizeEpoch" && finalizeNeedsOptions(v)) {

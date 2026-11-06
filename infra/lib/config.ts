@@ -149,6 +149,9 @@ export const PUBLISHER_CHAIN_ENV = [
   "FACTORY_ADDRESS",
   "START_BLOCK",
   "CURATOR_REGISTRY_ADDRESS",
+  /** The keeper settles and donates finalized epochs with both set. */
+  "FEE_VAULT_ADDRESS",
+  "DONATION_DISTRIBUTOR_ADDRESS",
 ] as const;
 
 /** Publisher task environment variable -> field of the varada/<env>/publisher JSON secret. */

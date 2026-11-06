@@ -120,6 +120,7 @@ address to the upload, and the form should leave it out unless the creator asks 
 | `KEEPER_PRIVATE_KEY` | none | secret, keeper signer (0x + 32 bytes); needs ETH for gas only |
 | `ETH_RPC_URL` | none | secret, Ethereum RPC URL or comma list (viem fallback, JSON-RPC batching). Must serve `eth_getLogs` for at least the last `KEEPER_LOOKBACK_EPOCHS` weeks (a full node with logs, not a pruned or free public endpoint) unless `INDEXER_URL` is set; see "Tally keeper" |
 | `EPOCH_GOVERNOR_ADDRESS`, `VOTING_SCHEME_ADDRESS`, `TAKEOVER_GOVERNOR_ADDRESS` | none | required by the keeper; the scheme is the `ZamaVotingScheme` it decrypts for |
+| `FEE_VAULT_ADDRESS`, `DONATION_DISTRIBUTOR_ADDRESS` | none | with both set, the keeper also settles (`FeeVault.settle`) and donates (`DonationDistributor.distribute`) every finalized epoch in its lookback (see "Tally keeper", step 4). Unset: finalized epochs are left for anyone to settle and donate (the web app's "Send this week's donation" card) |
 | `ROTATION_GOVERNOR_ADDRESS` | none | live mode's `RotationGovernor`: the keeper also drives live tokens' rotation rounds and the governor's period-change proposals (see "Tally keeper", step 2). Unset: both are left alone |
 | `FACTORY_ADDRESS`, `FACTORY_DEPLOY_BLOCK` | none | keeper token discovery fallback (`TokenCreated` logs) when the indexer is down; both needed. `FACTORY_ADDRESS` alone also locates the LP locker for the idle check (without it every epoch is opened) |
 | `KEEPER_MAX_TX_PER_RUN` | `10` | transactions per run (dry run: planned transactions) |
@@ -157,7 +158,8 @@ its configuration is present.
 - `stamp-watch` (`BEE_GATEWAY_URL`, `SWARM_BATCH_ID`): logs `postage batch needs attention` at `warn` when
   `batchTTL` is under 30 days, utilization is over 70% or the batch is unusable. Alarm on that message.
 - `tally-keeper` (`KEEPER_ENABLED`, `KEEPER_PRIVATE_KEY`, `ETH_RPC_URL`, the three governance addresses;
-  `ROTATION_GOVERNOR_ADDRESS` adds live mode): see below.
+  `ROTATION_GOVERNOR_ADDRESS` adds live mode; `FEE_VAULT_ADDRESS` with `DONATION_DISTRIBUTOR_ADDRESS`
+  adds settling and donating): see below.
 
 ## Tally keeper
 
@@ -257,7 +259,8 @@ backoff timers.
    is usable.
 4. Epochs, for every token (indexer `/api/tokens`, all pages; `TokenCreated` logs of `FACTORY_ADDRESS`
    from `FACTORY_DEPLOY_BLOCK` when the indexer fails) and every epoch in
-   `[current - KEEPER_LOOKBACK_EPOCHS, current)`, skipping unregistered tokens and finalized epochs:
+   `[current - KEEPER_LOOKBACK_EPOCHS, current)`, skipping unregistered tokens and epochs already
+   done (finalized, or with the donation addresses donated):
    - never opened, or opened with `voterCount == 0`: `finalizeEpoch` (the default cause wins; the
      epoch is not closed, which saves a public decryption);
    - opened with ballots, not closed: `closeEpoch` (makes the tallies publicly decryptable);
@@ -271,6 +274,19 @@ backoff timers.
      epoch whose tally is final has no timeout: if neither source answers it is never finalized,
      and the step fails with `BallotUnavailable: ballot org ids unavailable: ...` naming both
      causes. Epochs without ballots finalize with an empty list and need neither.
+   - finalized, with `FEE_VAULT_ADDRESS` and `DONATION_DISTRIBUTOR_ADDRESS` set: the SDK's
+     `planDonation` (`src/keeper/donate.ts`; the web app's donation card runs the same plan) over
+     chain state, including a simulated `settle` or `distribute`. Not settled: `FeeVault.settle`,
+     which first brings the epoch's outstanding fees in; while it would revert `FeesPending` the
+     epoch waits (until `SETTLE_GRACE`, 7 days, after its end at the latest). `NothingToSettle` (an
+     empty pool) is logged once at `info` but does not end the epoch: `FeeVault.depositFees`
+     credits late fees to the oldest unsettled epoch at or after their accrual epoch, so the epoch
+     can still fill up, and it is re-read every run while in the lookback. Settled: `DonationDistributor.distribute`
+     to the winning Endaoment org. `OrgNotActive` and `OrgAddressMismatch` need the owner or
+     Endaoment, so they are logged once at `warn` (`keeper cannot donate the epoch`) and the epoch
+     is re-read every run until they clear. The epoch is done once donated. Without the two
+     addresses a finalized epoch is done, as before. Keep `KEEPER_LOOKBACK_EPOCHS` at 2 or more so
+     an epoch whose fees stay pending is still in range when its settle grace ends.
 
    An item takes up to four steps in one run (close → submit → finalize), re-reading state before
    each. Polls on a scheme other than `VOTING_SCHEME_ADDRESS` are never decrypted.
@@ -289,7 +305,10 @@ each within `uint64` and equal to that handle's clear value, then submits those 
 **Transactions.** One viem wallet client and one account, one transaction at a time: gas estimate
 (a revert here costs nothing), send with 120% of the estimate, wait for the receipt. At most
 `KEEPER_MAX_TX_PER_RUN` per run. A send or receipt failure stops the run so no second nonce is
-used while one may be pending. Run a single publisher task.
+used while one may be pending. After such a failure, and once after a start, the keeper compares
+the account's `pending` and `latest` nonces before its next send and stops the run (`keeper has a
+transaction pending`, at `warn`) while they differ, so a step whose receipt timed out is not sent
+again while it can still be mined. Run a single publisher task.
 
 **Failure handling.** A failed step backs its item off in memory: 5 min, doubling to 6 h, reset on
 success; the item is retried on the first run after its backoff ends. One exception is capped: when a

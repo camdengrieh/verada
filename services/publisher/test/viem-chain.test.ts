@@ -161,6 +161,27 @@ describe("viem chain: ballotOrgIds with an indexer source", () => {
   });
 });
 
+describe("viem chain: pending transactions", () => {
+  it("compares the account's pending and latest nonces", async () => {
+    const nonces = { pending: 5n, latest: 4n };
+    const seen: string[] = [];
+    const transport = custom({
+      async request({ method, params }: { method: string; params: unknown[] }) {
+        if (method === "eth_chainId") return toHex(31337);
+        if (method !== "eth_getTransactionCount") throw new Error(`unexpected ${method}`);
+        const tag = params[1] as "pending" | "latest";
+        seen.push(tag);
+        return toHex(nonces[tag]);
+      },
+    });
+    const { writer } = createViemChain({ chainId: 31337, rpcUrls: ["http://unused"], privateKey: KEY, epochGovernor: EG, takeoverGovernor: EG, transport });
+    expect(await writer.hasPendingTx!()).toBe(true);
+    nonces.latest = 5n;
+    expect(await writer.hasPendingTx!()).toBe(false);
+    expect(seen.sort()).toEqual(["latest", "latest", "pending", "pending"]);
+  });
+});
+
 const RG = "0x00000000000000000000000000000000000000e3" as Address;
 const ZAMA = "0x00000000000000000000000000000000000000a1" as Address;
 const HANDLE = keccak256(toHex("outcome"));

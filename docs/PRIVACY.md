@@ -66,7 +66,7 @@ a worker when the bootstrap RPC serves a different chain than the specifier's.
 
 ### Measured cost
 
-Measured in Chrome on 2026-11-05 through Nym; Nox has not been measured in this app yet:
+Measured in Chrome on 2026-11-05 through Nym:
 
 - The worker was ready about 8 seconds after start.
 - Each `eth_blockNumber` took about 6 seconds.
@@ -74,6 +74,17 @@ Measured in Chrome on 2026-11-05 through Nym; Nox has not been measured in this 
 `ethereum.reth.rs` and `publicnode.com` answered. Llamarpc (HTTP 525) and Cloudflare refused
 mixnet traffic. The app batches JSON-RPC calls and lists several RPCs for failover. The worker
 starts on the first chain read, or straight away once a wallet connects.
+
+Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/web check:private-rpc`):
+
+- The worker was ready about 11 seconds after start: specifier read on Sepolia, a 650 KB bundle
+  from Hisoka's resolver, hash verified, three anchors dialled over KPS.
+- In the anon-rpc demo on the same network, the first `eth_getBalance` took about 4 seconds and
+  later ones about 1.5 seconds. After roughly 90 seconds the only exit offering TLS tunnels timed
+  out, was skipped for 10 minutes, and every read failed with "No exit offers TLS tunnels" until
+  then. The Nox testnet has few tunnel exits today. While it is down, account reads fail closed by
+  design and the user can load public data directly. `workerConfig: { "tls": "preferred" }` would
+  fall back to plaintext at the exit, which lets the exit read the request, so it is not the default.
 
 ### What it does not protect
 

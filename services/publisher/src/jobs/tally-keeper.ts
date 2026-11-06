@@ -1,9 +1,11 @@
+import { createDonationReader, type DonationReader } from "@varada/sdk";
 import type { Hex } from "viem";
 import type { KeeperConfig } from "../env.js";
 import type { IndexerClient } from "../indexer-client.js";
 import { createBallotPreparer, createRoundPreparer, type BallotReader, type RoundReader } from "../keeper/ballot.js";
 import type { ChainReader, ChainWriter, FactoryLogReader, RotationReader } from "../keeper/chain.js";
 import { createZamaDecryptor, type PublicDecryptor } from "../keeper/decrypt.js";
+import { createDonationPlanner } from "../keeper/donate.js";
 import { createKeeper, type KeeperDeps } from "../keeper/keeper.js";
 import { createTokenSource } from "../keeper/tokens.js";
 import { createViemChain } from "../keeper/viem-chain.js";
@@ -31,6 +33,8 @@ export interface TallyKeeperDeps {
     rotation?: RotationReader;
     rounds?: RoundReader;
     factoryLogs?: FactoryLogReader;
+    /** Settle and distribute reads; used only with FEE_VAULT_ADDRESS and DONATION_DISTRIBUTOR_ADDRESS. */
+    donation?: DonationReader;
   };
   decryptor?: PublicDecryptor;
 }
@@ -90,8 +94,14 @@ export function createTallyKeeperJob(deps: TallyKeeperDeps): Job | null {
         ballotSource: deps.indexer?.epochOrgIds ? (token, epoch) => deps.indexer!.epochOrgIds!(token, epoch) : undefined,
         // The factory's locker holds the LP positions whose uncollected fees mark a token active.
         lockerFactory: k.factory,
+        feeVault: k.feeVault,
+        donationDistributor: k.donationDistributor,
       });
-      chain ??= viemChain;
+      const donation =
+        k.feeVault && k.donationDistributor
+          ? createDonationReader(viemChain.publicClient as never, { epochGovernor, feeVault: k.feeVault, distributor: k.donationDistributor })
+          : undefined;
+      chain ??= { ...viemChain, donation };
       decryptor ??= createZamaDecryptor({
         chainId: deps.chainId,
         publicClient: viemChain.publicClient,
@@ -113,6 +123,12 @@ export function createTallyKeeperJob(deps: TallyKeeperDeps): Job | null {
   if (!deps.indexer && !chain.factoryLogs) {
     deps.log("warn", "tally keeper has no token source (INDEXER_URL, or FACTORY_ADDRESS with FACTORY_DEPLOY_BLOCK)");
   }
+
+  const donationReader = k.feeVault && k.donationDistributor ? chain.donation : undefined;
+  if (!donationReader) {
+    deps.log("warn", "FEE_VAULT_ADDRESS or DONATION_DISTRIBUTOR_ADDRESS not set; finalized epochs are not settled or donated by this keeper");
+  }
+  const donation = donationReader ? createDonationPlanner({ reader: donationReader, zamaScheme, log: deps.log }) : undefined;
 
   const indexer = deps.indexer;
   if (!indexer) deps.log("warn", "tally keeper has no INDEXER_URL; ballots that need rotation draws are left to other keepers");
@@ -158,6 +174,7 @@ export function createTallyKeeperJob(deps: TallyKeeperDeps): Job | null {
       : undefined,
     idleEpochs: k.idleEpochs,
     maxIndexerLagSeconds: k.maxIndexerLagSeconds,
+    donation,
     log: deps.log,
   });
   deps.log("info", "tally keeper ready", {
@@ -168,6 +185,7 @@ export function createTallyKeeperJob(deps: TallyKeeperDeps): Job | null {
     lookbackEpochs: k.lookbackEpochs,
     idleEpochs: k.idleEpochs,
     rotationRounds: rotation ? (rotation.rounds ? "prepare, close, finalize" : "close, finalize") : "off",
+    donations: donation ? "settle, distribute" : "off",
   });
 
   return {

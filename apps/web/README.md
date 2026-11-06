@@ -52,7 +52,7 @@ build-time defaults from `NEXT_PUBLIC_*` (see `.env.example`). Public values onl
   "chainId": 1,
   "indexerUrls": ["https://indexer-a.example", "https://indexer-b.example"],
   "rpcUrl": "https://...", "factoryAddress": "0x...", "factoryDeployBlock": 0,
-  "vaultAddress": "0x...", "governorAddress": "0x...",
+  "vaultAddress": "0x...", "governorAddress": "0x...", "donationDistributorAddress": "0x...",
   "publisherUrl": "https://publisher.example", "swarmGatewayUrl": "https://gw.example",
   "ensParentName": "varada.eth", "profileRegistryAddress": "0x...",
   "votingSchemeAddress": "0x...", "takeoverGovernorAddress": "0x...",
@@ -68,6 +68,7 @@ build-time defaults from `NEXT_PUBLIC_*` (see `.env.example`). Public values onl
 | `profileRegistryAddress` | `PROFILE_REGISTRY_ADDRESS` | `TokenProfileRegistry`: label availability, profile fallback reads, profile edits |
 | `votingSchemeAddress` | `VOTING_SCHEME_ADDRESS` | `ZamaVotingScheme`: ballots are sent here (an opened poll's own scheme wins) |
 | `takeoverGovernorAddress` | `TAKEOVER_GOVERNOR_ADDRESS` | `TakeoverGovernor`: the takeover panel |
+| `donationDistributorAddress` | `DONATION_DISTRIBUTOR_ADDRESS` | `DonationDistributor`: with `vaultAddress` (the `FeeVault`) and `governorAddress`, the token page's "Send this week's donation" card; hidden when any is unset |
 | `zamaRelayerUrl` | `ZAMA_RELAYER_URL` | Optional relayer override; otherwise the SDK's preset for the chain |
 | (build time only) | `DEV_PLAIN_BALLOTS` | `true` sends plaintext ballots to the mock scheme. Development only; `config.json` cannot set it |
 
@@ -192,6 +193,22 @@ through ENS (`getTokenAddressByLabel`, public-scope private RPC), then the regis
   never receive the wallet address. Controller/editor checks compare addresses in the browser.
 - Uploads and logo images go to the configured publisher and Swarm gateway (operator-run), which see the
   IP, like the indexer. The Zama relayer is the one third-party service contacted directly (see Voting).
+
+## Checking the private RPC
+
+The header pill shows the read path: "Connecting privately" until the anon-rpc worker is started
+(it starts on the first chain read, when a wallet connects, or when "Also route Varada API
+requests" is turned on in the pill's popover), then "Private RPC on · <network>", or
+"Private RPC failed" with a Retry. The worker's boot log is in the browser console under
+`[worker]`. To run that check without a browser session, start the app (`pnpm dev`) and run
+
+```sh
+pnpm --filter @varada/web check:private-rpc            # BASE_URL=http://127.0.0.1:3000/ by default
+```
+
+It drives headless Chrome (`CHROME_PATH`, needs `playwright-core` like `scripts/e2e.mjs`), turns the
+routing switch on, prints the worker log and exits 0 once the pill reads "Private RPC on". The
+configured network is `privateRpc.network` (Nox by default, see `docs/PRIVACY.md`).
 
 ## Art and assets
 

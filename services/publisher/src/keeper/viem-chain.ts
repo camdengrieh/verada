@@ -1,4 +1,4 @@
-import { epochGovernorAbi, rotationGovernorAbi, takeoverGovernorAbi, varadaFactoryAbi, varadaLpLockerAbi, zamaVotingSchemeAbi } from "@varada/sdk/abis";
+import { donationDistributorAbi, epochGovernorAbi, feeVaultAbi, rotationGovernorAbi, takeoverGovernorAbi, varadaFactoryAbi, varadaLpLockerAbi, zamaVotingSchemeAbi } from "@varada/sdk/abis";
 import {
   BaseError,
   ContractFunctionRevertedError,
@@ -68,6 +68,9 @@ export interface ViemChainOptions {
    */
   ballotSource?: (token: Address, epoch: bigint) => Promise<readonly Hex[] | null>;
   receiptTimeoutMs?: number;
+  /** `FeeVault` and `DonationDistributor`: targets of the `settle` and `distribute` actions. */
+  feeVault?: Address;
+  donationDistributor?: Address;
   /** Test seam: replaces the RPC transport built from `rpcUrls`. */
   transport?: Transport;
 }
@@ -294,6 +297,12 @@ export function createViemChain(opts: ViemChainOptions): {
       case "recordTally":
       case "execute":
         return { address: tg, abi: takeoverGovernorAbi, functionName: a.kind, args: [a.id] };
+      case "settle":
+        if (!opts.feeVault) throw new Error("no fee vault configured");
+        return { address: opts.feeVault, abi: feeVaultAbi, functionName: a.kind, args: [a.token, a.epoch] };
+      case "distribute":
+        if (!opts.donationDistributor) throw new Error("no donation distributor configured");
+        return { address: opts.donationDistributor, abi: donationDistributorAbi, functionName: a.kind, args: [a.token, a.epoch] };
     }
   };
 
@@ -314,6 +323,13 @@ export function createViemChain(opts: ViemChainOptions): {
       const hash = await wallet.writeContract({ ...toCall(action), gas, chain, account } as never);
       const r = await publicClient.waitForTransactionReceipt({ hash, timeout: opts.receiptTimeoutMs ?? 5 * 60_000 });
       return { hash, status: r.status, gasUsed: r.gasUsed };
+    },
+    async hasPendingTx() {
+      const [pending, latest] = await Promise.all([
+        publicClient.getTransactionCount({ address: account.address, blockTag: "pending" }),
+        publicClient.getTransactionCount({ address: account.address, blockTag: "latest" }),
+      ]);
+      return pending > latest;
     },
   };
 

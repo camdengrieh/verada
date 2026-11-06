@@ -378,6 +378,44 @@ describe("keeper: limits and modes", () => {
     expect(JSON.stringify(logs, (_k, v) => (typeof v === "bigint" ? v.toString() : v))).not.toContain("rpc.example");
   });
 
+  it("does not send again while a transaction of its own is still pending", async () => {
+    const c = new FakeChain().register(T1).register(T2);
+    c.current = 1n;
+    let pending = true;
+    let checks = 0;
+    const writer = { ...c.writer(), hasPendingTx: async () => (checks++, pending) };
+    const { keeper, logs, advance } = setup(c, { tokens: [T1, T2], writer });
+
+    // After a start: a transaction from before may still be in the mempool.
+    const s1 = await keeper.run();
+    expect(s1.halted).toBe(true);
+    expect(c.sent).toEqual([]);
+    expect(logs.find((l) => l.msg === "keeper has a transaction pending; not sending until it is mined or dropped")).toMatchObject({
+      level: "warn",
+      data: { tx: "finalizeEpoch", token: T1, epoch: 0n },
+    });
+
+    pending = false;
+    await keeper.run();
+    expect(c.sent).toHaveLength(2);
+    expect(checks).toBe(2);
+
+    // A receipt timeout: the step may still land, so the nonce is checked before the next send.
+    c.current = 2n;
+    c.sendError = new Error("receipt timeout");
+    await keeper.run();
+    expect(checks).toBe(2);
+    c.sendError = undefined;
+    pending = true;
+    advance(3_600_000);
+    await keeper.run();
+    expect(checks).toBe(3);
+    expect(c.sent).toHaveLength(2);
+    pending = false;
+    await keeper.run();
+    expect(c.sent.length).toBeGreaterThan(2);
+  });
+
   it("sends with the gas limit derived from the estimate (estimate * gasBufferPct / 100)", async () => {
     const c = new FakeChain().register(T1);
     c.current = 1n;
