@@ -7,7 +7,7 @@ import {DeployLive} from "../../script/DeployLive.s.sol";
 import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ZamaVotingScheme} from "../../src/governance/ZamaVotingScheme.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
@@ -32,7 +32,7 @@ contract RotationZamaIntegrationTest is Test, DeployLive {
     MockAcl internal acl = MockAcl(ZamaLocal.ACL);
     ZamaVotingScheme internal zama;
     RotationGovernor internal gov;
-    VeradaToken internal vt;
+    VaradaToken internal vt;
     bytes32[] internal causeIds;
     bytes32[] internal poolOrgs;
     bytes32[] internal poolLeaves;
@@ -79,7 +79,7 @@ contract RotationZamaIntegrationTest is Test, DeployLive {
         causes.setMaterializer(address(gov), true);
         gov.setVault(address(this));
 
-        vt = new VeradaToken("T", "T", "", address(this), address(this));
+        vt = new VaradaToken("T", "T", "", address(this), address(this));
         uint256 unit = 1e9 * 1e18;
         vt.transfer(pm, 70 * unit);
         vt.transfer(alice, 20 * unit);
