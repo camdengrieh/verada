@@ -6,6 +6,7 @@ import type { ImageSource } from "@varada/ui/components/varada/shared";
 import { swarmGatewayUrl } from "@varada/sdk";
 import { causeNameOf } from "@/lib/discover";
 import { siteBase } from "@/lib/base";
+import { useSiteRoot } from "@/lib/site-root";
 import { usePrivacyPrefs, useAppConfig, useDeps } from "@/components/providers";
 import { mergeActivity } from "@/lib/activity";
 import { subscribeActivity } from "@/lib/activity-stream";
@@ -203,5 +204,6 @@ export function useCauseLookup(causeIds: readonly (string | undefined)[]): (id: 
  * layout segments), so page components resolve against the site root from the URL instead.
  */
 export function useRel(): (path: string) => string {
-  return useCallback((path) => `${siteBase()}${path.replace(/^\//, "")}`, []);
+  const root = useSiteRoot();
+  return useCallback((path) => `${root ?? siteBase()}${path.replace(/^\//, "")}`, [root]);
 }

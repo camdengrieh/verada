@@ -18,7 +18,8 @@ import { NAV_ITEMS, relativeRoot } from "@/components/nav";
 import { PrivacyMenu } from "@/components/privacy-status";
 import { useAppConfig } from "@/components/providers";
 import { agentFromLocation } from "@/lib/host";
-import { siteBase, siteBaseFromPath } from "@/lib/base";
+import { SiteRootContext } from "@/lib/site-root";
+import { siteBase,siteBaseFromPath } from "@/lib/base";
 
 /** Resolves site-relative asset paths against the site root so they work under any Swarm/ENS prefix. */
 const resolveAsset = (path: string) => `${siteBase()}${path.replace(/^\//, "")}`;
@@ -67,6 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
 
   return (
+    <SiteRootContext.Provider value={prefix}>
     <AssetProvider resolve={resolveAsset}>
       <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-md focus:bg-ink focus:px-4 focus:py-2 focus:text-paper">
         Skip to content
@@ -109,6 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onSearch={searchCoins} />
       <Toaster />
     </AssetProvider>
+    </SiteRootContext.Provider>
   );
 }
 
