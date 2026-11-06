@@ -3,9 +3,10 @@
 
 import { ChevronDown, Settings2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useId, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useState, type ComponentProps, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { Popover, RadioGroup } from "radix-ui";
 import { Button } from "@verada/ui/components/ui/button";
+import { Divider } from "@verada/ui/components/ui/divider";
 import { cn } from "@verada/ui/lib/utils";
 import { CauseIcon, type CauseName } from "./cause-icon";
 import { HIT_AREA, type ImageSource } from "./shared";
@@ -17,9 +18,18 @@ import { StockLogo, type QuoteKind } from "./stock-logo";
  * state: it names whatever blocks the trade ("Connect wallet", "Enter an amount", "Insufficient
  * NVDAon balance") and only reads "Review buy" when the trade can go ahead.
  *
- * Under the pay input sit preset chips: amounts in the pay asset when buying (WETH sizes, or USD
- * sizes converted at `payPriceUsd`) and shares of the coin balance when selling, each showing the
- * amount it fills. A chip fills the input and stays pressed until the amount is edited.
+ * Under the pay input sit preset chips: amounts in the pay asset when buying (ETH sizes for WETH and
+ * liquid-staked ETH, small BTC sizes for WBTC / cbBTC, dollar sizes for stablecoins, or USD sizes
+ * converted at `payPriceUsd`) and shares of the coin balance when selling, each showing the amount
+ * it fills. A chip fills the input and stays pressed until the amount is edited.
+ *
+ * The panel is a size container: it lays out for its own width, not the viewport's. Narrow (a phone,
+ * a 300px column) the chips wrap three to a row; from 672px wide the inputs and the quote details sit
+ * side by side. Give it its width from the parent (a block, a grid cell or a `flex-1` item).
+ *
+ * The pieces are exported for other layouts (the mobile trade sheet uses them): `useTradePresets`
+ * with `TradePresetChips`, `tradeAction` with `TradeActionButton`, `TradeSideToggle`,
+ * `TradeSlippageControl` and `TradeTokenChip`.
  */
 
 export type TradeSide = "buy" | "sell";
@@ -58,12 +68,15 @@ export interface TradePanelProps extends Omit<ComponentProps<"section">, "childr
   /** Fiat value of the pay amount ("$1,249.50"). */
   payFiat?: string;
   /**
-   * Buy-side amount chips in the pay asset. Defaults: WETH 0.01 / 0.05 / 0.1 / 0.5; any asset with a
-   * `payPriceUsd` (stablecoins assume $1) gets `buyPresetUsd` sizes converted into it; otherwise 25% /
-   * 50% of the balance. A Max chip follows. `false` hides the chips.
+   * Buy-side amount chips in the pay asset. Defaults: WETH (and stETH, wstETH, rETH, cbETH, weETH)
+   * 0.01 / 0.05 / 0.1 / 0.5; WBTC, cbBTC, tBTC 0.0005 / 0.001 / 0.005 / 0.01 (both show the dollar
+   * value under the amount when `payPriceUsd` is given); stablecoins (USDC, USDT, DAI, USDS, PYUSD,
+   * USDe, FRAX, GHO…) $50 / $100 / $250 / $500; any other asset with a `payPriceUsd` gets
+   * `buyPresetUsd` sizes converted into it; otherwise 25% / 50% of the balance. A Max chip follows.
+   * `false` hides the chips.
    */
   buyPresets?: readonly TradePreset[] | false;
-  /** USD per pay token, for the default USD-sized buy presets ("$50 = 0.3862 NVDAon"). */
+  /** USD per pay token: converts the USD-sized presets and labels the ETH/BTC ones ("$50 = 0.3862 NVDAon"). */
   payPriceUsd?: number;
   /** USD sizes for the default buy presets (default 50 / 100 / 250 / 500). */
   buyPresetUsd?: readonly number[];
@@ -116,6 +129,8 @@ export interface TradePreset {
   detail?: string;
   /** Spoken name; defaults to "Pay <label> <symbol>". */
   ariaLabel?: string;
+  /** Read after the name (e.g. "about $152"). */
+  description?: string;
 }
 
 export interface TradePresetChoice {
@@ -125,11 +140,19 @@ export interface TradePresetChoice {
   percent?: number;
 }
 
-const STABLES = /^(USDC|USDT|DAI|USDS|PYUSD|USDON)$/i;
-const ETHLIKE = /^W?ETH$/i;
+const STABLES = /^(USDC|USDT|DAI|USDS|PYUSD|USDON|USDE|FRAX|GHO|LUSD|CRVUSD|RLUSD)$/i;
+const ETHLIKE = /^(W?ETH|STETH|WSTETH|RETH|CBETH|WEETH)$/i;
+const BTCLIKE = /^(W?BTC|CBBTC|TBTC|LBTC)$/i;
 export const WETH_BUY_PRESETS = ["0.01", "0.05", "0.1", "0.5"] as const;
+/** Small BTC sizes: about $50 to $1,000 at $100K a coin. */
+export const BTC_BUY_PRESETS = ["0.0005", "0.001", "0.005", "0.01"] as const;
 export const DEFAULT_BUY_PRESET_USD = [50, 100, 250, 500] as const;
 export const DEFAULT_SELL_PERCENTS = [10, 25, 50, 75, 100] as const;
+
+/** Whether the default presets treat a symbol as a dollar stablecoin (priced at $1). */
+export function isStablecoin(symbol: string): boolean {
+  return STABLES.test(symbol.replace(/^\$/, ""));
+}
 
 /** "3,402.18" → 3402.18; null when it isn't a number. */
 export function parseBalance(balance: string | undefined): number | null {
@@ -170,11 +193,23 @@ const fmtChipAmount = (s: string) => {
   const n = Number(s);
   return n >= 10_000 ? compactAmount.format(n) : sigAmount.format(n);
 };
+const usdWhole = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 2 });
+const fmtUsd = (n: number) => (n >= 10 ? usdWhole : usdCents).format(n);
+
+/** Fixed sizes in the asset itself (ETH or BTC), with the dollar value underneath when the price is known. */
+function assetSizedPresets(amounts: readonly string[], symbol: string, priceUsd?: number): TradePreset[] {
+  return amounts.map((a) => {
+    const usd = priceUsd && priceUsd > 0 ? fmtUsd(Number(a) * priceUsd) : undefined;
+    return { key: a, label: a, amount: a, detail: usd ? `≈ ${usd}` : undefined, ariaLabel: `Pay ${a} ${symbol}`, description: usd ? `about ${usd}` : undefined };
+  });
+}
 
 /** The default buy chips for a pay asset (see `TradePanelProps.buyPresets`). Empty when none apply. */
 export function defaultBuyPresets(symbol: string, priceUsd?: number, sizesUsd: readonly number[] = DEFAULT_BUY_PRESET_USD): TradePreset[] {
   const sym = symbol.replace(/^\$/, "");
-  if (ETHLIKE.test(sym)) return WETH_BUY_PRESETS.map((a) => ({ key: a, label: a, amount: a, ariaLabel: `Pay ${a} ${symbol}` }));
+  if (ETHLIKE.test(sym)) return assetSizedPresets(WETH_BUY_PRESETS, symbol, priceUsd);
+  if (BTCLIKE.test(sym)) return assetSizedPresets(BTC_BUY_PRESETS, symbol, priceUsd);
   const price = priceUsd ?? (STABLES.test(sym) ? 1 : undefined);
   if (!price) return [];
   return sizesUsd.map((usd) => {
@@ -190,7 +225,8 @@ export function defaultBuyPresets(symbol: string, priceUsd?: number, sizesUsd: r
   });
 }
 
-interface Chip {
+/** One preset chip as rendered (see `useTradePresets`). */
+export interface TradeChip {
   key: string;
   label: string;
   amount: string | null;
@@ -220,6 +256,131 @@ const IMPACT_TONE: Record<ImpactSeverity, string> = {
 export function sanitizeAmount(value: string): string | null {
   const v = value.replace(/,/g, "");
   return /^\d*\.?\d*$/.test(v) ? v : null;
+}
+
+/* ---------- action state ---------- */
+
+export interface TradeActionState {
+  /** What the primary button says: the blocker, the wallet wait, or "Review buy / sell". */
+  label: string;
+  /** Whether pressing it does something. */
+  actionable: boolean;
+  /** Runs the blocker's action when it has one, otherwise `onSubmit` (only when nothing blocks). */
+  run: (onSubmit: () => void) => void;
+}
+
+/** The primary button's state for a ticket (shared by TradePanel and the mobile trade sheet). */
+export function tradeAction({ side, payAmount, blocker, pending }: Pick<TradePanelProps, "side" | "payAmount" | "blocker" | "pending">): TradeActionState {
+  const empty = !(parseFloat(payAmount) > 0);
+  const effective: TradeBlocker | null = blocker ?? (empty ? { label: "Enter an amount" } : null);
+  const label = pending ? "Confirm in your wallet" : effective ? effective.label : side === "buy" ? "Review buy" : "Review sell";
+  return {
+    label,
+    actionable: !pending && (!effective || !!effective.onAction),
+    run: (onSubmit) => {
+      if (effective?.onAction) effective.onAction();
+      else if (!effective) onSubmit();
+    },
+  };
+}
+
+/** The big primary button; its label slides when the state changes (fades only with reduced motion). */
+export function TradeActionButton({
+  state,
+  onSubmit,
+  className,
+  ...props
+}: Omit<ComponentProps<typeof Button>, "onClick" | "children"> & { state: TradeActionState; onSubmit: () => void }) {
+  const reduced = useReducedMotion();
+  return (
+    <Button size="lg" disabled={!state.actionable} onClick={() => state.run(onSubmit)} className={cn("h-13 w-full text-[17px]", className)} {...props}>
+      <AnimatePresence mode="wait" initial={false}>
+        <motion.span
+          key={state.label}
+          initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
+          transition={{ duration: reduced ? 0 : 0.14, ease: [0.16, 1, 0.3, 1] }}
+          className="block"
+        >
+          {state.label}
+        </motion.span>
+      </AnimatePresence>
+    </Button>
+  );
+}
+
+/* ---------- presets ---------- */
+
+export type TradePresetOptions = Pick<
+  TradePanelProps,
+  | "side"
+  | "pay"
+  | "payAmount"
+  | "onPayAmountChange"
+  | "buyPresets"
+  | "payPriceUsd"
+  | "buyPresetUsd"
+  | "sellPercents"
+  | "payBalanceRaw"
+  | "maxAmount"
+  | "presetsDisabledReason"
+  | "onPreset"
+  | "onPercent"
+>;
+
+export interface TradePresetsState {
+  chips: TradeChip[];
+  /** The chip that filled the input, until the amount is edited or the side changes. */
+  pressedKey: string | null;
+  disabled: boolean;
+  disabledReason: string | null;
+  /** The group's accessible name. */
+  label: string;
+  pick: (chip: TradeChip) => void;
+  /** Call when the amount is typed, so no chip stays pressed. */
+  clear: () => void;
+}
+
+/** Builds the preset chips for a ticket and remembers which one filled the input. */
+export function useTradePresets({
+  side,
+  pay,
+  payAmount,
+  onPayAmountChange,
+  buyPresets,
+  payPriceUsd,
+  buyPresetUsd,
+  sellPercents,
+  payBalanceRaw,
+  maxAmount,
+  presetsDisabledReason,
+  onPreset,
+  onPercent,
+}: TradePresetOptions): TradePresetsState {
+  // Which chip filled the input; cleared by typing, switching side or the amount being emptied.
+  const [picked, setPicked] = useState<{ side: TradeSide; key: string } | null>(null);
+  const pressedKey = picked && picked.side === side && payAmount !== "" ? picked.key : null;
+
+  const rawBalance = payBalanceRaw ?? pay.balance?.replace(/[,\s_]/g, "");
+  const balance = parseBalance(rawBalance);
+  const hasBalance = balance !== null && balance > 0;
+  const chips = buildChips({ side, pay, rawBalance, hasBalance, buyPresets, payPriceUsd, buyPresetUsd, sellPercents, maxAmount });
+
+  return {
+    chips,
+    pressedKey,
+    disabled: !hasBalance,
+    disabledReason: hasBalance ? null : (presetsDisabledReason ?? `No ${pay.symbol} balance`),
+    label: side === "buy" ? `Amount presets in ${pay.symbol}` : `Sell a share of your ${pay.symbol} balance`,
+    pick: (chip) => {
+      setPicked({ side, key: chip.key });
+      if (chip.amount !== null) onPayAmountChange(chip.amount);
+      if (chip.percent !== undefined) onPercent?.(chip.percent);
+      onPreset?.({ key: chip.key, amount: chip.amount ?? "", percent: chip.percent });
+    },
+    clear: () => setPicked(null),
+  };
 }
 
 export function TradePanel({
@@ -259,208 +420,203 @@ export function TradePanel({
   className,
   ...props
 }: TradePanelProps) {
-  const reduced = useReducedMotion();
   const id = useId();
   const payId = `${id}-pay`;
   const receiveId = `${id}-receive`;
   const balanceId = `${id}-balance`;
-  const reasonId = `${id}-preset-reason`;
 
-  // Which chip filled the input; cleared by typing, switching side or the amount being emptied.
-  const [picked, setPicked] = useState<{ side: TradeSide; key: string } | null>(null);
-  const pressedKey = picked && picked.side === side && payAmount !== "" ? picked.key : null;
-
-  const rawBalance = payBalanceRaw ?? pay.balance?.replace(/[,\s_]/g, "");
-  const balance = parseBalance(rawBalance);
-  const hasBalance = balance !== null && balance > 0;
-  const chips = buildChips({ side, pay, rawBalance, hasBalance, buyPresets, payPriceUsd, buyPresetUsd, sellPercents, maxAmount });
-  const chipsDisabled = !hasBalance;
-  const disabledReason = chipsDisabled ? (presetsDisabledReason ?? `No ${pay.symbol} balance`) : null;
-
-  const pick = (chip: Chip) => {
-    const amount = chip.amount ?? "";
-    setPicked({ side, key: chip.key });
-    if (chip.amount !== null) onPayAmountChange(chip.amount);
-    if (chip.percent !== undefined) onPercent?.(chip.percent);
-    onPreset?.({ key: chip.key, amount, percent: chip.percent });
-  };
-
-  const empty = !(parseFloat(payAmount) > 0);
-  const effective: TradeBlocker | null = blocker ?? (empty ? { label: "Enter an amount" } : null);
-  const label = pending ? "Confirm in your wallet" : effective ? effective.label : side === "buy" ? "Review buy" : "Review sell";
-  const actionable = !pending && (!effective || !!effective.onAction);
-  const severity = priceImpact === undefined ? undefined : impactSeverity(priceImpact);
+  const presets = useTradePresets({
+    side,
+    pay,
+    payAmount,
+    onPayAmountChange,
+    buyPresets,
+    payPriceUsd,
+    buyPresetUsd,
+    sellPercents,
+    payBalanceRaw,
+    maxAmount,
+    presetsDisabledReason,
+    onPreset,
+    onPercent,
+  });
+  const action = tradeAction({ side, payAmount, blocker, pending });
 
   return (
     <section
       aria-label={side === "buy" ? `Buy ${receive.symbol}` : `Sell ${pay.symbol}`}
-      className={cn("flex flex-col gap-3.5 rounded-[26px] border border-line bg-card p-5 shadow-paper", className)}
+      data-slot="trade-panel"
+      className={cn("@container flex flex-col gap-3.5 rounded-[26px] border border-line bg-card p-5 shadow-paper", className)}
       {...props}
     >
       <div className="flex items-center gap-2">
-        <RadioGroup.Root
-          value={side}
-          onValueChange={(v) => onSideChange(v as TradeSide)}
-          aria-label="Trade side"
-          orientation="horizontal"
-          className="flex flex-1 rounded-full bg-sand p-1"
-        >
-          {(["buy", "sell"] as const).map((s) => (
-            <RadioGroup.Item
-              key={s}
-              value={s}
-              className={cn(
-                "min-h-11 flex-1 rounded-full text-[15px] font-semibold text-ink transition-colors",
-                "data-[state=checked]:text-primary-foreground",
-                s === "buy" ? "data-[state=checked]:bg-sage" : "data-[state=checked]:bg-primary",
-                "data-[state=unchecked]:hover:bg-line",
-              )}
-            >
-              {s === "buy" ? "Buy" : "Sell"}
-            </RadioGroup.Item>
-          ))}
-        </RadioGroup.Root>
-        <SlippageControl value={slippage} onChange={onSlippageChange} presets={slippagePresets} />
+        <TradeSideToggle side={side} onSideChange={onSideChange} className="flex-1" />
+        <TradeSlippageControl value={slippage} onChange={onSlippageChange} presets={slippagePresets} />
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={payId} className="text-[13px] text-ink-muted">
-          You pay
-        </label>
-        <div className="flex items-center gap-2.5 rounded-[14px] border-[1.5px] border-line-strong bg-paper-card py-2.5 pl-3.5 pr-3 focus-within:border-ink focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
-          <input
-            id={payId}
-            value={payAmount}
-            onChange={(e) => {
-              const v = sanitizeAmount(e.target.value);
-              if (v === null) return;
-              setPicked(null);
-              onPayAmountChange(v);
-            }}
-            inputMode="decimal"
-            autoComplete="off"
-            placeholder="0"
-            aria-describedby={pay.balance ? balanceId : undefined}
-            className="num min-w-0 flex-1 bg-transparent text-[26px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none"
-          />
-          <TokenChip token={pay} onClick={onPickPayToken} />
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-muted">
-          <span id={balanceId}>
-            {pay.balance ? (
-              <>
-                Balance <span className="num">{pay.balance}</span> {pay.symbol}
-              </>
-            ) : null}
-            {payFiat ? <span className="num"> · {payFiat}</span> : null}
-          </span>
-        </div>
-        {chips.length ? (
-          <PresetChips
-            chips={chips}
-            label={side === "buy" ? `Amount presets in ${pay.symbol}` : `Sell a share of your ${pay.symbol} balance`}
-            pressedKey={pressedKey}
-            disabled={chipsDisabled}
-            reasonId={disabledReason ? reasonId : undefined}
-            idPrefix={id}
-            onPick={pick}
-          />
-        ) : null}
-        {disabledReason && chips.length ? (
-          <p id={reasonId} className="m-0 text-xs text-ink-muted">
-            {disabledReason}
-          </p>
-        ) : null}
-      </div>
+      <div className="flex flex-col gap-3.5 @2xl:grid @2xl:grid-cols-2 @2xl:items-start @2xl:gap-6">
+        <div className="flex min-w-0 flex-col gap-3.5">
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={payId} className="text-[13px] text-ink-muted">
+              You pay
+            </label>
+            <div className="flex items-center gap-2.5 rounded-[14px] border-[1.5px] border-line-strong bg-paper-card py-2.5 pl-3.5 pr-3 focus-within:border-ink focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+              <input
+                id={payId}
+                value={payAmount}
+                onChange={(e) => {
+                  const v = sanitizeAmount(e.target.value);
+                  if (v === null) return;
+                  presets.clear();
+                  onPayAmountChange(v);
+                }}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0"
+                aria-describedby={pay.balance ? balanceId : undefined}
+                className="num min-w-0 flex-1 bg-transparent text-[22px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none @xs:text-[26px]"
+              />
+              <TradeTokenChip token={pay} onClick={onPickPayToken} />
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 text-[13px] text-ink-muted">
+              <span id={balanceId}>
+                {pay.balance ? (
+                  <>
+                    Balance <span className="num">{pay.balance}</span> {pay.symbol}
+                  </>
+                ) : null}
+                {payFiat ? <span className="num"> · {payFiat}</span> : null}
+              </span>
+            </div>
+            <TradePresetChips presets={presets} idPrefix={id} />
+          </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor={receiveId} className="text-[13px] text-ink-muted">
-          You receive (estimated)
-        </label>
-        <div className="flex items-center gap-2.5 rounded-[14px] bg-paper py-2.5 pl-3.5 pr-3">
-          <input
-            id={receiveId}
-            value={receiveAmount}
-            readOnly
-            tabIndex={-1}
-            placeholder="0"
-            className="num min-w-0 flex-1 bg-transparent text-[26px] text-ink outline-none placeholder:text-ink-muted"
-          />
-          <span className="inline-flex items-center gap-1.5 font-semibold">
-            {receive.kind ? <StockLogo symbol={receive.symbol} kind={receive.kind} src={receive.logo?.src} srcSet={receive.logo?.srcSet} size={24} decorative /> : null}
-            {receive.symbol}
-          </span>
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={receiveId} className="text-[13px] text-ink-muted">
+              You receive (estimated)
+            </label>
+            <div className="flex items-center gap-2.5 rounded-[14px] bg-paper py-2.5 pl-3.5 pr-3">
+              <input
+                id={receiveId}
+                value={receiveAmount}
+                readOnly
+                tabIndex={-1}
+                placeholder="0"
+                className="num min-w-0 flex-1 bg-transparent text-[22px] text-ink outline-none placeholder:text-ink-muted @xs:text-[26px]"
+              />
+              <span className="inline-flex shrink-0 items-center gap-1.5 font-semibold">
+                {receive.kind ? <StockLogo symbol={receive.symbol} kind={receive.kind} src={receive.logo?.src} srcSet={receive.logo?.srcSet} size={24} decorative /> : null}
+                {receive.symbol}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <Divider variant="dashed" className="@2xl:hidden" />
+
+        <div className="flex min-w-0 flex-col gap-3.5">
+          <TradeDetails receive={receive} priceImpact={priceImpact} minReceived={minReceived} fee={fee} sniperFee={sniperFee} />
+          <TradeCauseNote causeAmount={causeAmount} causeName={causeName} causeIcon={causeIcon} platformAmount={platformAmount} />
+          {notice}
+          <TradeActionButton state={action} onSubmit={onSubmit} />
         </div>
       </div>
-
-      <dl className="m-0 flex flex-col gap-2 text-sm">
-        {priceImpact !== undefined && severity ? (
-          <Row term="Price impact">
-            <span className={cn("num", IMPACT_TONE[severity])}>
-              {severity === "high" ? "High · " : null}
-              {priceImpact.toFixed(2)}%
-            </span>
-            {severity !== "low" ? <span className="sr-only">{severity === "high" ? ", high: you may get a much worse price" : ", moderate"}</span> : null}
-          </Row>
-        ) : null}
-        {minReceived ? (
-          <Row term="Minimum received">
-            <span className="num">
-              {minReceived} {receive.symbol}
-            </span>
-          </Row>
-        ) : null}
-        <Row term="Trading fee">
-          <span className="num">{fee}</span>
-          {sniperFee ? (
-            <span className={cn(sniperFee.active ? "font-semibold text-loss" : "text-ink-muted")}>
-              {" · "}
-              {sniperFee.active ? `sniper fee ${sniperFee.detail ?? "active"}` : "sniper fee ended"}
-            </span>
-          ) : null}
-        </Row>
-      </dl>
-
-      {causeAmount ? (
-        <div className="flex items-center gap-2.5 rounded-[14px] bg-sage-tint p-3 text-sm text-sage-ink">
-          {causeIcon ? <CauseIcon cause={causeIcon} size={40} decorative /> : null}
-          <p className="m-0">
-            <strong className="num">{causeAmount}</strong> of this trade&apos;s fee goes to {causeName}
-            {platformAmount ? (
-              <>
-                , <strong className="num">{platformAmount}</strong> to Varada
-              </>
-            ) : null}
-            .
-          </p>
-        </div>
-      ) : null}
-
-      {notice}
-
-      <Button
-        size="lg"
-        disabled={!actionable}
-        onClick={() => {
-          if (effective?.onAction) effective.onAction();
-          else if (!effective) onSubmit();
-        }}
-        className="h-13 w-full text-[17px]"
-      >
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.span
-            key={label}
-            initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }}
-            transition={{ duration: reduced ? 0 : 0.14, ease: [0.16, 1, 0.3, 1] }}
-            className="block"
-          >
-            {label}
-          </motion.span>
-        </AnimatePresence>
-      </Button>
     </section>
+  );
+}
+
+/** Price impact, minimum received and the fee line. */
+export function TradeDetails({
+  receive,
+  priceImpact,
+  minReceived,
+  fee,
+  sniperFee,
+  className,
+}: Pick<TradePanelProps, "receive" | "priceImpact" | "minReceived" | "fee" | "sniperFee"> & { className?: string }) {
+  const severity = priceImpact === undefined ? undefined : impactSeverity(priceImpact);
+  return (
+    <dl className={cn("m-0 flex flex-col gap-2 text-sm", className)}>
+      {priceImpact !== undefined && severity ? (
+        <Row term="Price impact">
+          <span className={cn("num", IMPACT_TONE[severity])}>
+            {severity === "high" ? "High · " : null}
+            {priceImpact.toFixed(2)}%
+          </span>
+          {severity !== "low" ? <span className="sr-only">{severity === "high" ? ", high: you may get a much worse price" : ", moderate"}</span> : null}
+        </Row>
+      ) : null}
+      {minReceived ? (
+        <Row term="Minimum received">
+          <span className="num">
+            {minReceived} {receive.symbol}
+          </span>
+        </Row>
+      ) : null}
+      <Row term="Trading fee">
+        <span className="num">{fee}</span>
+        {sniperFee ? (
+          <span className={cn(sniperFee.active ? "font-semibold text-loss" : "text-ink-muted")}>
+            {" · "}
+            {sniperFee.active ? `sniper fee ${sniperFee.detail ?? "active"}` : "sniper fee ended"}
+          </span>
+        ) : null}
+      </Row>
+    </dl>
+  );
+}
+
+/** "$28.11 of this trade's fee goes to …" on sage. Renders nothing without `causeAmount`. */
+export function TradeCauseNote({
+  causeAmount,
+  causeName,
+  causeIcon,
+  platformAmount,
+  compact,
+  className,
+}: Pick<TradePanelProps, "causeAmount" | "causeName" | "causeIcon" | "platformAmount"> & { compact?: boolean; className?: string }) {
+  if (!causeAmount) return null;
+  return (
+    <div className={cn("flex items-center gap-2.5 rounded-[14px] bg-sage-tint p-3 text-sm text-sage-ink", compact && "p-2.5 text-[13px]", className)}>
+      {causeIcon ? <CauseIcon cause={causeIcon} size={compact ? 32 : 40} decorative className="@max-3xs:hidden" /> : null}
+      <p className="m-0">
+        <strong className="num">{causeAmount}</strong> of this trade&apos;s fee goes to {causeName}
+        {platformAmount ? (
+          <>
+            , <strong className="num">{platformAmount}</strong> to Varada
+          </>
+        ) : null}
+        .
+      </p>
+    </div>
+  );
+}
+
+/** Buy / Sell as a two-option radio group. */
+export function TradeSideToggle({ side, onSideChange, className }: { side: TradeSide; onSideChange: (side: TradeSide) => void; className?: string }) {
+  return (
+    <RadioGroup.Root
+      value={side}
+      onValueChange={(v) => onSideChange(v as TradeSide)}
+      aria-label="Trade side"
+      orientation="horizontal"
+      className={cn("flex rounded-full bg-sand p-1", className)}
+    >
+      {(["buy", "sell"] as const).map((s) => (
+        <RadioGroup.Item
+          key={s}
+          value={s}
+          className={cn(
+            "min-h-11 flex-1 rounded-full text-[15px] font-semibold text-ink transition-colors",
+            "data-[state=checked]:text-primary-foreground",
+            s === "buy" ? "data-[state=checked]:bg-sage" : "data-[state=checked]:bg-primary",
+            "data-[state=unchecked]:hover:bg-line",
+          )}
+        >
+          {s === "buy" ? "Buy" : "Sell"}
+        </RadioGroup.Item>
+      ))}
+    </RadioGroup.Root>
   );
 }
 
@@ -484,9 +640,9 @@ function buildChips({
   buyPresetUsd: readonly number[] | undefined;
   sellPercents: readonly number[] | false | undefined;
   maxAmount: string | undefined;
-}): Chip[] {
+}): TradeChip[] {
   const sym = pay.symbol;
-  const percentChip = (p: number): Chip => {
+  const percentChip = (p: number): TradeChip => {
     const amount = rawBalance && hasBalance ? (p >= 100 && maxAmount ? maxAmount : percentOfBalance(rawBalance, p)) : null;
     return {
       key: `pct-${p}`,
@@ -503,31 +659,30 @@ function buildChips({
   const presets = buyPresets ?? defaultBuyPresets(sym, payPriceUsd, buyPresetUsd);
   if (!presets.length) return [25, 50, 100].map(percentChip);
   return [
-    ...presets.map<Chip>((p) => ({ key: p.key, label: p.label, amount: p.amount, detail: p.detail, ariaLabel: p.ariaLabel ?? `Pay ${p.label} ${sym}` })),
+    ...presets.map<TradeChip>((p) => ({
+      key: p.key,
+      label: p.label,
+      amount: p.amount,
+      detail: p.detail,
+      ariaLabel: p.ariaLabel ?? `Pay ${p.label} ${sym}`,
+      description: p.description,
+    })),
     percentChip(100),
   ];
 }
 
 const CHIP_NAV_KEYS = ["ArrowLeft", "ArrowRight", "Home", "End"];
 
-/** Toggle buttons (aria-pressed) in a group; arrow keys, Home and End move between them. */
-function PresetChips({
-  chips,
-  label,
-  pressedKey,
-  disabled,
-  reasonId,
-  idPrefix,
-  onPick,
-}: {
-  chips: Chip[];
-  label: string;
-  pressedKey: string | null;
-  disabled: boolean;
-  reasonId?: string;
-  idPrefix: string;
-  onPick: (chip: Chip) => void;
-}) {
+/**
+ * The preset chips: toggle buttons (aria-pressed) in a group; arrow keys, Home and End move between
+ * them. Three to a row in narrow containers, one row from 320px. Renders nothing without chips.
+ */
+export function TradePresetChips({ presets, idPrefix, className }: { presets: TradePresetsState; idPrefix?: string; className?: string }) {
+  const fallbackId = useId();
+  const prefix = idPrefix ?? fallbackId;
+  const { chips, pressedKey, disabled, disabledReason, label, pick } = presets;
+  if (!chips.length) return null;
+  const reasonId = disabledReason ? `${prefix}-preset-reason` : undefined;
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (!CHIP_NAV_KEYS.includes(e.key)) return;
     const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
@@ -539,57 +694,66 @@ function PresetChips({
     buttons[next]?.focus();
   };
   return (
-    <div
-      role="group"
-      aria-label={label}
-      aria-describedby={reasonId}
-      onKeyDown={onKeyDown}
-      className="grid gap-1.5"
-      style={{ gridTemplateColumns: `repeat(${chips.length}, minmax(0, 1fr))` }}
-    >
-      {chips.map((c) => {
-        const pressed = c.key === pressedKey;
-        const descId = c.description ? `${idPrefix}-chip-${c.key}` : undefined;
-        const describedBy = [descId, reasonId].filter(Boolean).join(" ") || undefined;
-        return (
-          <button
-            key={c.key}
-            type="button"
-            aria-pressed={pressed}
-            aria-label={c.ariaLabel}
-            aria-describedby={describedBy}
-            disabled={disabled}
-            onClick={() => onPick(c)}
-            className={cn(
-              "group flex min-h-11 min-w-0 flex-col items-center justify-center rounded-xl border border-line-strong bg-paper-card px-1 py-1 text-ink transition-colors",
-              "hover:bg-sand aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper aria-pressed:hover:bg-ink-soft",
-              "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-paper-card",
-            )}
-          >
-            <span className="num text-[13px] font-semibold leading-tight">{c.label}</span>
-            {c.detail ? <span className="num max-w-full truncate text-[11px] leading-tight text-ink-muted group-aria-pressed:text-paper/85">{c.detail}</span> : null}
-            {descId ? (
-              <span id={descId} className="sr-only">
-                {c.description}
-              </span>
-            ) : null}
-          </button>
-        );
-      })}
-    </div>
+    <>
+      <div
+        role="group"
+        aria-label={label}
+        aria-describedby={reasonId}
+        onKeyDown={onKeyDown}
+        data-slot="trade-presets"
+        className={cn("grid grid-cols-[repeat(var(--chips),minmax(0,1fr))] gap-1.5 @max-xs:grid-cols-3", className)}
+        style={{ "--chips": chips.length } as CSSProperties}
+      >
+        {chips.map((c) => {
+          const pressed = c.key === pressedKey;
+          const descId = c.description ? `${prefix}-chip-${c.key}` : undefined;
+          const describedBy = [descId, reasonId].filter(Boolean).join(" ") || undefined;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              aria-pressed={pressed}
+              aria-label={c.ariaLabel}
+              aria-describedby={describedBy}
+              disabled={disabled}
+              onClick={() => pick(c)}
+              className={cn(
+                "group flex min-h-11 min-w-0 flex-col items-center justify-center rounded-xl border border-line-strong bg-paper-card px-1 py-1 text-ink transition-colors",
+                "hover:bg-sand aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper aria-pressed:hover:bg-ink-soft",
+                "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-paper-card",
+              )}
+            >
+              <span className="num text-[13px] font-semibold leading-tight">{c.label}</span>
+              {c.detail ? <span className="num max-w-full truncate text-[11px] leading-tight text-ink-muted group-aria-pressed:text-paper/85">{c.detail}</span> : null}
+              {descId ? (
+                <span id={descId} className="sr-only">
+                  {c.description}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+      {reasonId ? (
+        <p id={reasonId} className="m-0 text-xs text-ink-muted">
+          {disabledReason}
+        </p>
+      ) : null}
+    </>
   );
 }
 
 function Row({ term, children }: { term: string; children: ReactNode }) {
   return (
-    <div className="flex justify-between gap-3">
+    <div className="flex flex-wrap justify-between gap-x-3 gap-y-0.5">
       <dt className="text-ink-muted">{term}</dt>
       <dd className="m-0 text-right">{children}</dd>
     </div>
   );
 }
 
-function TokenChip({ token, onClick }: { token: TradeToken; onClick?: () => void }) {
+/** The pay token, as a button that opens the token picker when `onClick` is given. */
+export function TradeTokenChip({ token, onClick }: { token: TradeToken; onClick?: () => void }) {
   const content = (
     <>
       <StockLogo symbol={token.symbol} kind={token.kind ?? "stock"} src={token.logo?.src} srcSet={token.logo?.srcSet} size={24} decorative />
@@ -610,7 +774,8 @@ function TokenChip({ token, onClick }: { token: TradeToken; onClick?: () => void
   );
 }
 
-function SlippageControl({ value, onChange, presets }: { value: number; onChange?: (v: number) => void; presets: readonly number[] }) {
+/** The slippage pill and its popover (presets, a custom value and a high-slippage warning). */
+export function TradeSlippageControl({ value, onChange, presets = [0.5, 1, 2, 3] }: { value: number; onChange?: (v: number) => void; presets?: readonly number[] }) {
   const [custom, setCustom] = useState("");
   const inputId = useId();
   const fmt = (v: number) => `${v}%`;
@@ -630,7 +795,8 @@ function SlippageControl({ value, onChange, presets }: { value: number; onChange
         <Popover.Content
           align="end"
           sideOffset={8}
-          className="z-50 flex w-72 flex-col gap-3 rounded-2xl border border-line bg-popover p-4 text-popover-foreground shadow-float data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          collisionPadding={12}
+          className="z-50 flex w-[min(18rem,calc(100vw-1.5rem))] flex-col gap-3 rounded-2xl border border-line bg-popover p-4 text-popover-foreground shadow-float data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           <div className="flex flex-col gap-0.5">
             <span className="font-display text-lg font-semibold">Slippage tolerance</span>
