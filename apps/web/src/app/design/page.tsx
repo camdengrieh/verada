@@ -46,6 +46,15 @@ export default function DesignPage() {
           <VaradaSection />
         </main>
       </div>
+      <footer className="border-t border-line px-4 py-6 text-sm text-muted-foreground sm:px-10">
+        <div className="mx-auto max-w-[1360px]">
+          Charts: TradingView Lightweight Charts™, Copyright (c) 2025 TradingView, Inc.,{" "}
+          <a href="https://www.tradingview.com/" rel="noopener noreferrer" className="underline">
+            tradingview.com
+          </a>
+          . Fonts: Fraunces, Instrument Sans and JetBrains Mono under the SIL Open Font License.
+        </div>
+      </footer>
     </div>
   );
 }

@@ -11,6 +11,7 @@ with an editable profile and a page on the Swarm-hosted app.
 - `packages/` — shared TypeScript (`sdk`, `endaoment-client`, `publish` for Swarm/ENS releases,
   `arkiv-registry` for the Arkiv mirror)
 - `services/` — `indexer` (Ponder + read-only API) and `publisher` (uploads, Arkiv mirror, tally keeper)
+- `packages/ui/` — the component library (Direction A design system; gallery at `/design`)
 - `apps/web/` — static-export frontend (served from Swarm behind ENS)
 - `infra/` — AWS CDK (indexer, Bee node + gateway, publisher)
 
