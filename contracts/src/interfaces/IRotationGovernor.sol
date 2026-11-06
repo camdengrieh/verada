@@ -21,7 +21,8 @@ enum RotationPeriod {
 /// @dev Candidates are chosen exactly as for a weekly ballot (`IEpochGovernor`,
 ///      `CatalogBallotLib`): the controller's pins (catalogue entries proven inside the token's
 ///      focus), then curated picks from the curator registry, then deterministic rotation draws
-///      over the focus pool of the catalogue version in effect when the poll's vote starts. Anyone
+///      over the focus pool, under the catalogue version the weekly ballot of the epoch containing
+///      the vote start uses (the version at the vote start without a curator clock). Anyone
 ///      prepares a round's ballot by supplying exactly the drawn entries with their Merkle proofs
 ///      (`prepareRound`, `prepareCuratedRound`); the ballot is frozen then, and ballots are
 ///      refused until it is. Only the winner is written to the cause registry. The pin, draw and
@@ -248,11 +249,16 @@ interface IRotationGovernor {
     /// @notice Prepares and opens the poll for rotation `target` of `token` (the next rotation)
     ///         from the pins and `draws`: exactly the rotation draws the governor derives, each
     ///         with its catalogue proof. Permissionless; once per round, during its vote window.
+    ///         During the round's curation grace (`min(6 hours, period / 4)` from its vote
+    ///         start) a round with usable curations reverts `IncompleteCuratedBallot` here and
+    ///         needs `prepareCuratedRound`; after it, the curated phase is skipped (also for
+    ///         `openRound`).
     function prepareRound(address token, uint64 target, IEpochGovernor.Draw[] calldata draws)
         external;
 
     /// @notice As `prepareRound`, with the curated picks taken before the rotation draws (the
-    ///         curations of weekly epoch `curationEpochOf(token, target)`).
+    ///         curations of weekly epoch `curationEpochOf(token, target)`), at any time in the
+    ///         vote window.
     function prepareCuratedRound(
         address token,
         uint64 target,
@@ -315,7 +321,9 @@ interface IRotationGovernor {
     function shortlistFor(address token, uint256 target) external view returns (bytes32[] memory);
 
     /// @notice Catalogue version and focus pool size of round `target`: as stored once prepared,
-    ///         otherwise the version in effect at the round's vote start (zero values if none).
+    ///         otherwise the version its weekly epoch's ballots use (in effect at that epoch's
+    ///         start), or the one in effect at its vote start when that is zero or there is no
+    ///         curator clock (zero values if none).
     function poolOf(address token, uint256 target)
         external
         view

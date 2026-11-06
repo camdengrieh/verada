@@ -56,8 +56,12 @@ interface ICuratorClock {
 ///      round's ballot is built exactly like a weekly ballot (`CatalogBallotLib`, see
 ///      `IRotationGovernor`): the controller's pins, then curated picks (the curator registry's
 ///      curations for the weekly epoch containing the vote start), then deterministic rotation
-///      draws over the token's focus pool, all under the catalogue version in effect at the vote
-///      start (`start(c)`), skipping blocked causes. Anyone prepares it with the drawn entries
+///      draws over the token's focus pool, skipping blocked causes. All of it uses the catalogue
+///      version the weekly ballot of that epoch uses (in effect at the epoch's start; see
+///      `CatalogBallotBuilder.versionOf`), so a round includes curated picks exactly when that
+///      weekly ballot does. Unpublished picks hold a round only for its curation grace
+///      (`CatalogBallotBuilder.curationGraceEnd`), as the weekly `CURATION_GRACE` holds an
+///      epoch. Anyone prepares it with the drawn entries
 ///      and their proofs (`prepareRound`); it is frozen then and never built inside a ballot, so
 ///      a ballot's option index always refers to a list fixed by an earlier transaction. A
 ///      round never prepared, or prepared with fewer than `MIN_OPTIONS` options (`NoBallot`),
@@ -206,9 +210,6 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     uint64 public proposalCount;
     /// @notice Curator agents' weekly picks (unset: no curated phase).
     ICuratorRegistry public curators;
-    /// @dev The curator registry's weekly clock, read once when it is set.
-    uint64 internal _curationZero;
-    uint64 internal _curationLength;
 
     mapping(address token => RotationScheduleLib.Schedule) internal _schedules;
     mapping(address token => CauseState) internal _causes;
@@ -304,8 +305,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         uint256 length = IEpochGovernor(clock).EPOCH_LENGTH();
         if (length == 0) revert CuratorClockNotSet();
         curators = curators_;
-        _curationZero = SafeCast.toUint64(zero);
-        _curationLength = SafeCast.toUint64(length);
+        ballotBuilder.setCurators(curators_, zero, length);
         emit CuratorRegistrySet(address(curators_), zero, length);
     }
 
@@ -795,7 +795,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         if (r.status != RoundStatus.None) return (r.catalogVersion, r.poolSize);
         (bool ok, uint40 voteStart) = _voteStart(token, target);
         if (!ok) return (0, 0);
-        version = _catalog.versionAt(voteStart);
+        (version,,) = ballotBuilder.versionOf(voteStart);
         (uint64 categoryMask, uint16 regionMask) = profileRegistry.focusOf(token);
         poolSize = _catalog.poolSize(version, categoryMask, regionMask);
     }
@@ -822,7 +822,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     {
         uint40 voteStart;
         (ok, voteStart) = _voteStart(token, target);
-        if (ok) (ok, epoch) = _curationEpochAt(voteStart);
+        if (ok) (, ok, epoch) = ballotBuilder.versionOf(voteStart);
     }
 
     /// @notice The cause catalogue.
@@ -859,6 +859,10 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     /// @dev Fixes round `target`'s ballot (pins, curated picks, rotation draws; see
     ///      `CatalogBallotLib`) and opens its poll when it has at least `MIN_OPTIONS` options.
+    ///
+    ///      Curated draws, when given, always apply; without them the curated phase applies only
+    ///      during the round's curation grace (`CatalogBallotBuilder.curationGraceEnd`), so picks
+    ///      committed but never published hold a round for that grace, not for the week.
     function _prepare(
         address token,
         uint64 target,
@@ -906,8 +910,9 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         r.voteEnd = voteEnd;
     }
 
-    /// @dev Builds and stores round `target`'s ballot under the catalogue version in effect at
-    ///      `voteStart`. Returns the options' cause ids.
+    /// @dev Builds and stores round `target`'s ballot (`CatalogBallotBuilder.build`: the
+    ///      catalogue version, curation epoch and curation grace of the round). Returns the
+    ///      options' cause ids.
     function _build(
         Round storage r,
         address token,
@@ -920,37 +925,29 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         CatalogBallotBuilder.Request memory q;
         q.token = token;
         q.round = target;
-        q.version = _catalog.versionAt(voteStart);
         q.size = _maxOptions(sch);
         q.pins = _shortlists[token];
-        (bool curatedPhase, uint256 epoch) = _curationEpochAt(voteStart);
-        if (curatedPhase) {
-            q.curators = curators;
-            q.curationEpoch = epoch;
-        }
+        q.voteStart = voteStart;
+        q.voteEnd = r.voteEnd;
         CatalogBallotBuilder.Built memory out = ballotBuilder.build(q, curated, draws);
         if (out.curatedDrawn != 0) {
             // Both are bounded by the ballot size (at most MAX_OPTIONS).
             // forge-lint: disable-next-line(unsafe-typecast)
             emit CuratedPicksUsed(
-                token, target, epoch, uint8(out.curatedDrawn), uint8(out.curatedIncluded)
+                token,
+                target,
+                out.curationEpoch,
+                uint8(out.curatedDrawn),
+                uint8(out.curatedIncluded)
             );
         }
-        r.catalogVersion = q.version;
+        r.catalogVersion = out.version;
         // A pool is at most 1024 buckets of uint32 entries.
         // forge-lint: disable-next-line(unsafe-typecast)
         r.poolSize = uint64(out.pool);
         r.options = out.orgs;
-        emit BallotPrepared(token, target, q.version, out.pool, out.pinned, out.options);
+        emit BallotPrepared(token, target, out.version, out.pool, out.pinned, out.options);
         return out.options;
-    }
-
-    /// @dev Weekly curation epoch containing `ts` (false without a curator clock or before it).
-    function _curationEpochAt(uint256 ts) private view returns (bool, uint256) {
-        uint256 length = _curationLength;
-        uint256 zero = _curationZero;
-        if (length == 0 || ts < zero) return (false, 0);
-        return (true, (ts - zero) / length);
     }
 
     /// @dev Vote start of round `target` from the current schedule (false when it has none).

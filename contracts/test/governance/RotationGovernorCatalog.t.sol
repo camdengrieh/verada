@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Test} from "forge-std/Test.sol";
 
+import {CatalogBallotBuilder} from "../../src/CatalogBallotBuilder.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {CuratorRegistry} from "../../src/CuratorRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
@@ -368,31 +369,64 @@ contract RotationGovernorCatalogTest is Test {
         assertEq(orgs.length, 10);
     }
 
-    function test_catalogVersionInEffectAtTheVoteStart() public {
+    function test_catalogVersionOfTheWeeklyEpoch() public {
         _start();
-        // Round 2's vote starts at t0 + 1 day; a version published after that applies from
-        // round 3.
+        // A version published mid-week (weekly epoch 1) applies from the first round voting in
+        // epoch 2, as for weekly ballots: rounds 2 and 3 keep version 1.
         vm.warp(t0 + 1 days + 10);
-        // The fixture proves against its latest tree: take round 2's draws under version 1.
+        // The fixture proves against its latest tree: take the version-1 draws first.
         IEpochGovernor.Draw[] memory d2 = _draws(2);
+        IEpochGovernor.Draw[] memory d3 = _draws(3);
         cat.add(cat.bucketOf(2, 0), _org(300));
         cat.publish();
         (uint32 v2, uint256 p2) = gov.poolOf(token, 2);
         assertEq(v2, 1);
         assertEq(p2, 50);
         (uint32 v3, uint256 p3) = gov.poolOf(token, 3);
-        assertEq(v3, 2);
-        assertEq(p3, 51);
+        assertEq(v3, 1, "same week, same version");
+        assertEq(p3, 50);
+        (uint32 wv,) = weekly.poolOf(token, 1);
+        assertEq(wv, 1);
+        // Round 8 votes from t0 + 7 days, inside weekly epoch 2.
+        (bool ok, uint256 epoch) = gov.curationEpochOf(token, 8);
+        assertTrue(ok);
+        assertEq(epoch, 2);
+        (uint32 v8, uint256 p8) = gov.poolOf(token, 8);
+        (uint32 wv2, uint256 wp2) = weekly.poolOf(token, 2);
+        assertEq(v8, 2);
+        assertEq(p8, 51);
+        assertEq(v8, wv2);
+        assertEq(p8, wp2);
         // Version-2 proofs do not verify against round 2's version-1 root.
         IEpochGovernor.Draw[] memory latest = _draws(2);
         vm.expectRevert();
         gov.prepareRound(token, 2, latest);
         gov.prepareRound(token, 2, d2);
         vm.warp(t0 + 2 days + 10);
-        gov.prepareRound(token, 3, _draws(3));
+        gov.prepareRound(token, 3, d3);
         (v3, p3) = gov.poolOf(token, 3);
-        assertEq(v3, 2, "stored");
-        assertEq(p3, 51);
+        assertEq(v3, 1, "stored");
+        assertEq(p3, 50);
+    }
+
+    function test_catalogVersionAtTheVoteStart_withoutACuratorClock() public {
+        RotationGovernor g = new RotationGovernor(
+            address(this),
+            registry,
+            ICauseCatalog(address(cat.catalog())),
+            ITokenProfileRegistry(address(profiles)),
+            makeAddr("poolManager"),
+            IOutcomeVotingScheme(address(scheme)),
+            IRotationGovernor.Params(24 hours, 3 days, 7 days, 1000, 50)
+        );
+        g.setVault(address(this));
+        vm.warp(weekly.epochStart(1) + 1 hours);
+        uint256 start = block.timestamp;
+        g.registerToken(token, initialCause, RotationPeriod.OneDay);
+        vm.warp(start + 12 hours);
+        cat.publish();
+        (uint32 v2,) = g.poolOf(token, 2);
+        assertEq(v2, 2, "no weekly epoch: the version at the vote start");
     }
 
     function test_noBallot_belowTwoOptions_keepsTheCurrentCause() public {
@@ -593,5 +627,166 @@ contract RotationGovernorCatalogTest is Test {
         profiles.setFocus(other, uint64(1) << 9, FOCUS_R); // no entries
         vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.PoolTooSmall.selector, other, 0));
         gov.registerToken(other, initialCause, RotationPeriod.OneDay);
+    }
+
+    // ------------------------------------------------------------------ curation grace
+
+    /// @dev Round `target`'s ballot is the rotation draws alone (repeats skipped, nothing
+    ///      blocked here), as `prepareRound` builds it without a curated phase.
+    function _expectNoCuratedPhase(uint64 target) internal view {
+        bytes32[] memory orgs = gov.roundOptionOrgIds(token, target);
+        IEpochGovernor.Draw[] memory d = _draws(target);
+        assertEq(orgs.length, 10);
+        uint256 n;
+        for (uint256 k; k < d.length; ++k) {
+            bool repeat;
+            for (uint256 j; j < n; ++j) {
+                if (orgs[j] == d[k].orgId) repeat = true;
+            }
+            if (repeat) continue;
+            assertEq(orgs[n++], d[k].orgId, "rotation draws only");
+        }
+        assertEq(n, orgs.length);
+    }
+
+    function _incompleteCurated(uint64 target) internal view returns (bytes memory) {
+        return abi.encodeWithSelector(
+            IEpochGovernor.IncompleteCuratedBallot.selector, token, uint256(target), 0
+        );
+    }
+
+    /// @dev Committed but never published picks hold each round only for its grace (6 hours of
+    ///      a daily rotation), then rounds fall back to rotation: the cause is never stuck all
+    ///      week.
+    function test_curationGrace_unpublishedPicksFallBackToRotation() public {
+        _submitPicks();
+        _start();
+        for (uint64 target = 2; target <= 7; ++target) {
+            uint256 voteStart = t0 + (target - 1) * 1 days;
+            vm.warp(voteStart + 6 hours - 1);
+            IEpochGovernor.Draw[] memory d = _draws(target);
+            vm.expectRevert(_incompleteCurated(target));
+            gov.prepareRound(token, target, d);
+            vm.expectRevert(_incompleteCurated(target));
+            gov.openRound(token);
+
+            vm.warp(voteStart + 6 hours);
+            if (target == 2) {
+                // `openRound` skips the curated phase too: it now needs the rotation draws.
+                vm.expectRevert(
+                    abi.encodeWithSelector(IEpochGovernor.IncompleteBallot.selector, token, 2, 0)
+                );
+                gov.openRound(token);
+            }
+            gov.prepareRound(token, target, d);
+            assertEq(uint8(_status(target)), uint8(IRotationGovernor.RoundStatus.Open));
+            _expectNoCuratedPhase(target);
+        }
+        // The weekly governor behaves the same way after its CURATION_GRACE.
+        vm.warp(weekly.epochStart(1) + weekly.CURATION_GRACE());
+        weekly.prepareBallot(token, 1, cat.draws(weekly, registry, token, 1, FOCUS_C, FOCUS_R));
+    }
+
+    function _curatedDraws(uint64 target) internal view returns (IEpochGovernor.Draw[] memory) {
+        bytes32[] memory taken = new bytes32[](3);
+        for (uint256 r; r < 3; ++r) {
+            taken[r] = _cause(_org(29 - r));
+        }
+        return cat.drawsAfter(
+            IEpochGovernor(address(gov)), registry, token, target, FOCUS_C, FOCUS_R, taken
+        );
+    }
+
+    function test_curationGrace_publishedCuratedDrawsStillApply() public {
+        _submitPicks();
+        _start();
+        vm.warp(t0 + 1 days + 7 hours); // past the grace
+        vm.expectEmit(address(gov));
+        emit IRotationGovernor.CuratedPicksUsed(token, 2, 1, 3, 3);
+        gov.prepareCuratedRound(token, 2, _curated(), _curatedDraws(2));
+        bytes32[] memory orgs = gov.roundOptionOrgIds(token, 2);
+        assertEq(orgs[0], _org(29), "curated picks first");
+        assertEq(orgs[1], _org(28));
+        assertEq(orgs[2], _org(27));
+    }
+
+    /// @dev Short rotations get a quarter of their period: 15 minutes for hourly rounds.
+    function test_curationGrace_isAQuarterOfShortPeriods() public {
+        _submitPicks();
+        vm.warp(weekly.epochStart(1) + 1 hours);
+        t0 = block.timestamp;
+        gov.registerToken(token, initialCause, RotationPeriod.OneHour);
+        vm.warp(t0 + 1 hours + 15 minutes - 1);
+        IEpochGovernor.Draw[] memory d = _draws(2);
+        vm.expectRevert(_incompleteCurated(2));
+        gov.prepareRound(token, 2, d);
+        vm.warp(t0 + 1 hours + 15 minutes);
+        gov.prepareRound(token, 2, d);
+        _expectNoCuratedPhase(2);
+        (,, uint40 voteEnd,,,,) = gov.roundOf(token, 2);
+        assertEq(voteEnd, t0 + 2 hours - 15 minutes, "half the hour still votes");
+    }
+
+    // ------------------------------------------------------------------ catalogue drift
+
+    /// @dev A catalogue version published mid-week keeps the week's curated phase in both
+    ///      governors: later rounds use the weekly epoch's version, under which the curations
+    ///      were submitted.
+    function test_midWeekCatalogPublish_keepsCuratedPicksInBothGovernors() public {
+        _submitPicks();
+        _start();
+        vm.warp(t0 + 12 hours);
+        cat.publish(); // version 2, same entries (so the fixture's proofs fit both)
+        assertEq(cat.catalog().latestVersion(), 2);
+
+        vm.warp(t0 + 1 days + 10);
+        (uint32 v,) = gov.poolOf(token, 2);
+        (uint32 wv,) = weekly.poolOf(token, 1);
+        assertEq(v, 1, "the weekly epoch's version");
+        assertEq(v, wv);
+        // The curated phase still applies: without the picks the round waits for its grace.
+        IEpochGovernor.Draw[] memory plain = _draws(2);
+        vm.expectRevert(_incompleteCurated(2));
+        gov.prepareRound(token, 2, plain);
+
+        IEpochGovernor.CuratedDraw[] memory curated = _curated();
+        vm.expectEmit(address(gov));
+        emit IRotationGovernor.CuratedPicksUsed(token, 2, 1, 3, 3);
+        gov.prepareCuratedRound(token, 2, curated, _curatedDraws(2));
+        (v,) = gov.poolOf(token, 2);
+        assertEq(v, 1, "stored");
+        bytes32[] memory orgs = gov.roundOptionOrgIds(token, 2);
+        assertEq(orgs[0], _org(29));
+
+        // The weekly ballot of the same epoch includes the same picks.
+        bytes32[] memory taken = new bytes32[](3);
+        for (uint256 r; r < 3; ++r) {
+            taken[r] = _cause(_org(29 - r));
+        }
+        weekly.prepareCuratedBallot(
+            token, 1, curated, cat.drawsAfter(weekly, registry, token, 1, FOCUS_C, FOCUS_R, taken)
+        );
+        bytes32[] memory w = weekly.epochOptionOrgIds(token, 1);
+        assertEq(w[0], _org(29));
+        assertEq(w[1], _org(28));
+        assertEq(w[2], _org(27));
+    }
+
+    function test_builderCurators_setOnceByTheGovernor() public {
+        CatalogBallotBuilder b = gov.ballotBuilder();
+        assertEq(b.governor(), address(gov));
+        assertEq(address(b.curators()), address(curators));
+        assertEq(b.curationZero(), weekly.epochZeroStart());
+        assertEq(b.curationLength(), weekly.EPOCH_LENGTH());
+        vm.expectRevert(CatalogBallotBuilder.NotGovernor.selector);
+        b.setCurators(ICuratorRegistry(address(curators)), 0, 1);
+        vm.prank(address(gov));
+        vm.expectRevert(CatalogBallotBuilder.CuratorsAlreadySet.selector);
+        b.setCurators(ICuratorRegistry(address(curators)), 0, 1);
+        // The grace is the close buffer: 6 hours, or a quarter of a short period.
+        assertEq(b.curationGraceEnd(100, 100 + 1 days - 6 hours), 100 + 6 hours);
+        assertEq(b.curationGraceEnd(100, 100 + 7 days - 6 hours), 100 + 6 hours);
+        assertEq(b.curationGraceEnd(100, 100 + 45 minutes), 100 + 15 minutes);
+        assertEq(b.curationGraceEnd(100, 100 + 9 hours), 100 + 3 hours);
     }
 }
