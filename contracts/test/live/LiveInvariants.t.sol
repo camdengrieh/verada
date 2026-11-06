@@ -17,12 +17,14 @@ import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
 import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockEndaomentRegistry} from "../mocks/EndaomentMocks.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogFixture} from "../utils/CatalogFixture.sol";
 import {LiveBase} from "./LiveBase.sol";
 import {AdversarialOrg, LiveUSDC, SyncingRouter} from "./LiveMocks.sol";
 
@@ -35,6 +37,7 @@ struct LiveWorld {
     LiveDonationVault vault;
     RotationGovernor gov;
     MockVotingScheme scheme;
+    CatalogFixture cat;
     FeeConsolidator cons;
     LiveUSDC usdc;
     MockEndaomentRegistry endRegistry;
@@ -249,10 +252,24 @@ contract LiveHandler is Test {
         try w.vault.withdrawPlatform() {} catch {}
     }
 
+    /// @dev Prepares `token`'s round `target` as a keeper would, if nobody did.
+    function _prepareRound(address token, uint64 target) internal {
+        (IRotationGovernor.RoundStatus st,,,,,,) = w.gov.roundOf(token, target);
+        if (st != IRotationGovernor.RoundStatus.None) return;
+        (uint64 c, uint16 r) = w.gov.profileRegistry().focusOf(token);
+        try w.cat
+        .draws(IEpochGovernor(address(w.gov)), w.gov.causeRegistry(), token, target, c, r) returns (
+            IEpochGovernor.Draw[] memory d
+        ) {
+            try w.gov.prepareRound(token, target, d) {} catch {}
+        } catch {}
+    }
+
     function rotate(uint8 tokenSeed, uint8 choice, bool late) external {
         address token = address(tokens[tokenSeed % tokens.length]);
         uint64 target = w.gov.currentRotation(token) + 1;
         uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target);
+        _prepareRound(token, target);
         vm.prank(voter);
         try w.scheme.castBallot(address(w.gov), token, scope, abi.encode(uint8(choice % 3))) {}
         catch {
@@ -319,6 +336,7 @@ contract LiveInvariantsTest is LiveBase {
             vault: vault,
             gov: rgov,
             scheme: scheme,
+            cat: cat,
             cons: cons,
             usdc: usdc,
             endRegistry: endRegistry,

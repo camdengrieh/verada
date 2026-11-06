@@ -26,6 +26,7 @@ import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
 import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
@@ -45,13 +46,16 @@ import {
 } from "../consolidator/ConsolidatorMocks.sol";
 import {MockEndaomentRegistry, MockOrgFactory} from "../mocks/EndaomentMocks.sol";
 import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
-import {AdversarialOrg, LiveUSDC} from "./LiveMocks.sol";
+import {CatalogFixture} from "../utils/CatalogFixture.sol";
+import {AdversarialOrg, LiveProfiles, LiveUSDC} from "./LiveMocks.sol";
 
 /// @dev Live-donation fixture: real PoolManager and routers, real QuoteRegistry and
 ///      FeeConsolidator with seeded references, real CauseRegistry, RotationGovernor,
 ///      LiveDonationVault and a mined VeradaLiveHook. Tokens are real VeradaTokens; this test
 ///      contract plays the factory (configure, register, initialize). Endaoment is mocked
-///      (cause A: deployed org, cause B: undeployed org, cause C: deployed org).
+///      (cause A: deployed org, cause B: undeployed org, cause C: deployed org). The catalogue's
+///      launch focus (hunger x Africa) holds exactly orgs A, B and C, so every rotation ballot is
+///      `[A, B, C]`; tokens default to that focus.
 ///      Route pools (all hookless): quote/USDC; native ETH/USDC (WETH unwraps into it);
 ///      quote/WETH and ondoB/quote (for a three-hop route ondoB -> quote -> WETH -> ETH -> USDC).
 abstract contract LiveBase is Deployers {
@@ -70,6 +74,9 @@ abstract contract LiveBase is Deployers {
     uint256 internal constant MAX_SLIPPAGE_BPS = 300;
     uint256 internal constant MAX_DEVIATION_TICKS = 1000;
     uint24 internal constant BASE_BPS = 300;
+    /// @dev Launch focus (category bit 2, region bit 0); the catalogue gives it three entries.
+    uint64 internal constant FOCUS_CATEGORIES = uint64(1) << 2;
+    uint16 internal constant FOCUS_REGIONS = uint16(1);
 
     LiveUSDC internal usdc;
     MockOndoToken internal quote;
@@ -84,6 +91,7 @@ abstract contract LiveBase is Deployers {
     CauseRegistry internal causes;
     MockVotingScheme internal scheme;
     MockProfileRegistryLite internal profiles;
+    CatalogFixture internal cat;
     RotationGovernor internal rgov;
     LiveDonationVault internal vault;
     VeradaLiveHook internal hook;
@@ -93,12 +101,13 @@ abstract contract LiveBase is Deployers {
     PoolKey internal quoteWethKey;
     PoolKey internal ondoBQuoteKey;
 
-    bytes32 internal constant CAUSE_A = keccak256("cause-a");
-    bytes32 internal constant CAUSE_B = keccak256("cause-b");
-    bytes32 internal constant CAUSE_C = keccak256("cause-c");
     bytes32 internal constant ORG_A = bytes32("200049703");
     bytes32 internal constant ORG_B = bytes32("873024488");
     bytes32 internal constant ORG_C = bytes32("131788491");
+    /// @dev Catalogue cause ids (`CauseRegistry.causeIdOf`).
+    bytes32 internal constant CAUSE_A = keccak256(abi.encode(ORG_A));
+    bytes32 internal constant CAUSE_B = keccak256(abi.encode(ORG_B));
+    bytes32 internal constant CAUSE_C = keccak256(abi.encode(ORG_C));
     address internal orgA;
     address internal orgB;
     address internal orgC;
@@ -160,22 +169,21 @@ abstract contract LiveBase is Deployers {
         causes.addCause(CAUSE_B, ORG_B, orgB, "ipfs://b");
         causes.addCause(CAUSE_C, ORG_C, orgC, "ipfs://c");
 
+        _publishCatalog();
+
         scheme = new MockVotingScheme();
-        profiles = new MockProfileRegistryLite();
+        profiles = new LiveProfiles(FOCUS_CATEGORIES, FOCUS_REGIONS);
         rgov = new RotationGovernor(
             address(this),
             ICauseRegistry(address(causes)),
+            ICauseCatalog(address(cat.catalog())),
             ITokenProfileRegistry(address(profiles)),
             address(manager),
             IOutcomeVotingScheme(address(scheme)),
             _defaultParams()
         );
         scheme.setGovernor(address(rgov), true);
-        bytes32[] memory list = new bytes32[](3);
-        list[0] = CAUSE_A;
-        list[1] = CAUSE_B;
-        list[2] = CAUSE_C;
-        rgov.setDefaultShortlist(list);
+        causes.setMaterializer(address(rgov), true);
 
         vault = new LiveDonationVault(
             address(this),
@@ -194,6 +202,37 @@ abstract contract LiveBase is Deployers {
         cons.setSource(address(hook), true);
 
         _setupRoutePools();
+    }
+
+    /// @dev The catalogue: orgs A, B and C in hunger x Africa (the launch focus).
+    function _publishCatalog() internal {
+        cat = new CatalogFixture();
+        cat.add(cat.bucketOf(2, 0), ORG_A);
+        cat.add(cat.bucketOf(2, 0), ORG_B);
+        cat.add(cat.bucketOf(2, 0), ORG_C);
+        cat.publish();
+    }
+
+    /// @dev The rotation draws of `token`'s round `target`, as a keeper computes them.
+    function _roundDraws(address token, uint64 target)
+        internal
+        view
+        returns (IEpochGovernor.Draw[] memory)
+    {
+        (uint64 c, uint16 r) = rgov.profileRegistry().focusOf(token);
+        return cat.draws(IEpochGovernor(address(rgov)), causes, token, target, c, r);
+    }
+
+    /// @dev Prepares (and opens) `token`'s round `target`, as a keeper does.
+    function _prepareRound(address token, uint64 target) internal {
+        rgov.prepareRound(token, target, _roundDraws(token, target));
+    }
+
+    /// @dev Prepares the round for the next rotation if nobody did; returns its target.
+    function _ensureRound(address token) internal returns (uint64 target) {
+        target = rgov.currentRotation(token) + 1;
+        (IRotationGovernor.RoundStatus st,,,,,,) = rgov.roundOf(token, target);
+        if (st == IRotationGovernor.RoundStatus.None) _prepareRound(token, target);
     }
 
     function _deployHook(address factory_) internal returns (VeradaLiveHook h) {

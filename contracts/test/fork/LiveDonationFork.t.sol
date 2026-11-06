@@ -18,6 +18,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {HookMiner} from "../../script/HookMiner.sol";
+import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {FeeConsolidator, IConsolidatorRegistry} from "../../src/FeeConsolidator.sol";
 import {FeeVault} from "../../src/FeeVault.sol";
@@ -26,6 +27,7 @@ import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
 import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
@@ -39,7 +41,9 @@ import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingS
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockDistributor, MockGovernor} from "../consolidator/ConsolidatorMocks.sol";
-import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {LiveProfiles} from "../live/LiveMocks.sol";
+import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogPublish} from "../utils/CatalogFixture.sol";
 
 interface IWETH9Live is IERC20 {
     function deposit() external payable;
@@ -79,8 +83,11 @@ contract LiveDonationForkTest is Test {
     PoolModifyLiquidityTest internal liquidityRouter;
     PoolSwapTest internal swapRouter;
 
-    bytes32 internal causeDeployed = keccak256("wikimedia-foundation");
-    bytes32 internal causeFresh = keccak256("fresh-org");
+    /// @dev Catalogue cause ids; the token focus (hunger x Africa) holds exactly these two orgs.
+    bytes32 internal causeDeployed = keccak256(abi.encode(ORG_DEPLOYED));
+    bytes32 internal causeFresh = keccak256(abi.encode(ORG_FRESH));
+    bytes32[] internal poolOrgs;
+    bytes32[] internal poolLeaves;
     address internal trader = makeAddr("trader");
     address internal treasury = makeAddr("treasury");
 
@@ -113,20 +120,25 @@ contract LiveDonationForkTest is Test {
         causes.addCause(causeDeployed, ORG_DEPLOYED, ORG_DEPLOYED_ADDR, "wikimedia-foundation");
         causes.addCause(causeFresh, ORG_FRESH, eFactory.computeOrgAddress(ORG_FRESH), "fresh");
 
+        CauseCatalog catalog = new CauseCatalog(address(this));
+        poolOrgs.push(ORG_DEPLOYED);
+        poolOrgs.push(ORG_FRESH);
+        poolLeaves = CatalogPublish.publish(catalog, poolOrgs);
+
         scheme = new MockVotingScheme();
         gov = new RotationGovernor(
             address(this),
             ICauseRegistry(address(causes)),
-            ITokenProfileRegistry(address(new MockProfileRegistryLite())),
+            ICauseCatalog(address(catalog)),
+            ITokenProfileRegistry(
+                address(new LiveProfiles(CatalogPublish.CATEGORIES, CatalogPublish.REGIONS))
+            ),
             address(PM),
             IOutcomeVotingScheme(address(scheme)),
             IRotationGovernor.Params(24 hours, 3 days, 7 days, 1000, 50)
         );
         scheme.setGovernor(address(gov), true);
-        bytes32[] memory shortlist = new bytes32[](2);
-        shortlist[0] = causeDeployed;
-        shortlist[1] = causeFresh;
-        gov.setDefaultShortlist(shortlist);
+        causes.setMaterializer(address(gov), true);
 
         vault = new LiveDonationVault(
             address(this),
@@ -284,6 +296,7 @@ contract LiveDonationForkTest is Test {
         uint64 r = 25;
         vm.warp(gov.rotationStart(address(t), r) + 60);
         uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, r + 1);
+        gov.prepareRound(address(t), r + 1, CatalogPublish.allDraws(poolOrgs, poolLeaves));
         vm.prank(voter);
         scheme.castBallot(address(gov), address(t), scope, abi.encode(uint8(1)));
         (,, uint40 voteEnd,,,,) = gov.roundOf(address(t), r + 1);

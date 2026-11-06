@@ -353,7 +353,7 @@ contract MockProfileRegistryLite {
         _regionMask[token] = regionMask;
     }
 
-    function focusOf(address token) external view returns (uint64, uint16) {
+    function focusOf(address token) public view virtual returns (uint64, uint16) {
         return (_categoryMask[token], _regionMask[token]);
     }
 }

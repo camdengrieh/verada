@@ -3,10 +3,13 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
+import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
+import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
@@ -15,8 +18,9 @@ import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {RotationScheduleLib} from "../../src/libraries/RotationScheduleLib.sol";
 import {MockEndaomentRegistry, MockOrgFactory, MockUSDC} from "../mocks/EndaomentMocks.sol";
 import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogPublish} from "../utils/CatalogFixture.sol";
 
-/// @dev Drives a live token's holders through transfers, rotation polls (open, vote, close,
+/// @dev Drives a live token's holders through transfers, rotation polls (prepare, vote, close,
 ///      tally, finalize, sometimes late) and period proposals, recording what the governor did.
 contract RotationHandler is Test {
     RotationGovernor public gov;
@@ -44,18 +48,25 @@ contract RotationHandler is Test {
     uint256 public executedChanges;
     /// @dev Latest proposal the handler created (the one it votes on and settles).
     uint64 public pendingId;
+    /// @dev The token's focus pool and its catalogue leaves (rounds are prepared from them).
+    bytes32[] internal _poolOrgs;
+    bytes32[] internal _poolLeaves;
 
     constructor(
         RotationGovernor gov_,
         MockVotingScheme scheme_,
         VeradaToken token_,
         address[] memory voters_,
-        bytes32 initialCause
+        bytes32 initialCause,
+        bytes32[] memory poolOrgs_,
+        bytes32[] memory poolLeaves_
     ) {
         gov = gov_;
         scheme = scheme_;
         token = token_;
         voters = voters_;
+        _poolOrgs = poolOrgs_;
+        _poolLeaves = poolLeaves_;
         allowedCause[initialCause] = true;
         _observe();
     }
@@ -112,6 +123,7 @@ contract RotationHandler is Test {
         address voter = voters[voterSeed % voters.length];
         uint64 target = gov.currentRotation(address(token)) + 1;
         uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target);
+        _prepare(target);
         vm.prank(voter);
         try scheme.castBallot(address(gov), address(token), scope, abi.encode(uint8(choice % 3))) {
             (uint40 holdFrom, uint40 snap) = gov.roundHoldWindow(address(token), target);
@@ -124,6 +136,14 @@ contract RotationHandler is Test {
             authorizedWeight[scope] += w;
         } catch {}
         _observe();
+    }
+
+    /// @dev Prepares round `target` as a keeper would, if nobody did.
+    function _prepare(uint64 target) internal {
+        (IRotationGovernor.RoundStatus st,,,,,,) = gov.roundOf(address(token), target);
+        if (st != IRotationGovernor.RoundStatus.None) return;
+        IEpochGovernor.Draw[] memory d = CatalogPublish.allDraws(_poolOrgs, _poolLeaves);
+        try gov.prepareRound(address(token), target, d) {} catch {}
     }
 
     function settleRound(uint8 lateSeed) external {
@@ -233,16 +253,21 @@ contract RotationInvariantsTest is Test {
         CauseRegistry causes =
             new CauseRegistry(address(this), IEndaomentOrgFundFactory(address(endFactory)));
         bytes32[] memory list = new bytes32[](3);
+        bytes32[] memory orgs = new bytes32[](3);
         for (uint256 i; i < 3; ++i) {
-            bytes32 orgId = bytes32(uint256(500 + i));
-            list[i] = keccak256(abi.encode("c", i));
-            causes.addCause(list[i], orgId, endFactory.computeOrgAddress(orgId), "");
+            orgs[i] = bytes32(uint256(500 + i));
+            list[i] = causes.causeIdOf(orgs[i]);
+            causes.addCause(list[i], orgs[i], endFactory.computeOrgAddress(orgs[i]), "");
         }
+        CauseCatalog catalog = new CauseCatalog(address(this));
+        bytes32[] memory leaves = CatalogPublish.publish(catalog, orgs);
+        MockProfileRegistryLite profiles = new MockProfileRegistryLite();
         scheme = new MockVotingScheme();
         gov = new RotationGovernor(
             address(this),
             ICauseRegistry(address(causes)),
-            ITokenProfileRegistry(address(new MockProfileRegistryLite())),
+            ICauseCatalog(address(catalog)),
+            ITokenProfileRegistry(address(profiles)),
             makeAddr("pm"),
             IOutcomeVotingScheme(address(scheme)),
             IRotationGovernor.Params({
@@ -254,8 +279,8 @@ contract RotationInvariantsTest is Test {
             })
         );
         scheme.setGovernor(address(gov), true);
+        causes.setMaterializer(address(gov), true);
         gov.setVault(address(this));
-        gov.setDefaultShortlist(list);
 
         token = new VeradaToken("T", "T", "", address(this), address(this));
         voters.push(makeAddr("v0"));
@@ -269,9 +294,10 @@ contract RotationInvariantsTest is Test {
         }
         // Holders hold for longer than any hold window (up to a week) before registration.
         vm.warp(block.timestamp + 8 days);
+        profiles.setFocus(address(token), CatalogPublish.CATEGORIES, CatalogPublish.REGIONS);
         gov.registerToken(address(token), list[0], RotationPeriod.OneHour);
 
-        handler = new RotationHandler(gov, scheme, token, voters, list[0]);
+        handler = new RotationHandler(gov, scheme, token, voters, list[0], orgs, leaves);
         targetContract(address(handler));
     }
 

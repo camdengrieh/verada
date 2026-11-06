@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {IEpochGovernor} from "./IEpochGovernor.sol";
+
 /// @notice Rotation length a live-donation token can use. Chosen by the creator at launch and
 ///         changeable later by a private holder vote.
 enum RotationPeriod {
@@ -16,11 +18,23 @@ enum RotationPeriod {
 ///         anchor-based schedule; during rotation `n` holders vote privately (through the pluggable
 ///         voting scheme) on the cause for rotation `n + 1`. Holders can also change the rotation
 ///         period through a private yes/no proposal. With no result, the current cause continues.
+/// @dev Candidates are chosen exactly as for a weekly ballot (`IEpochGovernor`,
+///      `CatalogBallotLib`): the controller's pins (catalogue entries proven inside the token's
+///      focus), then curated picks from the curator registry, then deterministic rotation draws
+///      over the focus pool of the catalogue version in effect when the poll's vote starts. Anyone
+///      prepares a round's ballot by supplying exactly the drawn entries with their Merkle proofs
+///      (`prepareRound`, `prepareCuratedRound`); the ballot is frozen then, and ballots are
+///      refused until it is. Only the winner is written to the cause registry. The pin, draw and
+///      curated-pick structs are `IEpochGovernor`'s, and the views `poolOf`, `shortlistFor`,
+///      `drawIndex`, `ballotSize` and `DRAW_FACTOR` have the weekly signatures, with the target
+///      rotation in place of the epoch, so the same tooling fills both.
 interface IRotationGovernor {
     /// @notice Status of the rotation poll for one target rotation.
     /// @dev `Applied`: the winner receives fees from `effectiveFrom`. `NoChange`: no ballots, or
     ///      no option received weight. `Stale`: a newer target was already applied. `InactiveWinner`:
-    ///      the winning cause is no longer active in the cause registry.
+    ///      the winning cause was blocked in the cause registry after the ballot was prepared.
+    ///      `NoBallot`: the prepared ballot had fewer than `MIN_OPTIONS` options, so no poll was
+    ///      opened. Every final status other than `Applied` keeps the current cause.
     enum RoundStatus {
         None,
         Open,
@@ -28,7 +42,8 @@ interface IRotationGovernor {
         NoChange,
         Applied,
         Stale,
-        InactiveWinner
+        InactiveWinner,
+        NoBallot
     }
 
     /// @notice State of a period-change proposal.
@@ -66,15 +81,36 @@ interface IRotationGovernor {
         RotationPeriod period,
         uint256 anchorTime
     );
+    /// @notice The token's pins (cause ids), used by every round prepared from now on.
     event ShortlistSet(address indexed token, bytes32[] causes);
-    event DefaultShortlistSet(bytes32[] causes);
     event SchemeUpdated(address indexed scheme);
+    /// @notice Curator registry set; `epochZeroStart` and `epochLength` are its weekly clock.
+    event CuratorRegistrySet(address curators, uint256 epochZeroStart, uint256 epochLength);
     event ParamsUpdated(Params params);
     event VaultSet(address indexed vault);
     event MinVotersSet(uint32 minVoters);
 
     // ---- events: rotation polls
 
+    /// @notice A round's ballot is fixed. `pinned` options come first, then curated picks, then
+    ///      rotation draws. With fewer than `MIN_OPTIONS` options the round is `NoBallot`.
+    event BallotPrepared(
+        address indexed token,
+        uint64 indexed target,
+        uint32 catalogVersion,
+        uint256 poolSize,
+        uint8 pinned,
+        bytes32[] options
+    );
+    /// @notice Curated phase of a round: `drawn` picks checked, `included` of them on the ballot,
+    ///         from the curations of weekly epoch `curationEpoch`.
+    event CuratedPicksUsed(
+        address indexed token,
+        uint64 indexed target,
+        uint256 curationEpoch,
+        uint8 drawn,
+        uint8 included
+    );
     event RoundOpened(
         address indexed token,
         uint64 indexed target,
@@ -139,8 +175,26 @@ interface IRotationGovernor {
 
     error InactiveCause(bytes32 causeId);
     error InvalidShortlist();
+    /// @notice The round was prepared with fewer than `MIN_OPTIONS` options, so it takes no
+    ///         ballots.
     error NoShortlist(address token);
-    error TooManyOptions(uint256 count, uint256 max);
+
+    // ---- errors: catalogue ballots (same signatures, so same selectors, as `IEpochGovernor`)
+
+    error NotInCatalog(bytes32 orgId);
+    error OutOfFocus(bytes32 orgId, uint16 bucket);
+    error PoolTooSmall(address token, uint256 poolSize);
+    /// @dev `round` is the target rotation.
+    error IncompleteBallot(address token, uint256 round, uint256 needed);
+    error TooManyDraws(uint256 supplied, uint256 used);
+    error InvalidDraw(uint256 k);
+    /// @dev `round` is the target rotation.
+    error IncompleteCuratedBallot(address token, uint256 round, uint256 needed);
+    error TooManyCuratedDraws(uint256 supplied, uint256 used);
+    error InvalidCuratedDraw(uint256 k);
+    error CuratorRegistryAlreadySet();
+    /// @notice The curator registry has no weekly clock (its epoch governor is not set).
+    error CuratorClockNotSet();
 
     // ---- errors: rounds
 
@@ -178,8 +232,33 @@ interface IRotationGovernor {
     // ---- registration
 
     /// @notice Registers a live-donation token with its initial cause and rotation period. The
-    ///         schedule is anchored at the current time (rotation 0 starts now). Vault only.
+    ///         schedule is anchored at the current time (rotation 0 starts now). The token's focus
+    ///         must give the latest catalogue at least `MIN_OPTIONS` entries, as for a weekly
+    ///         token. Vault only.
     function registerToken(address token, bytes32 initialCause, RotationPeriod period) external;
+
+    // ---- ballots
+
+    /// @notice Sets `token`'s pins: up to `PINNED_MAX` distinct, unblocked entries of the latest
+    ///         catalogue version inside the token's focus, each with its Merkle proof. Empty
+    ///         clears them. They apply to every round prepared from now on; prepared rounds keep
+    ///         their ballot. Profile controller only.
+    function setShortlist(address token, IEpochGovernor.Pin[] calldata pins) external;
+
+    /// @notice Prepares and opens the poll for rotation `target` of `token` (the next rotation)
+    ///         from the pins and `draws`: exactly the rotation draws the governor derives, each
+    ///         with its catalogue proof. Permissionless; once per round, during its vote window.
+    function prepareRound(address token, uint64 target, IEpochGovernor.Draw[] calldata draws)
+        external;
+
+    /// @notice As `prepareRound`, with the curated picks taken before the rotation draws (the
+    ///         curations of weekly epoch `curationEpochOf(token, target)`).
+    function prepareCuratedRound(
+        address token,
+        uint64 target,
+        IEpochGovernor.CuratedDraw[] calldata curated,
+        IEpochGovernor.Draw[] calldata draws
+    ) external;
 
     // ---- views (O(1), never revert, zero values for unknown tokens)
 
@@ -229,8 +308,34 @@ interface IRotationGovernor {
     /// @notice State of period-change proposal `id`.
     function proposalState(uint64 id) external view returns (ProposalState);
 
-    /// @notice The options a new round of `token` would use: its own shortlist, or the default.
+    /// @notice Cause ids of `token`'s pins (the first options of every round prepared now).
     function shortlistOf(address token) external view returns (bytes32[] memory);
+
+    /// @notice Cause ids of the pins a round `target` prepared now would start with.
+    function shortlistFor(address token, uint256 target) external view returns (bytes32[] memory);
+
+    /// @notice Catalogue version and focus pool size of round `target`: as stored once prepared,
+    ///         otherwise the version in effect at the round's vote start (zero values if none).
+    function poolOf(address token, uint256 target)
+        external
+        view
+        returns (uint32 version, uint256 poolSize);
+
+    /// @notice Pool index of rotation draw `k` of round `target` (as `IEpochGovernor.drawIndex`).
+    function drawIndex(address token, uint256 target, uint32 version, uint256 k, uint256 poolSize)
+        external
+        pure
+        returns (uint256);
+
+    /// @notice Options a round prepared now holds at most: `min(MAX_OPTIONS, scheme.MAX_OPTIONS())`.
+    function ballotSize() external view returns (uint256);
+
+    /// @notice Weekly epoch whose curations feed round `target` (the one containing its vote
+    ///         start); `ok` is false without a curator registry or a schedule for `target`.
+    function curationEpochOf(address token, uint256 target)
+        external
+        view
+        returns (bool ok, uint256 epoch);
 
     /// @notice Whether `token` is registered.
     function isRegistered(address token) external view returns (bool);

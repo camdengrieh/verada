@@ -18,12 +18,14 @@ import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
 import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockEndaomentRegistry} from "../mocks/EndaomentMocks.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogFixture} from "../utils/CatalogFixture.sol";
 import {LiveFactoryBase} from "./LiveFactoryBase.sol";
 import {AdversarialOrg} from "./LiveMocks.sol";
 
@@ -35,6 +37,7 @@ struct FactoryWorld {
     LiveDonationVault vault;
     RotationGovernor gov;
     MockVotingScheme scheme;
+    CatalogFixture cat;
     FeeConsolidator cons;
     MockEndaomentRegistry endRegistry;
     AdversarialOrg orgA;
@@ -323,6 +326,7 @@ contract LiveFactoryHandler is Test {
     function vote(uint8 tokenSeed, uint8 voterSeed, uint8 choice) external observed {
         address token = tokens[tokenSeed % tokens.length];
         uint64 target = w.gov.currentRotation(token) + 1;
+        _prepareRound(token, target);
         vm.prank(voters[voterSeed % voters.length]);
         try w.scheme
             .castBallot(
@@ -334,6 +338,19 @@ contract LiveFactoryHandler is Test {
             if (_votedTargets[token].length == 0 || _lastVoted(token) != target) {
                 _votedTargets[token].push(target);
             }
+        } catch {}
+    }
+
+    /// @dev Prepares `token`'s round `target` as a keeper would, if nobody did.
+    function _prepareRound(address token, uint64 target) internal {
+        (IRotationGovernor.RoundStatus st,,,,,,) = w.gov.roundOf(token, target);
+        if (st != IRotationGovernor.RoundStatus.None) return;
+        (uint64 c, uint16 r) = w.gov.profileRegistry().focusOf(token);
+        try w.cat
+        .draws(IEpochGovernor(address(w.gov)), w.gov.causeRegistry(), token, target, c, r) returns (
+            IEpochGovernor.Draw[] memory d
+        ) {
+            try w.gov.prepareRound(token, target, d) {} catch {}
         } catch {}
     }
 
@@ -464,6 +481,7 @@ contract LiveFactoryInvariantsTest is LiveFactoryBase {
                 vault: vault,
                 gov: rgov,
                 scheme: scheme,
+                cat: cat,
                 cons: cons,
                 endRegistry: endRegistry,
                 orgA: org,

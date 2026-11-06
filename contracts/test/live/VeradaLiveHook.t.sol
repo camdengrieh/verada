@@ -646,7 +646,7 @@ contract VeradaLiveHookTest is LiveBase {
         uint64 c = 1;
         while (rgov.rotationStart(t, c) < s0 + lookback + 1) ++c;
         vm.warp(rgov.rotationStart(t, c) + 1);
-        uint64 tgt = rgov.openRound(t);
+        uint64 tgt = _ensureRound(t);
         uint8 choice = target == CAUSE_A ? 0 : target == CAUSE_B ? 1 : 2;
         vm.prank(trader);
         scheme.castBallot(address(rgov), t, (uint256(1) << 248) | tgt, abi.encode(choice));

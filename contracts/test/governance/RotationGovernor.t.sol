@@ -3,10 +3,13 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
+import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
+import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
@@ -14,13 +17,17 @@ import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaoment
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockEndaomentRegistry, MockOrgFactory, MockUSDC} from "../mocks/EndaomentMocks.sol";
 import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogPublish, CatalogTree} from "../utils/CatalogFixture.sol";
 
 /// @dev Shared governor fixture: a real VeradaToken whose supply is split between the pool
-///      manager stand-in (70%) and three holders, four active causes and the plaintext scheme.
+///      manager stand-in (70%) and three holders, twelve active catalogue causes and the
+///      plaintext scheme. The token's focus (hunger x Africa) holds causes 0..2 only, a pool no
+///      larger than the ballot, so every round's ballot is those three in order.
 abstract contract RotationGovernorBase is Test {
     MockVotingScheme internal scheme;
     MockProfileRegistryLite internal profiles;
     CauseRegistry internal causes;
+    CauseCatalog internal catalog;
     RotationGovernor internal gov;
     VeradaToken internal token;
 
@@ -32,6 +39,10 @@ abstract contract RotationGovernorBase is Test {
     address internal controller = makeAddr("controller");
 
     bytes32[] internal causeIds;
+    bytes32[] internal orgIds;
+    /// @dev The focus pool (orgs of causes 0..2) and its catalogue leaves.
+    bytes32[] internal poolOrgs;
+    bytes32[] internal poolLeaves;
     uint256 internal t0;
 
     function _params() internal pure virtual returns (IRotationGovernor.Params memory) {
@@ -52,36 +63,61 @@ abstract contract RotationGovernorBase is Test {
         MockOrgFactory endFactory = new MockOrgFactory(endRegistry);
         causes = new CauseRegistry(address(this), IEndaomentOrgFundFactory(address(endFactory)));
         for (uint256 i; i < 12; ++i) {
-            bytes32 id = keccak256(abi.encode("cause", i));
             bytes32 orgId = bytes32(uint256(1000 + i));
+            bytes32 id = causes.causeIdOf(orgId);
             causes.addCause(id, orgId, endFactory.computeOrgAddress(orgId), "");
             causeIds.push(id);
+            orgIds.push(orgId);
+            if (i < 3) poolOrgs.push(orgId);
         }
+        catalog = new CauseCatalog(address(this));
+        poolLeaves = CatalogPublish.publish(catalog, poolOrgs);
         scheme = new MockVotingScheme();
         profiles = new MockProfileRegistryLite();
         gov = new RotationGovernor(
             address(this),
             ICauseRegistry(address(causes)),
+            ICauseCatalog(address(catalog)),
             ITokenProfileRegistry(address(profiles)),
             pm,
             IOutcomeVotingScheme(address(scheme)),
             _params()
         );
         scheme.setGovernor(address(gov), true);
+        causes.setMaterializer(address(gov), true);
         gov.setVault(address(this));
-        bytes32[] memory list = new bytes32[](3);
-        list[0] = causeIds[0];
-        list[1] = causeIds[1];
-        list[2] = causeIds[2];
-        gov.setDefaultShortlist(list);
 
         token = _newToken();
         // Holders hold for a week before registration, so every hold window of the fixture's
         // early rotations is covered.
         vm.warp(block.timestamp + 7 days);
         t0 = block.timestamp;
-        gov.registerToken(address(token), causeIds[0], period);
+        _register(address(token), period);
         profiles.register(address(token), controller);
+    }
+
+    /// @dev Gives `t` the fixture's focus and registers it with cause 0.
+    function _register(address t, RotationPeriod period) internal {
+        profiles.setFocus(t, CatalogPublish.CATEGORIES, CatalogPublish.REGIONS);
+        gov.registerToken(t, causeIds[0], period);
+    }
+
+    /// @dev The draws of the fixture's pool: every entry in order (it fits the ballot).
+    function _draws() internal view returns (IEpochGovernor.Draw[] memory) {
+        return CatalogPublish.allDraws(poolOrgs, poolLeaves);
+    }
+
+    /// @dev Prepares (and opens) round `target` of `t`.
+    function _prep(address t, uint64 target) internal {
+        gov.prepareRound(t, target, _draws());
+    }
+
+    /// @dev The ballot every fixture round gets: causes 0..2.
+    function _poolCauses() internal view returns (bytes32[] memory l) {
+        l = new bytes32[](3);
+        for (uint256 i; i < 3; ++i) {
+            l[i] = causeIds[i];
+        }
     }
 
     function _newToken() internal returns (VeradaToken t) {
@@ -101,7 +137,9 @@ abstract contract RotationGovernorBase is Test {
         return PollScopeLib.encode(PollScopeLib.KIND_PERIOD, id);
     }
 
+    /// @dev Prepares round `target` first if nobody did.
     function _vote(address voter, uint64 target, uint8 choice) internal {
+        if (_status(target) == IRotationGovernor.RoundStatus.None) _prep(address(token), target);
         vm.prank(voter);
         scheme.castBallot(address(gov), address(token), _rot(target), abi.encode(choice));
     }
@@ -204,7 +242,7 @@ contract RotationGovernorTest is RotationGovernorBase {
         uint256[5] memory buffers = [uint256(900), 10_800, 21_600, 21_600, 21_600];
         for (uint8 i; i < 5; ++i) {
             VeradaToken t = _newToken();
-            gov.registerToken(address(t), causeIds[0], RotationPeriod(i));
+            _register(address(t), RotationPeriod(i));
             uint256 s0 = gov.rotationStart(address(t), 0);
             assertEq(gov.rotationStart(address(t), 1) - s0, lengths[i]);
             (uint40 snap, uint40 vs, uint40 ve) = gov.pollWindow(address(t), 1);
@@ -220,7 +258,9 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_openRound_explicit() public {
         vm.warp(t0 + 1 days + 10);
-        bytes32[] memory opts = gov.shortlistOf(address(token));
+        bytes32[] memory opts = _poolCauses();
+        vm.expectEmit(address(gov));
+        emit IRotationGovernor.BallotPrepared(address(token), 2, 1, 3, 0, opts);
         vm.expectEmit(address(gov));
         emit IRotationGovernor.RoundOpened(
             address(token),
@@ -231,19 +271,32 @@ contract RotationGovernorTest is RotationGovernorBase {
             uint40(t0 + 2 days - 6 hours),
             address(scheme)
         );
-        uint64 target = gov.openRound(address(token));
-        assertEq(target, 2);
+        _prep(address(token), 2);
         assertEq(uint8(_status(2)), uint8(IRotationGovernor.RoundStatus.Open));
         vm.expectRevert(
             abi.encodeWithSelector(
                 IRotationGovernor.RoundAlreadyOpened.selector, address(token), uint64(2)
             )
         );
+        _prep(address(token), 2);
+        // Without draws the pool cannot fill the ballot.
+        vm.warp(t0 + 2 days + 10);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IEpochGovernor.IncompleteBallot.selector, address(token), uint256(3), uint256(0)
+            )
+        );
         gov.openRound(address(token));
     }
 
-    function test_openRound_lazilyOnFirstBallot() public {
+    function test_noLazyOpening_ballotBeforePreparationReverts() public {
         vm.warp(t0 + 1 days + 10);
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(IRotationGovernor.RoundNotOpened.selector, address(token), 2)
+        );
+        scheme.castBallot(address(gov), address(token), _rot(2), abi.encode(uint8(1)));
+        assertEq(uint8(_status(2)), uint8(IRotationGovernor.RoundStatus.None));
         _vote(alice, 2, 1);
         (IRotationGovernor.RoundStatus st,,, uint32 voters,,, bytes32[] memory opts) =
             gov.roundOf(address(token), 2);
@@ -255,16 +308,18 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_openRound_afterVoteEnd_closed() public {
         vm.warp(t0 + 2 days - 6 hours);
+        IEpochGovernor.Draw[] memory d = _draws();
         vm.expectRevert(IRotationGovernor.VotingClosed.selector);
-        gov.openRound(address(token));
+        gov.prepareRound(address(token), 2, d);
     }
 
     function test_rotationOne_hasNoWeight() public {
         // For a token registered as it is created (as the factory does), the round for
         // rotation 1 snapshots before launch, so nobody can vote in it.
         VeradaToken fresh = _newToken();
-        gov.registerToken(address(fresh), causeIds[0], RotationPeriod.OneDay);
+        _register(address(fresh), RotationPeriod.OneDay);
         vm.warp(block.timestamp + 10);
+        _prep(address(fresh), 1);
         vm.prank(alice);
         vm.expectRevert(IRotationGovernor.InvalidVote.selector);
         scheme.castBallot(address(gov), address(fresh), _rot(1), abi.encode(uint8(1)));
@@ -272,6 +327,7 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_snapshot_buyThenVoteHasNoWeight() public {
         vm.warp(t0 + 1 days + 10);
+        _prep(address(token), 2);
         vm.prank(alice);
         token.transfer(dave, 1e9 * 1e18);
         vm.prank(dave);
@@ -284,6 +340,7 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_snapshot_flashTransferSameBlock() public {
         vm.warp(t0 + 1 days + 10);
+        _prep(address(token), 2);
         vm.prank(alice);
         token.transfer(dave, 20e9 * 1e18);
         vm.prank(dave);
@@ -329,7 +386,7 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_schemeSwap_onlyAffectsNewRounds() public {
         vm.warp(t0 + 1 days + 10);
-        gov.openRound(address(token));
+        _prep(address(token), 2);
         MockVotingScheme s2 = new MockVotingScheme();
         s2.setGovernor(address(gov), true);
         gov.setScheme(IOutcomeVotingScheme(address(s2)));
@@ -361,7 +418,7 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_close_zeroVoters_noChange() public {
         vm.warp(t0 + 1 days + 10);
-        gov.openRound(address(token));
+        _prep(address(token), 2);
         vm.warp(_voteEnd(2));
         vm.expectEmit(address(gov));
         emit IRotationGovernor.RoundFinalized(
@@ -447,6 +504,7 @@ contract RotationGovernorTest is RotationGovernorBase {
     function test_finalize_inactiveWinner() public {
         vm.warp(t0 + 1 days + 10);
         _vote(alice, 2, 2);
+        // Blocked after the ballot was prepared: the round keeps it, the result does not apply.
         causes.deactivateCause(causeIds[2]);
         _settle(2);
         assertEq(uint8(_status(2)), uint8(IRotationGovernor.RoundStatus.InactiveWinner));
@@ -503,85 +561,90 @@ contract RotationGovernorTest is RotationGovernorBase {
         assertEq(_active(), causeIds[2]);
     }
 
-    // ------------------------------------------------------------------ shortlists
+    // ------------------------------------------------------------------ catalogue ballots
 
-    function _list(uint256 n, uint256 from) internal view returns (bytes32[] memory l) {
-        l = new bytes32[](n);
-        for (uint256 i; i < n; ++i) {
-            l[i] = causeIds[from + i];
+    function test_ballotIsTheFocusPool_andTheSchemeCapsIt() public {
+        vm.warp(t0 + 1 days + 10);
+        (uint32 v, uint256 pool) = gov.poolOf(address(token), 2);
+        assertEq(v, 1);
+        assertEq(pool, 3);
+        assertEq(gov.ballotSize(), 10);
+        vm.mockCall(address(scheme), abi.encodeWithSignature("MAX_OPTIONS()"), abi.encode(uint8(2)));
+        assertEq(gov.maxOptions(), 2);
+        assertEq(gov.ballotSize(), 2);
+        // Two slots for a pool of three: hash draws `drawIndex(token, 2, 1, k, 3)`, repeats
+        // skipped, until two distinct causes are drawn.
+        IEpochGovernor.Draw[] memory d = new IEpochGovernor.Draw[](6);
+        bytes32 first;
+        uint256 k;
+        for (; k < 6; ++k) {
+            uint256 idx = gov.drawIndex(address(token), 2, 1, k, 3);
+            assertEq(idx, uint256(keccak256(abi.encode(address(token), 2, uint32(1), k))) % 3);
+            d[k] = IEpochGovernor.Draw(poolOrgs[idx], CatalogTree.proof(poolLeaves, idx));
+            if (k == 0) first = poolOrgs[idx];
+            else if (poolOrgs[idx] != first) break;
         }
+        uint256 used = k + 1;
+        assembly ("memory-safe") {
+            mstore(d, 6)
+        }
+        vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.TooManyDraws.selector, 6, used));
+        gov.prepareRound(address(token), 2, d);
+        assembly ("memory-safe") {
+            mstore(d, used)
+        }
+        gov.prepareRound(address(token), 2, d);
+        bytes32[] memory orgs = gov.roundOptionOrgIds(address(token), 2);
+        assertEq(orgs.length, 2);
+        assertEq(orgs[0], first);
+        assertEq(orgs[1], d[used - 1].orgId);
     }
 
-    function test_shortlist_bounds() public {
+    function test_winnerIsMaterialized_andPaidFromTheRegistry() public {
+        // A catalogue org that was never added to the registry wins.
+        bytes32 newOrg = bytes32(uint256(5000));
+        bytes32[] memory orgs = new bytes32[](2);
+        orgs[0] = newOrg;
+        orgs[1] = orgIds[1];
+        CauseCatalog c2 = new CauseCatalog(address(this));
+        bytes32[] memory leaves = CatalogPublish.publish(c2, orgs);
+        RotationGovernor g2 = new RotationGovernor(
+            address(this),
+            ICauseRegistry(address(causes)),
+            ICauseCatalog(address(c2)),
+            ITokenProfileRegistry(address(profiles)),
+            pm,
+            IOutcomeVotingScheme(address(scheme)),
+            _params()
+        );
+        scheme.setGovernor(address(g2), true);
+        causes.setMaterializer(address(g2), true);
+        g2.setVault(address(this));
+        vm.warp(block.timestamp + 1);
+        g2.registerToken(address(token), causeIds[0], RotationPeriod.OneDay);
+        uint256 start = block.timestamp;
+        vm.warp(start + 1 days + 10);
+        g2.prepareRound(address(token), 2, CatalogPublish.allDraws(orgs, leaves));
+        bytes32 newCause = causes.causeIdOf(newOrg);
+        assertFalse(causes.exists(newCause), "not materialized by preparation");
+        assertEq(g2.roundOptionOrgIds(address(token), 2)[0], newOrg);
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(IRotationGovernor.NotController.selector, address(token), alice)
-        );
-        gov.setShortlist(address(token), _list(2, 0));
-        vm.startPrank(controller);
-        vm.expectRevert(IRotationGovernor.InvalidShortlist.selector);
-        gov.setShortlist(address(token), _list(1, 0));
-        vm.expectRevert(IRotationGovernor.InvalidShortlist.selector);
-        gov.setShortlist(address(token), _list(11, 0));
-        bytes32[] memory dup = _list(2, 0);
-        dup[1] = dup[0];
-        vm.expectRevert(IRotationGovernor.InvalidShortlist.selector);
-        gov.setShortlist(address(token), dup);
-        bytes32[] memory zero = _list(2, 0);
-        zero[1] = bytes32(0);
-        vm.expectRevert(IRotationGovernor.InvalidShortlist.selector);
-        gov.setShortlist(address(token), zero);
-        vm.stopPrank();
-        causes.deactivateCause(causeIds[4]);
-        vm.prank(controller);
-        vm.expectRevert(
-            abi.encodeWithSelector(IRotationGovernor.InactiveCause.selector, causeIds[4])
-        );
-        gov.setShortlist(address(token), _list(2, 3));
-
-        // Ten distinct active causes is the maximum.
-        bytes32[] memory ten = new bytes32[](10);
-        for (uint256 i; i < 10; ++i) {
-            ten[i] = causeIds[i < 4 ? i : i + 1];
-        }
-        vm.prank(controller);
-        gov.setShortlist(address(token), ten);
-        assertEq(gov.shortlistOf(address(token)).length, 10);
+        scheme.castBallot(address(g2), address(token), _rot(2), abi.encode(uint8(0)));
+        (,, uint40 end,,,,) = g2.roundOf(address(token), 2);
+        vm.warp(end);
+        g2.closeRound(address(token), 2);
+        scheme.finalizeFromBallots(address(g2), address(token), _rot(2));
+        g2.finalizeRound(address(token), 2);
+        assertTrue(causes.isActive(newCause), "winner materialized");
+        vm.warp(start + 2 days);
+        (bytes32 active,) = g2.activeCause(address(token));
+        assertEq(active, newCause);
     }
 
-    function test_shortlist_ownAndCleared() public {
-        vm.prank(controller);
-        gov.setShortlist(address(token), _list(4, 5));
-        assertEq(gov.shortlistOf(address(token)).length, 4);
-        vm.warp(t0 + 1 days + 10);
-        gov.openRound(address(token));
-        (,,,,,, bytes32[] memory opts) = gov.roundOf(address(token), 2);
-        assertEq(opts[0], causeIds[5]);
-        // A change mid-round does not affect the open round.
-        vm.prank(controller);
-        gov.setShortlist(address(token), new bytes32[](0));
-        assertEq(gov.shortlistOf(address(token)).length, 3, "default again");
-        (,,,,,, opts) = gov.roundOf(address(token), 2);
-        assertEq(opts.length, 4);
-    }
-
-    function test_noShortlist_reverts() public {
-        gov.setDefaultShortlist(new bytes32[](0));
-        vm.warp(t0 + 1 days + 10);
-        vm.expectRevert(
-            abi.encodeWithSelector(IRotationGovernor.NoShortlist.selector, address(token))
-        );
-        gov.openRound(address(token));
-    }
-
-    function test_schemeMaxBelowShortlist_tooManyOptionsAtOpen() public {
-        vm.prank(controller);
-        gov.setShortlist(address(token), _list(5, 5));
-        vm.mockCall(address(scheme), abi.encodeWithSignature("MAX_OPTIONS()"), abi.encode(uint8(3)));
-        vm.warp(t0 + 1 days + 10);
-        vm.expectRevert(abi.encodeWithSelector(IRotationGovernor.TooManyOptions.selector, 5, 3));
-        gov.openRound(address(token));
-        assertEq(gov.maxOptions(), 3);
+    function test_register_poolTooSmall() public {
+        VeradaToken t = _newToken();
+        vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.PoolTooSmall.selector, address(t), 0));
+        gov.registerToken(address(t), causeIds[0], RotationPeriod.OneDay);
     }
 
     // ------------------------------------------------------------------ period proposals
@@ -589,7 +652,7 @@ contract RotationGovernorTest is RotationGovernorBase {
     function test_propose_rotationZero_noCirculatingSupply() public {
         // A token registered as it is created (as the factory does) has no supply at start(0) - 1.
         VeradaToken fresh = _newToken();
-        gov.registerToken(address(fresh), causeIds[0], RotationPeriod.OneDay);
+        _register(address(fresh), RotationPeriod.OneDay);
         vm.warp(block.timestamp + 1);
         vm.prank(alice);
         vm.expectRevert(IRotationGovernor.NoCirculatingSupply.selector);
@@ -845,7 +908,7 @@ contract RotationGovernorTest is RotationGovernorBase {
             })
         );
         vm.warp(t0 + 1 days + 10);
-        gov.openRound(address(token));
+        _prep(address(token), 2);
         (, uint40 snap, uint40 end,,,,) = gov.roundOf(address(token), 2);
         _changePeriod(RotationPeriod.OneHour);
         (, uint40 snap2, uint40 end2,,,,) = gov.roundOf(address(token), 2);
@@ -863,13 +926,13 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_scopes_doNotCollide() public {
         vm.warp(t0 + 1 days + 10);
-        gov.openRound(address(token)); // target 2
+        _prep(address(token), 2);
         vm.prank(alice);
         uint64 id = gov.proposePeriod(address(token), RotationPeriod.OneHour); // id 1
         vm.prank(alice);
         gov.cancelPeriodProposal(id);
         vm.warp(t0 + 2 days + 10);
-        gov.openRound(address(token)); // target 3, while proposal 1's poll exists
+        _prep(address(token), 3); // while proposal 1's poll exists
         assertTrue(scheme.isOpen(address(gov), address(token), _rot(2)));
         assertTrue(scheme.isOpen(address(gov), address(token), _rot(3)));
         assertTrue(scheme.isOpen(address(gov), address(token), _per(1)));

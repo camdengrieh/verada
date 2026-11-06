@@ -50,10 +50,10 @@ contract LiveLaunchForkTest is Test, DeployLive {
     // Wikimedia Foundation (EIN 200049703): an Endaoment org already deployed on mainnet.
     bytes32 internal constant WIKI_ORG = bytes32("200049703");
     address internal constant WIKI_ADDR = 0xe5F123750FcEa2D82b1441048F1A431FDD3D2Dc1;
-    bytes32 internal constant WIKI_CAUSE = keccak256("wikimedia-foundation");
+    bytes32 internal constant WIKI_CAUSE = keccak256(abi.encode(WIKI_ORG));
     // Synthetic EIN, never deployed: exercises deploy-and-donate.
     bytes32 internal constant FRESH_ORG = bytes32("999000111");
-    bytes32 internal constant FRESH_CAUSE = keccak256("fresh-org");
+    bytes32 internal constant FRESH_CAUSE = keccak256(abi.encode(FRESH_ORG));
 
     address internal deployer = makeAddr("deployer");
     address internal owner = makeAddr("owner");
@@ -65,6 +65,9 @@ contract LiveLaunchForkTest is Test, DeployLive {
     LiveDeployment internal l;
     PoolSwapTest internal swapRouter;
     MockVotingScheme internal mockScheme;
+    /// @dev The launch focus pool (both catalogue orgs) and its leaves.
+    bytes32[] internal poolOrgs;
+    bytes32[] internal poolLeaves;
     address internal freshAddr;
     uint256 internal launches;
 
@@ -98,10 +101,9 @@ contract LiveLaunchForkTest is Test, DeployLive {
         }
         // Launches need a catalogue version that gives the launch focus at least two entries.
         CauseCatalog(d.causeCatalog).acceptOwnership();
-        bytes32[] memory catalogOrgs = new bytes32[](2);
-        catalogOrgs[0] = bytes32("catalog-org-1");
-        catalogOrgs[1] = bytes32("catalog-org-2");
-        CatalogPublish.publish(CauseCatalog(d.causeCatalog), catalogOrgs);
+        poolOrgs.push(WIKI_ORG);
+        poolOrgs.push(FRESH_ORG);
+        poolLeaves = CatalogPublish.publish(CauseCatalog(d.causeCatalog), poolOrgs);
 
         freshAddr = IEndaomentOrgFundFactory(ENDAOMENT_FACTORY).computeOrgAddress(FRESH_ORG);
         CauseRegistry(d.causeRegistry).addCause(WIKI_CAUSE, WIKI_ORG, WIKI_ADDR, "ipfs://wiki");
@@ -125,10 +127,6 @@ contract LiveLaunchForkTest is Test, DeployLive {
         mockScheme = new MockVotingScheme();
         mockScheme.setGovernor(l.rotationGovernor, true);
         RotationGovernor(l.rotationGovernor).setScheme(IOutcomeVotingScheme(address(mockScheme)));
-        bytes32[] memory shortlist = new bytes32[](2);
-        shortlist[0] = WIKI_CAUSE;
-        shortlist[1] = FRESH_CAUSE;
-        RotationGovernor(l.rotationGovernor).setDefaultShortlist(shortlist);
         vm.stopPrank();
 
         swapRouter = new PoolSwapTest(IPoolManager(POOL_MANAGER));
@@ -304,6 +302,7 @@ contract LiveLaunchForkTest is Test, DeployLive {
         uint64 r = 25;
         vm.warp(gov.rotationStart(token, r));
         uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, r + 1);
+        gov.prepareRound(token, r + 1, CatalogPublish.allDraws(poolOrgs, poolLeaves));
         vm.prank(trader);
         mockScheme.castBallot(address(gov), token, scope, abi.encode(uint8(1))); // FRESH_CAUSE
         vm.prank(voter2);

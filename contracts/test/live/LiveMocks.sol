@@ -15,6 +15,7 @@ import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol
 
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {MockEndaomentRegistry} from "../mocks/EndaomentMocks.sol";
+import {MockProfileRegistryLite} from "../mocks/GovernanceMocks.sol";
 
 /// @dev 6-decimal USDC stand-in that can be paused and can block accounts, like the real token.
 contract LiveUSDC is ERC20 {
@@ -287,5 +288,23 @@ contract ClaimsSource is IUnlockCallback {
         uint256 out = consolidator.convertClaims(currency, amount, to, hooklessOnly);
         lastConvertGas = g - gasleft();
         return abi.encode(out);
+    }
+}
+
+/// @dev Profile registry stand-in whose tokens default to `(categories, regions)` until a focus
+///      is set, so live tests can register tokens without setting one each time.
+contract LiveProfiles is MockProfileRegistryLite {
+    uint64 internal immutable _defaultCategories;
+    uint16 internal immutable _defaultRegions;
+
+    constructor(uint64 categories, uint16 regions) {
+        _defaultCategories = categories;
+        _defaultRegions = regions;
+    }
+
+    function focusOf(address token) public view override returns (uint64, uint16) {
+        (uint64 c, uint16 r) = super.focusOf(token);
+        if (c == 0 && r == 0) return (_defaultCategories, _defaultRegions);
+        return (c, r);
     }
 }

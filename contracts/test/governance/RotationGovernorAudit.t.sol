@@ -207,7 +207,7 @@ contract RotationGovernorAuditTest is RotationGovernorBase {
         vm.warp(snapshot + 100);
         assertEq(gov.weightAt(address(token), snapshot, dave), 10e9, "single-instant weight");
         assertEq(gov.holdWeightAt(address(token), snapshot - 1 days, snapshot, dave), 0);
-        gov.openRound(address(token)); // target 3
+        _prep(address(token), 3);
         vm.prank(dave);
         vm.expectRevert(IRotationGovernor.InvalidVote.selector);
         scheme.castBallot(address(gov), address(token), _rot(3), abi.encode(uint8(1)));
@@ -260,7 +260,7 @@ contract RotationGovernorAuditTest is RotationGovernorBase {
         _changePeriod(RotationPeriod.OneWeek); // from rotation 2 on, weekly
         uint256 s2 = gov.rotationStart(address(token), 2);
         vm.warp(s2 + 10);
-        gov.openRound(address(token)); // target 3, voted during the weekly rotation 2
+        _prep(address(token), 3); // voted during the weekly rotation 2
         (uint40 holdFrom, uint40 snap) = gov.roundHoldWindow(address(token), 3);
         assertEq(snap, s2 - 1);
         assertEq(holdFrom, s2 - 1 - 7 days, "a full weekly rotation");

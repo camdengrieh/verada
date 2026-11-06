@@ -6,7 +6,11 @@ import {IVotes} from "@openzeppelin/contracts/governance/utils/IVotes.sol";
 import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {FullMath} from "v4-core/libraries/FullMath.sol";
 
+import {CatalogBallotBuilder} from "./CatalogBallotBuilder.sol";
+import {ICauseCatalog} from "./interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "./interfaces/ICauseRegistry.sol";
+import {ICuratorRegistry} from "./interfaces/ICuratorRegistry.sol";
+import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IRotationGovernor, RotationPeriod} from "./interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
 import {
@@ -15,6 +19,7 @@ import {
     IVotingScheme,
     NO_WINNER
 } from "./interfaces/IVotingScheme.sol";
+import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
 import {PollScopeLib} from "./libraries/PollScopeLib.sol";
 import {RotationScheduleLib} from "./libraries/RotationScheduleLib.sol";
 
@@ -25,6 +30,11 @@ interface ICheckpointVotes {
         external
         view
         returns (uint48 key, uint208 value);
+}
+
+/// @dev `CuratorRegistry`'s weekly clock: the epoch governor its curations follow.
+interface ICuratorClock {
+    function governor() external view returns (address);
 }
 
 /// @title RotationGovernor
@@ -42,10 +52,18 @@ interface ICheckpointVotes {
 ///      snapshot instant: it must be held through the whole window (no buy-vote-sell, no flash
 ///      loans, no one-block holds). Polls of a token's first day therefore carry no weight.
 ///
-///      Rotation polls. During rotation `c`, holders vote on the cause for `target = c + 1` among the
-///      token's shortlist (or the default shortlist), frozen when the round opens. The poll closes
-///      `closeBuffer` before rotation `target` starts, leaving time to decrypt, submit and
-///      finalize the result. A result finalized after `target` started applies from the next
+///      Rotation polls. During rotation `c`, holders vote on the cause for `target = c + 1`. The
+///      round's ballot is built exactly like a weekly ballot (`CatalogBallotLib`, see
+///      `IRotationGovernor`): the controller's pins, then curated picks (the curator registry's
+///      curations for the weekly epoch containing the vote start), then deterministic rotation
+///      draws over the token's focus pool, all under the catalogue version in effect at the vote
+///      start (`start(c)`), skipping blocked causes. Anyone prepares it with the drawn entries
+///      and their proofs (`prepareRound`); it is frozen then and never built inside a ballot, so
+///      a ballot's option index always refers to a list fixed by an earlier transaction. A
+///      round never prepared, or prepared with fewer than `MIN_OPTIONS` options (`NoBallot`),
+///      takes no ballots. The poll closes `closeBuffer` before rotation `target` starts, leaving
+///      time to decrypt, submit and finalize the result. Only the winner is materialized into
+///      the cause registry. A result finalized after `target` started applies from the next
 ///      boundary instead, never retroactively. With fewer than `minVoters` ballots, or no result
 ///      yet, the current cause keeps receiving fees; there is no fallback cause. Rounds are
 ///      plurality with no quorum (ties go to the lowest option index).
@@ -77,18 +95,23 @@ interface ICheckpointVotes {
 ///         total supply at the snapshot.
 ///       - G8: `lastAppliedTarget` is monotonic and `effectiveFrom >= rotationAt(finalize) + 1`.
 ///
-///      Reentrancy: the only external calls are to the owner-set scheme (`open`, `requestTally`,
-///      `tallyOf`, `MAX_OPTIONS`), the cause registry and the token's vote checkpoints. The scheme
-///      re-enters `authorizeBallot` from `castBallot` by design, and this contract re-enters the
-///      scheme's `open` from there for lazily opened rounds; state is written before `open` is
-///      called. The swap path only reads `activeCause`.
+///      Reentrancy: the only external calls are to the owner-set scheme (`open`, `requestOutcome`,
+///      `outcomeOf`, `MAX_OPTIONS`), the cause registry (`materialize` only for a winner), the
+///      catalogue, the owner-set curator registry (views) and the token's vote checkpoints. The
+///      scheme re-enters `authorizeBallot` from `castBallot` by design; that path never opens a
+///      poll. Round state is written before the scheme's `open` is called. The swap path only
+///      reads `activeCause`.
 contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     using RotationScheduleLib for RotationScheduleLib.Schedule;
 
     /// @notice Most options a rotation poll may have (further capped by the scheme).
     uint8 public constant MAX_OPTIONS = 10;
-    /// @notice Fewest options a shortlist may have.
+    /// @notice Fewest options a round needs to open, and a focus pool at registration.
     uint8 public constant MIN_OPTIONS = 2;
+    /// @notice Most causes a controller may pin (as weekly).
+    uint8 public constant PINNED_MAX = CatalogBallotLib.PINNED_MAX;
+    /// @notice Rotation draws per free slot before giving up (as weekly).
+    uint256 public constant DRAW_FACTOR = CatalogBallotLib.DRAW_FACTOR;
     /// @notice Option index of AGAINST in a period proposal.
     uint8 public constant OPTION_AGAINST = 0;
     /// @notice Option index of FOR in a period proposal.
@@ -116,10 +139,13 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     uint8 internal constant FLAG_EXPIRED = 8;
     uint8 internal constant FLAG_CANCELED = 16;
 
-    /// @notice Cause registry (active checks for shortlists and winners).
+    /// @notice Cause registry: blocked causes are skipped, winners are materialized into it.
     ICauseRegistry public immutable causeRegistry;
-    /// @notice Profile registry; a token's controller sets its shortlist.
+    /// @notice Profile registry: a token's controller (pins) and focus.
     ITokenProfileRegistry public immutable profileRegistry;
+    ICauseCatalog internal immutable _catalog;
+    /// @notice Runs `CatalogBallotLib` for this governor (deployed by its constructor).
+    CatalogBallotBuilder public immutable ballotBuilder;
     /// @notice Uniswap v4 pool manager, excluded from the circulating supply.
     address public immutable poolManager;
 
@@ -145,7 +171,10 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         uint64 effectiveFrom;
         /// @dev Start of the hold window (`snapshot - lookback`).
         uint40 holdFrom;
+        uint32 catalogVersion;
+        uint64 poolSize;
         bytes32 winner;
+        /// @dev Catalogue org ids of the options, in ballot order.
         bytes32[] options;
         mapping(address voter => bool) voted;
     }
@@ -175,10 +204,15 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     Params internal _params;
     /// @notice Number of period proposals ever created (ids start at 1).
     uint64 public proposalCount;
-    bytes32[] internal _defaultShortlist;
+    /// @notice Curator agents' weekly picks (unset: no curated phase).
+    ICuratorRegistry public curators;
+    /// @dev The curator registry's weekly clock, read once when it is set.
+    uint64 internal _curationZero;
+    uint64 internal _curationLength;
 
     mapping(address token => RotationScheduleLib.Schedule) internal _schedules;
     mapping(address token => CauseState) internal _causes;
+    /// @dev Pinned catalogue org ids.
     mapping(address token => bytes32[]) internal _shortlists;
     mapping(address token => mapping(uint64 target => Round)) internal _rounds;
     mapping(uint64 id => PeriodProposal) internal _proposals;
@@ -196,25 +230,30 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     /// @notice Number of executed period changes of the token (supersedes older proposals).
     mapping(address token => uint32) public executions;
 
-    /// @param initialOwner Admin: scheme, params, default shortlist, vault (once).
-    /// @param causeRegistry_ Cause registry.
-    /// @param profileRegistry_ Token profile registry (shortlist authority).
+    /// @param initialOwner Admin: scheme, params, minVoters, vault and curator registry (once).
+    /// @param causeRegistry_ Cause registry (this governor must be one of its materializers).
+    /// @param catalog_ Cause catalogue.
+    /// @param profileRegistry_ Token profile registry (pin authority and focus).
     /// @param poolManager_ Uniswap v4 pool manager.
     /// @param scheme_ Initial voting scheme.
     /// @param params_ Initial period-proposal parameters.
     constructor(
         address initialOwner,
         ICauseRegistry causeRegistry_,
+        ICauseCatalog catalog_,
         ITokenProfileRegistry profileRegistry_,
         address poolManager_,
         IOutcomeVotingScheme scheme_,
         Params memory params_
     ) Ownable(initialOwner) {
         if (
-            address(causeRegistry_) == address(0) || address(profileRegistry_) == address(0)
-                || poolManager_ == address(0) || address(scheme_) == address(0)
+            address(causeRegistry_) == address(0) || address(catalog_) == address(0)
+                || address(profileRegistry_) == address(0) || poolManager_ == address(0)
+                || address(scheme_) == address(0)
         ) revert ZeroAddress();
         causeRegistry = causeRegistry_;
+        _catalog = catalog_;
+        ballotBuilder = new CatalogBallotBuilder(catalog_, causeRegistry_, profileRegistry_);
         profileRegistry = profileRegistry_;
         poolManager = poolManager_;
         _scheme = scheme_;
@@ -254,23 +293,30 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         emit MinVotersSet(minVoters_);
     }
 
-    /// @notice Sets the shortlist used by tokens without their own. Empty clears it.
-    function setDefaultShortlist(bytes32[] calldata causes) external onlyOwner {
-        if (causes.length != 0) _validateShortlist(causes);
-        _defaultShortlist = causes;
-        emit DefaultShortlistSet(causes);
+    /// @notice Sets the curator registry whose weekly curations feed the curated phase, and
+    ///         reads its weekly clock. Once.
+    function setCuratorRegistry(ICuratorRegistry curators_) external onlyOwner {
+        if (address(curators) != address(0)) revert CuratorRegistryAlreadySet();
+        if (address(curators_) == address(0)) revert ZeroAddress();
+        address clock = ICuratorClock(address(curators_)).governor();
+        if (clock == address(0)) revert CuratorClockNotSet();
+        uint256 zero = IEpochGovernor(clock).epochZeroStart();
+        uint256 length = IEpochGovernor(clock).EPOCH_LENGTH();
+        if (length == 0) revert CuratorClockNotSet();
+        curators = curators_;
+        _curationZero = SafeCast.toUint64(zero);
+        _curationLength = SafeCast.toUint64(length);
+        emit CuratorRegistrySet(address(curators_), zero, length);
     }
 
-    /// @notice Sets `token`'s shortlist (2 to `maxOptions()` distinct active causes). Empty
-    ///         clears it, so the default applies. Profile controller only. Rounds already open
-    ///         keep the options they were opened with.
-    function setShortlist(address token, bytes32[] calldata causes) external {
+    /// @inheritdoc IRotationGovernor
+    function setShortlist(address token, IEpochGovernor.Pin[] calldata pins) external {
         if (!_causes[token].registered) revert TokenNotRegistered(token);
         if (msg.sender != profileRegistry.controllerOf(token)) {
             revert NotController(token, msg.sender);
         }
-        if (causes.length != 0) _validateShortlist(causes);
-        _shortlists[token] = causes;
+        (bytes32[] memory orgs, bytes32[] memory causes) = ballotBuilder.validatePins(token, pins);
+        _shortlists[token] = orgs;
         emit ShortlistSet(token, causes);
     }
 
@@ -284,6 +330,10 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         if (initialCause == bytes32(0) || !causeRegistry.isActive(initialCause)) {
             revert InactiveCause(initialCause);
         }
+        // The weekly launch rule: the focus must give the latest catalogue a ballot's worth.
+        (uint64 categoryMask, uint16 regionMask) = profileRegistry.focusOf(token);
+        uint256 size = _catalog.poolSize(_catalog.latestVersion(), categoryMask, regionMask);
+        if (size < MIN_OPTIONS) revert PoolTooSmall(token, size);
         _schedules[token] = RotationScheduleLib.Schedule({
             // forge-lint: disable-next-line(unsafe-typecast)
             anchorTime: uint40(block.timestamp),
@@ -300,17 +350,30 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     // ------------------------------------------------------------------ rotation polls
 
-    /// @notice Opens the poll for the next rotation of `token`. Permissionless; a poll also opens
-    ///         lazily on its first ballot.
+    /// @notice Prepares the next rotation's round of `token` without draws: enough when the pins
+    ///         fill the ballot or the pool is empty (as the weekly `openEpoch`). Permissionless.
     /// @return target The rotation the poll decides.
     function openRound(address token) external returns (uint64 target) {
         if (!_causes[token].registered) revert TokenNotRegistered(token);
-        RotationScheduleLib.Schedule memory s = _schedules[token];
-        target = s.indexAt(block.timestamp) + 1;
-        if (_rounds[token][target].status != RoundStatus.None) {
-            revert RoundAlreadyOpened(token, target);
-        }
-        _openRound(token, target, s);
+        target = _schedules[token].indexAt(block.timestamp) + 1;
+        _prepare(token, target, new IEpochGovernor.CuratedDraw[](0), new IEpochGovernor.Draw[](0));
+    }
+
+    /// @inheritdoc IRotationGovernor
+    function prepareRound(address token, uint64 target, IEpochGovernor.Draw[] calldata draws)
+        external
+    {
+        _prepare(token, target, new IEpochGovernor.CuratedDraw[](0), draws);
+    }
+
+    /// @inheritdoc IRotationGovernor
+    function prepareCuratedRound(
+        address token,
+        uint64 target,
+        IEpochGovernor.CuratedDraw[] calldata curated,
+        IEpochGovernor.Draw[] calldata draws
+    ) external {
+        _prepare(token, target, curated, draws);
     }
 
     /// @inheritdoc IBallotGovernor
@@ -350,9 +413,10 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     /// @notice Applies the revealed winner of `target`. Permissionless.
     /// @dev The scheme reveals only the strict argmax (ties to the lowest index), or `NO_WINNER`
-    ///      when no option received weight. The winner applies from the rotation after the
-    ///      current one: `target` when finalized on time, later otherwise. A round older than the
-    ///      last applied one is recorded as `Stale`.
+    ///      when no option received weight. The winner is materialized into the cause registry and
+    ///      applies from the rotation after the current one: `target` when finalized on time,
+    ///      later otherwise. A round older than the last applied one is recorded as `Stale`; a
+    ///      winner blocked since the ballot was prepared as `InactiveWinner`.
     function finalizeRound(address token, uint64 target) external {
         Round storage r = _rounds[token][target];
         if (r.status != RoundStatus.Closed) revert RoundNotClosed(token, target);
@@ -364,7 +428,8 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         bytes32[] storage options = r.options;
         bool none = index == NO_WINNER;
         if (!none && index >= options.length) revert InvalidTally();
-        bytes32 winner = none ? bytes32(0) : options[index];
+        bytes32 winnerOrg = none ? bytes32(0) : options[index];
+        bytes32 winner = none ? bytes32(0) : CatalogBallotLib.causeIdOf(winnerOrg);
 
         CauseState storage cs = _causes[token];
         RoundStatus status;
@@ -373,9 +438,11 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
             status = RoundStatus.NoChange;
         } else if (target <= cs.lastAppliedTarget) {
             status = RoundStatus.Stale;
-        } else if (!causeRegistry.isActive(winner)) {
+        } else if (causeRegistry.isBlocked(winner)) {
             status = RoundStatus.InactiveWinner;
         } else {
+            // A catalogue winner is written to the registry so the vault can pay it.
+            causeRegistry.materialize(winnerOrg);
             RotationScheduleLib.Schedule memory s = _schedules[token];
             uint64 c = s.indexAt(block.timestamp);
             // Materialize a scheduled cause that is already in effect.
@@ -621,7 +688,24 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         )
     {
         Round storage r = _rounds[token][target];
-        return (r.status, r.snapshot, r.voteEnd, r.voters, r.winner, r.effectiveFrom, r.options);
+        return (
+            r.status,
+            r.snapshot,
+            r.voteEnd,
+            r.voters,
+            r.winner,
+            r.effectiveFrom,
+            CatalogBallotLib.causeIds(r.options)
+        );
+    }
+
+    /// @notice Catalogue org ids of round `target`'s options, in ballot order.
+    function roundOptionOrgIds(address token, uint64 target)
+        external
+        view
+        returns (bytes32[] memory)
+    {
+        return _rounds[token][target].options;
     }
 
     /// @notice Scheme a round was opened with (zero if never opened).
@@ -685,13 +769,65 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     /// @inheritdoc IRotationGovernor
     function shortlistOf(address token) external view returns (bytes32[] memory) {
-        bytes32[] storage own = _shortlists[token];
-        return own.length != 0 ? own : _defaultShortlist;
+        return CatalogBallotLib.causeIds(_shortlists[token]);
     }
 
-    /// @notice The default shortlist.
-    function defaultShortlist() external view returns (bytes32[] memory) {
-        return _defaultShortlist;
+    /// @inheritdoc IRotationGovernor
+    /// @dev Pins apply to every round prepared from now on, so `target` does not change it.
+    function shortlistFor(address token, uint256) external view returns (bytes32[] memory) {
+        return CatalogBallotLib.causeIds(_shortlists[token]);
+    }
+
+    /// @notice Pinned catalogue org ids of `token`.
+    function shortlistOrgIdsOf(address token) external view returns (bytes32[] memory) {
+        return _shortlists[token];
+    }
+
+    /// @inheritdoc IRotationGovernor
+    function poolOf(address token, uint256 target)
+        external
+        view
+        returns (uint32 version, uint256 poolSize)
+    {
+        if (target == 0 || target > type(uint64).max) return (0, 0);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        Round storage r = _rounds[token][uint64(target)];
+        if (r.status != RoundStatus.None) return (r.catalogVersion, r.poolSize);
+        (bool ok, uint40 voteStart) = _voteStart(token, target);
+        if (!ok) return (0, 0);
+        version = _catalog.versionAt(voteStart);
+        (uint64 categoryMask, uint16 regionMask) = profileRegistry.focusOf(token);
+        poolSize = _catalog.poolSize(version, categoryMask, regionMask);
+    }
+
+    /// @inheritdoc IRotationGovernor
+    function drawIndex(address token, uint256 target, uint32 version, uint256 k, uint256 poolSize)
+        external
+        pure
+        returns (uint256)
+    {
+        return CatalogBallotLib.drawIndex(token, target, version, k, poolSize);
+    }
+
+    /// @inheritdoc IRotationGovernor
+    function ballotSize() external view returns (uint256) {
+        return _maxOptions(_scheme);
+    }
+
+    /// @inheritdoc IRotationGovernor
+    function curationEpochOf(address token, uint256 target)
+        external
+        view
+        returns (bool ok, uint256 epoch)
+    {
+        uint40 voteStart;
+        (ok, voteStart) = _voteStart(token, target);
+        if (ok) (ok, epoch) = _curationEpochAt(voteStart);
+    }
+
+    /// @notice The cause catalogue.
+    function catalog() external view returns (address) {
+        return address(_catalog);
     }
 
     /// @inheritdoc IRotationGovernor
@@ -721,35 +857,112 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     // ------------------------------------------------------------------ internals
 
-    function _openRound(address token, uint64 target, RotationScheduleLib.Schedule memory s)
+    /// @dev Fixes round `target`'s ballot (pins, curated picks, rotation draws; see
+    ///      `CatalogBallotLib`) and opens its poll when it has at least `MIN_OPTIONS` options.
+    function _prepare(
+        address token,
+        uint64 target,
+        IEpochGovernor.CuratedDraw[] memory curated,
+        IEpochGovernor.Draw[] memory draws
+    ) private {
+        (Round storage r, uint40 voteStart) = _startRound(token, target);
+        IOutcomeVotingScheme sch = _scheme;
+        bytes32[] memory options = _build(r, token, target, voteStart, sch, curated, draws);
+        if (options.length < MIN_OPTIONS) {
+            r.status = RoundStatus.NoBallot;
+            emit RoundFinalized(token, target, RoundStatus.NoBallot, bytes32(0), 0);
+            return;
+        }
+        r.status = RoundStatus.Open;
+        r.scheme = sch;
+        uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target);
+        // Bounded by MAX_OPTIONS, so the cast cannot truncate.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        sch.open(token, scope, uint8(options.length));
+        emit RoundOpened(token, target, scope, options, r.snapshot, r.voteEnd, address(sch));
+    }
+
+    /// @dev Checks that round `target` is the next rotation's, unprepared and still in its vote
+    ///      window, and stores its snapshot, hold window and vote end. Returns the round and its
+    ///      vote start.
+    function _startRound(address token, uint64 target)
         private
+        returns (Round storage r, uint40 voteStart)
     {
-        (uint40 snapshot,, uint40 voteEnd) = _window(s, target);
+        if (!_causes[token].registered) revert TokenNotRegistered(token);
+        RotationScheduleLib.Schedule memory s = _schedules[token];
+        if (target != s.indexAt(block.timestamp) + 1) revert RoundNotCurrent(target);
+        r = _rounds[token][target];
+        if (r.status != RoundStatus.None) revert RoundAlreadyOpened(token, target);
+        uint40 snapshot;
+        uint40 voteEnd;
+        (snapshot, voteStart, voteEnd) = _window(s, target);
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp >= voteEnd) revert VotingClosed();
-        uint256 holdFrom = _holdFrom(snapshot, s.periodOf(target - 1));
-        bytes32[] storage source =
-            _shortlists[token].length != 0 ? _shortlists[token] : _defaultShortlist;
-        uint256 n = source.length;
-        if (n == 0) revert NoShortlist(token);
-        IOutcomeVotingScheme sch = _scheme;
-        uint256 max = _maxOptions(sch);
-        if (n > max) revert TooManyOptions(n, max);
-
-        Round storage r = _rounds[token][target];
-        r.scheme = sch;
         r.snapshot = snapshot;
         // `holdFrom <= snapshot`, which fits in 40 bits.
         // forge-lint: disable-next-line(unsafe-typecast)
-        r.holdFrom = uint40(holdFrom);
+        r.holdFrom = uint40(_holdFrom(snapshot, s.periodOf(target - 1)));
         r.voteEnd = voteEnd;
-        r.status = RoundStatus.Open;
-        r.options = source;
-        uint256 scope = PollScopeLib.encode(PollScopeLib.KIND_ROTATION, target);
-        // Bounded by MAX_OPTIONS above, so the cast cannot truncate.
+    }
+
+    /// @dev Builds and stores round `target`'s ballot under the catalogue version in effect at
+    ///      `voteStart`. Returns the options' cause ids.
+    function _build(
+        Round storage r,
+        address token,
+        uint64 target,
+        uint40 voteStart,
+        IOutcomeVotingScheme sch,
+        IEpochGovernor.CuratedDraw[] memory curated,
+        IEpochGovernor.Draw[] memory draws
+    ) private returns (bytes32[] memory) {
+        CatalogBallotBuilder.Request memory q;
+        q.token = token;
+        q.round = target;
+        q.version = _catalog.versionAt(voteStart);
+        q.size = _maxOptions(sch);
+        q.pins = _shortlists[token];
+        (bool curatedPhase, uint256 epoch) = _curationEpochAt(voteStart);
+        if (curatedPhase) {
+            q.curators = curators;
+            q.curationEpoch = epoch;
+        }
+        CatalogBallotBuilder.Built memory out = ballotBuilder.build(q, curated, draws);
+        if (out.curatedDrawn != 0) {
+            // Both are bounded by the ballot size (at most MAX_OPTIONS).
+            // forge-lint: disable-next-line(unsafe-typecast)
+            emit CuratedPicksUsed(
+                token, target, epoch, uint8(out.curatedDrawn), uint8(out.curatedIncluded)
+            );
+        }
+        r.catalogVersion = q.version;
+        // A pool is at most 1024 buckets of uint32 entries.
         // forge-lint: disable-next-line(unsafe-typecast)
-        sch.open(token, scope, uint8(n));
-        emit RoundOpened(token, target, scope, r.options, snapshot, voteEnd, address(sch));
+        r.poolSize = uint64(out.pool);
+        r.options = out.orgs;
+        emit BallotPrepared(token, target, q.version, out.pool, out.pinned, out.options);
+        return out.options;
+    }
+
+    /// @dev Weekly curation epoch containing `ts` (false without a curator clock or before it).
+    function _curationEpochAt(uint256 ts) private view returns (bool, uint256) {
+        uint256 length = _curationLength;
+        uint256 zero = _curationZero;
+        if (length == 0 || ts < zero) return (false, 0);
+        return (true, (ts - zero) / length);
+    }
+
+    /// @dev Vote start of round `target` from the current schedule (false when it has none).
+    function _voteStart(address token, uint256 target) private view returns (bool, uint40) {
+        if (!_causes[token].registered || target == 0 || target > type(uint64).max) {
+            return (false, 0);
+        }
+        RotationScheduleLib.Schedule memory s = _schedules[token];
+        if (target - 1 < s.anchorIndex) return (false, 0);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        (, uint40 voteStart,) = _window(s, uint64(target));
+        return (true, voteStart);
     }
 
     function _authorizeRotation(address token, uint64 target, address voter, bytes32 ballotRef)
@@ -760,13 +973,19 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         RotationScheduleLib.Schedule memory s = _schedules[token];
         if (target != s.indexAt(block.timestamp) + 1) revert RoundNotCurrent(target);
 
+        // Ballots are accepted only once the round was prepared by an earlier transaction: an
+        // option index is only meaningful against the frozen options.
         Round storage r = _rounds[token][target];
-        bool fresh = r.status == RoundStatus.None;
-        address expected = fresh ? address(_scheme) : address(r.scheme);
+        RoundStatus st = r.status;
+        bool opened = st != RoundStatus.None && st != RoundStatus.NoBallot;
+        address expected = opened ? address(r.scheme) : address(_scheme);
         if (msg.sender != expected) revert NotScheme(msg.sender);
-        if (fresh) _openRound(token, target, s);
+        if (!opened) {
+            if (st == RoundStatus.NoBallot) revert NoShortlist(token);
+            revert RoundNotOpened(token, target);
+        }
         // forge-lint: disable-next-line(block-timestamp)
-        else if (r.status != RoundStatus.Open || block.timestamp >= r.voteEnd) revert VotingClosed();
+        if (st != RoundStatus.Open || block.timestamp >= r.voteEnd) revert VotingClosed();
 
         if (r.voted[voter]) revert AlreadyVoted(voter);
         weight = _holdWeight(token, r.holdFrom, r.snapshot, voter);
@@ -929,20 +1148,6 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         // Capped just below, so the cast cannot truncate.
         // forge-lint: disable-next-line(unsafe-typecast)
         return whole > type(uint64).max ? type(uint64).max : uint64(whole);
-    }
-
-    /// @dev MIN_OPTIONS..maxOptions() nonzero, active, distinct causes.
-    function _validateShortlist(bytes32[] calldata causes) private view {
-        uint256 n = causes.length;
-        if (n < MIN_OPTIONS || n > _maxOptions(_scheme)) revert InvalidShortlist();
-        for (uint256 i; i < n; ++i) {
-            bytes32 causeId = causes[i];
-            if (causeId == bytes32(0)) revert InvalidShortlist();
-            if (!causeRegistry.isActive(causeId)) revert InactiveCause(causeId);
-            for (uint256 j; j < i; ++j) {
-                if (causes[j] == causeId) revert InvalidShortlist();
-            }
-        }
     }
 
     function _setParams(Params memory p) private {

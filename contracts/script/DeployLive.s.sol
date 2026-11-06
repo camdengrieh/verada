@@ -6,13 +6,16 @@ import {console2} from "forge-std/Script.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 
+import {CauseRegistry} from "../src/CauseRegistry.sol";
 import {FeeConsolidator} from "../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../src/LiveDonationVault.sol";
 import {RotationGovernor} from "../src/RotationGovernor.sol";
 import {VeradaFactory} from "../src/VeradaFactory.sol";
 import {VeradaLiveHook} from "../src/VeradaLiveHook.sol";
 import {ZamaVotingScheme} from "../src/governance/ZamaVotingScheme.sol";
+import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
+import {ICuratorRegistry} from "../src/interfaces/ICuratorRegistry.sol";
 import {IFeeConsolidator} from "../src/interfaces/IFeeConsolidator.sol";
 import {IRotationGovernor} from "../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
@@ -40,8 +43,10 @@ import {Deploy} from "./Deploy.s.sol";
 ///
 ///      Manual steps after deployment, in addition to those listed in `Deploy`:
 ///        1. The owner accepts ownership of the rotation governor and the live vault.
-///        2. The owner sets the rotation governor's default shortlist
-///           (`RotationGovernor.setDefaultShortlist`, 2 to 10 active causes).
+///        2. A keeper prepares each rotation's ballot (`RotationGovernor.prepareRound` or
+///           `prepareCuratedRound`, the same pins, curated picks and catalogue draws as a weekly
+///           ballot) once the poll's vote window opens; until it does, nobody can vote and the
+///           current cause continues.
 ///        3. The tally keeper (services/publisher) also follows the rotation governor's polls.
 ///           These are outcome-only polls: it decrypts `ZamaVotingScheme.outcomeHandle` and
 ///           relays it with `submitOutcome` (not `tallyHandles` / `submitTally`).
@@ -122,7 +127,8 @@ contract DeployLive is Deploy {
     }
 
     /// @notice Deploys and wires live-donation mode on top of `d`. `deployer` must be the factory
-    ///         deployer and still own the consolidator and the voting scheme.
+    ///         deployer and still own the consolidator, the voting scheme and the cause registry
+    ///         (the rotation governor materializes winners like the epoch governor).
     function deployLive(Deployment memory d, address platformTreasury, address deployer)
         public
         returns (LiveDeployment memory l)
@@ -130,6 +136,7 @@ contract DeployLive is Deploy {
         RotationGovernor gov = new RotationGovernor(
             deployer,
             ICauseRegistry(d.causeRegistry),
+            ICauseCatalog(d.causeCatalog),
             ITokenProfileRegistry(d.profileRegistry),
             POOL_MANAGER,
             IOutcomeVotingScheme(d.votingScheme),
@@ -154,6 +161,8 @@ contract DeployLive is Deploy {
 
         gov.setVault(address(vault));
         gov.setMinVoters(ROTATION_MIN_VOTERS);
+        gov.setCuratorRegistry(ICuratorRegistry(d.curatorRegistry));
+        CauseRegistry(d.causeRegistry).setMaterializer(address(gov), true);
         vault.setHook(hookAddr);
         FeeConsolidator(payable(d.feeConsolidator)).setSource(hookAddr, true);
         ZamaVotingScheme(d.votingScheme).setGovernor(address(gov), true);

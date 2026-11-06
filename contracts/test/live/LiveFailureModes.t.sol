@@ -258,11 +258,13 @@ contract LiveFailureModesTest is LiveBase {
 
     // ------------------------------------------------------------------ governance state
 
-    function _noShortlist() internal {
-        rgov.setDefaultShortlist(new bytes32[](0));
+    /// @dev Every other focus org blocked: no round can open (a one-option ballot).
+    function _focusPoolBlocked() internal {
+        causes.blockOrg(ORG_B);
+        causes.blockOrg(ORG_C);
     }
 
-    function test_governorWithoutShortlist() public {
-        _matrix(_noShortlist, true);
+    function test_governorWithAnEmptyBallot() public {
+        _matrix(_focusPoolBlocked, true);
     }
 }

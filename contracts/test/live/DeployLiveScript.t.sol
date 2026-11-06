@@ -144,10 +144,6 @@ contract DeployLiveScriptTest is Test, DeployLive {
         bytes32 org2 = bytes32("873024488");
         CauseRegistry(d.causeRegistry)
             .addCause(CAUSE_2, org2, MockOrgFactory(ENDAOMENT_FACTORY).computeOrgAddress(org2), "");
-        bytes32[] memory shortlist = new bytes32[](2);
-        shortlist[0] = CAUSE;
-        shortlist[1] = CAUSE_2;
-        RotationGovernor(l.rotationGovernor).setDefaultShortlist(shortlist);
         vm.stopPrank();
 
         vm.deal(trader, 1e22);
@@ -178,6 +174,10 @@ contract DeployLiveScriptTest is Test, DeployLive {
         assertTrue(ZamaVotingScheme(d.votingScheme).isGovernor(d.epochGovernor), "weekly kept");
         assertEq(RotationGovernor(l.rotationGovernor).vault(), l.liveVault);
         assertEq(RotationGovernor(l.rotationGovernor).minVoters(), 2, "outcome needs two ballots");
+        // Ballots come from the weekly catalogue and curator registry; winners are materialized.
+        assertEq(RotationGovernor(l.rotationGovernor).catalog(), d.causeCatalog);
+        assertEq(address(RotationGovernor(l.rotationGovernor).curators()), d.curatorRegistry);
+        assertTrue(CauseRegistry(d.causeRegistry).isMaterializer(l.rotationGovernor));
         assertEq(LiveDonationVault(l.liveVault).hook(), l.liveHook);
         assertEq(LiveDonationVault(l.liveVault).factory(), d.factory);
         assertEq(LiveDonationVault(l.liveVault).platformTreasury(), treasury);

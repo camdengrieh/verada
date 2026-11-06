@@ -661,7 +661,7 @@ contract LiveFactoryTest is LiveFactoryBase {
 
         // Rotation 1: a round opens, nobody votes.
         _warpToRotation(t, 1);
-        assertEq(rgov.openRound(t), 2);
+        _prepareRound(t, 2);
         vm.warp(_roundEnd(t, 2));
         rgov.closeRound(t, 2);
         assertEq(uint8(_roundStatus(t, 2)), uint8(IRotationGovernor.RoundStatus.NoChange));
