@@ -2,3 +2,15 @@
    come from the library; @source lets Tailwind see the classes used inside the library. */
 @import "@varada/ui/styles.css";
 @source "../../../../packages/ui/src";
+
+/* Keyboard focus and in-page anchors scroll clear of the sticky header and, on phones, of the bottom
+   tab bar plus the action bar that sits on it (72px + about 80px), so a focused control is never
+   left hidden underneath them. */
+html {
+  scroll-padding-top: 5.5rem;
+}
+@media (max-width: 767px) {
+  html {
+    scroll-padding-bottom: 11rem;
+  }
+}

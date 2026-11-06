@@ -16,6 +16,8 @@ import { CommandPalette } from "@/components/discover/command-palette";
 import { URL_EVENT } from "@/components/discover/hooks";
 import { NAV_ITEMS, relativeRoot } from "@/components/nav";
 import { PrivacyMenu } from "@/components/privacy-status";
+import { useAppConfig } from "@/components/providers";
+import { agentFromLocation } from "@/lib/host";
 import { siteBase, siteBaseFromPath } from "@/lib/base";
 
 /** Resolves site-relative asset paths against the site root so they work under any Swarm/ENS prefix. */
@@ -24,12 +26,14 @@ const resolveAsset = (path: string) => `${siteBase()}${path.replace(/^\//, "")}`
 const TAB_ICONS = { "": Compass, "launch/": Coins, "causes/": HandHeart, "governance/": Vote, "agent/": User } as const;
 
 /** The route a pathname belongs to ("" for the token list), independent of any Swarm/ENS prefix. */
-export function activeRoute(pathname: string): string {
+export function activeRoute(pathname: string, onAgentHost = false): string {
   const base = siteBaseFromPath(pathname);
   const rest = pathname.startsWith(base) ? pathname.slice(base.length) : pathname.replace(/^\//, "");
   const first = rest.split("/")[0] ?? "";
   const hit = NAV_ITEMS.find((n) => n.to !== "" && n.to.replace(/\/$/, "") === first);
-  return hit ? hit.to : "";
+  if (hit) return hit.to;
+  // The root of `<label>.agent.<parent>` and `agent.<parent>` is an agent page, not the token list.
+  return onAgentHost && first === "" ? "agent/" : "";
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -37,7 +41,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [route, setRoute] = useState("");
   // The static export has no server pathname context before hydration; read it once mounted.
-  useEffect(() => setRoute(activeRoute(window.location.pathname)), [pathname]);
+  const { ensParentName } = useAppConfig();
+  useEffect(() => setRoute(activeRoute(window.location.pathname, agentFromLocation(window.location, ensParentName) !== null)), [pathname, ensParentName]);
 
   const href = (to: string) => `${prefix}${to}`;
   const [paletteOpen, setPaletteOpen] = useCommandShortcut();
@@ -77,7 +82,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <main id="main" className="mx-auto w-full max-w-[1400px] px-4 pb-[calc(var(--tab-h)+1.5rem)] pt-6 @container md:px-8 md:pb-12" style={{ "--tab-h": `${BOTTOM_TAB_BAR_HEIGHT}px` } as React.CSSProperties}>
         {children}
       </main>
-      <footer className="mx-auto w-full max-w-[1400px] px-4 pb-28 md:px-8 md:pb-10">
+      <footer className="mx-auto w-full max-w-[1400px] px-4 pb-48 md:px-8 md:pb-10">
         <Divider variant="brush" />
         <div className="mt-6 flex flex-wrap items-center justify-between gap-4 text-sm text-ink-soft">
           <span className="inline-flex items-center gap-2">
