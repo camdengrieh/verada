@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAccount } from "wagmi";
 import { isAddress, type Address } from "viem";
 import { MAX_BALLOT_OPTIONS } from "@varada/sdk";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
 import { errorText } from "@/components/use-tx";
 import { EpochClock } from "@/components/governance/epoch-clock";

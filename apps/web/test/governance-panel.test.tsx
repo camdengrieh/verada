@@ -69,7 +69,6 @@ vi.mock("@/components/providers", () => ({
   usePrivacyPrefs: () => [{ routeIndexer: false, introSeen: true }, () => {}],
 }));
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: () => ({ readContract: accountRead }) }));
-vi.mock("@/components/nav", () => ({ useRel: () => (p: string) => `./${p}` }));
 vi.mock("@/components/connect-button", () => ({ ConnectButton: () => <button type="button">Connect wallet</button> }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: account.address, isConnected: Boolean(account.address), chainId: account.chainId }),
@@ -275,8 +274,8 @@ describe("token board and ballot", () => {
     renderPanel();
     const results = await screen.findByRole("region", { name: "Results" });
     expect(within(results).getByText("Winner")).toBeInTheDocument();
+    await waitFor(() => expect(within(results).getAllByRole("listitem")[0]).toHaveTextContent("Beta Pantry"));
     const rows = within(results).getAllByRole("listitem");
-    expect(rows[0]).toHaveTextContent("Beta Pantry");
     expect(rows[0]).toHaveTextContent("70 · 70%");
     expect(rows[1]).toHaveTextContent("Gamma Wells");
     expect(screen.queryByRole("radiogroup")).toBeNull();

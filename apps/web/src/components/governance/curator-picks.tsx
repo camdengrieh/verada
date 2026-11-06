@@ -5,7 +5,7 @@ import { isCauseName, type CauseName } from "@varada/ui/components/varada/cause-
 import { agentName, causeIdOfOrg } from "@varada/sdk";
 import type { Hex } from "viem";
 import { useAppConfig } from "@/components/providers";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import type { AgentReport, AgentSummary } from "@/lib/agents";
 import type { TokenFocus } from "@/lib/indexer";
 

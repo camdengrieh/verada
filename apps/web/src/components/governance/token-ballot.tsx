@@ -14,7 +14,7 @@ import type { Address } from "viem";
 import { MAX_BALLOT_OPTIONS } from "@varada/sdk";
 import { ConnectButton } from "@/components/connect-button";
 import { agentsForFocus, getAgentReport } from "@/lib/agents";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { OpenBallot } from "@/components/open-ballot";
 import { usePrivacyState, openPrivacyDetails } from "@/components/privacy-status";
 import { useAppConfig, useDeps } from "@/components/providers";

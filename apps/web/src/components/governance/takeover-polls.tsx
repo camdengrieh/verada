@@ -8,7 +8,7 @@ import { useAccount } from "wagmi";
 import type { Address } from "viem";
 import { TAKEOVER_AGAINST, TAKEOVER_FOR } from "@varada/sdk";
 import { takeoverGovernorAbi } from "@varada/sdk/abis";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
 import { useCastBallot } from "@/components/use-cast-ballot";
 import { errorText, shortAddress } from "@/components/use-tx";
