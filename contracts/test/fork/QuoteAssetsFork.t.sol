@@ -13,6 +13,7 @@ import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {AddQuoteAssets} from "../../script/AddQuoteAssets.s.sol";
 import {Deploy} from "../../script/Deploy.s.sol";
+import {DonationAsset} from "../../src/interfaces/IDonationAsset.sol";
 import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {FeeVault} from "../../src/FeeVault.sol";
@@ -152,7 +153,8 @@ contract QuoteAssetsForkTest is Test, Deploy {
             label: string.concat("quote-fork-", vm.toString(launches)),
             logoRef: bytes32(0),
             categoryMask: CatalogPublish.CATEGORIES,
-            regionMask: CatalogPublish.REGIONS
+            regionMask: CatalogPublish.REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
         vm.prank(creator);
         (address token,) = VaradaFactory(d.factory).deployToken(p);

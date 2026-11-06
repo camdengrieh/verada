@@ -20,6 +20,7 @@ import {VaradaFactory} from "../src/VaradaFactory.sol";
 import {VaradaLiveHook} from "../src/VaradaLiveHook.sol";
 import {VaradaLpLocker} from "../src/VaradaLpLocker.sol";
 import {RotationPeriod} from "../src/interfaces/IRotationGovernor.sol";
+import {DonationAsset} from "../src/interfaces/IDonationAsset.sol";
 import {IVaradaFactory} from "../src/interfaces/IVaradaFactory.sol";
 import {CatalogPublish} from "../test/utils/CatalogFixture.sol";
 
@@ -193,7 +194,8 @@ contract RehearseFork is Script {
             label,
             bytes32(0),
             CatalogPublish.CATEGORIES,
-            CatalogPublish.REGIONS
+            CatalogPublish.REGIONS,
+            DonationAsset.Usdc
         );
         (token,) = VaradaFactory(a.factory).deployToken(p);
         console2.log(label, token);
@@ -216,7 +218,8 @@ contract RehearseFork is Script {
             label,
             bytes32(0),
             CatalogPublish.CATEGORIES,
-            CatalogPublish.REGIONS
+            CatalogPublish.REGIONS,
+            DonationAsset.Usdc
         );
         (token,) = VaradaFactory(a.factory)
             .deployLiveToken(p, IVaradaFactory.LiveParams(WIKI_CAUSE, RotationPeriod.OneDay, 0));
