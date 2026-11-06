@@ -931,3 +931,129 @@ export const donationRelations = relations(donation, ({ one }) => ({
   tokenRef: one(token, { fields: [donation.token], references: [token.address] }),
   causeRef: one(cause, { fields: [donation.causeId], references: [cause.causeId] }),
 }));
+
+// ---- Market data: holders and trades, from each Verada token's own `Transfer` events.
+
+/**
+ * Running balance of every account that has held a Verada token. Rows that fall to zero are kept
+ * (so `firstSeenAt` survives a sell-out and re-buy); `holder_stat.holders` counts nonzero rows.
+ * Mints and burns (the zero address) only move `holder_stat.supply`.
+ */
+export const holder = onchainTable(
+  "holder",
+  (t) => ({
+    token: t.hex().notNull(),
+    account: t.hex().notNull(),
+    balance: t.bigint().notNull(),
+    firstSeenAt: t.bigint().notNull(),
+    lastActiveAt: t.bigint().notNull(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.token, table.account] }),
+    tokenBalanceIdx: index().on(table.token, table.balance),
+  }),
+);
+
+/** Per-token holder totals. */
+export const holderStat = onchainTable("holder_stat", (t) => ({
+  token: t.hex().primaryKey(),
+  /** Accounts with a nonzero balance (contracts included; the API labels the known ones). */
+  holders: t.integer().notNull(),
+  transfers: t.integer().notNull(),
+  /** Minted minus burned. */
+  supply: t.bigint().notNull(),
+  updatedAt: t.bigint().notNull(),
+}));
+
+/** Holder count at the end of each UTC day that saw a transfer (gaps carry the last value). */
+export const holderDay = onchainTable(
+  "holder_day",
+  (t) => ({
+    token: t.hex().notNull(),
+    /** Unix seconds of 00:00 UTC. */
+    day: t.bigint().notNull(),
+    holders: t.integer().notNull(),
+  }),
+  (table) => ({ pk: primaryKey({ columns: [table.token, table.day] }) }),
+);
+
+/**
+ * Pool side of a token, resolved on its first trade: the quote asset (`VeradaFactory.quoteAssetOf`)
+ * and whether the token sorts as currency0 of the v4 pool.
+ */
+export const tokenMarket = onchainTable("token_market", (t) => ({
+  token: t.hex().primaryKey(),
+  pool: t.hex().notNull(),
+  quote: t.hex().notNull(),
+  tokenIsCurrency0: t.boolean().notNull(),
+}));
+
+/**
+ * One PoolManager `Swap` on a Verada pool, found in the receipt of a transaction that moved the
+ * token in or out of the PoolManager. Amounts are unsigned and before hook fees taken as deltas.
+ * `trader` is the transaction sender (for a smart account that is the bundler); `sender` is the
+ * contract that called `swap` (router, fee consolidator…).
+ */
+export const trade = onchainTable(
+  "trade",
+  (t) => ({
+    /** `<txHash>-<logIndex>` of the Swap log. */
+    id: t.text().primaryKey(),
+    token: t.hex().notNull(),
+    pool: t.hex().notNull(),
+    /** "buy" (token out of the pool) or "sell". */
+    side: t.text().notNull(),
+    trader: t.hex().notNull(),
+    sender: t.hex().notNull(),
+    tokenAmount: t.bigint().notNull(),
+    quote: t.hex().notNull(),
+    quoteAmount: t.bigint().notNull(),
+    sqrtPriceX96: t.bigint().notNull(),
+    tick: t.integer().notNull(),
+    /** LP fee of the swap, hundredths of a bip. */
+    feePips: t.integer().notNull(),
+    blockNumber: t.bigint().notNull(),
+    logIndex: t.integer().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    tokenTsIdx: index().on(table.token, table.timestamp),
+    traderIdx: index().on(table.trader),
+  }),
+);
+
+/** Trades per token per UTC hour: counts, volumes and the tick range (for candles and pressure). */
+export const tradeHour = onchainTable(
+  "trade_hour",
+  (t) => ({
+    token: t.hex().notNull(),
+    /** Unix seconds at the start of the hour. */
+    hour: t.bigint().notNull(),
+    buys: t.integer().notNull(),
+    sells: t.integer().notNull(),
+    buyQuote: t.bigint().notNull(),
+    sellQuote: t.bigint().notNull(),
+    buyToken: t.bigint().notNull(),
+    sellToken: t.bigint().notNull(),
+    openTick: t.integer().notNull(),
+    highTick: t.integer().notNull(),
+    lowTick: t.integer().notNull(),
+    closeTick: t.integer().notNull(),
+    closeSqrtPriceX96: t.bigint().notNull(),
+  }),
+  (table) => ({ pk: primaryKey({ columns: [table.token, table.hour] }) }),
+);
+
+/** Lifetime trade totals and the latest pool price per token. */
+export const tradeStat = onchainTable("trade_stat", (t) => ({
+  token: t.hex().primaryKey(),
+  trades: t.integer().notNull(),
+  buys: t.integer().notNull(),
+  sells: t.integer().notNull(),
+  volumeQuote: t.bigint().notNull(),
+  volumeToken: t.bigint().notNull(),
+  lastSqrtPriceX96: t.bigint().notNull(),
+  lastTick: t.integer().notNull(),
+  lastTradeAt: t.bigint().notNull(),
+}));

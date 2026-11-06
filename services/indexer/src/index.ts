@@ -63,6 +63,7 @@ import {
   onTakeoverTallied,
   onTakeoverVoteCast,
 } from "./handlers/takeover";
+import { onPoolTransfer, onTokenTransfer } from "./handlers/market";
 import { onTokenCreated } from "./handlers/token";
 import {
   onClaimsConverted,
@@ -167,3 +168,6 @@ ponder.on("RotationGovernor:RoundFinalized", onRoundFinalized);
 ponder.on("RotationGovernor:PeriodChangeScheduled", onPeriodChangeScheduled);
 ponder.on("RotationGovernor:CuratedPicksUsed", onRotationCuratedPicksUsed);
 ponder.on("RotationGovernor:BallotPrepared", onRotationBallotPrepared);
+// Market data: holder balances from every transfer; trades from PoolManager transfers' receipts.
+ponder.on("VeradaToken:Transfer", onTokenTransfer);
+ponder.on("VeradaTokenPool:Transfer", onPoolTransfer);

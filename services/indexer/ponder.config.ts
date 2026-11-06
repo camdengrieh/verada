@@ -17,7 +17,9 @@ import {
   VeradaFactoryAbi,
   VeradaLiveHookAbi,
   ZamaVotingSchemeAbi,
+  VeradaTokenAbi,
 } from "./src/abis";
+import { POOL_MANAGER } from "./src/pool-manager";
 import { MAINNET_CHAIN_ID, readEnv } from "./src/env";
 
 const env = readEnv(process.env);
@@ -31,6 +33,33 @@ export default createConfig({
       abi: VeradaFactoryAbi,
       chain: "mainnet",
       address: env.factory,
+      startBlock: env.startBlock,
+    },
+    // Every Verada token (child of the factory's `TokenCreated`): all transfers, for holder balances.
+    VeradaToken: {
+      abi: VeradaTokenAbi,
+      chain: "mainnet",
+      address: factory({
+        address: env.factory,
+        event: getAbiItem({ abi: VeradaFactoryAbi, name: "TokenCreated" }),
+        parameter: "token",
+      }),
+      startBlock: env.startBlock,
+    },
+    // The same tokens, only transfers into or out of the PoolManager. The handler reads those
+    // transactions' receipts; their PoolManager `Swap` logs are the trades.
+    VeradaTokenPool: {
+      abi: VeradaTokenAbi,
+      chain: "mainnet",
+      address: factory({
+        address: env.factory,
+        event: getAbiItem({ abi: VeradaFactoryAbi, name: "TokenCreated" }),
+        parameter: "token",
+      }),
+      filter: [
+        { event: "Transfer", args: { from: POOL_MANAGER } },
+        { event: "Transfer", args: { to: POOL_MANAGER } },
+      ],
       startBlock: env.startBlock,
     },
     FeeVault: {
