@@ -72,6 +72,19 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_ROUTE_HOPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "PRE_TRY_GAS",
     "inputs": [],
     "outputs": [
@@ -114,12 +127,12 @@ export const veradaLiveHookAbi = [
     "name": "afterAddLiquidity",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -151,7 +164,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "params",
         "type": "tuple",
         "internalType": "struct ModifyLiquidityParams",
         "components": [
@@ -178,17 +191,17 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "delta",
         "type": "int256",
         "internalType": "BalanceDelta"
       },
       {
-        "name": "",
+        "name": "feesAccrued",
         "type": "int256",
         "internalType": "BalanceDelta"
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -205,19 +218,19 @@ export const veradaLiveHookAbi = [
         "internalType": "BalanceDelta"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
     "name": "afterDonate",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -249,17 +262,17 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "amount0",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "amount1",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -271,19 +284,19 @@ export const veradaLiveHookAbi = [
         "internalType": "bytes4"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
     "name": "afterInitialize",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -315,12 +328,12 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "sqrtPriceX96",
         "type": "uint160",
         "internalType": "uint160"
       },
       {
-        "name": "",
+        "name": "tick",
         "type": "int24",
         "internalType": "int24"
       }
@@ -332,19 +345,19 @@ export const veradaLiveHookAbi = [
         "internalType": "bytes4"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
     "name": "afterRemoveLiquidity",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -376,7 +389,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "params",
         "type": "tuple",
         "internalType": "struct ModifyLiquidityParams",
         "components": [
@@ -403,17 +416,17 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "delta",
         "type": "int256",
         "internalType": "BalanceDelta"
       },
       {
-        "name": "",
+        "name": "feesAccrued",
         "type": "int256",
         "internalType": "BalanceDelta"
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -430,14 +443,14 @@ export const veradaLiveHookAbi = [
         "internalType": "BalanceDelta"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
     "name": "afterSwap",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
@@ -501,19 +514,19 @@ export const veradaLiveHookAbi = [
         "internalType": "BalanceDelta"
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
     ],
     "outputs": [
       {
-        "name": "",
+        "name": "selector",
         "type": "bytes4",
         "internalType": "bytes4"
       },
       {
-        "name": "",
+        "name": "hookDelta",
         "type": "int128",
         "internalType": "int128"
       }
@@ -525,12 +538,12 @@ export const veradaLiveHookAbi = [
     "name": "beforeAddLiquidity",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -562,7 +575,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "params",
         "type": "tuple",
         "internalType": "struct ModifyLiquidityParams",
         "components": [
@@ -589,7 +602,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -601,19 +614,19 @@ export const veradaLiveHookAbi = [
         "internalType": "bytes4"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
     "name": "beforeDonate",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -645,17 +658,17 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "amount0",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "amount1",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -667,7 +680,7 @@ export const veradaLiveHookAbi = [
         "internalType": "bytes4"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -711,7 +724,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "sqrtPriceX96",
         "type": "uint160",
         "internalType": "uint160"
       }
@@ -730,12 +743,12 @@ export const veradaLiveHookAbi = [
     "name": "beforeRemoveLiquidity",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "",
+        "name": "key",
         "type": "tuple",
         "internalType": "struct PoolKey",
         "components": [
@@ -767,7 +780,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "params",
         "type": "tuple",
         "internalType": "struct ModifyLiquidityParams",
         "components": [
@@ -794,7 +807,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -806,14 +819,14 @@ export const veradaLiveHookAbi = [
         "internalType": "bytes4"
       }
     ],
-    "stateMutability": "pure"
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
     "name": "beforeSwap",
     "inputs": [
       {
-        "name": "",
+        "name": "sender",
         "type": "address",
         "internalType": "address"
       },
@@ -872,7 +885,7 @@ export const veradaLiveHookAbi = [
         ]
       },
       {
-        "name": "",
+        "name": "hookData",
         "type": "bytes",
         "internalType": "bytes"
       }
@@ -967,6 +980,107 @@ export const veradaLiveHookAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "conversionGasRequired",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "conversionRoute",
+    "inputs": [
+      {
+        "name": "from",
+        "type": "address",
+        "internalType": "Currency"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "route",
+        "type": "tuple[]",
+        "internalType": "struct PoolKey[]",
+        "components": [
+          {
+            "name": "currency0",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "currency1",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "fee",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tickSpacing",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "hooks",
+            "type": "address",
+            "internalType": "contract IHooks"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "conversionTarget",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "Currency"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "convertInline",
+    "inputs": [
+      {
+        "name": "bucket",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "currency",
+        "type": "address",
+        "internalType": "Currency"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1128,6 +1242,30 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "function",
+    "name": "heldFees",
+    "inputs": [
+      {
+        "name": "bucket",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "Currency"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "heldRaw",
     "inputs": [
       {
@@ -1188,6 +1326,25 @@ export const veradaLiveHookAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "isPoolInitializer",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -1284,6 +1441,35 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "function",
+    "name": "retryHeld",
+    "inputs": [
+      {
+        "name": "bucket",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "currency",
+        "type": "address",
+        "internalType": "Currency"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "rotationGovernor",
     "inputs": [],
     "outputs": [
@@ -1300,9 +1486,9 @@ export const veradaLiveHookAbi = [
     "name": "totalHeld",
     "inputs": [
       {
-        "name": "quote",
+        "name": "",
         "type": "address",
-        "internalType": "address"
+        "internalType": "Currency"
       }
     ],
     "outputs": [
@@ -1361,6 +1547,93 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "event",
+    "name": "ConversionRouteSet",
+    "inputs": [
+      {
+        "name": "from",
+        "type": "address",
+        "indexed": true,
+        "internalType": "Currency"
+      },
+      {
+        "name": "hops",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FeeConverted",
+    "inputs": [
+      {
+        "name": "bucket",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "currency",
+        "type": "address",
+        "indexed": true,
+        "internalType": "Currency"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "inSwap",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "FeeHeld",
+    "inputs": [
+      {
+        "name": "bucket",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "currency",
+        "type": "address",
+        "indexed": true,
+        "internalType": "Currency"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "reason",
+        "type": "bytes4",
+        "indexed": false,
+        "internalType": "bytes4"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "FeeTaken",
     "inputs": [
       {
@@ -1416,6 +1689,43 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "event",
+    "name": "HeldFeeRetried",
+    "inputs": [
+      {
+        "name": "bucket",
+        "type": "bytes32",
+        "indexed": true,
+        "internalType": "bytes32"
+      },
+      {
+        "name": "currency",
+        "type": "address",
+        "indexed": true,
+        "internalType": "Currency"
+      },
+      {
+        "name": "caller",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amountIn",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amountOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "HeldRetried",
     "inputs": [
       {
@@ -1447,6 +1757,25 @@ export const veradaLiveHookAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "PoolInitializerSet",
+    "inputs": [
+      {
+        "name": "account",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "allowed",
+        "type": "bool",
+        "indexed": false,
+        "internalType": "bool"
       }
     ],
     "anonymous": false
@@ -1557,6 +1886,28 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "error",
+    "name": "HookReentered",
+    "inputs": [
+      {
+        "name": "state",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InitializerNotAllowed",
+    "inputs": [
+      {
+        "name": "sender",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "InsufficientGas",
     "inputs": [
       {
@@ -1565,7 +1916,7 @@ export const veradaLiveHookAbi = [
         "internalType": "uint256"
       },
       {
-        "name": "available",
+        "name": "left",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -1605,6 +1956,16 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidPoolKey",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidRoute",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "NotFactory",
     "inputs": []
   },
@@ -1621,6 +1982,16 @@ export const veradaLiveHookAbi = [
   {
     "type": "error",
     "name": "NothingHeld",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NothingToRetry",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PartialFill",
     "inputs": []
   },
   {
@@ -1646,6 +2017,22 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "error",
+    "name": "PriceDeviation",
+    "inputs": [
+      {
+        "name": "spotTick",
+        "type": "int24",
+        "internalType": "int24"
+      },
+      {
+        "name": "referenceTick",
+        "type": "int24",
+        "internalType": "int24"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "QuoteNotRoutable",
     "inputs": [
       {
@@ -1658,6 +2045,27 @@ export const veradaLiveHookAbi = [
   {
     "type": "error",
     "name": "SettlementMismatch",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "SlippageExceeded",
+    "inputs": [
+      {
+        "name": "out",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minOut",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "SwapLockNeedsSwapCallbacks",
     "inputs": []
   },
   {
@@ -1689,7 +2097,22 @@ export const veradaLiveHookAbi = [
   },
   {
     "type": "error",
+    "name": "UnexpectedUnlock",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "ZeroAddress",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroConversionRecipient",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "ZeroPoolManager",
     "inputs": []
   }
 ] as const;

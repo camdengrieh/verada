@@ -358,7 +358,7 @@ contract MyPoolHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook, NoDonateHoo
 }
 ```
 
-The flags gain `BEFORE_DONATE`, so mine a new address. Prefer adding the feature to the flat
+The flags gain `Hooks.BEFORE_DONATE_FLAG`, so mine a new address. Prefer adding the feature to the flat
 list over inheriting your finished concrete hook (`contract V2 is MyPoolHook, NoDonateHook`): the
 new feature opens a second path to `BaseHook`, and every callback then has to be re-declared
 again with `override(BaseHook, MyPoolHook)`.
