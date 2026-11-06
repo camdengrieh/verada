@@ -85,15 +85,7 @@ abstract contract ConsolidatorBase is Deployers {
             address(distributor),
             address(usdc)
         );
-        cons = new FeeConsolidator(
-            address(this),
-            manager,
-            IConsolidatorRegistry(address(registry)),
-            IFeeVault(address(vault)),
-            address(weth),
-            MAX_SLIPPAGE_BPS,
-            MAX_DEVIATION_TICKS
-        );
+        cons = _deployConsolidator();
         vault.setConsolidator(address(cons));
 
         bytes memory args = abi.encode(manager, address(this), address(cons));
@@ -104,6 +96,19 @@ abstract contract ConsolidatorBase is Deployers {
 
         _fund(address(this));
         vault.registerToken(address(meme));
+    }
+
+    /// @dev Overridable so a test can run the same fixture against `FeeConsolidatorV3`.
+    function _deployConsolidator() internal virtual returns (FeeConsolidator) {
+        return new FeeConsolidator(
+            address(this),
+            manager,
+            IConsolidatorRegistry(address(registry)),
+            IFeeVault(address(vault)),
+            address(weth),
+            MAX_SLIPPAGE_BPS,
+            MAX_DEVIATION_TICKS
+        );
     }
 
     function _fund(address who) internal {
@@ -156,8 +161,7 @@ abstract contract ConsolidatorBase is Deployers {
         manager.initialize(quoteKey, TickMath.getSqrtPriceAtTick(qt));
         _addLiquidity(quoteKey, qt, 2e19);
 
-        PoolKey[] memory route = new PoolKey[](1);
-        route[0] = quoteKey;
+        PoolKey[] memory route = _quoteRoute();
         registry.addQuoteAssetWithRoute(address(quote), IQuoteRegistry.Kind.Ondo, route);
         cons.seedReferences(route);
 
@@ -175,6 +179,12 @@ abstract contract ConsolidatorBase is Deployers {
         int24 tt = _orientedTick(address(meme), address(quote), TOKEN_TICK);
         manager.initialize(tokenKey, TickMath.getSqrtPriceAtTick(tt));
         _addLiquidity(tokenKey, tt, 1e24);
+    }
+
+    /// @dev The route registered for the quote asset (a test may swap in v3 hops).
+    function _quoteRoute() internal virtual returns (PoolKey[] memory route) {
+        route = new PoolKey[](1);
+        route[0] = quoteKey;
     }
 
     /// @dev Delivers raw fees the way the LP locker would: transfer, then consolidate.
