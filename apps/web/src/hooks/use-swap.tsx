@@ -3,10 +3,11 @@
 import { txToast } from "@varada/ui/components/varada/tx-toast";
 import { useCallback, useRef, useState } from "react";
 import type { Hex, TransactionReceipt } from "viem";
-import { useAccount, useConfig, useSendTransaction, useSignTypedData } from "wagmi";
-import { estimateGas, waitForTransactionReceipt } from "wagmi/actions";
+import { useAccount, useConfig, usePublicClient, useSendTransaction, useSignTypedData } from "wagmi";
+import { estimateGas } from "wagmi/actions";
 import { buildTradeTransaction, mapSwapError, planExecution, SwapError, type SignedPermit, type TradeQuote } from "@varada/sdk";
 import { formatDisplay } from "@/lib/swap/amounts";
+import { waitForReceipt } from "./use-receipt";
 import { useSwapClients } from "./use-swap-clients";
 
 export type SwapStepId = "reset" | "approve" | "permit" | "swap";
@@ -44,6 +45,15 @@ const INITIAL: UseSwapState = { phase: "idle", steps: [], hash: null, receipt: n
 
 const explorerTx = (hash: Hex) => `https://etherscan.io/tx/${hash}`;
 
+/** A mined-but-reverted transaction as a typed error: the decoded revert reason when the replay gave one, else a plain note carrying the hash. */
+function revertedError(fallback: string, hash: Hex, revertError: unknown): SwapError {
+  if (revertError !== undefined) {
+    const mapped = mapSwapError(revertError);
+    if (mapped.reason !== "unknown" && mapped.reason !== "rpc-unavailable") return new SwapError(mapped.reason, undefined, { detail: hash, cause: revertError });
+  }
+  return new SwapError("unknown", fallback, { detail: hash });
+}
+
 /**
  * The swap state machine: approve (ERC-20 to Permit2, only when missing) -> sign a Permit2 permit
  * (only when Permit2 does not yet allow the router) -> estimate gas (a free simulation: reverts
@@ -54,6 +64,7 @@ const explorerTx = (hash: Hex) => `https://etherscan.io/tx/${hash}`;
 export function useSwap() {
   const config = useConfig();
   const { address, chainId } = useAccount();
+  const publicClient = usePublicClient({ chainId: chainId ?? 1 });
   const clients = useSwapClients();
   const { sendTransactionAsync } = useSendTransaction();
   const { signTypedDataAsync } = useSignTypedData();
@@ -74,6 +85,7 @@ export function useSwap() {
       let active: SwapStepId | null = null;
       try {
         if (!address || !clients.accountClient) throw new SwapError("unknown", "Connect your wallet first");
+        if (!publicClient) throw new SwapError("rpc-unavailable");
         if (Date.now() - quote.quotedAt > MAX_QUOTE_AGE_MS) throw new SwapError("deadline-expired");
         if (quote.blockers.length > 0) throw new SwapError(quote.blockers[0]!, quote.compliance.blockers.find((b) => b.reason === quote.blockers[0])?.message);
         setState({ ...INITIAL, phase: "planning", busy: true });
@@ -89,9 +101,9 @@ export function useSwap() {
         const sendAndWait = async (tx: { to: `0x${string}`; data: Hex }) => {
           const hash = await sendTransactionAsync({ to: tx.to, data: tx.data });
           setState((s) => ({ ...s, phase: "confirming" }));
-          const r = await waitForTransactionReceipt(config, { hash });
+          const { receipt: r, revertError } = await waitForReceipt(publicClient, hash);
           setState((s) => ({ ...s, phase: "awaiting-wallet" }));
-          if (r.status !== "success") throw new SwapError("unknown", "The approval transaction failed");
+          if (r.status !== "success") throw revertedError("The approval transaction failed", hash, revertError);
         };
 
         if (plan.resetTx) {
@@ -137,8 +149,8 @@ export function useSwap() {
         setState((s) => ({ ...s, hash, phase: "confirming" }));
         toastId = txToast.pending({ kind: "swap", description: `${spend} for ${get}`, explorerHref: explorerTx(hash) });
 
-        const receipt = await waitForTransactionReceipt(config, { hash });
-        if (receipt.status !== "success") throw new SwapError("unknown", "The swap transaction reverted", { detail: hash });
+        const { receipt, revertError } = await waitForReceipt(publicClient, hash);
+        if (receipt.status !== "success") throw revertedError("The swap transaction reverted", hash, revertError);
         patchStep("swap", "done");
         setState((s) => ({ ...s, receipt, phase: "success", busy: false }));
 
@@ -167,7 +179,7 @@ export function useSwap() {
         running.current = false;
       }
     },
-    [address, chainId, clients.accountClient, config, patchStep, sendTransactionAsync, signTypedDataAsync],
+    [address, chainId, clients.accountClient, config, patchStep, publicClient, sendTransactionAsync, signTypedDataAsync],
   );
 
   return { ...state, execute, reset };

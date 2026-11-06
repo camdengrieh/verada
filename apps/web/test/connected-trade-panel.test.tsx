@@ -158,6 +158,53 @@ describe("ConnectedTradePanel", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("AMZNon is paused by Ondo");
   });
 
+  it("shows a cancelled-in-wallet note (not an alert) after a rejected prompt, and the button stays usable", async () => {
+    h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+    h.swap = { ...h.swap, phase: "error", error: new SwapError("user-rejected"), steps: [{ id: "approve", label: "Approve WETH", status: "done" }, { id: "permit", label: "Sign permit for WETH", status: "error" }, { id: "swap", label: "Swap", status: "pending" }] };
+    renderPanel();
+    fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "1" } });
+    expect(await screen.findByRole("status")).toHaveTextContent("Cancelled in your wallet");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("list", { name: "Swap progress" })).toHaveTextContent("Failed: Sign permit for WETH");
+    expect(await screen.findByRole("button", { name: "Review buy" })).toBeEnabled();
+  });
+
+  it("shows why a mined swap failed (slippage) as an alert", async () => {
+    h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+    h.swap = { ...h.swap, phase: "error", error: new SwapError("slippage") };
+    renderPanel();
+    fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "1" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Price moved beyond your slippage limit");
+  });
+
+  it("sell: blocks on the token balance, then allows the swap once it covers the amount", async () => {
+    h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+    h.balances = new Map([[ETH.address, 5n * 10n ** 18n], [TOKEN, 2n * 10n ** 18n]]);
+    renderPanel();
+    fireEvent.click(await screen.findByRole("radio", { name: /Sell/ }));
+    const input = (await screen.findByLabelText("You pay")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "3" } });
+    expect(await screen.findByRole("button", { name: "Insufficient TKN balance" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "1.5" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Review sell/ }));
+    expect(h.swap.execute).toHaveBeenCalled();
+  });
+
+  it("warns that the US market is closed on a weekend for an Ondo quote asset, without blocking the trade", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T15:00:00Z")); // a Saturday
+    try {
+      h.resolved = market({ address: ONDO_TOKENS.AMZNon.address, symbol: "AMZNon", decimals: 18 });
+      h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+      renderPanel();
+      fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "1" } });
+      expect((await screen.findAllByText(/US market closed\./)).length).toBeGreaterThan(0);
+      expect(await screen.findByRole("button", { name: "Review buy" })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows the swap steps and disables the button while the wallet is busy", async () => {
     h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
     h.swap = { ...h.swap, phase: "awaiting-wallet", busy: true, steps: [{ id: "approve", label: "Approve WETH", status: "done" }, { id: "swap", label: "Swap", status: "active" }] };

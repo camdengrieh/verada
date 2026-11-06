@@ -205,6 +205,13 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
       </p>,
     );
   }
+  if (swap.phase === "error" && swap.error?.reason === "user-rejected") {
+    notices.push(
+      <p key="rejected" role="status" className="m-0 text-[13px] text-ink-soft">
+        Cancelled in your wallet. Nothing was swapped; press the button to try again.
+      </p>,
+    );
+  }
   if (q.error && quote && q.stale) notices.push(<p key="stale" role="status" className="m-0 text-[13px] text-ink-muted">Could not refresh the price: {q.error.message}</p>);
   if (q.status === "error" && q.error) notices.push(<p key="qerr" role="alert" className="m-0 text-[13px] text-terracotta-strong">{q.error.message}</p>);
 

@@ -105,6 +105,7 @@ export const KNOWN_ERROR_SELECTORS: Record<string, SwapReason> = {
   "0x7d617bb3": "hook-reverted", // PartialFillNotSupported() of VaradaLiveHook
   "0x19f9fbb7": "hook-reverted", // SwapReentered() of VaradaLiveHook
   "0xa9e35b2f": "hook-reverted", // HookCallFailed()
+  "0xe450d38c": "insufficient-balance", // ERC20InsufficientBalance(address,uint256,uint256) of OpenZeppelin v5 tokens
 };
 
 const UNEXPECTED_REVERT_BYTES = "0x6190b2b0"; // V4Quoter: UnexpectedRevertBytes(bytes)
@@ -188,6 +189,9 @@ export function mapSwapError(err: unknown): SwapError {
   }
   for (const [selector, reason] of Object.entries(KNOWN_ERROR_SELECTORS)) {
     if (lower.includes(selector)) return new SwapError(reason, undefined, { detail: selector, cause: err });
+  }
+  if (lower.includes("erc20insufficientbalance") || lower.includes("transfer amount exceeds balance") || lower.includes("transferfromfailed") || lower.includes("transfer_from_failed")) {
+    return new SwapError("insufficient-balance", undefined, { cause: err });
   }
   if (lower.includes("userblocked")) return new SwapError("blocked", undefined, { cause: err });
   if (lower.includes("usersanctioned")) return new SwapError("sanctioned", undefined, { cause: err });
