@@ -292,7 +292,7 @@ describe("rotation keeper: preparing rounds", () => {
     expect(rot.roundOf(T1, 5n).status).toBe("Open");
   });
 
-  it("logs missing picks at error once, not for every round of every live token", async () => {
+  it("logs missing picks at error once per two hours, not for every round of every live token", async () => {
     const { chain, rot, keeper, logs, advance } = setup({ live: [T3], over: { curationsFor: async () => onChain }, picks: picks({ asia: null }) });
     rot.curatedRequired = true;
     // Three hours of 5-minute runs: every round of both tokens waits for the picks.
@@ -302,7 +302,8 @@ describe("rotation keeper: preparing rounds", () => {
     }
     const failed = logs.filter((l) => l.msg === "keeper step failed");
     expect(failed.length).toBeGreaterThanOrEqual(6);
-    expect(failed.filter((l) => l.level === "error")).toHaveLength(1);
+    // Paged at the start and again two hours in, while the picks are still missing.
+    expect(failed.filter((l) => l.level === "error")).toHaveLength(2);
     expect(failed.every((l) => l.data?.awaitingCuratedPicks === true)).toBe(true);
     expect(chain.sent.filter((a) => "target" in a)).toEqual([]);
     // Any other failure of a round still logs at error.

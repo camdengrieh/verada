@@ -340,8 +340,13 @@ describe("curated ballots", () => {
     const failed = logs.filter((l) => l.msg === "keeper step failed");
     expect(failed.length).toBeGreaterThanOrEqual(20);
     expect(failed.every((l) => l.data?.awaitingCuratedPicks === true && Number(l.data?.retryInSeconds) <= 900)).toBe(true);
-    // The first report alarms; repeats of the same missing picks do not.
-    expect(failed.filter((l) => l.level === "error")).toHaveLength(1);
+    // The first report alarms and repeats log at warn, but a block that lasts pages again every
+    // two hours: at 0h, 2h and 4h of the six.
+    const errors = failed.filter((l) => l.level === "error");
+    expect(errors).toHaveLength(3);
+    expect(errors[0]!.data!.failuresSincePage).toBeUndefined();
+    expect(Number(errors[1]!.data!.failuresSincePage)).toBeGreaterThan(1);
+    expect(failed.indexOf(errors[1]!)).toBeGreaterThan(1);
     expect(String(failed[0]!.data!.error)).toMatch(/hunger\/asia picks for epoch 10.*voidCurations/);
     served = true;
     await keeper.run();

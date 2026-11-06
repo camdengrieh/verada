@@ -23,6 +23,8 @@ import {
  * served, or the curation voided, at any time, and an hourly round votes for 45 minutes.
  */
 export const PICKS_RETRY_MAX_MS = 15 * 60_000;
+/** Missing curator picks that persist this long are logged at error again (re-paged). */
+export const PICKS_REPAGE_MS = 2 * 3_600_000;
 
 /** Live-mode rotation rounds (`RotationGovernor`). */
 export interface RotationDeps {
@@ -193,8 +195,11 @@ export function createKeeper(deps: KeeperDeps) {
   const MAX_CARRIED = 64;
   /** Period-change proposals in a terminal state: never read again. */
   const donePeriods = new Set<bigint>();
-  /** `CuratedPicksUnavailable` messages already logged at error (then at warn). */
-  const picksReported = new Set<string>();
+  /**
+   * `CuratedPicksUnavailable` messages logged at error: when last paged and how many failures
+   * since. Repeats log at warn until `PICKS_REPAGE_MS` has passed, then at error again.
+   */
+  const picksReported = new Map<string, { pagedAt: number; failures: number }>();
   const lookbackRounds = BigInt(deps.rotation?.lookbackRounds ?? 24);
 
   /** Lowercase addresses of active tokens, or null when every epoch should be opened. */
@@ -272,8 +277,9 @@ export function createKeeper(deps: KeeperDeps) {
      * (`CuratedPicksUnavailable`) is retried at least every `PICKS_RETRY_MAX_MS`, since the picks
      * may be served (or the curation voided by the registry owner) at any time; there is no
      * rotation-only fallback. It logs at `error` the first time each message is seen (it names the
-     * agent, region and epoch), then at `warn`: every ballot and round of every token in that focus
-     * hits the same missing picks until someone acts or the weekly epoch ends.
+     * agent, region and epoch), then at `warn`, since every ballot and round of every token in that
+     * focus hits the same missing picks; while they stay missing it logs at `error` again every
+     * `PICKS_REPAGE_MS`, so a dismissed first page is not the last.
      */
     const fail = (key: string, ref: ItemRef, op: string, err: unknown) => {
       s.failed++;
@@ -286,10 +292,15 @@ export function createKeeper(deps: KeeperDeps) {
       else data.error = redact(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
       let expected = err instanceof KeeperRevert && err.errorName === "NoVotes";
       if (missingPicks) {
-        if (picksReported.has(err.message)) expected = true;
-        else {
-          if (picksReported.size >= 1_000) picksReported.clear();
-          picksReported.add(err.message);
+        const seen = picksReported.get(err.message);
+        const at = now();
+        if (seen && at - seen.pagedAt < PICKS_REPAGE_MS) {
+          seen.failures++;
+          expected = true;
+        } else {
+          if (!seen && picksReported.size >= 1_000) picksReported.clear();
+          if (seen) data.failuresSincePage = seen.failures + 1;
+          picksReported.set(err.message, { pagedAt: at, failures: 0 });
         }
         data.awaitingCuratedPicks = true;
       }
