@@ -5,6 +5,10 @@ import { useAccount } from "wagmi";
 import { isAddress, zeroAddress, type Address } from "viem";
 import { swarmReferenceToBytes32, TOKEN_TEXT_KEYS } from "@varada/sdk";
 import { tokenProfileRegistryAbi } from "@varada/sdk/abis";
+import { Button } from "@varada/ui/components/ui/button";
+import { Card } from "@varada/ui/components/ui/card";
+import { Field, FieldControl, FieldLabel } from "@varada/ui/components/ui/field";
+import { Input } from "@varada/ui/components/ui/input";
 import { LogoUploadField } from "@/components/logo-upload";
 import { useAppConfig } from "@/components/providers";
 import { sameAddress, TxStatus, useTx } from "@/components/use-tx";
@@ -55,43 +59,58 @@ export function EditProfilePanel({ token, profile }: { token: Address; profile: 
   }
 
   return (
-    <section aria-label="Edit profile">
-      <h2>Edit profile</h2>
-      <p>You are this token&apos;s profile {isController ? "controller" : "editor"}. Each save is a separate transaction.</p>
-      {EDITABLE.map(({ key, label }) => (
-        <form
-          key={key}
-          onSubmit={(e) => {
-            e.preventDefault();
-            send("setText", [token, key, (texts[key] ?? "").trim()]);
-          }}
-        >
-          <label>
-            {label} ({key}) <input value={texts[key] ?? ""} onChange={(e) => setTexts((t) => ({ ...t, [key]: e.target.value }))} />
-          </label>{" "}
-          <button type="submit" disabled={tx.isPending}>
-            Save {label}
-          </button>
-        </form>
-      ))}
+    <section aria-label="Edit profile" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="m-0 font-display text-2xl font-semibold">Edit profile</h2>
+        <p className="m-0 text-sm text-ink-soft">You are this token&apos;s profile {isController ? "controller" : "editor"}. Each save is a separate transaction.</p>
+      </div>
+      <Card className="gap-5 p-5">
+        {EDITABLE.map(({ key, label }) => (
+          <form
+            key={key}
+            className="flex flex-col gap-2 sm:flex-row sm:items-end"
+            onSubmit={(e) => {
+              e.preventDefault();
+              send("setText", [token, key, (texts[key] ?? "").trim()]);
+            }}
+          >
+            <Field className="flex-1">
+              <FieldLabel>
+                {label} ({key})
+              </FieldLabel>
+              <FieldControl>
+                <Input value={texts[key] ?? ""} onChange={(e) => setTexts((t) => ({ ...t, [key]: e.target.value }))} />
+              </FieldControl>
+            </Field>
+            <Button type="submit" variant="outline" disabled={tx.isPending}>
+              Save {label}
+            </Button>
+          </form>
+        ))}
 
-      <LogoUploadField onUploaded={setLogo} label="New logo" />
-      <button type="button" disabled={!logo || tx.isPending} onClick={() => logo && send("setLogoRef", [token, swarmReferenceToBytes32(logo.reference)])}>
-        Set logo
-      </button>
+        <div className="flex flex-col gap-2 border-t border-line pt-4">
+          <LogoUploadField onUploaded={setLogo} label="New logo" />
+          <Button type="button" variant="outline" className="self-start" disabled={!logo || tx.isPending} onClick={() => logo && send("setLogoRef", [token, swarmReferenceToBytes32(logo.reference)])}>
+            Set logo
+          </Button>
+        </div>
 
-      {isController && (
-        <form onSubmit={onEditor}>
-          <label>
-            Editor address (empty to remove) <input value={editor} onChange={(e) => setEditor(e.target.value)} placeholder={profile.editor ?? ""} />
-          </label>{" "}
-          <button type="submit" disabled={tx.isPending}>
-            Set editor
-          </button>
-        </form>
-      )}
-      {error && <p role="alert">{error}</p>}
-      <TxStatus tx={tx} label="Profile update" />
+        {isController && (
+          <form onSubmit={onEditor} className="flex flex-col gap-2 border-t border-line pt-4 sm:flex-row sm:items-end">
+            <Field className="flex-1">
+              <FieldLabel>Editor address (empty to remove)</FieldLabel>
+              <FieldControl>
+                <Input value={editor} onChange={(e) => setEditor(e.target.value)} placeholder={profile.editor ?? ""} className="num" />
+              </FieldControl>
+            </Field>
+            <Button type="submit" variant="outline" disabled={tx.isPending}>
+              Set editor
+            </Button>
+          </form>
+        )}
+        {error && <p role="alert" className="m-0 text-sm font-medium text-destructive">{error}</p>}
+        <TxStatus tx={tx} label="Profile update" />
+      </Card>
     </section>
   );
 }

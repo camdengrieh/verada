@@ -140,10 +140,10 @@ describe("epoch panel option labels", () => {
   it("tags each option Pinned / Curated / Rotation from the indexer", async () => {
     fixtures[EPOCH_PATH] = { ...baseEpoch, pinnedCount: 1, curatedDrawn: 2, curatedCount: 1, optionSources: ["pinned", "curated", "rotation"] };
     renderPanel();
-    expect(await optionTags()).toEqual(["[Pinned]", "[Curated]", "[Rotation]"]);
+    expect(await optionTags()).toEqual(["Pinned", "Curated", "Rotation"]);
     const panel = screen.getByRole("region", { name: "Current epoch" });
     expect(within(panel).getByText(/Options: 1 pinned, 1 curated, 1 rotation\./)).toBeInTheDocument();
-    expect(within(panel).getByTitle(/curator agent/)).toHaveTextContent("[Curated]");
+    expect(within(panel).getByTitle(/curator agent/)).toHaveTextContent("Curated");
     // No agent link: the API does not say which agent's bucket a curated pick came from.
     expect(within(panel).queryByRole("link")).toBeNull();
   });
@@ -151,7 +151,7 @@ describe("epoch panel option labels", () => {
   it("derives the tags from pinnedCount / curatedCount when optionSources is absent", async () => {
     fixtures[EPOCH_PATH] = { ...baseEpoch, pinnedCount: 0, curatedCount: 2 };
     renderPanel();
-    expect(await optionTags()).toEqual(["[Curated]", "[Curated]", "[Rotation]"]);
+    expect(await optionTags()).toEqual(["Curated", "Curated", "Rotation"]);
   });
 
   it("shows no tags for an older indexer without the fields", async () => {
@@ -166,7 +166,7 @@ describe("epoch panel option labels", () => {
   it("tags the token's pins before the ballot is prepared", async () => {
     fixtures[EPOCH_PATH] = { epoch: "5", options: [], prepared: false, poll: null, pinnedCount: null, curatedCount: null, optionSources: [] };
     renderPanel();
-    expect(await optionTags()).toEqual(["[Pinned]"]);
+    expect(await optionTags()).toEqual(["Pinned"]);
     const panel = screen.getByRole("region", { name: "Current epoch" });
     expect(within(panel).getByText(/not prepared yet/)).toHaveTextContent(/curator agents/);
   });

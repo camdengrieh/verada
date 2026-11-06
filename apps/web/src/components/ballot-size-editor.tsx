@@ -5,6 +5,9 @@ import { useAccount } from "wagmi";
 import type { Address } from "viem";
 import { ballotGasHint, BALLOT_GAS_PER_TALLY_WORD, effectiveBallotSize, MAX_BALLOT_OPTIONS } from "@varada/sdk";
 import { epochGovernorAbi } from "@varada/sdk/abis";
+import { Button } from "@varada/ui/components/ui/button";
+import { Card } from "@varada/ui/components/ui/card";
+import { controlClasses } from "@varada/ui/components/ui/input";
 import { useAppConfig } from "@/components/providers";
 import { sameAddress, TxStatus, useTx } from "@/components/use-tx";
 import type { TokenDetail } from "@/lib/indexer";
@@ -49,40 +52,42 @@ export function BallotSizeEditor({ token, detail }: { token: Address; detail: To
   }
 
   return (
-    <section aria-label="Ballot size">
-      <h2>Ballot size</h2>
-      <p>
-        How many charities each weekly ballot holds. The platform allows up to {cap}
-        {settings ? `; this token's ballot now holds up to ${settings.size}` : ""}. A change applies to this week&apos;s ballot if it has
-        not been prepared yet, and otherwise from next week.
-      </p>
-      <label>
-        Options per ballot{" "}
-        <select value={choice} onChange={(e) => setChoice(Number(e.target.value))}>
-          <option value={0}>Follow the platform ({cap})</option>
-          {BALLOT_SIZE_CHOICES.map((n) => (
-            <option key={n} value={n}>
-              {n > cap ? `${n} (capped at ${cap})` : n}
-            </option>
-          ))}
-        </select>
-      </label>
-      <p role="note">
-        Sizes that are multiples of 3 are the most efficient: votes are counted three options to an encrypted word, and each 3 fewer
-        options save each voter about {Math.round(BALLOT_GAS_PER_TALLY_WORD / 1000)}k gas per ballot. {ballotGasText(size)}
-      </p>
-      {pins > size && (
-        <p role="note">
-          This token has {pins} pinned causes: only the first {size} make it onto a {size}-option ballot.
+    <section aria-label="Ballot size" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="m-0 font-display text-2xl font-semibold">Ballot size</h2>
+        <p className="m-0 text-sm text-ink-soft">
+          How many charities each weekly ballot holds. The platform allows up to {cap}
+          {settings ? `; this token's ballot now holds up to ${settings.size}` : ""}. A change applies to this week&apos;s ballot if it has
+          not been prepared yet, and otherwise from next week.
         </p>
-      )}
-      <p>
-        <button type="button" disabled={tx.isPending || choice === (settings?.choice ?? 0)} onClick={save}>
+      </div>
+      <Card className="p-5">
+        <label className="flex flex-col gap-1.5 text-sm font-semibold text-ink">
+          Options per ballot
+          <select value={choice} onChange={(e) => setChoice(Number(e.target.value))} className={`${controlClasses} h-11 max-w-xs px-3`}>
+            <option value={0}>Follow the platform ({cap})</option>
+            {BALLOT_SIZE_CHOICES.map((n) => (
+              <option key={n} value={n}>
+                {n > cap ? `${n} (capped at ${cap})` : n}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p role="note" className="m-0 text-sm text-ink-soft">
+          Sizes that are multiples of 3 are the most efficient: votes are counted three options to an encrypted word, and each 3 fewer
+          options save each voter about {Math.round(BALLOT_GAS_PER_TALLY_WORD / 1000)}k gas per ballot. {ballotGasText(size)}
+        </p>
+        {pins > size && (
+          <p role="note" className="m-0 text-sm text-ink-soft">
+            This token has {pins} pinned causes: only the first {size} make it onto a {size}-option ballot.
+          </p>
+        )}
+        <Button type="button" variant="outline" className="self-start" disabled={tx.isPending || choice === (settings?.choice ?? 0)} onClick={save}>
           Save ballot size
-        </button>
-      </p>
-      {error && <p role="alert">{error}</p>}
-      <TxStatus tx={tx} label="Ballot size update" />
+        </Button>
+        {error && <p role="alert" className="m-0 text-sm font-medium text-destructive">{error}</p>}
+        <TxStatus tx={tx} label="Ballot size update" />
+      </Card>
     </section>
   );
 }

@@ -4,10 +4,14 @@ import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import type { Address, Hex } from "viem";
 import { epochGovernorAbi } from "@varada/sdk/abis";
+import { Button } from "@varada/ui/components/ui/button";
+import { Card } from "@varada/ui/components/ui/card";
+import { CauseIcon } from "@varada/ui/components/varada/cause-icon";
 import { CatalogBrowser } from "@/components/catalog-browser";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { sameAddress, TxStatus, useTx } from "@/components/use-tx";
 import type { CatalogOrg, TokenDetail } from "@/lib/indexer";
+import { causeNameOfOrg } from "@/lib/token-data";
 import { addPin, entryInFocus, maxPins, type PinDraft } from "@/lib/profile";
 
 /**
@@ -71,47 +75,52 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
   }
 
   return (
-    <section aria-label="Pinned causes">
-      <h2>Pinned causes</h2>
-      <p>
-        Up to {max} causes from this token&apos;s focus that lead every ballot. The other options are drawn in rotation from the
-        whole focus pool, so every charity in it gets its turn. Changes take effect from the next epoch once the current ballot is
-        prepared.
-      </p>
-      {draft.length > max && (
-        <p role="note">
-          This token&apos;s ballot now holds {max} options, so only the first {max} pinned causes make it onto the ballot.
+    <section aria-label="Pinned causes" className="flex flex-col gap-4">
+      <div className="flex flex-col gap-1">
+        <h2 className="m-0 font-display text-2xl font-semibold">Pinned causes</h2>
+        <p className="m-0 text-sm text-ink-soft">
+          Up to {max} causes from this token&apos;s focus that lead every ballot. The other options are drawn in rotation from the
+          whole focus pool, so every charity in it gets its turn. Changes take effect from the next epoch once the current ballot is
+          prepared.
         </p>
-      )}
-      {draft.length === 0 ? (
-        <p>No causes pinned: every option is drawn from the focus pool.</p>
-      ) : (
-        <ol>
-          {draft.map((p) => (
-            <li key={p.causeId}>
-              {p.name}{" "}
-              <button type="button" onClick={() => setDraft((d) => d.filter((x) => x.causeId !== p.causeId))}>
-                Unpin {p.name}
-              </button>
-            </li>
-          ))}
-        </ol>
-      )}
-      {focus ? (
-        <CatalogBrowser onSelect={(o) => void add(o)} selectLabel="Pin" within={{ categories: focus.categories, regions: focus.regions }} />
-      ) : (
-        <p role="note">The token&apos;s cause focus is not indexed yet.</p>
-      )}
-      <p>
-        <button type="button" disabled={tx.isPending} onClick={() => save(draft)}>
-          Save pinned causes
-        </button>{" "}
-        <button type="button" disabled={tx.isPending || draft.length === 0} onClick={() => save([])}>
-          Unpin all
-        </button>
-      </p>
-      {error && <p role="alert">{error}</p>}
-      <TxStatus tx={tx} label="Pinned causes update" />
+      </div>
+      <Card className="p-5">
+        {draft.length > max && (
+          <p role="note" className="m-0 text-sm text-ink-soft">
+            This token&apos;s ballot now holds {max} options, so only the first {max} pinned causes make it onto the ballot.
+          </p>
+        )}
+        {draft.length === 0 ? (
+          <p className="m-0 text-sm text-ink-soft">No causes pinned: every option is drawn from the focus pool.</p>
+        ) : (
+          <ol className="m-0 grid list-none gap-2 p-0">
+            {draft.map((p) => (
+              <li key={p.causeId} className="flex min-w-0 items-center gap-3 rounded-2xl border border-line bg-paper-card px-3 py-2">
+                <CauseIcon cause={causeNameOfOrg({ categories: p.categories ?? [] })} size={32} decorative />
+                <span className="min-w-0 flex-1 truncate text-[15px] font-semibold">{p.name}</span>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setDraft((d) => d.filter((x) => x.causeId !== p.causeId))}>
+                  Unpin {p.name}
+                </Button>
+              </li>
+            ))}
+          </ol>
+        )}
+        {focus ? (
+          <CatalogBrowser onSelect={(o) => void add(o)} selectLabel="Pin" within={{ categories: focus.categories, regions: focus.regions }} />
+        ) : (
+          <p role="note" className="m-0 text-sm text-ink-soft">The token&apos;s cause focus is not indexed yet.</p>
+        )}
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="cause" disabled={tx.isPending} onClick={() => save(draft)}>
+            Save pinned causes
+          </Button>
+          <Button type="button" variant="outline" disabled={tx.isPending || draft.length === 0} onClick={() => save([])}>
+            Unpin all
+          </Button>
+        </div>
+        {error && <p role="alert" className="m-0 text-sm font-medium text-destructive">{error}</p>}
+        <TxStatus tx={tx} label="Pinned causes update" />
+      </Card>
     </section>
   );
 }
@@ -124,5 +133,6 @@ function toDraft(org: CatalogOrg, entry: { bucket: number; index: number; proof:
     index: entry.index,
     proof: entry.proof as Hex[],
     name: org.name,
+    categories: org.categories,
   };
 }

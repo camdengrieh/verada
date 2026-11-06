@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { Input } from "@varada/ui/components/ui/input";
 import { useAppConfig } from "@/components/providers";
 import { checkLogoFile, PublisherClient, type LogoUpload } from "@/lib/publisher";
 
@@ -43,17 +44,23 @@ export function LogoUploadField({ onUploaded, label = "Logo (PNG, JPEG or WebP, 
   }
 
   return (
-    <fieldset>
-      <legend>{label}</legend>
-      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => void onChange(e)} aria-label="Logo file" />
-      {preview && <img src={preview} alt="Selected logo preview" width={64} height={64} />}
-      {state.status === "uploading" && <p role="status">Uploading {Math.ceil(state.size / 1024)} KiB to Swarm</p>}
+    <fieldset className="flex min-w-0 flex-col gap-2 border-0 p-0">
+      <legend className="mb-1 text-sm font-semibold text-ink">{label}</legend>
+      <div className="flex flex-wrap items-center gap-3">
+        <Input type="file" accept="image/png,image/jpeg,image/webp" onChange={(e) => void onChange(e)} aria-label="Logo file" className="h-auto min-h-11 max-w-sm py-2" />
+        {preview && (
+          // A local object URL of the file just picked; next/image does not apply.
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={preview} alt="Selected logo preview" width={64} height={64} className="size-16 rounded-xl border border-line object-cover" />
+        )}
+      </div>
+      {state.status === "uploading" && <p role="status" className="m-0 text-sm text-ink-soft">Uploading {Math.ceil(state.size / 1024)} KiB to Swarm</p>}
       {state.status === "done" && (
-        <p role="status">
-          Uploaded. Swarm reference <code>{state.upload.reference}</code>
+        <p role="status" className="m-0 text-sm text-ink-soft">
+          Uploaded. Swarm reference <code className="num break-all">{state.upload.reference}</code>
         </p>
       )}
-      {state.status === "error" && <p role="alert">Logo upload failed: {state.message}</p>}
+      {state.status === "error" && <p role="alert" className="m-0 text-sm font-medium text-destructive">Logo upload failed: {state.message}</p>}
     </fieldset>
   );
 }
