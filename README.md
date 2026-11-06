@@ -8,16 +8,28 @@ mode, where every swap's fee is converted to USDC and donated in the same swap t
 cause, and holders rotate that cause by private vote every hour, 12 hours, day, three days or week.
 
 ## Layout
-- `contracts/` — Foundry (Uniswap v4 hook-based launch, fee vault, causes, weekly governance,
-  live-donation hook, vault and rotation governor, ENS profile registry and wildcard resolver, Zama FHE voting scheme, community takeover)
-- `packages/` — shared TypeScript (`sdk`, `endaoment-client`, `publish` for Swarm/ENS releases,
-  `arkiv-registry` for the Arkiv mirror)
-- `services/` — `indexer` (Ponder + read-only API) and `publisher` (uploads, Arkiv mirror, tally keeper)
-- `packages/ui/` — the component library (Direction A design system; gallery at `/design`)
-- `apps/web/` — static-export frontend (served from Swarm behind ENS)
-- `infra/` — AWS CDK (indexer, Bee node + gateway, publisher)
 
-See `docs/ARCHITECTURE.md` for how the pieces fit together.
+| Path | What it is |
+| --- | --- |
+| `contracts/` | Foundry: Uniswap v4 hook-based launch, fee vault, causes, weekly governance, live-donation hook, vault and rotation governor, ENS profile registry and wildcard resolver, Zama FHE voting scheme, community takeover |
+| `apps/web/` | Static-export Next.js app, served from Swarm behind ENS ([README](apps/web/README.md)) |
+| `packages/ui/` | `@varada/ui`, the component library; gallery at `/design` ([README](packages/ui/README.md)) |
+| `packages/sdk/` | `@varada/sdk`: ABIs, addresses, fee and ballot math, ENS and Swarm helpers, the swap engine |
+| `packages/publish/` | Validate, upload and point ENS at a release of the static export |
+| `packages/cause-catalog/`, `packages/curator/`, `packages/endaoment-client/`, `packages/arkiv-registry/` | Catalogue builder, curator agent CLI, Endaoment client, Arkiv mirror schemas |
+| `services/indexer/` | Ponder indexer and the read-only `/api/*` layer (market, trades, holders, discover, causes, governance) |
+| `services/publisher/` | Logo and metadata uploads, Arkiv mirror, tally keeper, x402 facilitator |
+| `agents/` | Operations for the 20 curator agents |
+| `infra/` | AWS CDK (indexer, Bee node and gateway, publisher) |
+
+Where to read next:
+
+- [`docs/OVERVIEW.md`](docs/OVERVIEW.md): how the app shell, `@varada/ui`, the SDK swap engine and the
+  indexer API fit together, and how to run all of it locally.
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): the contracts and protocol rules.
+- [`docs/SWAP.md`](docs/SWAP.md): routing, quotes, fees and execution of a trade.
+- [`docs/PRIVACY.md`](docs/PRIVACY.md): what each component can see about a user.
+- [`docs/ENV.md`](docs/ENV.md): environment variables and `config.json`, by component.
 
 Security reviews, their coverage, every finding and its status: [`docs/SECURITY.md`](docs/SECURITY.md).
 Deploying to Ethereum mainnet (rehearsal, broadcast, owner setup): [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md).
@@ -48,6 +60,9 @@ and trust assumptions: [`docs/hooks/README.md`](docs/hooks/README.md). Tutorial:
 
 ## Getting started
 
+Requirements: pnpm 10; Node 22.12 or newer for the indexer (Ponder), Node 20 or newer is enough for the
+web app, SDK and tests; Foundry for the contracts; Git LFS for the art originals.
+
 The original artwork in `apps/web/assets-src/` is stored with [Git LFS](https://git-lfs.com).
 Install it once per machine before cloning, or the art files arrive as small text pointers:
 
@@ -55,7 +70,7 @@ Install it once per machine before cloning, or the art files arrive as small tex
 brew install git-lfs        # or your platform's package
 git lfs install             # once per machine
 git clone https://github.com/camdengrieh/verada.git
-cd varada && git lfs pull   # only needed if you cloned before installing LFS
+cd verada && git lfs pull   # only needed if you cloned before installing LFS
 pnpm install
 ```
 
@@ -95,3 +110,21 @@ every known gap are in [`docs/PRIVACY.md`](docs/PRIVACY.md).
 ## License
 
 MIT. See [`LICENSE`](LICENSE).
+
+Run the web app against a mock indexer (no RPC key needed), in two terminals:
+
+```sh
+pnpm --filter @varada/indexer serve:fixtures 42069
+pnpm --filter @varada/web dev      # http://localhost:3000
+```
+
+Checks (the ones CI runs):
+
+```sh
+pnpm typecheck && pnpm test
+pnpm --filter @varada/web build && pnpm --filter @varada/web verify:export
+pnpm build:contracts && pnpm test:contracts
+```
+
+The real indexer, the publisher, the static export on a Swarm-style server and a mainnet fork are
+covered in [`docs/OVERVIEW.md`](docs/OVERVIEW.md#running-everything-locally).
