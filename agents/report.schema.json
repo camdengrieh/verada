@@ -192,6 +192,10 @@
         }
       ],
       "$comment": "Each region at most once."
+    },
+    "donors": {
+      "description": "Optional. The cause's biggest public on-chain donors over the week, copied from the indexer by `varada-curator donors` and merged by `build --donors`. Never written by hand.",
+      "$ref": "#/$defs/Donors"
     }
   },
   "required": [
@@ -365,6 +369,107 @@
         "score",
         "reasons",
         "sources"
+      ]
+    },
+    "Donors": {
+      "description": "Donor leaderboard snapshot: coins (Varada tokens' payouts) and wallets (direct Endaoment org donations), largest first.",
+      "type": "object",
+      "properties": {
+        "from": {
+          "description": "Window start, unix seconds (inclusive).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "to": {
+          "description": "Window end, unix seconds (exclusive).",
+          "type": "integer",
+          "minimum": 0
+        },
+        "coins": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/CoinDonor"
+          },
+          "maxItems": 10
+        },
+        "wallets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/WalletDonor"
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "from",
+        "to",
+        "coins",
+        "wallets"
+      ]
+    },
+    "CoinDonor": {
+      "description": "A Varada token, ranked by what its weekly and live payouts gave the cause.",
+      "type": "object",
+      "properties": {
+        "token": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "symbol": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "ensName": {
+          "description": "`<label>.varada.eth`, when the token has a name.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "donated": {
+          "description": "USDC base units (6 decimals), decimal string.",
+          "type": "string",
+          "pattern": "^\\d{1,30}$"
+        },
+        "donations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "token",
+        "symbol",
+        "donated",
+        "donations"
+      ]
+    },
+    "WalletDonor": {
+      "description": "Any address that donated directly to the cause's Endaoment orgs.",
+      "type": "object",
+      "properties": {
+        "address": {
+          "type": "string",
+          "pattern": "^0x[0-9a-fA-F]{40}$"
+        },
+        "ensName": {
+          "description": "The wallet's primary name, only when it is a varada.eth subname.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 255
+        },
+        "donated": {
+          "description": "USDC base units (6 decimals), decimal string.",
+          "type": "string",
+          "pattern": "^\\d{1,30}$"
+        },
+        "donations": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "address",
+        "donated",
+        "donations"
       ]
     }
   }

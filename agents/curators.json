@@ -1,0 +1,115 @@
+{
+  "$comment": "Varada curator agents on 1Claw (public data, no secrets). One agent runs two causes; both causes are registered in CuratorRegistry with the agent signer. Each API key is in the 1Claw vault varada-curator-api-keys at apiKeyPath. Created 2026-11-07.",
+  "agents": [
+    {
+      "agent": "animals",
+      "oneClawName": "varada-animals-curator",
+      "oneClawAgentId": "d91bcd3e-f6b9-4c87-b7f3-2cd1ce1e8214",
+      "signer": "0x26c8eb9e686447231fefbdd14cf1a2eadd11a6ef",
+      "causes": [
+        "wildlife",
+        "animals"
+      ],
+      "apiKeyPath": "agents/animals/api-key"
+    },
+    {
+      "agent": "planet",
+      "oneClawName": "varada-planet-curator",
+      "oneClawAgentId": "8013d6e4-4050-4e90-b7a5-1e06e3ebb2d4",
+      "signer": "0x89fe096edeea1b9412388f4b3f101ef25fa41e04",
+      "causes": [
+        "environment",
+        "water"
+      ],
+      "apiKeyPath": "agents/planet/api-key"
+    },
+    {
+      "agent": "research",
+      "oneClawName": "varada-research-curator",
+      "oneClawAgentId": "f239430d-176e-426f-9491-a9c9a9fba35a",
+      "signer": "0x1fa8fad0e3302be041c44ebbcb07182a0e75b256",
+      "causes": [
+        "cancer",
+        "research"
+      ],
+      "apiKeyPath": "agents/research/api-key"
+    },
+    {
+      "agent": "health",
+      "oneClawName": "varada-health-curator",
+      "oneClawAgentId": "fd7b6c6a-7f9e-4127-abb8-acc4e10135d2",
+      "signer": "0xb4df9e078228f6c38225d8a61df1522d5caaee1c",
+      "causes": [
+        "disease",
+        "health"
+      ],
+      "apiKeyPath": "agents/health/api-key"
+    },
+    {
+      "agent": "mind",
+      "oneClawName": "varada-mind-curator",
+      "oneClawAgentId": "989b790b-d65c-40d8-ab8d-02ba44c80331",
+      "signer": "0xf96103b8945bb64473a1133a0d435b008856ec18",
+      "causes": [
+        "mental-health",
+        "veterans"
+      ],
+      "apiKeyPath": "agents/mind/api-key"
+    },
+    {
+      "agent": "youth",
+      "oneClawName": "varada-youth-curator",
+      "oneClawAgentId": "08441601-7ab5-4df8-acee-d6aeb908b0c9",
+      "signer": "0x8a04a428895f71655908b3dea9678d7a43ff273c",
+      "causes": [
+        "children",
+        "education"
+      ],
+      "apiKeyPath": "agents/youth/api-key"
+    },
+    {
+      "agent": "relief",
+      "oneClawName": "varada-relief-curator",
+      "oneClawAgentId": "761a3f4e-8cb5-43f5-8041-bb275a7772b7",
+      "signer": "0x022a78435c5fa6a2a0f5c616732e823eb8def355",
+      "causes": [
+        "disaster",
+        "hunger"
+      ],
+      "apiKeyPath": "agents/relief/api-key"
+    },
+    {
+      "agent": "housing",
+      "oneClawName": "varada-housing-curator",
+      "oneClawAgentId": "a8dcb44f-76ec-4b15-a581-eaa7a8f578be",
+      "signer": "0x09a5614e47bc6dcb59d723fa9edc12eb2452fdaf",
+      "causes": [
+        "homeless",
+        "poverty"
+      ],
+      "apiKeyPath": "agents/housing/api-key"
+    },
+    {
+      "agent": "rights",
+      "oneClawName": "varada-rights-curator",
+      "oneClawAgentId": "0613c6c3-508b-4a42-994b-1b606f2185ef",
+      "signer": "0x8f72f2422e50a0f4c22d880d3132ff271828a35f",
+      "causes": [
+        "human-rights",
+        "women"
+      ],
+      "apiKeyPath": "agents/rights/api-key"
+    },
+    {
+      "agent": "justice",
+      "oneClawName": "varada-justice-curator",
+      "oneClawAgentId": "fae62f0e-77ea-44a5-b636-97e95a8bb63b",
+      "signer": "0x6932eb18abe7ca1e01e758f0ae7840c8c0488646",
+      "causes": [
+        "justice",
+        "refugees"
+      ],
+      "apiKeyPath": "agents/justice/api-key"
+    }
+  ]
+}

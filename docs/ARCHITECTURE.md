@@ -6,9 +6,9 @@ liquidity that is locked permanently. Trading fees are consolidated to USDC and 
 platform and a per-token cause pool. Each token chooses a cause focus at launch (categories such as
 hunger or endangered species, and regions such as Africa), and its holders vote weekly, with hidden
 choices, on which Endaoment-listed nonprofit inside that focus receives the accumulated cause funds. Every token gets an ENS subname
-(`<label>.varada.eth`) with an editable profile and a page on the Swarm-hosted dApp. Twenty
-curator agents, one per cause (`<label>.agent.varada.eth`), publish weekly ranked picks that fill
-part of each ballot; see [Curator agents](#curator-agents).
+(`<label>.varada.eth`) with an editable profile and a page on the Swarm-hosted dApp. Every cause
+has a curator (`<label>.agent.varada.eth`) that publishes ranked picks for each epoch, filling
+part of each ballot; ten agents run the twenty causes, two each; see [Curator agents](#curator-agents).
 
 A token can instead launch in live mode: every swap's fee is converted to USDC inside the swap and
 donated to the cause active at that moment, and holders rotate that cause by private vote on a
@@ -22,12 +22,12 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 | `packages/sdk` | ABIs, addresses, viem helpers, fee math. |
 | `packages/endaoment-client` | Typed Endaoment organization search client. |
 | `packages/cause-catalog` | Harvests Endaoment orgs, classifies them by cause and region, and builds the catalogue Merkle tree (`varada-catalog` CLI). |
-| `packages/curator` | Curator agent tooling (`varada-curator` CLI): weekly report schema (`varada.curation/v1`), pick trees, calldata, and the 1Claw signer. |
+| `packages/curator` | Curator agent tooling (`varada-curator` CLI): the ten agents and their rotation, report schema (`varada.curation/v1`), pick trees, calldata, and the 1Claw signer. |
 | `services/indexer` | Ponder indexer and API over protocol events, plus the x402 paid data routes. |
 | `apps/web` | Next.js app built as a static export (token list, launch, token page, causes, governance, curator agents). |
 | `packages/publish` | Swarm upload, site feed updates and ENS contenthash tooling (dry-run by default). |
 | `packages/arkiv-registry` | Arkiv entity schemas, reconcile planning and client for the token mirror. |
-| `services/publisher` | Logo/metadata uploads to Swarm, signed curator report uploads, stamp watch, Arkiv mirror, the ballot and tally keeper, and the mainnet x402 facilitator. |
+| `services/publisher` | Logo/metadata uploads to Swarm, signed curator report uploads, stamp watch, Arkiv mirror, the ballot and tally keeper, and a mainnet x402 facilitator (dormant: x402 no longer settles on mainnet). |
 | `agents/` | Curator agent operations: provisioning, weekly routines, monitoring and the pause/recovery runbook (`agents/README.md`). |
 | `infra/` | AWS CDK app. |
 
@@ -50,7 +50,7 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 | `CauseRegistry` | Causes that can be paid: `causeId` (`keccak256` of the 32-byte Endaoment org id) to the org's factory-computed address and an active flag. The governor materializes catalogue winners into it; the owner can add causes directly or block any org. |
 | `EpochGovernor` | Weekly epochs. Builds each epoch's ballot from the token's pinned causes, curator agents' picks and rotation draws over its focus pool, authorizes voters by vote checkpoints, and records the winning cause from the scheme's tally on finalization. |
 | `DonationDistributor` | After finalization, sends the epoch's cause funds to the winning cause's payout address. |
-| `CuratorRegistry` | One curator agent per cause category: ERC-8004 identity (owned by the registry), signer, vault, active flag and ENS label. Accepts each agent's weekly curations for the next epoch. |
+| `CuratorRegistry` | One curator registration per cause category (ten agents run them, two each): ERC-8004 identity (owned by the registry), signer, vault, active flag and ENS label. Accepts each agent's weekly curations for the next epoch. |
 | `AgentVault` | Per-agent USDC donation vault. Only the agent's signer can give, only to unblocked catalogue orgs in the agent's own buckets, within a per-epoch cap. No withdrawal. |
 | `VaradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to USDC inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
 | `LiveDonationVault` | USDC ledger of live tokens: splits every conversion 10% platform / 90% cause, keeps the cause share per `(token, cause)` and pushes it to the cause's Endaoment org once the token's donation threshold is reached, or on `flush`. |
@@ -561,15 +561,19 @@ empty values while the label stays taken).
 
 ## Curator agents
 
-Twenty curator agents, one per cause category (every category except `other`), research their
-cause each week and publish ranked picks for the next epoch's ballots. They are run by the
-platform. They cannot pin causes or vote, and no ballot depends on them: rotation fills any slot
+Every cause category except `other` (twenty) has a curator registration, and ten agents run them,
+two related causes each (the 1Claw plan allows ten agents). An agent evaluates one of its causes
+in all regions every 3 days, alternating, so each cause publishes ranked picks for the next
+epoch's ballots every 6 days, at least once per 7-day epoch (a later run in the same epoch
+replaces the earlier one). The pairs and the rotation are `CURATORS` in
+`packages/curator/src/curators.ts`. They are run by the platform. They cannot pin causes or vote, and no ballot depends on them: rotation fills any slot
 they leave empty. Operating them is described in [`agents/README.md`](../agents/README.md).
 
 ### Identities and names
 
-- `CuratorRegistry` (owned by the platform) holds one agent per category bit: its ERC-8004 agent
-  id, signer, vault, active flag, ENS label and description. `registerAgent(categoryBit, label,
+- `CuratorRegistry` (owned by the platform) holds one registration per category bit: its ERC-8004
+  agent id, signer, vault, active flag, ENS label and description. The two causes of an agent are
+  registered with the same signer; the registry and the vaults check the signer per cause. `registerAgent(categoryBit, label,
   signer, agentURI, description)` deploys the agent's `AgentVault` (CREATE2, salt = category bit)
   and registers an identity on the ERC-8004 Identity Registry on mainnet
   (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`) with metadata `varada.category` and
@@ -658,10 +662,10 @@ they leave empty. Operating them is described in [`agents/README.md`](../agents/
 
 ### Runtime and web
 
-- Each agent runs as a weekly Claude scheduled cloud routine, staggered across the day before the
-  epoch starts. The routine does the research and writing; every report signature and transaction
-  goes through the agent's 1Claw key, whose 1Claw policies allow only the registry and the agent's
-  own vault as destinations, zero value, a small daily transaction count, simulation first, and
+- Each agent runs as a daily Claude scheduled cloud routine (staggered 06:00-10:30 UTC) that
+  stops at once unless the rotation has a run that day (`varada-curator due`). The routine does
+  the research and writing; every report signature and transaction goes through the agent's 1Claw
+  key, whose 1Claw policies allow only the registry and the agent's two vaults as destinations, zero value, a small daily transaction count, simulation first, and
   human approval for gifts above a USD threshold. News text is untrusted data, never instructions.
 - A manipulated or compromised agent can, each epoch until it is paused, fill its buckets with
   bad picks and, by inflating its weight, take curated slots from other agents' buckets and from
@@ -685,25 +689,35 @@ under `/x402/v1`. It is off unless `X402_ENABLED` is set; when off, every `/x402
 | `GET /x402/v1/catalog/export` | $0.50 | The classified catalogue, filterable by `category` and `region`, paged (`offset`, `limit` up to 5,000). |
 
 - `GET /x402/v1` is free: the price list with each route's payment options, and the free routes.
-- Each route accepts USDC on Base (`eip155:8453`) first, then on Ethereum mainnet (`eip155:1`).
-  Base payments are settled by Coinbase CDP's facilitator (`CDP_API_KEY_ID`/`CDP_API_KEY_SECRET`,
-  or another facilitator at `X402_BASE_FACILITATOR_URL`). CDP does not settle on Ethereum
-  mainnet, so mainnet payments go to the publisher's own facilitator (`X402_MAINNET_FACILITATOR_URL`
-  and a bearer token); a mainnet payee without a facilitator URL is a configuration error.
-- `payTo` is always a platform treasury (`X402_BASE_PAY_TO`, `X402_MAINNET_PAY_TO`). No x402
-  revenue goes to agents or vaults.
+- Each route accepts USDC on the configured networks, in this order: Base (`eip155:8453`), Arc
+  mainnet (`eip155:5042`) and OP Mainnet (`eip155:10`). The facilitator of each network pays the
+  gas; nothing settles on Ethereum mainnet (decision 2026-11-07: mainnet gas would be a platform
+  cost per sale).
+  - Base: Coinbase CDP's facilitator (`CDP_API_KEY_ID`/`CDP_API_KEY_SECRET`), or another at
+    `X402_BASE_FACILITATOR_URL`.
+  - Arc: Circle Facilitator Service (`X402_ARC_FACILITATOR_URL`, default
+    `https://api.circle.com/v1/facilitator/x402`, with `CIRCLE_API_KEY` as bearer token). Arc
+    settlements are final; Circle warns that Base settlements can still be reorganised.
+  - Optimism: a third-party facilitator (`X402_OPTIMISM_FACILITATOR_URL`, optional bearer token);
+    neither CDP nor Circle settles there. `@x402/evm` has no default asset for OP Mainnet, so the
+    option is quoted as native USDC (`0x0b2C…Ff85`, EIP-712 `USD Coin` / `2`) explicitly, and a
+    buyer's x402 client must allow that asset.
+  - A facilitator cannot redirect a payment (the buyer's signature fixes payee and amount); a bad
+    one can only fail to settle or misreport. Each facilitator is scoped to its own network (the
+    resource server routes a network to the first facilitator listing it, and Circle also lists
+    Base). A settlement reported as pending (Circle answers 200 with a `settlement-status`
+    extension) or without a transaction hash is treated as not settled, so the paid response is
+    withheld.
+- `payTo` is always a platform treasury on that network (`X402_BASE_PAY_TO`, `X402_ARC_PAY_TO`,
+  `X402_OPTIMISM_PAY_TO`). No x402 revenue goes to agents or vaults, and x402 money stays on the
+  network it was paid on (the vaults are on Ethereum mainnet).
 - Prices are USD decimal strings (`X402_PRICE_RANKINGS`, `X402_PRICE_HISTORY`,
-  `X402_PRICE_CATALOG`, `X402_PRICE_NEWSLETTERS`). On mainnet the price is
-  `max(price, X402_MAINNET_MIN_PRICE)` ($0.50 by default) so a settlement's gas is covered.
-  Payments time out after 120 seconds on Base and 300 on mainnet.
-- The mainnet facilitator (`/x402/supported`, `/x402/verify`, `/x402/settle` on the publisher,
-  enabled by `X402_FACILITATOR_ENABLED`) answers only the indexer's bearer token, only the
-  `exact` scheme on its configured network, and only requirements whose `payTo` is
-  `X402_FACILITATOR_PAY_TO`, because it pays the gas. It settles EIP-3009
-  `transferWithAuthorization` on USDC with simulation first; smart-wallet deployment (ERC-6492) is
-  disabled. The settlement key is a 1Claw key whose policy allows only the USDC contract, and the
-  signer wrapper refuses any call other than `transferWithAuthorization` on USDC as well. A local
-  key is accepted for development and fork tests only.
+  `X402_PRICE_CATALOG`, `X402_PRICE_NEWSLETTERS`), with an optional floor per network
+  (`X402_<NETWORK>_MIN_PRICE`, e.g. a facilitator's per-settlement fee). Payments time out after
+  120 seconds.
+- The publisher still contains a mainnet facilitator (`/x402/*`, `X402_FACILITATOR_ENABLED`, a
+  1Claw settlement key limited to USDC `transferWithAuthorization`). It is dormant: the indexer no
+  longer offers mainnet, and no 1Claw agent is provisioned for it.
 - A handler that answers 4xx or 5xx (unknown agent or region, no report, catalogue unavailable)
   cancels the payment, so a buyer is never charged for a miss. Paid responses are
   `Cache-Control: private, no-store`; CORS exposes `PAYMENT-REQUIRED` and `PAYMENT-RESPONSE`.
@@ -870,7 +884,8 @@ Production does not allow `*`. The API is rate limited per client.
 - Curator agents are platform-run: one account's scheduled routines and one key custodian (1Claw),
   and only the registry owner can register or replace a signer. Pins and rotation keep every
   ballot working without them.
-- Mainnet x402 settlement runs through the platform's own facilitator in the publisher.
+- x402 settlement depends on third parties per network: Coinbase CDP (Base), Circle (Arc) and an
+  independent facilitator (Optimism).
 
 ## AWS topology
 

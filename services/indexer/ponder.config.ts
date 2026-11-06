@@ -6,6 +6,7 @@ import {
   CuratorRegistryAbi,
   CauseRegistryAbi,
   DonationDistributorAbi,
+  EndaomentEntityAbi,
   EpochGovernorAbi,
   FeeConsolidatorAbi,
   FeeVaultAbi,
@@ -161,6 +162,14 @@ export default createConfig({
         parameter: "liveVault",
       }),
       startBlock: env.startBlock,
+    },
+    // Direct donations to Endaoment orgs from any address, for the per-cause donor leaderboards.
+    // No address filter: the handler keeps only logs whose emitter is a real Endaoment org (its
+    // `orgId()` maps back to it through the OrgFundFactory), so a look-alike event is ignored.
+    EndaomentOrg: {
+      abi: EndaomentEntityAbi,
+      chain: "mainnet",
+      startBlock: env.endaomentStartBlock,
     },
     // Optional (ROTATION_GOVERNOR_ADDRESS); the zero address indexes nothing.
     RotationGovernor: {

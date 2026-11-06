@@ -106,22 +106,31 @@ jobs:
           INDEXER_PUBLIC_URL: ${{ vars.INDEXER_PUBLIC_URL }}
           ARKIV_CHAIN: ${{ vars.ARKIV_CHAIN }}
           ARKIV_ENABLED: ${{ vars.ARKIV_ENABLED }}
-          # Curator agents and x402 paid routes (all optional, off by default). The secrets (CDP keys,
-          # facilitator token, 1Claw agent) live in Secrets Manager, never in workflow variables.
+          # Curator agents and x402 paid routes (all optional, off by default). x402 settles on Base,
+          # Arc and Optimism only, never on Ethereum mainnet. The secrets (CDP keys, Circle API key,
+          # Optimism facilitator token) live in Secrets Manager, never in workflow variables.
           ENS_PARENT_NAME: ${{ vars.ENS_PARENT_NAME }}
           MAX_REPORT_BYTES: ${{ vars.MAX_REPORT_BYTES }}
           X402_ENABLED: ${{ vars.X402_ENABLED }}
           X402_BASE_PAY_TO: ${{ vars.X402_BASE_PAY_TO }}
           X402_BASE_NETWORK: ${{ vars.X402_BASE_NETWORK }}
           X402_BASE_FACILITATOR_URL: ${{ vars.X402_BASE_FACILITATOR_URL }}
-          X402_MAINNET_PAY_TO: ${{ vars.X402_MAINNET_PAY_TO }}
-          X402_MAINNET_NETWORK: ${{ vars.X402_MAINNET_NETWORK }}
-          X402_MAINNET_FACILITATOR_URL: ${{ vars.X402_MAINNET_FACILITATOR_URL }}
+          X402_BASE_MIN_PRICE: ${{ vars.X402_BASE_MIN_PRICE }}
+          X402_ARC_PAY_TO: ${{ vars.X402_ARC_PAY_TO }}
+          X402_ARC_NETWORK: ${{ vars.X402_ARC_NETWORK }}
+          X402_ARC_FACILITATOR_URL: ${{ vars.X402_ARC_FACILITATOR_URL }}
+          X402_ARC_MIN_PRICE: ${{ vars.X402_ARC_MIN_PRICE }}
+          X402_ARC_CIRCLE_KEY: ${{ vars.X402_ARC_CIRCLE_KEY }}
+          X402_OPTIMISM_PAY_TO: ${{ vars.X402_OPTIMISM_PAY_TO }}
+          X402_OPTIMISM_NETWORK: ${{ vars.X402_OPTIMISM_NETWORK }}
+          X402_OPTIMISM_FACILITATOR_URL: ${{ vars.X402_OPTIMISM_FACILITATOR_URL }}
+          X402_OPTIMISM_FACILITATOR_AUTH: ${{ vars.X402_OPTIMISM_FACILITATOR_AUTH }}
+          X402_OPTIMISM_USDC: ${{ vars.X402_OPTIMISM_USDC }}
+          X402_OPTIMISM_MIN_PRICE: ${{ vars.X402_OPTIMISM_MIN_PRICE }}
           X402_PRICE_RANKINGS: ${{ vars.X402_PRICE_RANKINGS }}
           X402_PRICE_HISTORY: ${{ vars.X402_PRICE_HISTORY }}
           X402_PRICE_CATALOG: ${{ vars.X402_PRICE_CATALOG }}
           X402_PRICE_NEWSLETTERS: ${{ vars.X402_PRICE_NEWSLETTERS }}
-          X402_MAINNET_MIN_PRICE: ${{ vars.X402_MAINNET_MIN_PRICE }}
           X402_FACILITATOR_ENABLED: ${{ vars.X402_FACILITATOR_ENABLED }}
           X402_FACILITATOR_PAY_TO: ${{ vars.X402_FACILITATOR_PAY_TO }}
           X402_FACILITATOR_NETWORK: ${{ vars.X402_FACILITATOR_NETWORK }}
@@ -172,14 +181,22 @@ jobs:
           add x402BasePayTo "$X402_BASE_PAY_TO"
           add x402BaseNetwork "$X402_BASE_NETWORK"
           add x402BaseFacilitatorUrl "$X402_BASE_FACILITATOR_URL"
-          add x402MainnetPayTo "$X402_MAINNET_PAY_TO"
-          add x402MainnetNetwork "$X402_MAINNET_NETWORK"
-          add x402MainnetFacilitatorUrl "$X402_MAINNET_FACILITATOR_URL"
+          add x402BaseMinPrice "$X402_BASE_MIN_PRICE"
+          add x402ArcPayTo "$X402_ARC_PAY_TO"
+          add x402ArcNetwork "$X402_ARC_NETWORK"
+          add x402ArcFacilitatorUrl "$X402_ARC_FACILITATOR_URL"
+          add x402ArcMinPrice "$X402_ARC_MIN_PRICE"
+          add x402ArcCircleKey "$X402_ARC_CIRCLE_KEY"
+          add x402OptimismPayTo "$X402_OPTIMISM_PAY_TO"
+          add x402OptimismNetwork "$X402_OPTIMISM_NETWORK"
+          add x402OptimismFacilitatorUrl "$X402_OPTIMISM_FACILITATOR_URL"
+          add x402OptimismFacilitatorAuth "$X402_OPTIMISM_FACILITATOR_AUTH"
+          add x402OptimismUsdc "$X402_OPTIMISM_USDC"
+          add x402OptimismMinPrice "$X402_OPTIMISM_MIN_PRICE"
           add x402PriceRankings "$X402_PRICE_RANKINGS"
           add x402PriceHistory "$X402_PRICE_HISTORY"
           add x402PriceCatalog "$X402_PRICE_CATALOG"
           add x402PriceNewsletters "$X402_PRICE_NEWSLETTERS"
-          add x402MainnetMinPrice "$X402_MAINNET_MIN_PRICE"
           add x402FacilitatorEnabled "$X402_FACILITATOR_ENABLED"
           add x402FacilitatorPayTo "$X402_FACILITATOR_PAY_TO"
           add x402FacilitatorNetwork "$X402_FACILITATOR_NETWORK"

@@ -152,6 +152,26 @@ Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/we
 - Donating is a wallet transaction like any other write, so the wallet's RPC sees it (see
   "What it does not protect").
 
+### Donor leaderboards (coins and public wallets)
+
+- **What is ranked.** `/api/agents/:label/donors`, the agent pages and the weekly newsletters rank
+  a cause's biggest donors over a window (7 days by default). Coins are Varada tokens, ranked by
+  what their weekly and live payouts gave the cause's catalogue orgs. Wallets are **any address**
+  that donated directly to one of those Endaoment orgs (`EntityDonationReceived`), Varada user or
+  not. This is public chain data, and the user chose to show it (2026-11-07).
+- **What it never includes.** Agent-vault donors who did not opt in to credit: their donation goes
+  to the vault, and the vault's gift to an org is a Varada payout, dropped by transaction hash
+  like the weekly and live payouts. So the leaderboard cannot reveal an uncredited vault donor.
+  Endaoment's own operational senders are excluded too (`DONOR_EXCLUDE`).
+- **Names.** A wallet is shown by address, or by its primary ENS name only when that name is a
+  `varada.eth` subname (with ENSv2 any wallet can claim one). The indexer reads primary names
+  through the ENSv2 Universal Resolver, which checks that the name resolves back to the address.
+  Names from elsewhere (`*.eth`) are not shown. The lookup covers only addresses already on the
+  leaderboard; no visitor's address is involved.
+- **Newsletters.** A report's `donors` field is a snapshot of the leaderboard taken by the CLI,
+  so the newsletter and its archive name the same public donors. Like every report it is permanent
+  once its reference is on chain.
+
 ### Live-donation feed entries
 
 - `LiveDonationVault.Donated(token, causeId, org, amount, orgDeployed, inSwap)` names no donor: the
@@ -169,12 +189,12 @@ Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/we
   IP. It stores neither: there is no payment table and no ALB access log. Paid responses are
   `Cache-Control: private, no-store`.
 - **What is recorded: the settlement only.** The settlement is a public USDC transfer from the
-  payer to the platform treasury on Base or Ethereum mainnet, which shows that the address paid
-  Varada at that time; the amount can hint at which route was bought. Base settlements are also
-  recorded by Coinbase CDP under its own policies. Mainnet settlements are logged by the
-  publisher's facilitator (outcome, transaction hash, error reason). The facilitators receive the
-  payment from the indexer, never the buyer's IP. Buyers who do not want purchases tied to their
-  other activity should pay from a fresh address.
+  payer to the platform treasury on Base, Arc or Optimism (never Ethereum mainnet), which shows
+  that the address paid Varada at that time; the amount can hint at which route was bought. Each
+  network's facilitator also records it under its own policies: Coinbase CDP (Base), Circle (Arc)
+  and the configured third-party facilitator (Optimism). The facilitators receive the payment from
+  the indexer, never the buyer's IP. Buyers who do not want purchases tied to their other activity
+  should pay from a fresh address.
 
 ### Curator reports
 
@@ -182,8 +202,9 @@ Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/we
   chain, and the indexer serves them free, so anyone can check how a ballot was built. A report
   cannot be retracted once its reference is on chain; it stays retrievable while its postage
   stamp lasts.
-- Reports name organisations and link public news. They carry no data about donors, voters or
-  site visitors. News text the agents read is untrusted data: it can shape a ranking but is never
+- Reports name organisations and link public news. The only donor data they carry is the
+  `donors` leaderboard snapshot described above (public on-chain donors); they carry nothing about
+  voters or site visitors. News text the agents read is untrusted data: it can shape a ranking but is never
   followed as instructions.
 
 ## Rules for new features
@@ -195,8 +216,10 @@ Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/we
    requests apart from the RPCs and the anon-rpc bootstrap.
 4. `EventSource` cannot use a custom fetch. When indexer traffic is routed privately, use
    `subscribeActivity(..., { sse: false })`.
-5. Name a donor only when they opted in (`credit`). Totals may count everyone; lists and pages
-   show credited donors only, and nothing stores an uncredited donor's address.
+5. Name an agent-vault donor only when they opted in (`credit`). Totals may count everyone;
+   vault donor lists show credited donors only, and nothing stores an uncredited vault donor's
+   address. Direct Endaoment donations are public and may be ranked (see "Donor leaderboards"),
+   but never in a way that links back to an uncredited vault donation.
 6. The web app never calls the `/x402` routes. A payment header carries the payer's address,
    which rule 1 forbids sending; the paid routes are for outside buyers.
 7. Paid features must not add accounts or store anything about a buyer beyond the settlement.
@@ -243,7 +266,8 @@ Status as of 2026-11-07. Gaps are listed with the change that would close each o
 | Agent vault donors are named only on opt-in (`credit`); the indexer stores no address for the rest | Met; the donor address is public on chain regardless, documented above |
 | x402 buyers need no account; nothing about a buyer is stored beyond the settlement | Met; the settlement itself is a public transfer from the payer's address |
 | The indexer sees a paid request's IP and payer address together while serving it | Gap: documented; buyers can pay from a fresh address or route through Tor |
-| Curator reports are public and permanent once referenced on chain | By design; they carry no personal data |
+| Curator reports are public and permanent once referenced on chain | By design; their only donor data is the public leaderboard snapshot |
+| Donor leaderboards rank any public wallet that gave to a cause's orgs directly | By design (user decision 2026-11-07); uncredited vault donors never appear; names shown only for `varada.eth` primary names |
 
 ### Security
 
@@ -258,4 +282,4 @@ Status as of 2026-11-07. Gaps are listed with the change that would close each o
 | On-chain limits hold even if an agent key is misused: gifts only to unblocked orgs in the agent's own buckets, capped per epoch, no withdrawal; picks are checked against the catalogue at ballot time | Met |
 | Human approval for large gifts is a 1Claw policy, enforced off chain | Gap: the on-chain `maxGivePerEpoch` is the hard limit; keep it at an amount the platform accepts losing to one bad week |
 | Agents read untrusted news text (prompt injection) | Partial: the worst outcome, each epoch until it is paused, is skewed picks that (through an inflated weight) can also displace other agents' picks and rotation on tokens whose focus includes the agent's buckets, plus gifts up to the per-epoch cap. Holders still vote, and pausing stops both |
-| Mainnet x402 settlement key can only call USDC `transferWithAuthorization` (1Claw policy and signer guard), only for the treasury as payee, only for the indexer's bearer token | Met |
+| x402 settles only through each network's facilitator (CDP, Circle, a third party on Optimism); no platform settlement key exists, and a facilitator cannot change payee or amount | Met; the Optimism facilitator is an independent operator chosen by config |

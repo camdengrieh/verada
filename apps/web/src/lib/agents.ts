@@ -349,6 +349,73 @@ export async function getAgentReport(client: Getter, label: string, epoch: strin
   return orMissing(async () => toAgentReport(await client.get(`/api/agents/${encodeURIComponent(l)}/reports/${e}`)));
 }
 
+/** One coin on a cause's donor leaderboard: a Varada token, by its weekly and live payouts. */
+export interface CoinDonor {
+  token: string;
+  name: string | null;
+  symbol: string | null;
+  /** `<label>.<parent>` when the token has a name. */
+  ensName: string | null;
+  donated: string;
+  donations: number;
+  orgs: number;
+}
+
+/** One wallet on a cause's donor leaderboard: any address donating directly to the cause's orgs. */
+export interface WalletDonor {
+  address: string;
+  /** The wallet's primary name, only when it is a subname of the parent (`*.varada.eth`). */
+  ensName: string | null;
+  donated: string;
+  donations: number;
+  orgs: number;
+}
+
+export interface DonorBoard {
+  /** Unix seconds, `from <= t < to`, as decimal strings. */
+  window: { from: string; to: string; epoch: string | null };
+  coins: CoinDonor[];
+  wallets: WalletDonor[];
+  totals: { coins: { donated: string; donors: number }; wallets: { donated: string; donors: number } };
+}
+
+const isHexAddress = (v: unknown): v is string => typeof v === "string" && /^0x[0-9a-fA-F]{40}$/.test(v);
+
+function toCoinDonor(v: unknown): CoinDonor | null {
+  if (!isRecord(v) || !isHexAddress(v.token)) return null;
+  return { token: v.token, name: str(v.name) ?? null, symbol: str(v.symbol) ?? null, ensName: str(v.ensName) ?? null, donated: dec(v.donated), donations: num(v.donations) ?? 0, orgs: num(v.orgs) ?? 0 };
+}
+
+function toWalletDonor(v: unknown): WalletDonor | null {
+  if (!isRecord(v) || !isHexAddress(v.address)) return null;
+  return { address: v.address, ensName: str(v.ensName) ?? null, donated: dec(v.donated), donations: num(v.donations) ?? 0, orgs: num(v.orgs) ?? 0 };
+}
+
+export function toDonorBoard(v: unknown): DonorBoard | null {
+  if (!isRecord(v) || !isRecord(v.window)) return null;
+  const t = isRecord(v.totals) ? v.totals : {};
+  const tot = (x: unknown) => (isRecord(x) ? { donated: dec(x.donated), donors: num(x.donors) ?? 0 } : { donated: "0", donors: 0 });
+  const epoch = v.window.epoch;
+  return {
+    window: { from: dec(v.window.from), to: dec(v.window.to), epoch: epoch === null || epoch === undefined ? null : dec(epoch) },
+    coins: list(v.coins, toCoinDonor),
+    wallets: list(v.wallets, toWalletDonor),
+    totals: { coins: tot(t.coins), wallets: tot(t.wallets) },
+  };
+}
+
+/**
+ * A cause's biggest public on-chain donors over the last `days` (default 7): coins and wallets.
+ * Works for every agent label, registered or not; null for an unknown label.
+ */
+export async function getDonorBoard(client: Getter, label: string, opts: { days?: number; limit?: number; region?: string } = {}): Promise<DonorBoard | null> {
+  const l = label.trim().toLowerCase();
+  if (!agentByLabel(l)) return null;
+  const q = new URLSearchParams({ days: String(opts.days ?? 7), limit: String(opts.limit ?? 10) });
+  if (opts.region) q.set("region", opts.region);
+  return orMissing(async () => toDonorBoard(await client.get(`/api/agents/${encodeURIComponent(l)}/donors?${q}`)));
+}
+
 /** Agents whose category is in a token's focus (by slug, or by bit when the slug list is empty). */
 export function agentsForFocus<T extends Pick<AgentSummary, "category" | "categoryBit">>(
   agents: readonly T[],

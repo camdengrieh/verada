@@ -25,6 +25,7 @@ import { pickProofs, verifyReport, type AgentsRepo, type ReportFetcher } from ".
 import type { CatalogStore } from "./catalog";
 import type { CauseSearch } from "./search";
 import { type CauseTotalsRepo, rankCauseTotals, totalsByCategory } from "./cause-totals";
+import { type DonorsRepo, type NameLookup, donorWindow, inCause, rankBy } from "./donors";
 import {
   corsMiddleware,
   RateLimiter,
@@ -71,6 +72,10 @@ export interface ApiDeps {
   live?: LiveRepo;
   /** Donations per cause; `/api/causes/leaderboard` answers 503 without it. */
   causeTotals?: CauseTotalsRepo;
+  /** Per-cause donor leaderboards; `/api/agents/:label/donors` answers 503 without it. */
+  donors?: DonorsRepo;
+  /** Primary names that are `varada.eth` subnames, for wallet donors. */
+  names?: NameLookup;
   /** Trades and holders; `/api/tokens/:address/{trades,holders,market}` answer 503 without it. */
   market?: MarketRepo;
   /** Token list with market summaries; `/api/discover` answers 503 without it. */
@@ -448,6 +453,82 @@ export function createApi(deps: ApiDeps): Hono {
         latestCurations: curations.map((x) => ({ regionBit: x.regionBit, count: x.count, weight: x.weight, picksRoot: x.picksRoot })),
         donors: donors.map((d) => ({ donor: d.donor, amount: d.amount, timestamp: d.timestamp, txHash: d.txHash })),
         gifts,
+      },
+      CACHE.detail,
+    );
+  });
+
+  const DonorsQuery = z.object({
+    epoch: EpochParam.optional(),
+    days: z.coerce.number().int().min(1).max(366).optional(),
+    region: z.string().optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(10),
+  });
+  const donorExclude = new Set(config.donorExclude);
+
+  // Biggest donors to one cause in a window: coins (Varada tokens' weekly and live payouts) and
+  // wallets (direct Endaoment org donations from any address, Varada's own payouts excluded).
+  // Works for every agent label, registered or not. Wallets show a name only when their primary
+  // name is a subname of the parent (`*.varada.eth`).
+  app.get("/api/agents/:label/donors", async (c) => {
+    if (!deps.donors) return agentsUnavailable(c);
+    const label = agentLabel(c);
+    if (!label) return bad(c, [{ path: "label", message: "unknown agent label" }]);
+    const def = agentByLabel(label)!;
+    const q = parse(c, DonorsQuery, c.req.query());
+    if (!q.ok) return q.res;
+    const region = q.data.region ? REGIONS.find((r) => r.slug === q.data.region) : undefined;
+    if (q.data.region && !region) return bad(c, [{ path: "region", message: "unknown region" }]);
+    const catalog = deps.catalog?.catalog() ? deps.catalog : null;
+    if (!catalog) {
+      c.header("Cache-Control", CACHE.none);
+      return c.json({ error: "catalog_unavailable" }, 503);
+    }
+    const clock = q.data.epoch !== undefined ? await deps.donors.clock() : null;
+    const window = donorWindow({ epoch: q.data.epoch !== undefined ? BigInt(q.data.epoch) : undefined, days: q.data.days }, clock, nowSeconds());
+    if (!window) {
+      c.header("Cache-Control", CACHE.none);
+      return c.json({ error: "epoch_clock_unavailable" }, 503);
+    }
+
+    const [coinRows, walletRows] = await Promise.all([deps.donors.coins(window.from, window.to), deps.donors.wallets(window.from, window.to)]);
+    const causeIds = [...new Set([...coinRows, ...walletRows].map((r) => r.causeId.toLowerCase() as Hex))];
+    const orgs = new Map((catalog.causes(causeIds) ?? []).map((o) => [o.causeId.toLowerCase(), o]));
+    const orgOf = (id: Hex) => orgs.get(id.toLowerCase());
+    const coins = rankBy(inCause(coinRows, orgOf, def.slug, region?.slug), (r) => r.token);
+    const wallets = rankBy(inCause(walletRows, orgOf, def.slug, region?.slug), (r) => r.donor, donorExclude);
+    const topCoins = coins.slice(0, q.data.limit);
+    const topWallets = wallets.slice(0, q.data.limit);
+    const [tokens, names] = await Promise.all([
+      deps.donors.tokens(topCoins.map((r) => r.key as Hex)),
+      deps.names ? deps.names.names(topWallets.map((r) => r.key as Hex)) : Promise.resolve(new Map<string, string>()),
+    ]);
+    const tokenOf = new Map(tokens.map((t) => [t.address.toLowerCase(), t]));
+    const sum = (rows: { donated: bigint }[]) => rows.reduce((a, r) => a + r.donated, 0n);
+    return send(
+      c,
+      {
+        label,
+        category: def.slug,
+        region: region?.slug ?? null,
+        window,
+        coins: topCoins.map((r) => {
+          const t = tokenOf.get(r.key);
+          return {
+            token: r.key,
+            name: t?.name ?? null,
+            symbol: t?.symbol ?? null,
+            ensName: t?.label ? `${t.label}.${config.ensParentName}` : null,
+            donated: r.donated,
+            donations: r.donations,
+            orgs: r.orgs,
+          };
+        }),
+        wallets: topWallets.map((r) => ({ address: r.key, ensName: names.get(r.key) ?? null, donated: r.donated, donations: r.donations, orgs: r.orgs })),
+        totals: {
+          coins: { donated: sum(coins), donors: coins.length },
+          wallets: { donated: sum(wallets), donors: wallets.length },
+        },
       },
       CACHE.detail,
     );

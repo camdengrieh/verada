@@ -15,7 +15,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { REGIONS, agentBySlug } from "@varada/sdk";
 import { datetimeRegex, type ZodTypeAny } from "zod";
-import { EventSchema, PickSchema, RegionReportSchema, ReportSchema } from "../src/report.js";
+import { CoinDonorSchema, DonorsSchema, EventSchema, PickSchema, RegionReportSchema, ReportSchema, WalletDonorSchema } from "../src/report.js";
 
 export const REPORT_SCHEMA_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../../agents/report.schema.json");
 
@@ -26,6 +26,9 @@ const DEFS = new Map<ZodTypeAny, string>([
   [EventSchema, "Event"],
   [PickSchema, "Pick"],
   [RegionReportSchema, "RegionReport"],
+  [DonorsSchema, "Donors"],
+  [CoinDonorSchema, "CoinDonor"],
+  [WalletDonorSchema, "WalletDonor"],
 ]);
 
 /**
@@ -79,6 +82,16 @@ const DESCRIPTIONS: Record<string, string> = {
   "Pick.score": "Importance of the org's work this week, 0-100 (see the curator skill's rubric).",
   "Pick.reasons": "Why this org, this week.",
   "Pick.sources": "Supporting links.",
+  "Report.donors": "Optional. The cause's biggest public on-chain donors over the week, copied from the indexer by `varada-curator donors` and merged by `build --donors`. Never written by hand.",
+  Donors: "Donor leaderboard snapshot: coins (Varada tokens' payouts) and wallets (direct Endaoment org donations), largest first.",
+  "Donors.from": "Window start, unix seconds (inclusive).",
+  "Donors.to": "Window end, unix seconds (exclusive).",
+  CoinDonor: "A Varada token, ranked by what its weekly and live payouts gave the cause.",
+  "CoinDonor.ensName": "`<label>.varada.eth`, when the token has a name.",
+  "CoinDonor.donated": "USDC base units (6 decimals), decimal string.",
+  WalletDonor: "Any address that donated directly to the cause's Endaoment orgs.",
+  "WalletDonor.ensName": "The wallet's primary name, only when it is a varada.eth subname.",
+  "WalletDonor.donated": "USDC base units (6 decimals), decimal string.",
 };
 
 const typeName = (s: ZodTypeAny): string => (s._def as { typeName: string }).typeName;

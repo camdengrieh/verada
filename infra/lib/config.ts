@@ -179,13 +179,16 @@ export const PUBLISHER_FACILITATOR_SECRET_FIELDS = {
 /**
  * Indexer task environment variable -> field of the varada/<env>/indexer JSON secret. Referenced only
  * with x402Enabled=true: the CDP keys when Base payments settle through CDP (x402BasePayTo without
- * x402BaseFacilitatorUrl), the token when mainnet payments are on (x402MainnetPayTo). The token must be
- * the publisher secret's x402FacilitatorToken.
+ * x402BaseFacilitatorUrl), the Circle API key with x402ArcCircleKey=true (without it Arc uses
+ * Circle's keyless trial), and the Optimism facilitator's bearer token with
+ * x402OptimismFacilitatorAuth=true. Nothing settles on
+ * Ethereum mainnet.
  */
 export const INDEXER_X402_SECRET_FIELDS = {
   CDP_API_KEY_ID: "cdpApiKeyId",
   CDP_API_KEY_SECRET: "cdpApiKeySecret",
-  X402_MAINNET_FACILITATOR_TOKEN: "x402FacilitatorToken",
+  CIRCLE_API_KEY: "circleApiKey",
+  X402_OPTIMISM_FACILITATOR_TOKEN: "optimismFacilitatorToken",
 } as const;
 
 /** Context key -> indexer price variable (USD decimal strings; service defaults when unset). */
@@ -194,7 +197,9 @@ export const INDEXER_X402_PRICE_KEYS = {
   x402PriceHistory: "X402_PRICE_HISTORY",
   x402PriceCatalog: "X402_PRICE_CATALOG",
   x402PriceNewsletters: "X402_PRICE_NEWSLETTERS",
-  x402MainnetMinPrice: "X402_MAINNET_MIN_PRICE",
+  x402BaseMinPrice: "X402_BASE_MIN_PRICE",
+  x402ArcMinPrice: "X402_ARC_MIN_PRICE",
+  x402OptimismMinPrice: "X402_OPTIMISM_MIN_PRICE",
 } as const;
 
 /** Bee/gateway task environment variable -> field of the varada/<env>/bee JSON secret. */
@@ -446,14 +451,17 @@ function loadIndexerApi(node: Node, envName: string, isProd: boolean, publisher:
   }
   const enabled = bool(node, "x402Enabled");
   const basePayTo = optAddress(node, "x402BasePayTo");
-  const mainnetPayTo = optAddress(node, "x402MainnetPayTo");
   const baseNetwork = network(node, "x402BaseNetwork");
-  const mainnetNetwork = network(node, "x402MainnetNetwork");
   const baseFacilitatorUrl = serviceUrl(node, "x402BaseFacilitatorUrl", isProd);
-  // Default: this environment's own publisher facilitator, when it is on and has an HTTPS hostname.
-  const ownFacilitator =
-    publisher.facilitator.enabled && publisher.httpsEnabled && publisher.domainName ? `https://${publisher.domainName}/x402` : undefined;
-  const mainnetFacilitatorUrl = serviceUrl(node, "x402MainnetFacilitatorUrl", isProd) ?? ownFacilitator;
+  const arcPayTo = optAddress(node, "x402ArcPayTo");
+  const arcNetwork = network(node, "x402ArcNetwork");
+  const arcFacilitatorUrl = serviceUrl(node, "x402ArcFacilitatorUrl", isProd);
+  const arcCircleKey = bool(node, "x402ArcCircleKey");
+  const opPayTo = optAddress(node, "x402OptimismPayTo");
+  const opNetwork = network(node, "x402OptimismNetwork");
+  const opFacilitatorUrl = serviceUrl(node, "x402OptimismFacilitatorUrl", isProd);
+  const opUsdc = optAddress(node, "x402OptimismUsdc");
+  const opAuth = bool(node, "x402OptimismFacilitatorAuth");
   const prices: Record<string, string> = {};
   for (const [key, envVar] of Object.entries(INDEXER_X402_PRICE_KEYS)) {
     const v = str(node, key);
@@ -461,12 +469,9 @@ function loadIndexerApi(node: Node, envName: string, isProd: boolean, publisher:
     if (!/^\d{1,6}(\.\d{1,6})?$/.test(v)) throw new Error(`context "${key}" must be a USD amount like 0.01`);
     prices[envVar] = v;
   }
-  if (mainnetPayTo && !mainnetFacilitatorUrl) {
-    throw new Error(
-      '"x402MainnetPayTo" needs "x402MainnetFacilitatorUrl", or "x402FacilitatorEnabled=true" with an HTTPS publisher domain (CDP does not settle on mainnet)',
-    );
+  if (enabled && !basePayTo && !arcPayTo && !opPayTo) {
+    throw new Error('"x402Enabled" needs "x402BasePayTo", "x402ArcPayTo" or "x402OptimismPayTo"');
   }
-  if (enabled && !basePayTo && !mainnetPayTo) throw new Error('"x402Enabled" needs "x402BasePayTo" or "x402MainnetPayTo"');
 
   const environment: Record<string, string> = {};
   const secretFields: Record<string, string> = {};
@@ -480,11 +485,19 @@ function loadIndexerApi(node: Node, envName: string, isProd: boolean, publisher:
         secretFields.CDP_API_KEY_SECRET = INDEXER_X402_SECRET_FIELDS.CDP_API_KEY_SECRET;
       }
     }
-    if (mainnetPayTo && mainnetFacilitatorUrl) {
-      environment.X402_MAINNET_PAY_TO = mainnetPayTo;
-      environment.X402_MAINNET_FACILITATOR_URL = mainnetFacilitatorUrl;
-      if (mainnetNetwork) environment.X402_MAINNET_NETWORK = mainnetNetwork;
-      secretFields.X402_MAINNET_FACILITATOR_TOKEN = INDEXER_X402_SECRET_FIELDS.X402_MAINNET_FACILITATOR_TOKEN;
+    if (arcPayTo) {
+      environment.X402_ARC_PAY_TO = arcPayTo;
+      if (arcNetwork) environment.X402_ARC_NETWORK = arcNetwork;
+      if (arcFacilitatorUrl) environment.X402_ARC_FACILITATOR_URL = arcFacilitatorUrl;
+      if (arcCircleKey) secretFields.CIRCLE_API_KEY = INDEXER_X402_SECRET_FIELDS.CIRCLE_API_KEY;
+    }
+    if (opPayTo) {
+      environment.X402_OPTIMISM_PAY_TO = opPayTo;
+      // Unset: the indexer's default facilitator (Dexter).
+      if (opFacilitatorUrl) environment.X402_OPTIMISM_FACILITATOR_URL = opFacilitatorUrl;
+      if (opNetwork) environment.X402_OPTIMISM_NETWORK = opNetwork;
+      if (opUsdc) environment.X402_OPTIMISM_USDC = opUsdc;
+      if (opAuth) secretFields.X402_OPTIMISM_FACILITATOR_TOKEN = INDEXER_X402_SECRET_FIELDS.X402_OPTIMISM_FACILITATOR_TOKEN;
     }
     Object.assign(environment, prices);
   }

@@ -40,6 +40,40 @@ export const RegionReportSchema = z.object({
   newsletter: z.string().max(20_000),
 });
 
+const address = z.string().regex(/^0x[0-9a-fA-F]{40}$/, "must be a 20-byte address").transform((s) => s.toLowerCase() as `0x${string}`);
+/** USDC base units (6 decimals) as a decimal string. */
+const usdc = z.string().regex(/^\d{1,30}$/, "must be USDC base units");
+const ensName = z.string().min(1).max(255);
+
+export const CoinDonorSchema = z.object({
+  token: address,
+  symbol: z.string().max(64),
+  /** `<label>.varada.eth`, when the token has a name. */
+  ensName: ensName.optional(),
+  donated: usdc,
+  donations: z.number().int().min(0),
+});
+
+export const WalletDonorSchema = z.object({
+  address,
+  /** The wallet's primary name, only when it is a `varada.eth` subname. */
+  ensName: ensName.optional(),
+  donated: usdc,
+  donations: z.number().int().min(0),
+});
+
+/**
+ * The cause's biggest public on-chain donors over the week before the report, copied verbatim
+ * from the indexer by `varada-curator donors` and merged by `build --donors`; never typed by hand.
+ */
+export const DonorsSchema = z.object({
+  /** Unix seconds, `from <= t < to`. */
+  from: z.number().int().min(0),
+  to: z.number().int().min(0),
+  coins: z.array(CoinDonorSchema).max(10),
+  wallets: z.array(WalletDonorSchema).max(10),
+});
+
 export const ReportSchema = z
   .object({
     schema: z.literal("varada.curation/v1"),
@@ -51,6 +85,7 @@ export const ReportSchema = z
     /** Newsletter introduction, markdown. */
     intro: z.string().max(20_000),
     regions: z.array(RegionReportSchema).min(1).max(REGIONS.length),
+    donors: DonorsSchema.optional(),
   })
   .superRefine((r, ctx) => {
     const seen = new Set<string>();
@@ -70,6 +105,7 @@ export const ReportSchema = z
 
 export type Report = z.infer<typeof ReportSchema>;
 export type RegionReport = z.infer<typeof RegionReportSchema>;
+export type Donors = z.infer<typeof DonorsSchema>;
 
 export function parseReport(json: unknown): Report {
   return ReportSchema.parse(json);

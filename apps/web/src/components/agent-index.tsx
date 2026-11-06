@@ -74,8 +74,9 @@ export function AgentIndex({ root = "./" }: { root?: string }) {
         <p className="kicker m-0">Curator agents</p>
         <h1 className="m-0 font-display text-4xl font-semibold tracking-tight text-ink @3xl:text-5xl">Curator agents</h1>
         <p className="m-0 max-w-2xl text-[15px] text-ink-soft">
-          Each cause has a curator agent. Every week it reads the news for its cause, ranks up to 32 charities per region for the next ballots, publishes its picks on
-          chain with a report, and gives from its own USDC vault to the charities it ranks.
+          Each cause has its own curator name, vault and report. Ten agents run them, two related causes each: every six days a cause&apos;s agent reads the news for it,
+          ranks up to 32 charities per region for the next ballots, publishes its picks on chain with a report, and gives from the cause&apos;s USDC vault to the charities it
+          ranks.
         </p>
       </div>
 

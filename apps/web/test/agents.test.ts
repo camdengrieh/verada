@@ -176,3 +176,28 @@ describe("helpers", () => {
     expect(agentPath("homeless", "north-america")).toBe("/agent/homeless/north-america/");
   });
 });
+
+describe("getDonorBoard", () => {
+  it("parses coins and wallets, drops bad rows and asks for the trailing week", async () => {
+    const { getDonorBoard } = await import("@/lib/agents");
+    const urls: string[] = [];
+    const fn = vi.fn(async (url: string) => {
+      urls.push(url);
+      return res({
+        label: "hunger",
+        window: { from: "100", to: "200", epoch: null },
+        coins: [{ token: "0x00000000000000000000000000000000000000d1", name: "Bread", symbol: "BREAD", ensName: "bread.varada.eth", donated: "5000000", donations: 2, orgs: 2 }, { token: "nope" }],
+        wallets: [{ address: "0x00000000000000000000000000000000000000a1", ensName: "alice.varada.eth", donated: "2000000", donations: 1, orgs: 1 }, { address: "0x00000000000000000000000000000000000000b2", ensName: null, donated: "7", donations: 1, orgs: 1 }],
+        totals: { coins: { donated: "5000000", donors: 1 }, wallets: { donated: "2000007", donors: 2 } },
+      });
+    });
+    const b = await getDonorBoard(client(fn), "Hunger", { region: "africa" });
+    expect(urls[0]).toContain("/api/agents/hunger/donors?days=7&limit=10&region=africa");
+    expect(b?.window).toEqual({ from: "100", to: "200", epoch: null });
+    expect(b?.coins).toEqual([{ token: "0x00000000000000000000000000000000000000d1", name: "Bread", symbol: "BREAD", ensName: "bread.varada.eth", donated: "5000000", donations: 2, orgs: 2 }]);
+    expect(b?.wallets.map((w) => w.ensName)).toEqual(["alice.varada.eth", null]);
+    expect(b?.totals.wallets).toEqual({ donated: "2000007", donors: 2 });
+    expect(await getDonorBoard(client(fn), "not-an-agent")).toBeNull();
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+});

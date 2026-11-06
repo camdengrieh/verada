@@ -32,7 +32,15 @@ Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck 
 | `TAKEOVER_GOVERNOR_ADDRESS` | `TakeoverGovernor` |
 | `ROTATION_GOVERNOR_ADDRESS` | `RotationGovernor` of live-donation tokens. Optional: unset indexes nothing for it. `VaradaLiveHook` and `LiveDonationVault` need no variable; they are found through the factory's `LiveModeConfigured` |
 | `START_BLOCK` | Deployment block; every contract is indexed from it |
+| `ENDAOMENT_START_BLOCK` | Optional. First block for direct Endaoment org donations (`EntityDonationReceived` from any address, for the donor leaderboards). Default `START_BLOCK`; set it earlier to rank donations made before launch |
+| `DONOR_EXCLUDE` | Optional. Comma-separated addresses never ranked as wallet donors. Unset: Endaoment's own senders (`BaseTokenBucket` and `ndao.eth`, see `DEFAULT_DONOR_EXCLUDE` in `src/api/config.ts`). `none`: exclude nobody |
 | `DATABASE_URL`, `DATABASE_SCHEMA` | Postgres (PGlite when unset) |
+| `X402_ENABLED` | Optional. `true` mounts the paid data routes (`/x402/v1/*`, USDC, `exact` scheme). Needs at least one network below. Nothing settles on Ethereum mainnet; the facilitator of each network pays the gas |
+| `X402_BASE_PAY_TO`, `X402_BASE_NETWORK`, `X402_BASE_FACILITATOR_URL`, `CDP_API_KEY_ID`, `CDP_API_KEY_SECRET` | Base (default `eip155:8453`): platform treasury; Coinbase CDP settles unless another facilitator URL is set |
+| `X402_ARC_PAY_TO`, `X402_ARC_NETWORK`, `X402_ARC_FACILITATOR_URL`, `CIRCLE_API_KEY` | Arc mainnet (default `eip155:5042`, USDC `0x3600…0000`): settled by Circle Facilitator Service (default `https://api.circle.com/v1/facilitator/x402`), with the Circle API key as bearer token. A settlement Circle reports as pending is never served |
+| `X402_OPTIMISM_PAY_TO`, `X402_OPTIMISM_FACILITATOR_URL`, `X402_OPTIMISM_FACILITATOR_TOKEN`, `X402_OPTIMISM_NETWORK`, `X402_OPTIMISM_USDC` | OP Mainnet (default `eip155:10`): a third-party facilitator, default Dexter (`https://x402.dexter.cash`, keyless, gas-sponsored), optional bearer token. Quoted in native USDC `0x0b2C…Ff85` (EIP-712 `USD Coin` / `2`) as an explicit asset, since `@x402/evm` has no default for it; stock x402 clients must allow that asset (`spendControls.allowedAssets`) |
+| `X402_PRICE_RANKINGS`, `X402_PRICE_HISTORY`, `X402_PRICE_CATALOG`, `X402_PRICE_NEWSLETTERS` | Route prices in USD (defaults 0.01, 0.10, 0.50, 0.02) |
+| `X402_BASE_MIN_PRICE`, `X402_ARC_MIN_PRICE`, `X402_OPTIMISM_MIN_PRICE` | Optional per-network price floor in USD, e.g. a facilitator's per-settlement fee |
 
 The browser-facing options (`CORS_ALLOWED_ORIGINS`, rate limits, SSE limits, Endaoment proxy)
 are documented in `.env.example`.

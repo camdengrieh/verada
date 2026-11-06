@@ -21,6 +21,11 @@ export type IndexerEnv = {
   /** Live-donation rotation governor; the zero address when live mode is not deployed. */
   rotationGovernor: Address;
   startBlock: number;
+  /**
+   * First block for direct Endaoment org donations (`EntityDonationReceived` from any wallet), for
+   * the per-cause donor leaderboards. Defaults to `startBlock`.
+   */
+  endaomentStartBlock: number;
 };
 
 function required(env: Record<string, string | undefined>, key: string): string {
@@ -33,6 +38,14 @@ function address(env: Record<string, string | undefined>, key: string): Address 
   const v = required(env, key);
   if (!isAddress(v)) throw new Error(`${key} is not a valid address`);
   return v;
+}
+
+function optionalBlock(env: Record<string, string | undefined>, key: string): number | undefined {
+  const v = env[key];
+  if (v === undefined || v === "") return undefined;
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) throw new Error(`${key} must be a positive integer block number`);
+  return n;
 }
 
 /** Reads and validates indexer configuration. Mainnet only. */
@@ -65,5 +78,6 @@ export function readEnv(env: Record<string, string | undefined>): IndexerEnv {
     takeoverGovernor: address(env, "TAKEOVER_GOVERNOR_ADDRESS"),
     rotationGovernor: env.ROTATION_GOVERNOR_ADDRESS ? address(env, "ROTATION_GOVERNOR_ADDRESS") : zeroAddress,
     startBlock: start,
+    endaomentStartBlock: optionalBlock(env, "ENDAOMENT_START_BLOCK") ?? start,
   };
 }

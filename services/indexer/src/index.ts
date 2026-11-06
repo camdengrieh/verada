@@ -21,6 +21,7 @@ import {
   onVaultGiven,
 } from "./handlers/agents";
 import { onCatalogVersionSet, onFocusSet } from "./handlers/catalog";
+import { onEntityDonationReceived } from "./handlers/endaoment";
 import {
   onBallotPrepared,
   onBallotSizeCapSet,
@@ -147,6 +148,9 @@ ponder.on("CuratorRegistry:CurationVoided", onCurationVoided);
 ponder.on("CuratorRegistry:CurationsSubmitted", onCurationsSubmitted);
 ponder.on("AgentVault:Donated", onVaultDonated);
 ponder.on("AgentVault:Given", onVaultGiven);
+
+// Direct Endaoment org donations (donor leaderboards).
+ponder.on("EndaomentOrg:EntityDonationReceived", onEntityDonationReceived);
 
 // Live-donation mode.
 ponder.on("Factory:LiveModeConfigured", onLiveModeConfigured);

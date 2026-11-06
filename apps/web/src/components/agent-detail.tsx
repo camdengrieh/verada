@@ -20,7 +20,7 @@ import { AgentRegionView } from "@/components/agent-region";
 import { useVaultBalances } from "@/components/agents/vault-balances";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText, shortAddress } from "@/components/use-tx";
-import { getAgent, getAgentReport, regionReport, type AgentDetail as AgentInfo, type AgentReport } from "@/lib/agents";
+import { getAgent, getAgentReport, getDonorBoard, regionReport, type AgentDetail as AgentInfo, type AgentReport, type DonorBoard } from "@/lib/agents";
 import { loadTokens } from "@/lib/data";
 import { agentGatewayUrl } from "@/lib/host";
 import { Markdown } from "@/lib/markdown";
@@ -70,6 +70,12 @@ export function AgentDetail({ label, region, root = "./" }: { label: string; reg
     queryKey: ["agent-report", label, epoch],
     queryFn: () => getAgentReport(deps.indexer, label, epoch!),
     enabled: Boolean(agent && epoch !== null),
+    retry: false,
+  });
+  const donorBoard = useQuery({
+    queryKey: ["agent-donors", label, region ?? null],
+    queryFn: () => getDonorBoard(deps.indexer, label, { region }),
+    enabled: Boolean(def),
     retry: false,
   });
   const balances = useVaultBalances(agent ? [agent.vault] : []);
@@ -153,6 +159,8 @@ export function AgentDetail({ label, region, root = "./" }: { label: string; reg
         </>
       )}
 
+      <TopDonors board={donorBoard.data ?? null} loading={donorBoard.isLoading} failed={Boolean(donorBoard.error)} cause={def.label} region={focus ? regionName(focus.slug) : undefined} root={root} />
+
       <div className="grid grid-cols-1 gap-3">
         <h2 className={H2}>Where this name lives</h2>
         <SubnameTree
@@ -213,7 +221,7 @@ function ReportSection({
   );
   return (
     <section aria-label="Report" className={SECTION}>
-      <h2 className={H2}>{epoch === null ? "Weekly report" : `Report for epoch ${epoch}`}</h2>
+      <h2 className={H2}>{epoch === null ? "Latest report" : `Report for epoch ${epoch}`}</h2>
       {epoch === null && <p className="m-0 text-sm text-ink-soft">No report published yet.</p>}
       {loading && (
         <div role="status" aria-label="Loading the report" className="grid grid-cols-1 gap-2">
@@ -324,12 +332,24 @@ function ReportArchive({ agent, epoch, onChoose }: { agent: AgentInfo; epoch: st
   );
 }
 
+/** ERC-7930 interoperable address of an EVM contract, lowercase hex (as VaradaResolver builds it). */
+export function erc7930(chainId: number, address: string): string {
+  let ref = chainId.toString(16);
+  if (ref.length % 2) ref = `0${ref}`;
+  const len = (ref.length / 2).toString(16).padStart(2, "0");
+  return `0x00010000${len}${ref}14${address.toLowerCase().replace(/^0x/, "")}`;
+}
+
 /** The agent's name on ENS and what its resolver answers for it (derived from the registry, as the resolver does). */
 function AgentIdentity({ agent, ensName, gateway, chainId }: { agent: AgentInfo; ensName: string; gateway: string; chainId: number }) {
   const records = [
     { key: "description", value: agent.description },
     { key: "url", value: gateway, href: gateway },
-    { key: "agent-registration", value: `eip155:${chainId}:${ERC8004_IDENTITY_REGISTRY}:${agent.agentId}` },
+    // ENSIP-25: the name attests this ERC-8004 identity (key = ERC-7930 address of the registry + agent id).
+    { key: `agent-registration[${erc7930(chainId, ERC8004_IDENTITY_REGISTRY)}][${agent.agentId}]`, value: "1" },
+    // ENSIP-26
+    { key: "agent-endpoint[web]", value: gateway, href: gateway },
+    { key: "agent-context", value: agent.description },
     { key: "varada.category", value: String(agent.categoryBit) },
   ];
   return (
@@ -341,6 +361,64 @@ function AgentIdentity({ agent, ensName, gateway, chainId }: { agent: AgentInfo;
       siteHref={gateway}
       wash="sage"
     />
+  );
+}
+
+/**
+ * The cause's biggest public on-chain donors this week: coins (Varada tokens' payouts) and any
+ * wallet that donated directly to the cause's Endaoment orgs. A wallet shows its varada.eth name
+ * when its primary name is one, else its address.
+ */
+function TopDonors({ board, loading, failed, cause, region, root }: { board: DonorBoard | null; loading: boolean; failed: boolean; cause: string; region?: string; root: string }) {
+  const where = region ? `${cause} in ${region}` : cause;
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const coins: ActivityItem[] = (board?.coins ?? []).map((c, i) => ({
+    id: c.token,
+    kind: "give",
+    tag: `#${i + 1}`,
+    title: (
+      <a href={`${root}token/?address=${c.token}`} title={c.token} className="font-semibold text-primary underline-offset-4 hover:underline">
+        {c.ensName ?? (c.symbol ? "$" + c.symbol : shortAddress(c.token))}
+      </a>
+    ),
+    meta: `${plural(c.donations, "payout", "payouts")} to ${plural(c.orgs, "org", "orgs")}`,
+    amount: usdcText(c.donated),
+    amountTone: "cause",
+  }));
+  const wallets: ActivityItem[] = (board?.wallets ?? []).map((w, i) => ({
+    id: w.address,
+    kind: "give",
+    tag: `#${i + 1}`,
+    title: <span title={w.address}>{w.ensName ?? shortAddress(w.address)}</span>,
+    meta: `${plural(w.donations, "donation", "donations")} to ${plural(w.orgs, "org", "orgs")}`,
+    amount: usdcText(w.donated),
+    amountTone: "cause",
+  }));
+  return (
+    <section aria-label="Biggest donors this week" className={SECTION}>
+      <h2 className={H2}>Biggest donors this week</h2>
+      <p className="m-0 text-sm text-ink-soft">
+        Public on-chain donations to {where} charities over the last 7 days. Coins give through their weekly and live payouts; wallets are any address that donated to these charities directly.
+      </p>
+      {loading && <Skeleton className="h-24 w-full" />}
+      {failed && (
+        <p role="alert" className="m-0 text-sm">
+          Could not load the donor leaderboard.
+        </p>
+      )}
+      {board && (
+        <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-2 @4xl:items-start">
+          <div className="grid grid-cols-1 gap-2">
+            <h3 className="m-0 font-display text-lg font-semibold text-ink">Coins</h3>
+            <ActivityList items={coins} label="Top donating coins" live={false} empty={<p className="m-0 text-sm text-ink-soft">No coin payouts this week.</p>} />
+          </div>
+          <div className="grid grid-cols-1 gap-2">
+            <h3 className="m-0 font-display text-lg font-semibold text-ink">Wallets</h3>
+            <ActivityList items={wallets} label="Top donating wallets" live={false} empty={<p className="m-0 text-sm text-ink-soft">No direct donations this week.</p>} />
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

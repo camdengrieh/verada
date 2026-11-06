@@ -98,6 +98,7 @@ function report(epoch: string, over: Record<string, unknown> = {}): AgentReport 
 
 const getAgent = vi.fn<(c: unknown, label: string) => Promise<AgentInfo | null>>();
 const getAgentReport = vi.fn<(c: unknown, label: string, epoch: string | number | bigint) => Promise<AgentReport | null>>();
+const getDonorBoard = vi.fn<(c: unknown, label: string, opts?: { region?: string }) => Promise<unknown>>(async () => null);
 const listAgents = vi.fn<(c: unknown) => Promise<AgentSummary[]>>();
 
 vi.mock("@/lib/agents", async (orig) => ({
@@ -105,6 +106,7 @@ vi.mock("@/lib/agents", async (orig) => ({
   getAgent: (c: unknown, l: string) => getAgent(c, l),
   getAgentReport: (c: unknown, l: string, e: string | number | bigint) => getAgentReport(c, l, e),
   listAgents: (c: unknown) => listAgents(c),
+  getDonorBoard: (c: unknown, l: string, o?: { region?: string }) => getDonorBoard(c, l, o),
 }));
 
 /** What `CuratorRegistry.agentOf` returns on chain; tests change it per case. */
@@ -255,6 +257,25 @@ describe("agent page", () => {
     const gifts = screen.getByRole("region", { name: "Recent gifts" });
     expect(within(gifts).getByText("500 USDC")).toBeInTheDocument();
     expect(within(gifts).getByText("0x0000...00F0")).toBeInTheDocument();
+  });
+
+  it("shows the week's biggest coin and wallet donors, with varada.eth names when they exist", async () => {
+    getDonorBoard.mockImplementationOnce(async () => ({
+      window: { from: "1", to: "2", epoch: null },
+      coins: [{ token: "0x00000000000000000000000000000000000000d1", name: "Bread", symbol: "BREAD", ensName: "bread.varada.eth", donated: "5000000", donations: 2, orgs: 2 }],
+      wallets: [
+        { address: "0x00000000000000000000000000000000000000b2", ensName: null, donated: "7000000", donations: 3, orgs: 1 },
+        { address: "0x00000000000000000000000000000000000000a1", ensName: "alice.varada.eth", donated: "2000000", donations: 1, orgs: 1 },
+      ],
+      totals: { coins: { donated: "5000000", donors: 1 }, wallets: { donated: "9000000", donors: 2 } },
+    }));
+    wrap(<AgentDetail label="homeless" region="africa" />);
+    const board = await screen.findByRole("region", { name: "Biggest donors this week" });
+    expect(getDonorBoard).toHaveBeenLastCalledWith(expect.anything(), "homeless", { region: "africa" });
+    expect(await within(board).findByRole("link", { name: "bread.varada.eth" })).toHaveAttribute("href", "./token/?address=0x00000000000000000000000000000000000000d1");
+    expect(within(board).getByText("alice.varada.eth")).toHaveAttribute("title", "0x00000000000000000000000000000000000000a1");
+    expect(within(board).getByText("0x0000...00b2")).toBeInTheDocument();
+    expect(within(board).getByText("7 USDC")).toBeInTheDocument();
   });
 
   it("loads an archived epoch's report", async () => {
@@ -711,5 +732,13 @@ describe("agents index", () => {
     const links = within(screen.getByRole("list", { name: "Agents" })).getAllByRole("link");
     expect(links).toHaveLength(20);
     expect(links.some((a) => a.getAttribute("href") === "./agent/homeless/")).toBe(true);
+  });
+});
+
+describe("ENSIP-25 key", () => {
+  it("matches VaradaResolver's ERC-7930 encoding", async () => {
+    const { erc7930, ERC8004_IDENTITY_REGISTRY } = await import("@/components/agent-detail");
+    expect(erc7930(1, ERC8004_IDENTITY_REGISTRY)).toBe("0x000100000101148004a169fb4a3325136eb29fa0ceb6d2e539a432");
+    expect(erc7930(31337, ERC8004_IDENTITY_REGISTRY).slice(0, 18)).toBe("0x00010000027a6914");
   });
 });

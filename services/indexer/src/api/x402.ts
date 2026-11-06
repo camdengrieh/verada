@@ -16,10 +16,10 @@ import type { PaidRoute, X402Config } from "./config";
  * ranked lists with reasons and sources, the full history, the classified catalogue and the
  * newsletter archive, as machine-readable JSON.
  *
- * Every route accepts USDC on Base (settled by Coinbase CDP) and on Ethereum mainnet (settled by
- * the publisher's own facilitator, since CDP does not cover mainnet). `payTo` is always a
- * platform treasury. A handler that answers 4xx/5xx cancels the payment, so a buyer is never
- * charged for a miss.
+ * Every route accepts USDC on the configured networks: Base (settled by Coinbase CDP), Arc mainnet
+ * (Circle Facilitator Service) and Optimism (a third-party facilitator). The facilitator pays the
+ * gas; nothing settles on Ethereum mainnet. `payTo` is always a platform treasury. A handler that
+ * answers 4xx/5xx cancels the payment, so a buyer is never charged for a miss.
  */
 
 export const X402_PREFIX = "/x402/v1";
@@ -54,32 +54,36 @@ export interface X402Deps {
   serialize: (v: unknown) => string;
 }
 
-/** `max(price, min)` for mainnet, as decimal strings with up to 6 places. */
-export function mainnetPrice(price: string, min: string): string {
-  const micros = (s: string) => {
-    const [i = "0", f = ""] = s.split(".");
-    return BigInt(i) * 1_000_000n + BigInt((f + "000000").slice(0, 6));
-  };
-  return micros(price) >= micros(min) ? price : min;
+const micros = (s: string) => {
+  const [i = "0", f = ""] = s.split(".");
+  return BigInt(i) * 1_000_000n + BigInt((f + "000000").slice(0, 6));
+};
+
+/** `max(price, min)`, as decimal strings with up to 6 places. */
+export function floorPrice(price: string, min: string | undefined): string {
+  return min === undefined || micros(price) >= micros(min) ? price : min;
 }
 
-/** The `accepts` list for one route: Base first (cheapest to settle), then mainnet. */
+/** A USD decimal string in `decimals` token units (USDC: 6), exactly. */
+export function toTokenUnits(usd: string, decimals: number): string {
+  const m = micros(usd);
+  return (decimals >= 6 ? m * 10n ** BigInt(decimals - 6) : m / 10n ** BigInt(6 - decimals)).toString();
+}
+
+type Price = string | { amount: string; asset: string; extra: { name: string; version: string } };
+
+/**
+ * The `accepts` list for one route, in config order (Base, Arc, Optimism). A network without a
+ * default USDC in @x402/evm (Optimism) is quoted as an explicit asset amount.
+ */
 export function paymentOptions(config: X402Config, route: PaidRoute) {
-  const price = config.prices[route];
-  const out: { scheme: "exact"; network: `${string}:${string}`; price: string; payTo: string; maxTimeoutSeconds: number }[] = [];
-  if (config.base) {
-    out.push({ scheme: "exact", network: config.base.network as `${string}:${string}`, price: `$${price}`, payTo: config.base.payTo, maxTimeoutSeconds: 120 });
-  }
-  if (config.mainnet) {
-    out.push({
-      scheme: "exact",
-      network: config.mainnet.network as `${string}:${string}`,
-      price: `$${mainnetPrice(price, config.mainnetMinPrice)}`,
-      payTo: config.mainnet.payTo,
-      maxTimeoutSeconds: 300,
-    });
-  }
-  return out;
+  return config.networks.map((n) => {
+    const usd = floorPrice(config.prices[route], n.minPrice);
+    const price: Price = n.asset
+      ? { amount: toTokenUnits(usd, n.asset.decimals), asset: n.asset.address, extra: { name: n.asset.name, version: n.asset.version } }
+      : `$${usd}`;
+    return { scheme: "exact" as const, network: n.network as `${string}:${string}`, price, payTo: n.payTo, maxTimeoutSeconds: 120 };
+  });
 }
 
 export function routesConfig(config: X402Config): RoutesConfig {
@@ -95,27 +99,48 @@ export function routesConfig(config: X402Config): RoutesConfig {
   return routes;
 }
 
+/** Settlement-status values that mean "settled" if a facilitator ever reports one on success. */
+const SETTLED_STATUSES = new Set(["settled", "confirmed", "completed", "succeeded", "success"]);
+
+/**
+ * Wraps a facilitator so it (1) only claims its own network, since the resource server routes a
+ * network to the first facilitator that lists it (Circle's /supported also lists Base), and
+ * (2) never reports a settlement that has not landed. Circle answers a settlement that is still
+ * in flight with HTTP 200 and a `settlement-status` extension (`pending`), and says not to
+ * fulfil on pending; such an answer, or a success without a transaction hash, becomes a
+ * `settlement_pending` failure, so the paid response is withheld (x402 retries a pending
+ * settlement once, idempotently, with the same payload).
+ */
+export function scopedFacilitator(client: FacilitatorClient, network: string): FacilitatorClient {
+  return {
+    verify: (payload, req) => client.verify(payload, req),
+    getSupported: async () => {
+      const s = await client.getSupported();
+      return { ...s, kinds: s.kinds.filter((k) => k.network === network) };
+    },
+    settle: async (payload, req) => {
+      const r = await client.settle(payload, req);
+      if (!r.success) return r;
+      const status = (r.extensions?.["settlement-status"] as { status?: unknown } | undefined)?.status;
+      const pending = status !== undefined && !SETTLED_STATUSES.has(String(status).toLowerCase());
+      if (!pending && r.transaction) return r;
+      return { ...r, success: false, errorReason: "settlement_pending", errorMessage: `settlement not final (${String(status ?? "no transaction")})` };
+    },
+  };
+}
+
 export function facilitatorsOf(config: X402Config): FacilitatorClient[] {
-  const out: FacilitatorClient[] = [];
-  if (config.base) {
-    const b = config.base;
-    out.push(
-      new HTTPFacilitatorClient(
-        b.facilitatorUrl ? { url: b.facilitatorUrl } : createFacilitatorConfig(b.cdpKeyId, b.cdpKeySecret),
-      ),
-    );
-  }
-  if (config.mainnet) {
-    const m = config.mainnet;
-    const auth = m.facilitatorToken ? { Authorization: `Bearer ${m.facilitatorToken}` } : undefined;
-    out.push(
-      new HTTPFacilitatorClient({
-        url: m.facilitatorUrl,
-        createAuthHeaders: auth ? async () => ({ verify: auth, settle: auth, supported: auth }) : undefined,
-      }),
-    );
-  }
-  return out;
+  return config.networks.map((n) => {
+    const f = n.facilitator;
+    const auth = f.token ? { Authorization: `Bearer ${f.token}` } : undefined;
+    const client = f.url
+      ? new HTTPFacilitatorClient({
+          url: f.url,
+          createAuthHeaders: auth ? async () => ({ verify: auth, settle: auth, supported: auth }) : undefined,
+        })
+      : new HTTPFacilitatorClient(createFacilitatorConfig(f.cdpKeyId, f.cdpKeySecret));
+    return scopedFacilitator(client, n.network);
+  });
 }
 
 const LimitQuery = z.object({ limit: z.coerce.number().int().min(1).max(260).default(52) });
@@ -152,8 +177,7 @@ export function mountX402(app: Hono, deps: X402Deps): void {
   );
 
   const server = new x402ResourceServer(deps.facilitators ?? facilitatorsOf(config));
-  if (config.base) server.register(config.base.network as `${string}:${string}`, new ExactEvmScheme());
-  if (config.mainnet) server.register(config.mainnet.network as `${string}:${string}`, new ExactEvmScheme());
+  for (const n of config.networks) server.register(n.network as `${string}:${string}`, new ExactEvmScheme());
   // Only paid paths go through the middleware; the price list above stays free.
   app.use(`${X402_PREFIX}/*`, paymentMiddleware(routesConfig(config), server));
 

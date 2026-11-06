@@ -70,7 +70,7 @@ No account ids, regions or secrets are in code. Pass with `-c key=value` or put 
 | `zamaRelayerUrl` | no | service preset | `ZAMA_RELAYER_URL` override; https in prod |
 | `siteFeedOwner` / `siteFeedManifest` | no | none | `SITE_FEED_OWNER` (address) and `SITE_FEED_MANIFEST` (32-byte hex reference), returned by `GET /site` |
 | `maxReportBytes` | no | service default | `MAX_REPORT_BYTES`: body limit of `POST /agents/reports` (4096 to 4194304) |
-| `x402FacilitatorEnabled` | no | `false` | `X402_FACILITATOR_ENABLED`: the publisher's mainnet x402 facilitator at `/x402`. Needs a payee (below) and adds the facilitator secret fields |
+| `x402FacilitatorEnabled` | no | `false` | `X402_FACILITATOR_ENABLED`: the publisher's mainnet x402 facilitator at `/x402`. **Dormant**: the indexer no longer settles on Ethereum mainnet (2026-11-07), so leave it off. Needs a payee (below) and adds the facilitator secret fields |
 | `x402FacilitatorPayTo` | with the facilitator | value of `x402MainnetPayTo` | `X402_FACILITATOR_PAY_TO`: the only payee it settles for; must equal `x402MainnetPayTo` when both are set |
 | `x402FacilitatorNetwork` | no | value of `x402MainnetNetwork`, then `eip155:1` | `X402_FACILITATOR_NETWORK`; must equal `x402MainnetNetwork` when both are set |
 | `x402FacilitatorUsdc` | no | service default (mainnet USDC) | `X402_FACILITATOR_USDC` |
@@ -83,14 +83,20 @@ The publisher also receives `epochGovernorAddress`, `votingSchemeAddress`, `take
 | Key | Required | Default | Purpose |
 |---|---|---|---|
 | `ensParentName` | no | service default (`varada.eth`) | `ENS_PARENT_NAME`, lower-cased; must end in `.eth` |
-| `x402Enabled` | no | `false` | `X402_ENABLED` (always passed). Needs `x402BasePayTo` or `x402MainnetPayTo`. When false no other `X402_*` variable and no indexer secret is referenced |
-| `x402BasePayTo` | one of two | none | `X402_BASE_PAY_TO`: Base payee |
+| `x402Enabled` | no | `false` | `X402_ENABLED` (always passed). Needs at least one of `x402BasePayTo`, `x402ArcPayTo`, `x402OptimismPayTo`. When false no other `X402_*` variable and no indexer secret is referenced. Nothing settles on Ethereum mainnet |
+| `x402BasePayTo` | one of three | none | `X402_BASE_PAY_TO`: Base payee |
 | `x402BaseNetwork` | no | service default | `X402_BASE_NETWORK` (CAIP-2, e.g. `eip155:8453`) |
 | `x402BaseFacilitatorUrl` | no | CDP | `X402_BASE_FACILITATOR_URL`; https in prod. Unset means CDP, which adds the `cdpApiKeyId`/`cdpApiKeySecret` indexer secret fields |
-| `x402MainnetPayTo` | one of two | none | `X402_MAINNET_PAY_TO`: mainnet payee; adds the `x402FacilitatorToken` indexer secret field |
-| `x402MainnetNetwork` | no | service default | `X402_MAINNET_NETWORK` |
-| `x402MainnetFacilitatorUrl` | with `x402MainnetPayTo` | `https://<publisherDomainName>/x402` when `x402FacilitatorEnabled=true` and the publisher has HTTPS | `X402_MAINNET_FACILITATOR_URL`; https in prod (CDP does not settle on mainnet) |
-| `x402PriceRankings` / `x402PriceHistory` / `x402PriceCatalog` / `x402PriceNewsletters` / `x402MainnetMinPrice` | no | service defaults | `X402_PRICE_RANKINGS` / `X402_PRICE_HISTORY` / `X402_PRICE_CATALOG` / `X402_PRICE_NEWSLETTERS` / `X402_MAINNET_MIN_PRICE` (USD, e.g. `0.01`) |
+| `x402ArcPayTo` | one of three | none | `X402_ARC_PAY_TO`: Arc mainnet payee, settled by Circle Facilitator Service |
+| `x402ArcCircleKey` | no | `false` | With `true`, adds the `circleApiKey` indexer secret field (`CIRCLE_API_KEY`). Without it Arc settles on Circle's keyless trial, a per-payee allowance of unpublished size; when it runs out Circle answers `403 registration_required` and Arc sales stop until a key is added |
+| `x402ArcNetwork` | no | service default (`eip155:5042`) | `X402_ARC_NETWORK` |
+| `x402ArcFacilitatorUrl` | no | service default (`https://api.circle.com/v1/facilitator/x402`) | `X402_ARC_FACILITATOR_URL`; https in prod |
+| `x402OptimismPayTo` | one of three | none | `X402_OPTIMISM_PAY_TO`: OP Mainnet payee, settled by a third-party facilitator |
+| `x402OptimismFacilitatorUrl` | no | service default (Dexter, `https://x402.dexter.cash`) | `X402_OPTIMISM_FACILITATOR_URL`; https in prod (neither CDP nor Circle settles on Optimism) |
+| `x402OptimismFacilitatorAuth` | no | `false` | `true` adds the `optimismFacilitatorToken` indexer secret field (`X402_OPTIMISM_FACILITATOR_TOKEN`, sent as a bearer token) |
+| `x402OptimismNetwork` / `x402OptimismUsdc` | no | service defaults (`eip155:10`, native USDC `0x0b2C…Ff85`) | `X402_OPTIMISM_NETWORK` / `X402_OPTIMISM_USDC` |
+| `x402PriceRankings` / `x402PriceHistory` / `x402PriceCatalog` / `x402PriceNewsletters` | no | service defaults | `X402_PRICE_RANKINGS` / `X402_PRICE_HISTORY` / `X402_PRICE_CATALOG` / `X402_PRICE_NEWSLETTERS` (USD, e.g. `0.01`) |
+| `x402BaseMinPrice` / `x402ArcMinPrice` / `x402OptimismMinPrice` | no | none | `X402_BASE_MIN_PRICE` / `X402_ARC_MIN_PRICE` / `X402_OPTIMISM_MIN_PRICE`: per-network price floor (USD), e.g. a facilitator's per-settlement fee |
 | `indexerSecretName` | no | `varada/<env>/indexer` | JSON secret for the x402 fields below, imported only when a field is needed |
 
 The indexer also gets `SWARM_GATEWAY_URL` (the publisher's gateway URL, from `swarmGatewayUrl` or `https://<swarmDomainName>`) to read curator reports, and `CURATOR_REGISTRY_ADDRESS` with the other addresses. The deploy workflow passes each key from the repository or environment variable of the same name in upper snake case (`x402BasePayTo` from `X402_BASE_PAY_TO`, `oneClawBaseUrl` from `ONECLAW_BASE_URL`); secrets never go through workflow variables.
@@ -106,7 +112,7 @@ Create these before deploying; the stacks import them by name and never create o
 | `varada/<env>/eth-rpc-url` | plain string | Ethereum mainnet RPC URL, or several comma-separated (the indexer load-balances across them) -> indexer `ETH_RPC_URL` |
 | `varada/<env>/bee` | JSON | `password` -> `BEE_PASSWORD` (encrypts the Bee key file on EFS); `gnosisRpcUrl` -> `BEE_BLOCKCHAIN_RPC_ENDPOINT` (Gnosis Chain RPC); `gatewayAuthSecret` -> gateway `AUTH_SECRET` |
 | `varada/<env>/publisher` | JSON | `beeGatewayAuthSecret` -> `BEE_GATEWAY_AUTH_SECRET` (must equal the bee secret's `gatewayAuthSecret`; sent verbatim as the `Authorization` header); `swarmBatchId` -> `SWARM_BATCH_ID`; `arkivAccessKey` -> `ARKIV_ACCESS_KEY`; `arkivPrivateKey` -> `ARKIV_PRIVATE_KEY`; `keeperPrivateKey` -> `KEEPER_PRIVATE_KEY`; `ethRpcUrl` -> `ETH_RPC_URL`; with `keeperEnabled=true` only: `zamaRelayerApiKey` -> `ZAMA_RELAYER_API_KEY`; with `x402FacilitatorEnabled=true` only: `x402FacilitatorToken` -> `X402_FACILITATOR_TOKEN`, `x402OneClawAgentId` -> `X402_ONECLAW_AGENT_ID`, `x402OneClawApiKey` -> `X402_ONECLAW_API_KEY` |
-| `varada/<env>/indexer` | JSON | Only with `x402Enabled=true`. `cdpApiKeyId` -> `CDP_API_KEY_ID` and `cdpApiKeySecret` -> `CDP_API_KEY_SECRET` (Base through CDP); `x402FacilitatorToken` -> `X402_MAINNET_FACILITATOR_TOKEN` (mainnet; must equal the publisher secret's `x402FacilitatorToken`) |
+| `varada/<env>/indexer` | JSON | Only with `x402Enabled=true`. `cdpApiKeyId` -> `CDP_API_KEY_ID` and `cdpApiKeySecret` -> `CDP_API_KEY_SECRET` (Base through CDP); `circleApiKey` -> `CIRCLE_API_KEY` (Arc, only with `x402ArcCircleKey=true`); `optimismFacilitatorToken` -> `X402_OPTIMISM_FACILITATOR_TOKEN` (Optimism, with `x402OptimismFacilitatorAuth=true`) |
 
 ```sh
 aws secretsmanager create-secret --name varada/<env>/bee \

@@ -1,4 +1,4 @@
-import { db } from "ponder:api";
+import { db, publicClients } from "ponder:api";
 import * as rawSchema from "ponder:schema";
 import { and, asc, desc, eq, graphql, isNotNull, replaceBigInts } from "ponder";
 import { createApi } from "./routes";
@@ -10,6 +10,8 @@ import { liveRepo } from "./live-repo";
 import { createMarketRepo } from "./market-repo";
 import { createDiscoverRepo } from "./discover-repo";
 import { causeTotalsRepo } from "./cause-totals-repo";
+import { donorsRepo } from "./donors-repo";
+import { varadaNameLookup } from "./donors";
 import { createCatalogStore } from "./catalog";
 import { createCauseSearch } from "./search";
 
@@ -45,6 +47,8 @@ const app = createApi({
   agents: agentsRepo,
   live: liveRepo,
   causeTotals: causeTotalsRepo,
+  donors: donorsRepo,
+  names: varadaNameLookup(publicClients.mainnet, config.ensParentName),
   market: createMarketRepo(
     [process.env.FEE_VAULT_ADDRESS, process.env.FEE_CONSOLIDATOR_ADDRESS].filter(
       (a): a is string => !!a && /^0x[0-9a-fA-F]{40}$/.test(a),

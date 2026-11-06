@@ -310,6 +310,8 @@ describe("curator agents and x402", () => {
   const secretsOf = (t: Template) => Object.fromEntries((container(t).Secrets ?? []).map((x: any) => [x.Name, JSON.stringify(x.ValueFrom)]));
   const PAY_BASE = A(0xb1);
   const PAY_MAINNET = A(0xe1);
+  const PAY_ARC = A(0xa1);
+  const PAY_OP = A(0x0f);
 
   test("defaults: x402 and the facilitator off, no x402 secrets, gateway shared with the publisher", () => {
     const b = build({ ...HTTPS });
@@ -340,11 +342,12 @@ describe("curator agents and x402", () => {
   test("x402 on Base through CDP: pay-to, prices and the CDP keys from varada/<env>/indexer", () => {
     const t = Template.fromStack(build({ x402Enabled: "true", x402BasePayTo: PAY_BASE, x402PriceRankings: "0.02", x402BaseNetwork: "eip155:84532" }).indexer);
     expect(envOf(t)).toMatchObject({ X402_ENABLED: "true", X402_BASE_PAY_TO: PAY_BASE, X402_BASE_NETWORK: "eip155:84532", X402_PRICE_RANKINGS: "0.02" });
-    expect(envOf(t)).not.toHaveProperty("X402_MAINNET_PAY_TO");
+    expect(envOf(t)).not.toHaveProperty("X402_ARC_PAY_TO");
+    expect(envOf(t)).not.toHaveProperty("X402_OPTIMISM_PAY_TO");
     const sec = secretsOf(t);
     expect(sec.CDP_API_KEY_ID).toContain("secret:varada/dev/indexer:cdpApiKeyId::");
     expect(sec.CDP_API_KEY_SECRET).toContain("secret:varada/dev/indexer:cdpApiKeySecret::");
-    expect(sec).not.toHaveProperty("X402_MAINNET_FACILITATOR_TOKEN");
+    expect(sec).not.toHaveProperty("CIRCLE_API_KEY");
     expect(JSON.stringify(container(t).Environment)).not.toMatch(/CDP_API_KEY/);
     // A custom Base facilitator needs no CDP keys.
     const own = Template.fromStack(build({ x402Enabled: "true", x402BasePayTo: PAY_BASE, x402BaseFacilitatorUrl: "https://fac.example.org/" }).indexer);
@@ -352,24 +355,44 @@ describe("curator agents and x402", () => {
     expect(secretsOf(own)).not.toHaveProperty("CDP_API_KEY_ID");
   });
 
-  test("x402 on mainnet through this environment's publisher facilitator; one token in both secrets", () => {
+  test("x402 on Arc (Circle) and Optimism (third-party facilitator); nothing on mainnet", () => {
+    const ix = Template.fromStack(
+      build({
+        x402Enabled: "true",
+        x402ArcPayTo: PAY_ARC,
+        x402ArcCircleKey: "true",
+        x402OptimismPayTo: PAY_OP,
+        x402OptimismFacilitatorUrl: "https://op-fac.example.org/",
+        x402OptimismFacilitatorAuth: "true",
+        x402OptimismMinPrice: "0.05",
+        x402MainnetPayTo: PAY_MAINNET,
+      }).indexer,
+    );
+    expect(envOf(ix)).toMatchObject({
+      X402_ENABLED: "true",
+      X402_ARC_PAY_TO: PAY_ARC,
+      X402_OPTIMISM_PAY_TO: PAY_OP,
+      X402_OPTIMISM_FACILITATOR_URL: "https://op-fac.example.org",
+      X402_OPTIMISM_MIN_PRICE: "0.05",
+    });
+    // Arc uses the service's default Circle URL; mainnet context no longer reaches the indexer.
+    expect(envOf(ix)).not.toHaveProperty("X402_ARC_FACILITATOR_URL");
+    expect(JSON.stringify(container(ix).Environment)).not.toMatch(/X402_MAINNET/);
+    const sec = secretsOf(ix);
+    expect(sec.CIRCLE_API_KEY).toContain("secret:varada/dev/indexer:circleApiKey::");
+    expect(sec.X402_OPTIMISM_FACILITATOR_TOKEN).toContain("secret:varada/dev/indexer:optimismFacilitatorToken::");
+    expect(sec).not.toHaveProperty("CDP_API_KEY_ID");
+    expect(JSON.stringify(container(ix).Environment)).not.toMatch(/CIRCLE_API_KEY|FACILITATOR_TOKEN/);
+  });
+
+  test("publisher's mainnet facilitator still wires when enabled (dormant: the indexer no longer uses it)", () => {
     const b = build({
       ...HTTPS,
-      x402Enabled: "true",
       x402MainnetPayTo: PAY_MAINNET,
-      x402MainnetMinPrice: "0.75",
       x402FacilitatorEnabled: "true",
       x402FacilitatorUsdc: A(0x5c),
       oneClawBaseUrl: "https://claw.example.org",
     });
-    const ix = Template.fromStack(b.indexer);
-    expect(envOf(ix)).toMatchObject({
-      X402_ENABLED: "true",
-      X402_MAINNET_PAY_TO: PAY_MAINNET,
-      X402_MAINNET_FACILITATOR_URL: "https://publisher.example.com/x402",
-      X402_MAINNET_MIN_PRICE: "0.75",
-    });
-    expect(secretsOf(ix).X402_MAINNET_FACILITATOR_TOKEN).toContain("secret:varada/dev/indexer:x402FacilitatorToken::");
     const pub = Template.fromStack(b.publisher);
     expect(envOf(pub)).toMatchObject({
       X402_FACILITATOR_ENABLED: "true",
@@ -385,10 +408,15 @@ describe("curator agents and x402", () => {
   });
 
   test("rejects inconsistent x402 settings", () => {
-    expect(() => build({ x402Enabled: "true" })).toThrow(/x402Enabled.*x402BasePayTo/);
-    expect(() => build({ x402MainnetPayTo: PAY_MAINNET })).toThrow(/x402MainnetFacilitatorUrl/);
-    // HTTP-only publisher (no domain): no default facilitator URL.
-    expect(() => build({ x402Enabled: "true", x402MainnetPayTo: PAY_MAINNET, x402FacilitatorEnabled: "true" })).toThrow(/x402MainnetFacilitatorUrl/);
+    expect(() => build({ x402Enabled: "true" })).toThrow(/x402Enabled.*x402BasePayTo.*x402ArcPayTo.*x402OptimismPayTo/);
+    // Keyless defaults: Optimism through the indexer's default facilitator (Dexter), Arc on Circle's trial.
+    const keyless = Template.fromStack(build({ x402Enabled: "true", x402ArcPayTo: PAY_ARC, x402OptimismPayTo: PAY_OP }).indexer);
+    expect(envOf(keyless)).toMatchObject({ X402_ARC_PAY_TO: PAY_ARC, X402_OPTIMISM_PAY_TO: PAY_OP });
+    expect(envOf(keyless)).not.toHaveProperty("X402_OPTIMISM_FACILITATOR_URL");
+    expect(secretsOf(keyless)).not.toHaveProperty("CIRCLE_API_KEY");
+    expect(() => build({ x402ArcNetwork: "arc" })).toThrow(/x402ArcNetwork/);
+    expect(() => build({ x402OptimismMinPrice: "five" })).toThrow(/x402OptimismMinPrice/);
+    expect(() => build({ ...PROD, ...CHAIN_CTX, x402OptimismFacilitatorUrl: "http://op.example.org" })).toThrow(/https "x402OptimismFacilitatorUrl"/);
     expect(() => build({ x402FacilitatorEnabled: "true" })).toThrow(/x402FacilitatorPayTo/);
     expect(() => build({ ...HTTPS, x402FacilitatorEnabled: "true", x402MainnetPayTo: PAY_MAINNET, x402FacilitatorPayTo: A(0xe2) })).toThrow(/must equal "x402MainnetPayTo"/);
     expect(() => build({ ...HTTPS, x402FacilitatorEnabled: "true", x402FacilitatorPayTo: PAY_MAINNET, x402MainnetNetwork: "eip155:1", x402FacilitatorNetwork: "eip155:11155111" })).toThrow(/x402FacilitatorNetwork/);

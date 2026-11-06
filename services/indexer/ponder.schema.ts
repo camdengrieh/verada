@@ -1055,3 +1055,46 @@ export const tradeStat = onchainTable("trade_stat", (t) => ({
   lastTick: t.integer().notNull(),
   lastTradeAt: t.bigint().notNull(),
 }));
+
+/**
+ * Endaoment entities seen emitting `EntityDonationReceived`. `orgId` is set only when the emitter
+ * is the factory's CREATE2 address for its own `orgId()`, i.e. a real Endaoment org; funds and
+ * look-alike contracts are stored with a null `orgId` so they are checked once.
+ */
+export const endaomentEntity = onchainTable("endaoment_entity", (t) => ({
+  address: t.hex().primaryKey(),
+  orgId: t.hex(),
+  causeId: t.hex(),
+  checkedAt: t.bigint().notNull(),
+}));
+
+/**
+ * One direct donation to an Endaoment org. `donor` is the event's `from`, or the transaction sender
+ * when `from` is the OrgFundFactory (`deployOrgAndDonate`). Varada's own payouts (weekly, live and
+ * agent-vault gifts) also land here; the leaderboard drops them by transaction hash.
+ */
+export const orgDonation = onchainTable(
+  "org_donation",
+  (t) => ({
+    id: t.text().primaryKey(),
+    org: t.hex().notNull(),
+    orgId: t.hex().notNull(),
+    causeId: t.hex().notNull(),
+    donor: t.hex().notNull(),
+    /** The event's `from`: the donor, the factory or a contract acting for the donor. */
+    via: t.hex().notNull(),
+    tokenIn: t.hex().notNull(),
+    amountIn: t.bigint().notNull(),
+    /** Gross USDC (6 decimals), before Endaoment's fee. */
+    amount: t.bigint().notNull(),
+    timestamp: t.bigint().notNull(),
+    blockNumber: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    causeIdx: index().on(table.causeId, table.timestamp),
+    timeIdx: index().on(table.timestamp),
+    donorIdx: index().on(table.donor),
+    txIdx: index().on(table.txHash),
+  }),
+);

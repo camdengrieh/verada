@@ -107,3 +107,48 @@ describe("oneClawSigner", () => {
     await expect(s.signMessage("0x")).rejects.toThrow(/denied/);
   });
 });
+
+describe("donor snapshot", () => {
+  const body = {
+    window: { from: "1000", to: "2000" },
+    coins: [{ token: "0x00000000000000000000000000000000000000D1", symbol: "BREAD", ensName: "bread.varada.eth", donated: "5000000", donations: 2 }],
+    wallets: [
+      { address: "0x00000000000000000000000000000000000000B2", ensName: null, donated: "7000000", donations: 3 },
+      { address: "0x00000000000000000000000000000000000000A1", ensName: "alice.varada.eth", donated: "2000000", donations: 1 },
+    ],
+  };
+
+  it("converts the indexer leaderboard and fetches it for a label", async () => {
+    const { donorsSnapshot, fetchDonors } = await import("../src/donors.js");
+    const s = donorsSnapshot(body);
+    expect(s).toEqual({
+      from: 1000,
+      to: 2000,
+      coins: [{ token: "0x00000000000000000000000000000000000000d1", symbol: "BREAD", ensName: "bread.varada.eth", donated: "5000000", donations: 2 }],
+      wallets: [
+        { address: "0x00000000000000000000000000000000000000b2", donated: "7000000", donations: 3 },
+        { address: "0x00000000000000000000000000000000000000a1", ensName: "alice.varada.eth", donated: "2000000", donations: 1 },
+      ],
+    });
+    let asked = "";
+    const f = (async (u: string) => {
+      asked = u;
+      return new Response(JSON.stringify(body), { status: 200 });
+    }) as unknown as typeof fetch;
+    expect(await fetchDonors("https://idx.example/", "hunger", { fetch: f })).toEqual(s);
+    expect(asked).toBe("https://idx.example/api/agents/hunger/donors?days=7&limit=10");
+    const fail = (async () => new Response("down", { status: 503 })) as unknown as typeof fetch;
+    await expect(fetchDonors("https://idx.example", "hunger", { fetch: fail })).rejects.toThrow(/503/);
+  });
+
+  it("only keeps donors that came from the snapshot, and the schema bounds them", async () => {
+    const { donorsSnapshot, withDonors } = await import("../src/donors.js");
+    const { parseReport } = await import("../src/report.js");
+    const base = report();
+    const forged = { ...base, donors: { from: 0, to: 1, coins: [], wallets: [{ address: "0x00000000000000000000000000000000000000ff", donated: "1", donations: 1 }] } };
+    expect(withDonors(parseReport(forged), undefined).donors).toBeUndefined();
+    const snap = donorsSnapshot(body);
+    expect(withDonors(parseReport(forged), snap).donors).toEqual(snap);
+    expect(() => donorsSnapshot({ ...body, wallets: [{ ...body.wallets[0]!, donated: "1.5" }] })).toThrow();
+  });
+});

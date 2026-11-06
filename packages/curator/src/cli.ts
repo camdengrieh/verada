@@ -4,17 +4,25 @@ import { entryProof, loadCatalog } from "@varada/cause-catalog";
 import { AGENT_CATEGORIES, REGIONS, agentByLabel, agentBySlug, bucketId, regionBySlug } from "@varada/sdk";
 import { getAddress, keccak256, toHex, type Address, type Hex } from "viem";
 import { buildReport, canonicalJson, type BuiltReport } from "./build.js";
+import { CURATORS, cronOf, curatorByName, dueOn, upcomingRuns } from "./curators.js";
+import { registerCallsFromRecord, registrationDataUri, registrationFile } from "./registration.js";
 import { giveCalldata, submitCurationsCalldata } from "./calldata.js";
-import { parseReport } from "./report.js";
+import { fetchDonors, withDonors } from "./donors.js";
+import { DonorsSchema, parseReport } from "./report.js";
 import { oneClawSigner, type CuratorSigner } from "./signer.js";
 import { curatorStatus, rpcReader, toJson, vaultOf } from "./status.js";
 
 const HELP = `varada-curator <command> [options]
 
+  due       which cause the agent evaluates today, or none (--agent <name> [--at <ISO time>]); see curators
+  curators  the ten agents, their two causes, routine cron and next runs ([--at <ISO time>])
+  registration  a cause's ERC-8004 registration file (--category [--agent-id N] [--uri: print the data: URI])
+  register-calls  the 20 CuratorRegistry.registerAgent calls with each cause's agent signer ([--record agents/curators.json])
   status    read the next epoch, deadlines, catalogue version and the agent's vault from chain (--category)
   pool      list a bucket's catalogue entries (--category <slug|label> --region <slug>)
   template  print an empty report for a category (--category, --epoch, --catalog-version)
-  build     validate a report against the catalogue and build the pick trees (--report, --out)
+  donors    fetch the cause's biggest on-chain donors of the past week from the indexer (--category [--days 7] [--limit 10])
+  build     validate a report against the catalogue and build the pick trees (--report, --out, [--donors <file from donors>])
   publish   upload a built report to Swarm through the publisher; prints the reference (--built)
   submit    send CuratorRegistry.submitCurations for a built report (--built, --report-ref)
   give      send AgentVault.give (--category --region --org <orgId> --amount <USDC units> [--vault])
@@ -24,6 +32,7 @@ Signing (1Claw): env ONECLAW_AGENT_ID, ONECLAW_API_KEY (a network secret in sche
 Contracts: env CURATOR_REGISTRY_ADDRESS, and for give the vault address (--vault, or CuratorRegistry.agentOf)
 Chain reads (status, give without --vault): env ETH_RPC_URL (mainnet; several URLs comma-separated)
 Publisher: env PUBLISHER_URL
+Indexer (donors): env INDEXER_URL
 Add --dry-run to print the transaction instead of sending it.
 `;
 
@@ -31,6 +40,11 @@ const { positionals, values: v } = parseArgs({
   allowPositionals: true,
   options: {
     category: { type: "string" },
+    agent: { type: "string" },
+    "agent-id": { type: "string" },
+    uri: { type: "boolean", default: false },
+    record: { type: "string", default: "agents/curators.json" },
+    at: { type: "string" },
     region: { type: "string" },
     epoch: { type: "string" },
     "catalog-version": { type: "string" },
@@ -41,6 +55,9 @@ const { positionals, values: v } = parseArgs({
     org: { type: "string" },
     amount: { type: "string" },
     vault: { type: "string" },
+    donors: { type: "string" },
+    days: { type: "string" },
+    limit: { type: "string" },
     source: { type: "string" },
     "dry-run": { type: "boolean", default: false },
     help: { type: "boolean", default: false },
@@ -83,6 +100,30 @@ async function main() {
   const cmd = positionals[0];
   if (!cmd || v.help) return out(HELP);
   switch (cmd) {
+    case "due": {
+      const name = need(v.agent, "--agent");
+      const agent = curatorByName(name);
+      if (!agent) throw new Error(`no curator agent ${name}; one of ${CURATORS.map((c) => c.name).join(", ")}`);
+      const at = v.at ? new Date(v.at) : new Date();
+      if (Number.isNaN(at.getTime())) throw new Error(`--at is not a time: ${v.at}`);
+      const run = dueOn(agent, at);
+      const next = upcomingRuns(agent, new Date(at.getTime() + 86_400_000), 2);
+      return out({ agent: agent.name, causes: agent.causes, due: run !== null, cause: run?.cause ?? null, date: at.toISOString().slice(0, 10), next });
+    }
+    case "curators": {
+      const at = v.at ? new Date(v.at) : new Date();
+      if (Number.isNaN(at.getTime())) throw new Error(`--at is not a time: ${v.at}`);
+      return out(CURATORS.map((c) => ({ agent: c.name, causes: c.causes, cron: cronOf(c), next: upcomingRuns(c, at, 2) })));
+    }
+    case "registration": {
+      const agent = agentOf(need(v.category, "--category"));
+      const file = registrationFile(agent.ensLabel, { agentId: v["agent-id"] ? BigInt(v["agent-id"]) : undefined });
+      return out(v.uri ? registrationDataUri(file) : file);
+    }
+    case "register-calls": {
+      const rec = JSON.parse(await readFile(v.record!, "utf8"));
+      return out(registerCallsFromRecord(rec).map((c) => ({ ...c, agentURI: `${c.agentURI.slice(0, 48)}... (${c.agentURI.length} chars)` })));
+    }
     case "status": {
       const agent = agentOf(need(v.category, "--category"));
       return out(toJson(await curatorStatus(reader(), registryAddress(), agent)));
@@ -114,8 +155,18 @@ async function main() {
         regions: REGIONS.map((r) => ({ region: r.slug, weight: 0, summary: "", events: [], picks: [], newsletter: "" })),
       });
     }
+    case "donors": {
+      const agent = agentOf(need(v.category, "--category"));
+      return out(
+        await fetchDonors(need(process.env.INDEXER_URL, "INDEXER_URL"), agent.ensLabel, {
+          days: v.days ? Number(v.days) : undefined,
+          limit: v.limit ? Number(v.limit) : undefined,
+        }),
+      );
+    }
     case "build": {
-      const report = parseReport(JSON.parse(await readFile(need(v.report, "--report"), "utf8")));
+      const snapshot = v.donors ? DonorsSchema.parse(JSON.parse(await readFile(v.donors, "utf8"))) : undefined;
+      const report = withDonors(parseReport(JSON.parse(await readFile(need(v.report, "--report"), "utf8"))), snapshot);
       const built = buildReport(report, await loadCatalog(source()));
       await writeFile(v.out!, JSON.stringify(built, null, 2));
       return out({ out: v.out, reportHash: built.reportHash, regions: built.regions.map((r) => ({ region: r.region, count: r.count, weight: r.weight, picksRoot: r.picksRoot })) });
