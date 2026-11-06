@@ -73,6 +73,12 @@ export async function chainCurrentEpoch(client: PublicClient, cfg: AppConfig): P
   return client.readContract({ address: cfg.governorAddress, abi: epochGovernorAbi, functionName: "currentEpoch" });
 }
 
+/** The platform's ballot size cap (`ballotSizeCap`, 2..32): the most options any token's next ballot can hold. */
+export async function chainBallotSizeCap(client: PublicClient, cfg: AppConfig): Promise<number> {
+  if (!cfg.governorAddress) throw new Error("Governor address not configured");
+  return Number(await client.readContract({ address: cfg.governorAddress, abi: epochGovernorAbi, functionName: "ballotSizeCap" }));
+}
+
 /** Cause pool for a token's epoch, raw USDC units (6 decimals). */
 export async function chainCausePool(client: PublicClient, cfg: AppConfig, token: Address, epoch: bigint): Promise<bigint> {
   if (!cfg.vaultAddress) throw new Error("Vault address not configured");
