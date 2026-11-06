@@ -101,6 +101,8 @@ describe("https and cors configuration", () => {
   test("origins must be bare origins", () => {
     expect(() => build({ indexerCorsOrigins: "https://a.example/" })).toThrow(/bare origin/);
     expect(() => build({ indexerCorsOrigins: "nonsense" })).toThrow(/not a valid origin/);
+    expect(() => build({ indexerCorsOrigins: "*.com/x" })).toThrow(/not a valid origin/);
+    expect(() => build({ ...PROD, indexerCorsOrigins: "https://varada.example.com,*.eth.limo,https://*.bzz.link" })).not.toThrow();
   });
   test("a domain needs a certificate or a hosted zone; zone settings come as a pair", () => {
     expect(() => build({ allowInsecureHttp: "", indexerDomainName: "api.example.com" })).toThrow(/needs either/);
@@ -232,6 +234,25 @@ describe("indexer runtime contract", () => {
     const [td] = Object.values(t.findResources("AWS::ECS::TaskDefinition")) as any[];
     return td.Properties.ContainerDefinitions[0];
   };
+
+  test("rollouts: a schema per build, readiness-gated traffic, liveness-only container check, one writer", () => {
+    const schemaOf = (ctx: Record<string, string>) =>
+      container(Template.fromStack(build(ctx).indexer)).Environment.find((e: any) => e.Name === "DATABASE_SCHEMA").Value;
+    const a = schemaOf({});
+    expect(a).toMatch(/^varada_[0-9a-f]{12}$/);
+    expect(schemaOf({})).toBe(a);
+    expect(schemaOf({ indexerImageTag: "v2" })).not.toBe(a);
+    expect(schemaOf({ startBlock: "2000" })).not.toBe(a);
+    const t = Template.fromStack(build().indexer);
+    t.hasResourceProperties("AWS::ECS::Service", {
+      HealthCheckGracePeriodSeconds: 3600,
+      DeploymentConfiguration: Match.objectLike({ MinimumHealthyPercent: 100, MaximumPercent: 200 }),
+    });
+    expect(JSON.stringify(container(t).HealthCheck.Command)).toContain("/health");
+    expect(JSON.stringify(container(t).HealthCheck.Command)).not.toContain("/ready");
+    expect(() => build({ indexerDesiredCount: "2" })).toThrow(/one Ponder writer/);
+    expect(() => build({ indexerMaxCount: "3" })).toThrow(/one Ponder writer/);
+  });
 
   test("health check uses node, not wget/curl", () => {
     const c = container(Template.fromStack(build().indexer));
@@ -469,7 +490,7 @@ describe("stacks", () => {
       ImageTagMutability: "IMMUTABLE",
     });
     t.hasResourceProperties("AWS::ElasticLoadBalancingV2::TargetGroup", {
-      HealthCheckPath: "/health",
+      HealthCheckPath: "/ready",
       TargetType: "ip",
     });
     t.hasResourceProperties("AWS::ECS::Service", {

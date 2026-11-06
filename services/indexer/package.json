@@ -8,6 +8,7 @@
     "start": "ponder start",
     "serve": "ponder serve",
     "serve:fixtures": "tsx scripts/serve-fixtures.ts",
+    "deployment-env": "tsx scripts/deployment-env.ts",
     "codegen": "ponder codegen",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
