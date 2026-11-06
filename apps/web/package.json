@@ -12,7 +12,8 @@
     "build:verify": "pnpm run build && node scripts/verify-export.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:fork": "vitest run test/fork --no-file-parallelism"
   },
   "dependencies": {
     "@anon-rpc/browser-harness": "0.4.0",
