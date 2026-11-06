@@ -1,5 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("@/hooks/use-usd-quotes", () => ({ useUsdQuotes: () => ({ quotes: new Map(), loading: false, quoteFor: () => undefined }) }));
 import type { Address } from "viem";
 import { PairStep } from "@/components/launch/pair-step";
 import { initialWizardState } from "@/lib/launch-steps";
