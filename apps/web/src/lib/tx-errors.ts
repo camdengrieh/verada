@@ -86,6 +86,19 @@ function isInsufficientFunds(e: unknown): boolean {
 }
 
 /**
+ * The 4-byte selector of a custom error viem could not decode against the contract's ABI (it comes
+ * from another contract in the call, such as the FHE input verifier), or undefined.
+ */
+export function undecodedRevertSignature(e: unknown): string | undefined {
+  for (const c of chain(e)) {
+    const text = [c.shortMessage, c.message].filter((x): x is string => typeof x === "string").join(" ");
+    const m = /reverted with the following signature:\s*(0x[0-9a-fA-F]{8})\b/.exec(text);
+    if (m) return m[1];
+  }
+  return undefined;
+}
+
+/**
  * A friendly message for an error we recognise, or null so the caller can show the raw one.
  * Never includes the user's address or anything else from the request.
  */
@@ -96,5 +109,7 @@ export function friendlyTxError(e: unknown): string | null {
   if (isInsufficientFunds(e)) return "Your wallet does not have enough ETH to pay for gas.";
   const revert = revertName(e);
   if (revert && REVERTS[revert]) return REVERTS[revert]!;
+  const signature = undecodedRevertSignature(e);
+  if (signature) return `The contract rejected the transaction (error ${signature}). Nothing was spent beyond gas.`;
   return null;
 }

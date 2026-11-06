@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type FormEvent } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 import { isAddress, type Address } from "viem";
 import { TAKEOVER_AGAINST, TAKEOVER_FOR } from "@varada/sdk";
@@ -51,6 +51,20 @@ export function shareOf(part: string, whole: string | undefined): string | null 
   if (!whole || !/^\d+$/.test(whole) || !/^\d+$/.test(part) || BigInt(whole) === 0n) return null;
   const bp = (BigInt(part) * 10_000n) / BigInt(whole);
   return `${bp / 100n}.${(bp % 100n).toString().padStart(2, "0")}%`;
+}
+
+/**
+ * Reads the proposal list (and the viewer's weight) again once one of this panel's transactions is
+ * confirmed, so a new proposal, a closed vote, an execution or a cast ballot shows without a reload.
+ */
+function useRefreshOnConfirm(token: Address, ...receipts: ({ status: string; transactionHash: string } | undefined)[]) {
+  const queryClient = useQueryClient();
+  const confirmed = receipts.map((r) => (r?.status === "success" ? r.transactionHash : "")).join(",");
+  useEffect(() => {
+    if (!confirmed.replace(/,/g, "")) return;
+    void queryClient.invalidateQueries({ queryKey: ["takeovers", token] });
+    void queryClient.invalidateQueries({ queryKey: ["takeover-account"] });
+  }, [confirmed, queryClient, token]);
 }
 
 /** Community takeover: replace the profile controller by a FOR/AGAINST vote of holders. */
@@ -131,6 +145,7 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
   const gate = useWalletGate();
   const ballot = useCastBallot();
   const tx = useTx();
+  useRefreshOnConfirm(token, tx.receipt, ballot.tx.receipt);
   const id = BigInt(p.proposalId);
 
   const accountClient = useMemo(() => (account ? createAccountClient(rpc, account) : null), [rpc, account]);
@@ -245,7 +260,8 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
       )}
       {mine.error && <p role="alert" className="m-0 text-sm text-destructive">Could not read your weight: {errorText(mine.error)}</p>}
       {ballot.phase === "encrypting" && <p role="status" className="m-0 text-sm">Encrypting your ballot</p>}
-      {ballot.error && <p role="alert" className="m-0 text-sm text-destructive">{ballot.error}</p>}
+      {/* A wallet or contract error is the ballot transaction's own and TxStatus shows it; this line is for failures before a transaction (encrypting, no wallet). */}
+      {ballot.error && !ballot.tx.error && <p role="alert" className="m-0 text-sm text-destructive">{ballot.error}</p>}
       {gate.wrongChain && (
         <Button type="button" variant="outline" className="self-start" onClick={gate.switchToApp} disabled={gate.switching}>
           Switch network
@@ -284,6 +300,7 @@ function ProposeForm({ governor, token }: { governor: Address; token: Address })
   const config = useAppConfig();
   const { address: account } = useAccount();
   const tx = useTx();
+  useRefreshOnConfirm(token, tx.receipt);
   const [newController, setNewController] = useState("");
   const [error, setError] = useState<string>();
 

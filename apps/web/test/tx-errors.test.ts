@@ -36,6 +36,13 @@ describe("friendlyTxError", () => {
     expect(friendlyTxError(new Error('The contract function "castBallot" reverted with the following signature: ZeroWeight()'))).toMatch(/none of this token/);
   });
 
+  it("names a revert viem could not decode instead of showing the raw message", () => {
+    const e = new Error('The contract function "castBallot" reverted with the following signature:\n0xb9688461\n\nUnable to decode signature');
+    expect(friendlyTxError(e)).toBe("The contract rejected the transaction (error 0xb9688461). Nothing was spent beyond gas.");
+    // A known custom error still wins.
+    expect(friendlyTxError({ shortMessage: "reverted", message: "reverted with the following signature: 0xdeadbeef", cause: { data: { errorName: "ZeroWeight" } } })).toMatch(/none of this token/);
+  });
+
   it("leaves unknown errors alone", () => {
     expect(friendlyTxError(new Error("something odd"))).toBeNull();
     expect(friendlyTxError(undefined)).toBeNull();
