@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Script, console2} from "forge-std/Script.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {IPositionManager} from "v4-periphery/interfaces/IPositionManager.sol";
 
+import {CauseCatalog} from "../src/CauseCatalog.sol";
 import {CauseRegistry} from "../src/CauseRegistry.sol";
+import {CuratorRegistry} from "../src/CuratorRegistry.sol";
 import {DonationDistributor} from "../src/DonationDistributor.sol";
 import {EpochGovernor} from "../src/EpochGovernor.sol";
 import {FeeConsolidator, IConsolidatorRegistry} from "../src/FeeConsolidator.sol";
@@ -19,7 +23,9 @@ import {VeradaHook} from "../src/VeradaHook.sol";
 import {VeradaLpLocker} from "../src/VeradaLpLocker.sol";
 import {VeradaResolver} from "../src/VeradaResolver.sol";
 import {ZamaVotingScheme} from "../src/governance/ZamaVotingScheme.sol";
+import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
+import {ICuratorRegistry} from "../src/interfaces/ICuratorRegistry.sol";
 import {IEpochGovernor} from "../src/interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "../src/interfaces/IFeeConsolidator.sol";
 import {IFeeVault} from "../src/interfaces/IFeeVault.sol";
@@ -29,6 +35,7 @@ import {ITakeoverGovernor} from "../src/interfaces/ITakeoverGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
 import {IVeradaHook} from "../src/interfaces/IVeradaHook.sol";
 import {IVotingScheme} from "../src/interfaces/IVotingScheme.sol";
+import {IERC8004IdentityRegistry} from "../src/interfaces/external/IERC8004IdentityRegistry.sol";
 import {IEndaomentOrgFundFactory} from "../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {ContenthashLib} from "../src/libraries/ContenthashLib.sol";
 import {DnsNameLib} from "../src/libraries/DnsNameLib.sol";
@@ -38,16 +45,16 @@ import {DnsNameLib} from "../src/libraries/DnsNameLib.sol";
 ///         address, wires roles and writes the resulting addresses to `deployments/<chainid>.json`.
 /// @dev Environment for `run()`:
 ///        OWNER               final owner of the admin contracts (two-step transfer, must accept)
-///        PLATFORM_TREASURY   receiver of the platform fee share; also the `addr` of verada.eth
+///        PLATFORM_TREASURY   receiver of the platform fee share; also the `addr` of varada.eth
 ///        SITE_SWARM_REF      optional bytes32 Swarm reference (the site feed manifest) stored as
 ///                            the default contenthash served for every ENS name
 ///      Example (fork dry run):
 ///        forge script script/Deploy.s.sol --fork-url $ETH_RPC_URL
 ///
 ///      Manual steps after deployment (not transactions this script can send):
-///        1. The owner of `verada.eth` on ENSv2 calls
+///        1. The owner of `varada.eth` on ENSv2 calls
 ///           `ETHRegistry(0xf60aba43e1f7f3dab1186ff03b561401c9df85e2).setResolver(
-///               uint256(keccak256("verada")), <resolver>)`.
+///               uint256(keccak256("varada")), <resolver>)`.
 ///        2. The owner accepts ownership of every admin contract, adds causes, sets the default
 ///           shortlist (`EpochGovernor.setDefaultShortlist`) and the default cause, and, after the
 ///           first site publish, `TokenProfileRegistry.setDefaultContenthash` if SITE_SWARM_REF was
@@ -66,8 +73,12 @@ contract Deploy is Script {
     uint256 internal constant MAX_DEVIATION_TICKS = 1500;
     /// @dev Deterministic CREATE2 deployer present on mainnet; used to place the hook.
     address internal constant CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
-    /// @dev DNS wire-format encoding of `verada.eth`, the parent of every token subname.
-    bytes internal constant PARENT_DNS_NAME = hex"067665726164610365746800";
+    /// @dev DNS wire-format encoding of `varada.eth`, the parent of every token subname.
+    bytes internal constant PARENT_DNS_NAME = hex"067661726164610365746800";
+    string internal constant PARENT_NAME = "varada.eth";
+    /// @dev ERC-8004 Identity Registry on Ethereum mainnet (erc-8004/erc-8004-contracts; an
+    ///      upgradeable proxy whose `name()` is "AgentIdentity").
+    address internal constant ERC8004_IDENTITY = 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432;
 
     uint160 internal constant HOOK_FLAGS = uint160(
         Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG
@@ -90,12 +101,14 @@ contract Deploy is Script {
         address feeConsolidator;
         address quoteRegistry;
         address causeRegistry;
+        address causeCatalog;
         address epochGovernor;
         address donationDistributor;
         address profileRegistry;
         address resolver;
         address takeoverGovernor;
         address votingScheme;
+        address curatorRegistry;
         uint256 deployBlock;
     }
 
@@ -122,7 +135,8 @@ contract Deploy is Script {
     }
 
     /// @notice Initial takeover parameters: one-week vote and execution window, two weeks of
-    ///         cooldown and minimum token age, 3% quorum, 0.25% proposal threshold.
+    ///         per-proposer cooldown and minimum token age, 3% quorum and 0.25% proposal threshold
+    ///         of circulating supply, and a one-week holding lookback for voting weight.
     function defaultTakeoverParams() public pure returns (ITakeoverGovernor.Params memory) {
         return ITakeoverGovernor.Params({
             votingPeriod: 7 days,
@@ -130,7 +144,8 @@ contract Deploy is Script {
             cooldown: 14 days,
             minTokenAge: 14 days,
             quorumBps: 300,
-            proposalThresholdBps: 25
+            proposalThresholdBps: 25,
+            lookback: 7 days
         });
     }
 
@@ -148,6 +163,8 @@ contract Deploy is Script {
         // The deployer owns everything during setup; ownership moves to cfg.owner at the end.
         CauseRegistry registry =
             new CauseRegistry(deployer, IEndaomentOrgFundFactory(ENDAOMENT_FACTORY));
+        // Empty until the owner publishes the first catalogue version; launches revert until then.
+        CauseCatalog catalog = new CauseCatalog(deployer);
         QuoteRegistry quotes = new QuoteRegistry(deployer, USDC, WETH);
         // The scheme reads the Zama coprocessor config for the current chain (mainnet here).
         ZamaVotingScheme scheme = new ZamaVotingScheme(deployer);
@@ -172,6 +189,7 @@ contract Deploy is Script {
         EpochGovernor governor = new EpochGovernor(
             deployer,
             ICauseRegistry(address(registry)),
+            ICauseCatalog(address(catalog)),
             IVotingScheme(address(scheme)),
             ITokenProfileRegistry(address(profiles))
         );
@@ -225,20 +243,44 @@ contract Deploy is Script {
         );
         _expect("factory", factoryAddr, address(factory));
 
+        // Curator agents: identities on ERC-8004, names under `agent.<parent>`, weekly picks.
+        CuratorRegistry curators = new CuratorRegistry(
+            deployer,
+            IERC8004IdentityRegistry(ERC8004_IDENTITY),
+            ICauseCatalog(address(catalog)),
+            ICauseRegistry(address(registry)),
+            IEndaomentOrgFundFactory(ENDAOMENT_FACTORY),
+            IERC20(USDC),
+            ITokenProfileRegistry(address(profiles))
+        );
+
         // ENS resolver (stateless) and the takeover governor need no address prediction.
-        VeradaResolver resolver =
-            new VeradaResolver(ITokenProfileRegistry(address(profiles)), PARENT_DNS_NAME);
+        VeradaResolver resolver = new VeradaResolver(
+            ITokenProfileRegistry(address(profiles)),
+            PARENT_DNS_NAME,
+            ICuratorRegistry(address(curators)),
+            PARENT_NAME
+        );
+        // The pool manager's (self-delegated, never-voting) balance is excluded from the
+        // circulating supply the takeover quorum is measured against.
         TakeoverGovernor takeover = new TakeoverGovernor(
             deployer,
             ITokenProfileRegistry(address(profiles)),
             IVotingScheme(address(scheme)),
-            defaultTakeoverParams()
+            defaultTakeoverParams(),
+            POOL_MANAGER
         );
 
         // Wiring.
         governor.setFactory(address(factory));
+        governor.setCuratorRegistry(ICuratorRegistry(address(curators)));
+        curators.setGovernor(IEpochGovernor(address(governor)));
+        // `agent.<parent>` is the curator agents' namespace: no token may take the label.
+        profiles.setReservation(keccak256("agent"), true, address(0));
+        registry.setMaterializer(address(governor), true);
         distributor.setFeeVault(address(vault));
         vault.setConsolidator(address(consolidator));
+        vault.setLpLocker(ILpLocker(address(locker)));
         consolidator.setHook(hookAddr);
         consolidator.setSource(address(locker), true);
         scheme.setGovernor(address(governor), true);
@@ -249,19 +291,6 @@ contract Deploy is Script {
             profiles.setDefaultContenthash(ContenthashLib.swarm(cfg.siteSwarmRef));
         }
 
-        // Hand over ownership (two-step: cfg.owner must call acceptOwnership on each).
-        if (cfg.owner != deployer) {
-            registry.transferOwnership(cfg.owner);
-            governor.transferOwnership(cfg.owner);
-            distributor.transferOwnership(cfg.owner);
-            vault.transferOwnership(cfg.owner);
-            quotes.transferOwnership(cfg.owner);
-            consolidator.transferOwnership(cfg.owner);
-            profiles.transferOwnership(cfg.owner);
-            scheme.transferOwnership(cfg.owner);
-            takeover.transferOwnership(cfg.owner);
-        }
-
         d = Deployment({
             factory: address(factory),
             hook: hookAddr,
@@ -270,6 +299,8 @@ contract Deploy is Script {
             feeConsolidator: address(consolidator),
             quoteRegistry: address(quotes),
             causeRegistry: address(registry),
+            causeCatalog: address(catalog),
+            curatorRegistry: address(curators),
             epochGovernor: address(governor),
             donationDistributor: address(distributor),
             profileRegistry: address(profiles),
@@ -278,6 +309,30 @@ contract Deploy is Script {
             votingScheme: address(scheme),
             deployBlock: block.number
         });
+
+        // Hand over ownership (two-step: cfg.owner must call acceptOwnership on each).
+        if (cfg.owner != deployer) _handOver(d, cfg.owner);
+    }
+
+    /// @dev Starts the two-step ownership transfer of every owned contract of `d` to `newOwner`.
+    ///      A separate function so `deploy` stays within the stack limit wherever it is inlined.
+    function _handOver(Deployment memory d, address newOwner) internal {
+        address[11] memory owned = [
+            d.causeRegistry,
+            d.causeCatalog,
+            d.curatorRegistry,
+            d.epochGovernor,
+            d.donationDistributor,
+            d.feeVault,
+            d.quoteRegistry,
+            d.feeConsolidator,
+            d.profileRegistry,
+            d.votingScheme,
+            d.takeoverGovernor
+        ];
+        for (uint256 i; i < owned.length; ++i) {
+            Ownable(owned[i]).transferOwnership(newOwner);
+        }
     }
 
     // ------------------------------------------------------------------ hook mining

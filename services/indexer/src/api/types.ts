@@ -72,6 +72,8 @@ export interface TokenRow {
   contenthash: Hex | null;
   suppressed: boolean;
   registeredAt: bigint | null;
+  categoryMask: bigint | null;
+  regionMask: number | null;
 }
 
 export interface FeeTotalRow {
@@ -106,8 +108,23 @@ export interface EpochRow {
   closedAt: bigint | null;
   voterCount: number;
   fallbackApplied: boolean;
+  /** `no_votes` or `timeout` once a fallback applied. */
+  fallbackReason: string | null;
+  closeFailed: boolean;
   governor: Hex | null;
   scheme: Hex | null;
+  /** Ballot fixed (`BallotPrepared`); options may be fewer than two, then it never opens. */
+  prepared: boolean;
+  preparedAt: bigint | null;
+  catalogVersion: number | null;
+  poolSize: bigint | null;
+  pinnedCount: number | null;
+}
+
+/** A token's cause focus (`TokenProfileRegistry.FocusSet`). */
+export interface FocusRow {
+  categoryMask: bigint;
+  regionMask: number;
 }
 
 export interface EpochClock {
@@ -140,6 +157,8 @@ export interface TakeoverRow {
   end: bigint;
   snapshot: bigint;
   executionDeadline: bigint | null;
+  lookbackSnapshot: bigint | null;
+  circulatingWeight: bigint | null;
   quorumWeight: bigint;
   forWeight: bigint;
   againstWeight: bigint;
@@ -154,6 +173,15 @@ export interface TakeoverRow {
   executedAt: bigint | null;
   canceledAt: bigint | null;
   txHash: Hex;
+  /** Token executions when created; behind `takeoverExecutions(token)` means superseded. */
+  generation: number;
+}
+
+/** Stored shortlist schedule (see `ponder.schema.ts`). */
+export interface ShortlistSchedule {
+  causeIds: Hex[];
+  effectiveFrom: bigint | null;
+  previousCauseIds: Hex[];
 }
 
 export interface TextRecordRow {
@@ -201,9 +229,9 @@ export interface Repo {
     token: TokenRow;
     feeTotals: FeeTotalRow | null;
     textRecords: TextRecordRow[];
-    /** The token's own shortlist; null when it has none (or cleared it). */
-    shortlist: Hex[] | null;
-    defaultShortlist: Hex[] | null;
+    shortlist: ShortlistSchedule | null;
+    focus: FocusRow | null;
+    clock: EpochClock | null;
   } | null>;
   /** Address of the token registered under `label`, if any. */
   findTokenByLabel(label: string): Promise<Hex | null>;
@@ -223,6 +251,8 @@ export interface Repo {
   /** Newest proposal first. */
   listTakeovers(token: Hex, limit: number): Promise<TakeoverRow[]>;
   getTakeover(proposalId: bigint): Promise<TakeoverRow | null>;
+  /** Executed takeovers of `token` so far (0 when none). */
+  takeoverExecutions(token: Hex): Promise<number>;
   getPoll(governor: Hex, token: Hex, scope: bigint): Promise<PollRow | null>;
   stats(): Promise<Stats>;
 }

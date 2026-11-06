@@ -25,7 +25,7 @@ contract LiveFailureModesTest is LiveBase {
     AdversarialOrg internal org;
 
     /// @dev Storage slot of `FeeConsolidator.references` (see `forge inspect`).
-    uint256 internal constant REFERENCES_SLOT = 13;
+    uint256 internal constant REFERENCES_SLOT = 14;
 
     function setUp() public {
         _liveSetUp();

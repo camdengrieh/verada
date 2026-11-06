@@ -14,6 +14,7 @@ import {Actions} from "v4-periphery/libraries/Actions.sol";
 import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 
 import {VeradaToken} from "./VeradaToken.sol";
+import {ICauseCatalog} from "./interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
 import {ILiveDonationVault} from "./interfaces/ILiveDonationVault.sol";
@@ -39,10 +40,11 @@ interface IPermit2Allowance {
 /// @notice Launches a token: deploys it with CREATE2, initializes its Uniswap v4 pool against
 ///         a registry-approved quote asset (WETH or an Ondo token) with the Verada hook, mints the whole supply as single-sided liquidity, sends
 ///         the position NFT to the locker and registers the token with the fee vault, the
-///         epoch governor and the profile registry (its `<label>.verada.eth` name). The factory
+///         epoch governor and the profile registry (its `<label>.varada.eth` name). The factory
 ///         holds no tokens or positions after a launch. Once the deployer has configured live
 ///         mode, `deployLiveToken` runs the same launch on the live-donation hook and registers
-///         the token with the live vault and rotation governor instead.
+///         the token with the live vault and rotation governor instead. Both modes fix the
+///         token's cause focus at launch, under the same catalogue check.
 /// @dev `startTick` in `DeployParams` is expressed in whole-token terms: the price of one whole
 ///      token (18 decimals) in whole units of the quote asset is 1.0001^startTick, whatever the
 ///      quote's decimals. The pool works in raw units, so the factory shifts the tick by
@@ -208,6 +210,10 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         // Claims the ENS label before any pool state exists, so a bad or taken label reverts
         // the launch cheaply.
         _profileRegistry.register(token, params.label, msg.sender, params.logoRef);
+        _profileRegistry.setFocus(token, params.categoryMask, params.regionMask);
+        // A weekly token's focus is checked against the catalogue when the epoch governor
+        // registers it; a live token never reaches that governor, so the same check runs here.
+        if (isLive) _checkFocusPool(token, params.categoryMask, params.regionMask);
 
         hook_.configureToken(
             token,
@@ -264,6 +270,14 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
     }
 
     // ------------------------------------------------------------------ internals
+
+    /// @dev The epoch governor's launch rule (`IEpochGovernor.registerToken`): the latest
+    ///      catalogue must give the focus at least `MIN_OPTIONS` entries.
+    function _checkFocusPool(address token, uint64 categoryMask, uint16 regionMask) internal view {
+        ICauseCatalog catalog = ICauseCatalog(governor.catalog());
+        uint256 size = catalog.poolSize(catalog.latestVersion(), categoryMask, regionMask);
+        if (size < governor.MIN_OPTIONS()) revert IEpochGovernor.PoolTooSmall(token, size);
+    }
 
     function _validate(DeployParams calldata params) internal pure {
         if (params.baseFeeBps < MIN_FEE_BPS || params.baseFeeBps > MAX_FEE_BPS) {

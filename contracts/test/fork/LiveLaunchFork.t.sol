@@ -16,6 +16,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {DeployLive} from "../../script/DeployLive.s.sol";
+import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
@@ -33,6 +34,7 @@ import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingS
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogPublish} from "../utils/CatalogFixture.sol";
 
 interface IWETHLaunch is IERC20 {
     function deposit() external payable;
@@ -94,6 +96,12 @@ contract LiveLaunchForkTest is Test, DeployLive {
         for (uint256 i; i < owned.length; ++i) {
             Ownable2Step(owned[i]).acceptOwnership();
         }
+        // Launches need a catalogue version that gives the launch focus at least two entries.
+        CauseCatalog(d.causeCatalog).acceptOwnership();
+        bytes32[] memory catalogOrgs = new bytes32[](2);
+        catalogOrgs[0] = bytes32("catalog-org-1");
+        catalogOrgs[1] = bytes32("catalog-org-2");
+        CatalogPublish.publish(CauseCatalog(d.causeCatalog), catalogOrgs);
 
         freshAddr = IEndaomentOrgFundFactory(ENDAOMENT_FACTORY).computeOrgAddress(FRESH_ORG);
         CauseRegistry(d.causeRegistry).addCause(WIKI_CAUSE, WIKI_ORG, WIKI_ADDR, "ipfs://wiki");
@@ -149,7 +157,9 @@ contract LiveLaunchForkTest is Test, DeployLive {
             -69_000, // about 0.001 WETH per token
             WETH,
             string.concat("live-fork-", vm.toString(launches)),
-            bytes32(0)
+            bytes32(0),
+            CatalogPublish.CATEGORIES,
+            CatalogPublish.REGIONS
         );
         vm.prank(creator);
         (token,) = VeradaFactory(d.factory)

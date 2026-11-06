@@ -26,6 +26,7 @@ import {VeradaFactory} from "../../src/VeradaFactory.sol";
 import {VeradaHook} from "../../src/VeradaHook.sol";
 import {VeradaLpLocker} from "../../src/VeradaLpLocker.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
@@ -42,6 +43,7 @@ import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockDistributor, MockOndoToken, MockWETH} from "../consolidator/ConsolidatorMocks.sol";
 import {MockEndaomentRegistry, MockOrgFactory} from "../mocks/EndaomentMocks.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogFixture} from "../utils/CatalogFixture.sol";
 import {LiveBase} from "./LiveBase.sol";
 import {LiveUSDC} from "./LiveMocks.sol";
 
@@ -60,10 +62,14 @@ abstract contract LiveFactoryBase is LiveBase {
         0x57d91e5a92cd91e5d7f0bc0b6bbcab514531e262e06e38ae9e2d95ef97080e65;
     /// @dev 1.0001^-69000: about 0.001 whole quote per whole token, for an 18-decimal quote.
     int24 internal constant START_TICK = -69_000;
+    /// @dev Launch focus (category bit 2, region bit 0); the catalogue gives it three entries.
+    uint64 internal constant FOCUS_CATEGORIES = uint64(1) << 2;
+    uint16 internal constant FOCUS_REGIONS = uint16(1);
 
     IPositionManager internal posm;
     TokenProfileRegistry internal profileRegistry;
     EpochGovernor internal epochGov;
+    CatalogFixture internal cat;
     VeradaHook internal weeklyHook;
     VeradaLpLocker internal locker;
     VeradaFactory internal factory;
@@ -110,6 +116,12 @@ abstract contract LiveFactoryBase is LiveBase {
         scheme = new MockVotingScheme();
         address distributor = address(new MockDistributor());
 
+        cat = new CatalogFixture();
+        for (uint256 i; i < 3; ++i) {
+            cat.add(cat.bucketOf(2, 0), keccak256(abi.encode("live-catalog", i)));
+        }
+        cat.publish();
+
         // The weekly contracts and the factory reference each other through immutables, so the
         // factory address is fixed ahead of time: profile registry, epoch governor, fee vault,
         // consolidator, weekly hook (CREATE2), locker, factory.
@@ -118,6 +130,7 @@ abstract contract LiveFactoryBase is LiveBase {
         epochGov = new EpochGovernor(
             address(this),
             ICauseRegistry(address(causes)),
+            ICauseCatalog(address(cat.catalog())),
             IVotingScheme(address(scheme)),
             ITokenProfileRegistry(address(profileRegistry))
         );
@@ -203,7 +216,7 @@ abstract contract LiveFactoryBase is LiveBase {
     }
 
     /// @dev Launch parameters, built positionally: name, symbol, metadata, salt, base fee,
-    ///      launch surcharge start and decay, start tick, quote asset, label, logo.
+    ///      launch surcharge start and decay, start tick, quote asset, label, logo, focus.
     function _deployParams(bytes32 salt, address quoteAsset, uint24 surcharge, uint32 decay)
         internal
         pure
@@ -220,7 +233,9 @@ abstract contract LiveFactoryBase is LiveBase {
             START_TICK,
             quoteAsset,
             _label(salt),
-            bytes32(0)
+            bytes32(0),
+            FOCUS_CATEGORIES,
+            FOCUS_REGIONS
         );
     }
 

@@ -48,9 +48,9 @@ contract VeradaFactoryTest is Test {
     uint256 internal constant SUPPLY = 100_000_000_000e18;
     // beforeInitialize | beforeSwap
     uint160 internal constant HOOK_FLAGS = (1 << 13) | (1 << 7);
-    // namehash("verada.eth")
+    // namehash("varada.eth")
     bytes32 internal constant PARENT_NODE =
-        0x57d91e5a92cd91e5d7f0bc0b6bbcab514531e262e06e38ae9e2d95ef97080e65;
+        0x7d4d6e6569fdd1888104213a462800d63bbc25e3e300f7cf64c5cebeb6da0aa3;
 
     PoolManager internal poolManager;
     IPositionManager internal posm;
@@ -58,6 +58,10 @@ contract VeradaFactoryTest is Test {
     MockLocker internal locker;
     MockFeeVault internal vault;
     MockGovernor internal governor;
+
+    /// @dev Hunger x Africa.
+    uint64 internal constant FOCUS_CATEGORIES = uint64(1) << 2;
+    uint16 internal constant FOCUS_REGIONS = uint16(1);
     MockHook internal hook;
     MockQuoteRegistry internal registry;
     MockQuote internal usdcLike; // 6 decimals
@@ -152,7 +156,9 @@ contract VeradaFactoryTest is Test {
             startTick: -230_200,
             quoteAsset: address(weth),
             label: _label(salt),
-            logoRef: bytes32(0)
+            logoRef: bytes32(0),
+            categoryMask: FOCUS_CATEGORIES,
+            regionMask: FOCUS_REGIONS
         });
     }
 
@@ -205,6 +211,9 @@ contract VeradaFactoryTest is Test {
         assertTrue(locker.locked(token));
         assertTrue(vault.registered(token));
         assertTrue(governor.registered(token));
+        (uint64 cm, uint16 rm) = profiles.focusOf(token);
+        assertEq(cm, FOCUS_CATEGORIES);
+        assertEq(rm, FOCUS_REGIONS);
         assertTrue(factory.isVeradaToken(token));
 
         // Token metadata.
@@ -641,7 +650,9 @@ contract VeradaFactoryTest is Test {
             startTick: startTick,
             quoteAsset: address(weth),
             label: "fuzz",
-            logoRef: salt
+            logoRef: salt,
+            categoryMask: FOCUS_CATEGORIES,
+            regionMask: FOCUS_REGIONS
         });
         address predicted = factory.predictTokenAddress(who, p);
         (address token, uint256 id) = _deploy(who, p);

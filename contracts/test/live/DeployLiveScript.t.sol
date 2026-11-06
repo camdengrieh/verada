@@ -19,6 +19,7 @@ import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol
 import {PositionManager} from "v4-periphery/PositionManager.sol";
 
 import {DeployLive} from "../../script/DeployLive.s.sol";
+import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
@@ -34,6 +35,7 @@ import {RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
 import {MockWETH} from "../consolidator/ConsolidatorMocks.sol";
 import {MockEndaomentRegistry, MockOrgFactory} from "../mocks/EndaomentMocks.sol";
+import {CatalogPublish} from "../utils/CatalogFixture.sol";
 import {LiveUSDC} from "./LiveMocks.sol";
 
 /// @dev Runs the DeployLive script without an RPC: chain id 1, with local stand-ins placed at the
@@ -105,6 +107,12 @@ contract DeployLiveScriptTest is Test, DeployLive {
         for (uint256 i; i < owned.length; ++i) {
             Ownable2Step(owned[i]).acceptOwnership();
         }
+        // Launches need a catalogue version that gives the launch focus at least two entries.
+        CauseCatalog(d.causeCatalog).acceptOwnership();
+        bytes32[] memory catalogOrgs = new bytes32[](2);
+        catalogOrgs[0] = bytes32("catalog-org-1");
+        catalogOrgs[1] = bytes32("catalog-org-2");
+        CatalogPublish.publish(CauseCatalog(d.causeCatalog), catalogOrgs);
         vm.stopPrank();
 
         // A native ETH/USDC route pool for WETH, with liquidity, and the owner's setup.
@@ -192,7 +200,9 @@ contract DeployLiveScriptTest is Test, DeployLive {
             -69_000,
             WETH,
             "live-one",
-            bytes32(0)
+            bytes32(0),
+            CatalogPublish.CATEGORIES,
+            CatalogPublish.REGIONS
         );
         vm.prank(creator);
         (address token,) =

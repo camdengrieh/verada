@@ -7,11 +7,14 @@ import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
 import {TakeoverGovernor} from "../../src/TakeoverGovernor.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
+import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ITakeoverGovernor} from "../../src/interfaces/ITakeoverGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {MockEndaomentRegistry, MockOrgFactory, MockUSDC} from "../mocks/EndaomentMocks.sol";
 import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
+import {CatalogFixture} from "../utils/CatalogFixture.sol";
 
 /// @dev Drives holders of a real VeradaToken through transfers, epoch ballots, takeover proposals
 ///      and the close/tally/finalize/execute steps, recording what the governors authorized.
@@ -43,6 +46,7 @@ contract GovernanceHandler is Test {
     uint256 public takeoverBallotsAccepted;
     uint256 public proposalsAccepted;
     uint256 public executions;
+    uint256 public lastExecutedId;
 
     constructor(
         VeradaToken token_,
@@ -131,8 +135,15 @@ contract GovernanceHandler is Test {
         } catch {}
     }
 
-    function voteTakeover(uint8 voterIdx, bool voteFor) external {
-        uint256 id = takeover.activeProposalOf(address(token));
+    /// @dev One of the token's pending proposals (several may run at once), or zero.
+    function _pickPending(uint8 pick) internal view returns (uint256) {
+        uint256[] memory active = takeover.activeProposalsOf(address(token));
+        if (active.length == 0) return 0;
+        return active[pick % active.length];
+    }
+
+    function voteTakeover(uint8 voterIdx, bool voteFor, uint8 pick) external {
+        uint256 id = _pickPending(pick);
         if (id == 0) return;
         address voter = voters[voterIdx % voters.length];
         uint64 weight = takeover.weightOf(id, voter);
@@ -146,8 +157,8 @@ contract GovernanceHandler is Test {
         } catch {}
     }
 
-    function settleTakeover() external {
-        uint256 id = takeover.activeProposalOf(address(token));
+    function settleTakeover(uint8 pick) external {
+        uint256 id = _pickPending(pick);
         if (id == 0) return;
         ITakeoverGovernor.State s = takeover.state(id);
         if (s == ITakeoverGovernor.State.Closing) {
@@ -160,11 +171,12 @@ contract GovernanceHandler is Test {
         if (s == ITakeoverGovernor.State.Succeeded) {
             takeover.execute(id);
             executions += 1;
+            lastExecutedId = id;
         }
     }
 
-    function cancelTakeover(uint8 who) external {
-        uint256 id = takeover.activeProposalOf(address(token));
+    function cancelTakeover(uint8 who, uint8 pick) external {
+        uint256 id = _pickPending(pick);
         if (id == 0) return;
         address caller = who % 2 == 0 ? takeover.getProposal(id).proposer : takeover.owner();
         vm.prank(caller);
@@ -206,21 +218,35 @@ contract GovernanceInvariants is Test {
             new MockOrgFactory(new MockEndaomentRegistry(address(usdc), makeAddr("treasury")));
         registry = new CauseRegistry(owner, IEndaomentOrgFundFactory(address(orgFactory)));
         scheme = new MockVotingScheme();
+        // Three pinned causes fill every epoch ballot; takeover polls use two options.
+        scheme.setMaxOptions(3);
         profiles = new MockProfileRegistryLite();
-        epochGov =
-            new EpochGovernor(owner, registry, scheme, ITokenProfileRegistry(address(profiles)));
+        CatalogFixture cat = new CatalogFixture();
+        for (uint256 i; i < 3; ++i) {
+            cat.add(cat.bucketOf(2, 0), keccak256(abi.encode("org", i)));
+        }
+        cat.publish();
+        epochGov = new EpochGovernor(
+            owner,
+            registry,
+            ICauseCatalog(address(cat.catalog())),
+            scheme,
+            ITokenProfileRegistry(address(profiles))
+        );
         takeover = new TakeoverGovernor(
             owner,
             ITokenProfileRegistry(address(profiles)),
             scheme,
             ITakeoverGovernor.Params({
                 votingPeriod: 1 days,
-                executionWindow: 1 days,
+                executionWindow: 2 days,
                 cooldown: 0,
                 minTokenAge: 0,
                 quorumBps: 1000,
-                proposalThresholdBps: 0
-            })
+                proposalThresholdBps: 1,
+                lookback: 1 days
+            }),
+            makeAddr("poolManager")
         );
         scheme.setGovernor(address(epochGov), true);
         scheme.setGovernor(address(takeover), true);
@@ -228,20 +254,28 @@ contract GovernanceInvariants is Test {
 
         handler = new GovernanceHandler(token, scheme, profiles, epochGov, takeover, voters);
         profiles.register(address(token), handler.controllerA());
+        profiles.setFocus(address(token), uint64(1) << 2, uint16(1));
 
         vm.startPrank(owner);
         epochGov.setFactory(factory);
+        registry.setMaterializer(address(epochGov), true);
         for (uint256 i; i < 3; ++i) {
-            bytes32 causeId = keccak256(abi.encode("cause", i));
-            bytes32 orgId = bytes32(abi.encode("org", i));
-            registry.addCause(causeId, orgId, orgFactory.computeOrgAddress(orgId), "meta");
-            causes.push(causeId);
+            bytes32 orgId = keccak256(abi.encode("org", i));
+            causes.push(keccak256(abi.encode(orgId)));
         }
-        epochGov.setDefaultShortlist(causes);
+        // The fallback cause is an owner-added registry cause; the others materialize on a win.
+        bytes32 org0 = keccak256(abi.encode("org", uint256(0)));
+        registry.addCause(causes[0], org0, orgFactory.computeOrgAddress(org0), "meta");
         epochGov.setDefaultCause(causes[0]);
         vm.stopPrank();
         vm.prank(factory);
         epochGov.registerToken(address(token));
+        IEpochGovernor.Pin[] memory pins = new IEpochGovernor.Pin[](3);
+        for (uint256 i; i < 3; ++i) {
+            pins[i] = cat.pin(i);
+        }
+        vm.prank(handler.controllerA());
+        epochGov.setShortlist(address(token), pins);
 
         targetContract(address(handler));
     }
@@ -251,11 +285,17 @@ contract GovernanceInvariants is Test {
     function test_handlerSmoke_exercisesEveryPath() public {
         handler.propose(0);
         assertEq(handler.proposalsAccepted(), 1);
-        handler.voteTakeover(5, true); // 6% FOR
-        handler.voteTakeover(4, true); // 5% FOR
-        handler.voteTakeover(0, false); // 1% AGAINST
-        handler.voteTakeover(0, true); // duplicate, rejected
+        handler.propose(0); // the same proposer already has one pending: rejected
+        assertEq(handler.proposalsAccepted(), 1);
+        handler.voteTakeover(5, true, 0); // 6% FOR
+        handler.voteTakeover(4, true, 0); // 5% FOR
+        handler.voteTakeover(0, false, 0); // 1% AGAINST
+        handler.voteTakeover(0, true, 0); // duplicate, rejected
         assertEq(handler.takeoverBallotsAccepted(), 3);
+        // A concurrent proposal by another holder, superseded once the first executes.
+        handler.propose(2);
+        assertEq(handler.proposalsAccepted(), 2);
+        assertEq(takeover.activeProposalsOf(address(token)).length, 2);
 
         handler.voteEpoch(1, 0);
         handler.voteEpoch(2, 1);
@@ -270,16 +310,19 @@ contract GovernanceInvariants is Test {
         );
 
         // Nothing settles before the windows end.
-        handler.settleTakeover();
+        handler.settleTakeover(0);
+        handler.settleTakeover(1);
         handler.finalizeEndedEpochs();
         assertEq(handler.executions(), 0);
         assertFalse(epochGov.isFinalized(address(token), epoch));
 
-        // Past the voting period: close, tally and execute the takeover.
+        // Past the voting period: close, tally and execute the takeover (index 1: the oldest).
         vm.warp(block.timestamp + 1 days + 1);
-        handler.settleTakeover();
+        handler.settleTakeover(1);
         assertEq(handler.executions(), 1);
         assertEq(profiles.controllerOf(address(token)), handler.controllerB());
+        assertEq(uint8(takeover.state(2)), uint8(ITakeoverGovernor.State.Superseded));
+        assertEq(takeover.activeProposalsOf(address(token)).length, 0);
 
         // Past the epoch: close, publish the tally and finalize.
         vm.warp(epochGov.epochStart(epoch + 1));
@@ -287,15 +330,16 @@ contract GovernanceInvariants is Test {
         assertTrue(epochGov.isFinalized(address(token), epoch));
         assertEq(epochGov.winningCause(address(token), epoch), causes[2]);
 
-        // A second proposal can now be made and canceled by its proposer.
+        // A new proposal can now be made and canceled by its proposer.
         handler.propose(1);
-        assertEq(handler.proposalsAccepted(), 2);
-        handler.cancelTakeover(0);
-        assertEq(uint8(takeover.state(2)), uint8(ITakeoverGovernor.State.Canceled));
+        assertEq(handler.proposalsAccepted(), 3);
+        handler.cancelTakeover(0, 0);
+        assertEq(uint8(takeover.state(3)), uint8(ITakeoverGovernor.State.Canceled));
 
         invariant_oneBallotPerVoterPerPoll();
         invariant_tallyMatchesAuthorizedWeight();
-        invariant_atMostOnePendingProposalPerToken();
+        invariant_atMostOnePendingProposalPerProposer();
+        invariant_executionSupersedesOlderProposals();
         invariant_executionsReachRegistry();
         invariant_votesConserveSupply();
     }
@@ -372,21 +416,46 @@ contract GovernanceInvariants is Test {
         }
     }
 
-    /// Never more than one pending (active, closing or executable) proposal per token.
+    /// Never more than one pending (active, closing or executable) proposal per (token, proposer),
+    /// and the governor's pending views agree with the proposals' states.
     /// forge-config: default.invariant.runs = 64
     /// forge-config: default.invariant.depth = 200
-    function invariant_atMostOnePendingProposalPerToken() public view {
+    function invariant_atMostOnePendingProposalPerProposer() public view {
         uint256 m = handler.proposalCount();
         uint256 pending;
-        for (uint256 i; i < m; ++i) {
-            ITakeoverGovernor.State s = takeover.state(handler.proposals(i));
-            if (
-                s == ITakeoverGovernor.State.Active || s == ITakeoverGovernor.State.Closing
-                    || s == ITakeoverGovernor.State.Succeeded
-            ) ++pending;
+        uint256 newest;
+        for (uint256 v; v < voters.length; ++v) {
+            uint256 mine;
+            for (uint256 i; i < m; ++i) {
+                uint256 id = handler.proposals(i);
+                if (takeover.getProposal(id).proposer != voters[v]) continue;
+                if (_isPending(takeover.state(id))) {
+                    ++mine;
+                    if (id > newest) newest = id;
+                }
+            }
+            assertLe(mine, 1);
+            pending += mine;
         }
-        assertLe(pending, 1);
-        if (pending == 1) assertTrue(takeover.activeProposalOf(address(token)) != 0);
+        assertEq(takeover.activeProposalsOf(address(token)).length, pending);
+        assertEq(takeover.activeProposalOf(address(token)), newest);
+    }
+
+    /// Once a proposal is executed, no proposal created before it is still pending.
+    /// forge-config: default.invariant.runs = 64
+    /// forge-config: default.invariant.depth = 200
+    function invariant_executionSupersedesOlderProposals() public view {
+        uint256 last = handler.lastExecutedId();
+        uint256 m = handler.proposalCount();
+        for (uint256 i; i < m; ++i) {
+            uint256 id = handler.proposals(i);
+            if (id < last) assertFalse(_isPending(takeover.state(id)));
+        }
+    }
+
+    function _isPending(ITakeoverGovernor.State s) internal pure returns (bool) {
+        return s == ITakeoverGovernor.State.Active || s == ITakeoverGovernor.State.Closing
+            || s == ITakeoverGovernor.State.Succeeded;
     }
 
     /// Executed takeovers always moved the controller through the registry.

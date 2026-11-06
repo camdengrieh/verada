@@ -16,7 +16,8 @@ export interface PublicDecryptor {
   dispose?(): void;
 }
 
-const UINT64_MAX = (1n << 64n) - 1n;
+/** Largest packed tally word: three 40-bit counters (`ZamaVotingScheme` `MAX_WORD`). */
+const MAX_WORD = (1n << 120n) - 1n;
 
 /** `abi.encode(uint256 v0, uint256 v1, ...)`: one 32-byte word per value. */
 export function encodeCleartexts(values: readonly bigint[]): Hex {
@@ -53,7 +54,8 @@ const asBigint = (v: unknown): bigint | undefined => {
 
 /**
  * Checks a decryption against the handles it was requested for, the way `ZamaVotingScheme.submitTally`
- * will: one word per handle, each fitting `uint64`, and (when the SDK returns them) each word equal to
+ * will: one word per handle, each fitting 120 bits (three packed 40-bit counters), and (when the SDK
+ * returns them) each word equal to
  * the clear value of the handle at the same index. Returns the cleartexts to submit unchanged, since
  * the KMS signature covers those exact bytes.
  */
@@ -64,7 +66,7 @@ export function checkDecryption(handles: readonly Hex[], r: PublicDecryption): {
   }
   const byHandle = new Map(Object.entries(r.clearValues ?? {}).map(([k, v]) => [k.toLowerCase(), v]));
   handles.forEach((h, i) => {
-    if (values[i]! > UINT64_MAX) throw new DecryptionMismatch(`word ${i} exceeds uint64`);
+    if (values[i]! > MAX_WORD) throw new DecryptionMismatch(`word ${i} exceeds 120 bits`);
     if (byHandle.size === 0) return;
     const clear = asBigint(byHandle.get(h.toLowerCase()));
     if (clear === undefined) throw new DecryptionMismatch(`no clear value for handle ${i}`);
@@ -103,7 +105,7 @@ export function createFakeDecryptor(
   };
 }
 
-export const ZAMA_CHAIN_IDS = { mainnet: 1, sepolia: 11_155_111 } as const;
+export const ZAMA_CHAIN_IDS = { mainnet: 1 } as const;
 
 export interface ZamaDecryptorOptions {
   chainId: number;
@@ -127,8 +129,8 @@ export interface ZamaDecryptorOptions {
  * dropped and rebuilt after any failure.
  */
 export function createZamaDecryptor(opts: ZamaDecryptorOptions): PublicDecryptor {
-  if (opts.chainId !== ZAMA_CHAIN_IDS.mainnet && opts.chainId !== ZAMA_CHAIN_IDS.sepolia) {
-    throw new Error(`Zama public decryption is only configured for chains 1 and 11155111, not ${opts.chainId}`);
+  if (opts.chainId !== ZAMA_CHAIN_IDS.mainnet) {
+    throw new Error(`Zama public decryption is only configured for Ethereum mainnet (chain 1), not ${opts.chainId}`);
   }
   const timeout = opts.timeoutMs ?? 10 * 60_000;
   type Sdk = { decryption: { decryptPublicValues(h: Hex[], o?: { timeout?: number }): Promise<PublicDecryption> }; dispose?(): void };
@@ -140,7 +142,7 @@ export function createZamaDecryptor(opts: ZamaDecryptorOptions): PublicDecryptor
       import("@zama-fhe/sdk/node"),
       import("@zama-fhe/sdk/viem"),
     ]);
-    const preset = opts.chainId === ZAMA_CHAIN_IDS.mainnet ? core.mainnet : core.sepolia;
+    const preset = core.mainnet;
     const chain = {
       ...preset,
       network: opts.rpcUrl,

@@ -393,6 +393,92 @@ contract LiveFactoryTest is LiveFactoryBase {
         factory.deployLiveToken(p, live);
     }
 
+    /// @dev A live launch fixes the cause focus like a weekly one and is held to the same rule:
+    ///      a non-empty focus that the latest catalogue gives at least two entries.
+    function test_deployLiveToken_setsAndChecksTheCauseFocus() public {
+        (VeradaToken token,) = _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
+        (uint64 categories, uint16 regions) = profileRegistry.focusOf(address(token));
+        assertEq(categories, FOCUS_CATEGORIES);
+        assertEq(regions, FOCUS_REGIONS);
+
+        IVeradaFactory.LiveParams memory live =
+            IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0);
+        IVeradaFactory.DeployParams memory p =
+            _deployParams(bytes32(uint256(51)), address(quote), 0, 0);
+        p.categoryMask = uint64(1) << 5; // no catalogue entry
+        address predicted = factory.predictTokenAddress(creator, p);
+        vm.prank(creator);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEpochGovernor.PoolTooSmall.selector, predicted, uint256(0))
+        );
+        factory.deployLiveToken(p, live);
+        // The weekly path refuses the same focus with the same error.
+        vm.prank(creator);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEpochGovernor.PoolTooSmall.selector, predicted, uint256(0))
+        );
+        factory.deployToken(p);
+
+        p.categoryMask = 0;
+        vm.prank(creator);
+        vm.expectRevert(ITokenProfileRegistry.ZeroFocus.selector);
+        factory.deployLiveToken(p, live);
+
+        // A focus the catalogue covers launches.
+        p.categoryMask = FOCUS_CATEGORIES;
+        vm.prank(creator);
+        (address t,) = factory.deployLiveToken(p, live);
+        assertEq(t, predicted);
+    }
+
+    /// @dev Live in-swap claim conversions share the consolidator and its route pools with weekly
+    ///      tokens but never touch a weekly holding: the raw launch surcharge a weekly swap holds
+    ///      (the pool manager is unlocked inside the swap) keeps their amount, epoch tag and owed total
+    ///      through live conversions in that epoch and the next, and still flush into their own
+    ///      epoch afterwards.
+    function test_liveConversionsLeaveWeeklyEpochTagsAlone() public {
+        IVeradaFactory.DeployParams memory p =
+            _deployParams(bytes32(uint256(61)), address(quote), 2000, 1 days);
+        vm.prank(creator);
+        (address weekly,) = factory.deployToken(p);
+        PoolKey memory weeklyKey = _keyWith(weekly, address(quote), address(weeklyHook));
+        _fund(trader, VeradaToken(weekly));
+        _buyExactIn(weeklyKey, weekly, 1e18);
+
+        uint256 epoch = epochGov.currentEpoch();
+        address q = address(quote);
+        uint256 heldQuote = cons.heldFees(weekly, q);
+        uint256 heldToken = cons.heldFees(weekly, weekly);
+        assertGt(heldQuote + heldToken, 0, "weekly fee held");
+        uint256 inEpochQuote = cons.heldFeesIn(weekly, q, epoch);
+        uint256 owedQuote = cons.totalHeld(q);
+        uint256 balanceQuote = quote.balanceOf(address(cons));
+
+        (VeradaToken live, PoolKey memory liveKey) =
+            _launchLive(q, 0, RotationPeriod.OneHour, CAUSE_A);
+        _fund(trader, live);
+        for (uint256 round; round < 2; ++round) {
+            vm.recordLogs();
+            _buyExactIn(liveKey, address(live), 1e18);
+            (bool found,,,,, bool converted,) = _lastFeeTaken(vm.getRecordedLogs());
+            assertTrue(found && converted, "converted in the swap");
+
+            assertEq(cons.heldFees(weekly, q), heldQuote, "weekly quote holding");
+            assertEq(cons.heldFees(weekly, weekly), heldToken, "weekly token holding");
+            assertEq(cons.heldFeesIn(weekly, q, epoch), inEpochQuote, "epoch tag");
+            assertEq(cons.totalHeld(q), owedQuote, "owed total");
+            assertEq(quote.balanceOf(address(cons)), balanceQuote, "backing balance");
+            assertEq(cons.heldFeesIn(weekly, q, epoch + 1), 0, "nothing retagged");
+            // The next live conversion runs in the following epoch.
+            vm.warp(epochGov.epochStart(epoch + 1) + 1);
+        }
+
+        assertTrue(cons.heldThrough(weekly, q, epoch) || heldQuote == 0);
+        assertTrue(cons.flushThrough(weekly, epoch), "flushed");
+        assertEq(cons.heldFees(weekly, q), 0);
+        assertEq(cons.heldFees(weekly, weekly), 0);
+    }
+
     /// @dev An allowed quote without a route to USDC launches in weekly mode but not in live mode.
     function test_deployLiveToken_unroutableQuoteReverts() public {
         address bare = address(new VeradaToken("Bare", "BARE", "", address(this), address(this)));

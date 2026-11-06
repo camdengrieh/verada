@@ -28,6 +28,9 @@ export const token = onchainTable(
     contenthash: t.hex(),
     suppressed: t.boolean().notNull().default(false),
     registeredAt: t.bigint(),
+    /** Cause focus mirrored from `token_focus` (null until known). */
+    categoryMask: t.bigint(),
+    regionMask: t.integer(),
   }),
   (table) => ({
     creatorIdx: index().on(table.creator),
@@ -227,11 +230,24 @@ export const epoch = onchainTable(
     closedAt: t.bigint(),
     /** Ballots authorized by the governor (equals `voteCount`; named after the contract view). */
     voterCount: t.integer().notNull().default(0),
-    /** Finalized with the default cause because nobody voted. */
+    /** Finalized with the default cause: nobody voted, or the tally never became final. */
     fallbackApplied: t.boolean().notNull().default(false),
+    /** `no_votes` (`NoVoteFallbackApplied`) or `timeout` (`TallyTimeoutFallbackApplied`). */
+    fallbackReason: t.text(),
+    /**
+     * The last `closeEpoch` could not request the tally (`EpochCloseFailed`); `closed` is still
+     * true, as on-chain, and a later successful close clears this.
+     */
+    closeFailed: t.boolean().notNull().default(false),
     /** Governor that opened the epoch and the scheme its poll lives on (null until opened). */
     governor: t.hex(),
     scheme: t.hex(),
+    /** Ballot fixed by `BallotPrepared`: catalogue version, focus pool size and pinned count. */
+    prepared: t.boolean().notNull().default(false),
+    preparedAt: t.bigint(),
+    catalogVersion: t.integer(),
+    poolSize: t.bigint(),
+    pinnedCount: t.integer(),
   }),
   (table) => ({
     pk: primaryKey({ columns: [table.token, table.epoch] }),
@@ -297,18 +313,38 @@ export const epochOption = onchainTable(
   }),
 );
 
-/** A token's own cause shortlist; an empty list means it uses the default. */
+/**
+ * A token's own cause shortlist schedule, mirroring the governor: `causeIds` is the latest list
+ * set, applying from epoch `effectiveFrom`; `previousCauseIds` applies before that. These are the
+ * controller's pinned causes; the rest of each ballot is drawn from the token's focus pool. `effectiveFrom` is null only for rows written by the legacy
+ * `ShortlistSet` before any `ShortlistScheduled` was seen (`scheduled` false).
+ */
 export const shortlist = onchainTable("shortlist", (t) => ({
   token: t.hex().primaryKey(),
   causeIds: t.hex().array().notNull(),
+  effectiveFrom: t.bigint(),
+  previousCauseIds: t.hex().array().notNull(),
+  scheduled: t.boolean().notNull(),
   updatedAt: t.bigint().notNull(),
 }));
 
-/** The platform default shortlist (single row, id `default`). */
-export const defaultShortlist = onchainTable("default_shortlist", (t) => ({
-  id: t.text().primaryKey(),
-  causeIds: t.hex().array().notNull(),
-  updatedAt: t.bigint().notNull(),
+/** A published `CauseCatalog` version. It applies to epochs that start after `setAt`. */
+export const catalogVersion = onchainTable("catalog_version", (t) => ({
+  version: t.integer().primaryKey(),
+  root: t.hex().notNull(),
+  swarmRef: t.hex().notNull(),
+  entries: t.bigint().notNull(),
+  setAt: t.bigint().notNull(),
+  txHash: t.hex().notNull(),
+}));
+
+/** A token's cause focus, fixed at launch (`TokenProfileRegistry.FocusSet`). */
+export const tokenFocus = onchainTable("token_focus", (t) => ({
+  token: t.hex().primaryKey(),
+  /** Category bit mask (uint64, as a decimal-safe bigint). */
+  categoryMask: t.bigint().notNull(),
+  regionMask: t.integer().notNull(),
+  setAt: t.bigint().notNull(),
 }));
 
 /**
@@ -360,6 +396,7 @@ export const ballot = onchainTable(
 /**
  * A community takeover proposal. `executionDeadline` comes from `getProposal` at the proposal
  * block (falling back to `end + params().executionWindow`); null when neither read succeeded.
+ * Several proposals of one token may be pending at once (the cooldown is per proposer).
  */
 export const takeoverProposal = onchainTable(
   "takeover_proposal",
@@ -372,6 +409,9 @@ export const takeoverProposal = onchainTable(
     end: t.bigint().notNull(),
     snapshot: t.bigint().notNull(),
     executionDeadline: t.bigint(),
+    /** From `getProposal`: holding-lookback snapshot and circulating weight (null if unread). */
+    lookbackSnapshot: t.bigint(),
+    circulatingWeight: t.bigint(),
     quorumWeight: t.bigint().notNull(),
     forWeight: t.bigint().notNull(),
     againstWeight: t.bigint().notNull(),
@@ -386,11 +426,24 @@ export const takeoverProposal = onchainTable(
     executedAt: t.bigint(),
     canceledAt: t.bigint(),
     txHash: t.hex().notNull(),
+    /**
+     * Executions of the token's takeovers when this proposal was created. Once another proposal
+     * of the token executes, `takeover_token.executions` moves past it and a still-pending
+     * proposal is `Superseded`, exactly as the contract's generation check.
+     */
+    generation: t.integer().notNull(),
   }),
   (table) => ({
     tokenIdx: index().on(table.token),
   }),
 );
+
+/** Executed takeovers per token (`TakeoverSuperseded` count). */
+export const takeoverToken = onchainTable("takeover_token", (t) => ({
+  token: t.hex().primaryKey(),
+  executions: t.integer().notNull(),
+  lastExecutedProposalId: t.bigint(),
+}));
 
 export const takeoverVote = onchainTable(
   "takeover_vote",

@@ -37,7 +37,7 @@ contract FeeConsolidatorPriceGuardsTest is LiveBase {
     // ------------------------------------------------------------------ helpers
 
     function _refTick(PoolKey memory key) internal view returns (int24 t) {
-        (t,,,) = cons.references(key.toId());
+        (t,,,,) = cons.references(key.toId());
     }
 
     function _dist(PoolKey memory key) internal view returns (uint256) {
@@ -156,10 +156,10 @@ contract FeeConsolidatorPriceGuardsTest is LiveBase {
 
     function test_moveReference_keepsTimeWhenStepTruncates() public {
         _push(200, false);
-        (, uint40 updatedBefore,,) = cons.references(quoteUsdcKey.toId());
+        (, uint40 updatedBefore,,,) = cons.references(quoteUsdcKey.toId());
         vm.warp(block.timestamp + 12);
         src.convert(address(quote), 1e16, to, true);
-        (, uint40 updatedAfter,,) = cons.references(quoteUsdcKey.toId());
+        (, uint40 updatedAfter,,,) = cons.references(quoteUsdcKey.toId());
         assertEq(updatedAfter, updatedBefore, "zero step keeps the elapsed time");
     }
 

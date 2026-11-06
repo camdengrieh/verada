@@ -14,6 +14,11 @@ export const epochGovernorAbi = [
         "internalType": "contract ICauseRegistry"
       },
       {
+        "name": "catalog_",
+        "type": "address",
+        "internalType": "contract ICauseCatalog"
+      },
+      {
         "name": "scheme_",
         "type": "address",
         "internalType": "contract IVotingScheme"
@@ -25,6 +30,19 @@ export const epochGovernorAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "DRAW_FACTOR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -48,6 +66,45 @@ export const epochGovernorAbi = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MIN_OPTIONS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PINNED_MAX",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TALLY_GRACE",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -95,6 +152,32 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "ballotSize",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "catalog",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "closeEpoch",
     "inputs": [
       {
@@ -110,6 +193,30 @@ export const epochGovernorAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "closeFailed",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -139,8 +246,58 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
-    "name": "defaultShortlist",
-    "inputs": [],
+    "name": "drawIndex",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "k",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "epochOptionOrgIds",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
@@ -364,6 +521,30 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "isPrepared",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isRegistered",
     "inputs": [
       {
@@ -424,6 +605,94 @@ export const epochGovernorAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "pendingShortlistOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "causes",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      },
+      {
+        "name": "effectiveFrom",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "poolOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "version",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "prepareBallot",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "draws",
+        "type": "tuple[]",
+        "internalType": "struct IEpochGovernor.Draw[]",
+        "components": [
+          {
+            "name": "orgId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "proof",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -499,19 +768,6 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
-    "name": "setDefaultShortlist",
-    "inputs": [
-      {
-        "name": "causes",
-        "type": "bytes32[]",
-        "internalType": "bytes32[]"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setFactory",
     "inputs": [
       {
@@ -546,13 +802,59 @@ export const epochGovernorAbi = [
         "internalType": "address"
       },
       {
-        "name": "causes",
-        "type": "bytes32[]",
-        "internalType": "bytes32[]"
+        "name": "pins",
+        "type": "tuple[]",
+        "internalType": "struct IEpochGovernor.Pin[]",
+        "components": [
+          {
+            "name": "orgId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "bucket",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "index",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "proof",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
       }
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "shortlistFor",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -562,6 +864,30 @@ export const epochGovernorAbi = [
         "name": "token",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "shortlistOrgIdsFor",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [
@@ -713,6 +1039,49 @@ export const epochGovernorAbi = [
   },
   {
     "type": "event",
+    "name": "BallotPrepared",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "catalogVersion",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "pinned",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "options",
+        "type": "bytes32[]",
+        "indexed": false,
+        "internalType": "bytes32[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DefaultCauseSet",
     "inputs": [
       {
@@ -726,13 +1095,19 @@ export const epochGovernorAbi = [
   },
   {
     "type": "event",
-    "name": "DefaultShortlistSet",
+    "name": "EpochCloseFailed",
     "inputs": [
       {
-        "name": "causes",
-        "type": "bytes32[]",
-        "indexed": false,
-        "internalType": "bytes32[]"
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -897,6 +1272,31 @@ export const epochGovernorAbi = [
   },
   {
     "type": "event",
+    "name": "ShortlistScheduled",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "effectiveFrom",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "causes",
+        "type": "bytes32[]",
+        "indexed": false,
+        "internalType": "bytes32[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "ShortlistSet",
     "inputs": [
       {
@@ -910,6 +1310,31 @@ export const epochGovernorAbi = [
         "type": "bytes32[]",
         "indexed": false,
         "internalType": "bytes32[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "TallyTimeoutFallbackApplied",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "causeId",
+        "type": "bytes32",
+        "indexed": false,
+        "internalType": "bytes32"
       }
     ],
     "anonymous": false
@@ -947,6 +1372,22 @@ export const epochGovernorAbi = [
         "name": "voter",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "BallotAlreadyPrepared",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },
@@ -1054,6 +1495,43 @@ export const epochGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "IncompleteBallot",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "needed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InsufficientGas",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidDraw",
+    "inputs": [
+      {
+        "name": "k",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "InvalidShortlist",
     "inputs": []
   },
@@ -1128,12 +1606,39 @@ export const epochGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "NotInCatalog",
+    "inputs": [
+      {
+        "name": "orgId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "NotScheme",
     "inputs": [
       {
         "name": "caller",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "OutOfFocus",
+    "inputs": [
+      {
+        "name": "orgId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "bucket",
+        "type": "uint16",
+        "internalType": "uint16"
       }
     ]
   },
@@ -1161,6 +1666,22 @@ export const epochGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "PoolTooSmall",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "TallyNotFinal",
     "inputs": [
       {
@@ -1183,6 +1704,22 @@ export const epochGovernorAbi = [
         "name": "token",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TooManyDraws",
+    "inputs": [
+      {
+        "name": "supplied",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "used",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },

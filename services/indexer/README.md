@@ -25,7 +25,8 @@ Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck 
 | `CAUSE_REGISTRY_ADDRESS` | `CauseRegistry` |
 | `EPOCH_GOVERNOR_ADDRESS` | `EpochGovernor` |
 | `DONATION_DISTRIBUTOR_ADDRESS` | `DonationDistributor` |
-| `TOKEN_REGISTRY_ADDRESS` | `TokenProfileRegistry` (ENS labels, controller, editor, records) |
+| `TOKEN_REGISTRY_ADDRESS` | `TokenProfileRegistry` (ENS labels, controller, editor, records, cause focus) |
+| `CAUSE_CATALOG_ADDRESS` | `CauseCatalog` (published catalogue versions) |
 | `VOTING_SCHEME_ADDRESS` | `ZamaVotingScheme`, shared by both governors |
 | `TAKEOVER_GOVERNOR_ADDRESS` | `TakeoverGovernor` |
 | `START_BLOCK` | Deployment block; every contract is indexed from it |
@@ -41,20 +42,22 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 
 | Table | Key | Source |
 | --- | --- | --- |
-| `token` | `address` | `TokenCreated`; `name`/`symbol` read from the token at the launch block (empty strings if the read fails); profile columns (`label`, `labelhash`, `controller`, `editor`, `logoRef`, `contenthash`, `suppressed`, `registeredAt`) mirrored from `token_profile` |
+| `token` | `address` | `TokenCreated`; `name`/`symbol` read from the token at the launch block (empty strings if the read fails); profile columns (`label`, `labelhash`, `controller`, `editor`, `logoRef`, `contenthash`, `suppressed`, `registeredAt`) mirrored from `token_profile`; `categoryMask`, `regionMask` mirrored from `token_focus` |
+| `token_focus` | `token` | `FocusSet`: the cause focus fixed at launch (emitted before `TokenCreated`) |
+| `catalog_version` | `version` | `CatalogVersionSet`: root, Swarm reference, entry count and `setAt` (a version applies to epochs starting after it) |
 | `token_profile` | `token` | `TokenRegistered` and the registry's profile events. Kept separately because the registry emits before the factory in the launch transaction |
 | `token_text_record` | `token, key` | `TextChanged` (latest value per key) |
 | `profile_update` | event id | One row per controller, editor, text, logo or contenthash change (the logo set during registration is not counted) |
 | `fee_total`, `fee_collection`, `fee_consolidation`, `consolidation_failure`, `consolidation_total` | | Fee vault and consolidator |
 | `quote_asset`, `cause`, `org_deployment`, `donation` | | Registries and distributor |
-| `epoch` | `token, epoch` | Votes, `EpochOpened` (`opened`, `openedAt`, `governor`, `scheme`), `EpochClosed`, `NoVoteFallbackApplied` (`fallbackApplied`), `EpochFinalized`, donations. `voterCount` equals `voteCount` |
-| `epoch_option` | `token, epoch, index` | Options frozen by `EpochOpened` |
+| `epoch` | `token, epoch` | Votes, `EpochOpened` (`opened`, `openedAt`, `governor`, `scheme`), `EpochClosed` (`closed`, `closedAt`, clears `closeFailed`), `EpochCloseFailed` (`closed` and `closeFailed`, as on-chain; no `closedAt`), `NoVoteFallbackApplied` / `TallyTimeoutFallbackApplied` (`fallbackApplied`, `fallbackReason` = `no_votes` / `timeout`), `EpochFinalized`, donations, `BallotPrepared` (`prepared`, `preparedAt`, `catalogVersion`, `poolSize`, `pinnedCount`). `voterCount` equals `voteCount` |
+| `epoch_option` | `token, epoch, index` | Options fixed by `BallotPrepared` (also written by `EpochOpened`) |
 | `epoch_clock` | `id` | `epochZeroStart` and `epochLength` of the epoch governor (see below) |
-| `shortlist` | `token` | `ShortlistSet`; an empty list means the token uses the default |
-| `default_shortlist` | `id = "default"` | `DefaultShortlistSet` |
+| `shortlist` | `token` | The controller's pinned causes. `ShortlistScheduled`: latest list `causeIds` from epoch `effectiveFrom`, and `previousCauseIds` before it. `ShortlistSet` is only used until the first scheduled event (`scheduled` false) |
 | `poll` | `governor, token, scope` | Scheme `PollOpened`, `BallotCast` (`ballotCount`), `TallyRequested` (`closed`), `TallySubmitted` (`isFinal`, `counts`). `scope` is the epoch for the epoch governor and the proposal id for the takeover governor |
 | `ballot` | `ballotRef` | `BallotCast`: voter and weight (public on-chain), never the choice |
-| `takeover_proposal` | `proposalId` | `TakeoverProposed` and the lifecycle events |
+| `takeover_proposal` | `proposalId` | `TakeoverProposed` and the lifecycle events; `lookbackSnapshot` and `circulatingWeight` from `getProposal`; `generation` = the token's executions when created |
+| `takeover_token` | `token` | `TakeoverSuperseded` (emitted on every execution): `executions`, `lastExecutedProposalId` |
 | `takeover_vote` | `voteRef` | `TakeoverVoteCast` |
 | `vote` | event id | `VoteCast` |
 
@@ -63,10 +66,26 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 `epochZeroStart = floor(timestamp / week) * week - epoch * week` without an RPC call. Until one
 has been indexed the API returns `start`, `end` and `snapshot` as null.
 
-**Takeover execution deadline.** `TakeoverProposed` does not carry it. The handler reads
-`getProposal(id)` at the proposal block (exact, since parameters are captured per proposal),
-falling back to `end + params().executionWindow`; if both reads fail it stays null and the API
-never reports `Expired` for that proposal. `snapshot` is `start - 1`.
+If no epoch event has been indexed yet, the first pin schedule reads `epochZeroStart` from
+the governor instead.
+
+**Pin schedules.** A change applies from the current epoch while its ballot is not prepared yet,
+otherwise from the next one. The governor returns that epoch as `effectiveFrom`, so the current
+epoch at the event is at least `effectiveFrom - 1`: a stored list scheduled from before that has
+applied and becomes `previousCauseIds`; a list that has not applied yet is simply replaced. The API
+resolves the list in effect from the epoch clock and the server time.
+
+**Takeover reads.** `TakeoverProposed` does not carry the execution deadline, lookback snapshot
+or circulating weight. The handler reads `getProposal(id)` at the proposal block (exact, since
+parameters are captured per proposal), falling back to `end + params().executionWindow` for the
+deadline; if both reads fail they stay null and the API never reports `Expired` for that
+proposal. `snapshot` is `start - 1`.
+
+**Superseded takeovers.** Several proposals of one token can be pending at once (the cooldown is
+per proposer). Executing one makes every other pending proposal of the token created before it
+`Superseded`. The contract tracks this with a per-token execution counter stamped on each
+proposal; the indexer stores the same counter (`generation`, `takeover_token.executions`), which
+also covers a proposal with a higher id that was created before the execution.
 
 ## HTTP API
 
@@ -78,7 +97,7 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | --- | --- |
 | `/api/health` | `{ status: "ok" }` |
 | `/api/tokens?cursor&limit` | `{ items: Token[], nextCursor }`; each item has every `token` column plus `feeTotals` |
-| `/api/tokens/:address` | `Token & { feeTotals, profile, shortlist, defaultShortlist }` |
+| `/api/tokens/:address` | `Token & { feeTotals, profile, shortlist, shortlistPending, focus }` |
 | `/api/tokens/by-label/:label` | Same as the detail; 400 unless the label passes `isValidLabel`, 404 if unregistered |
 | `/api/activity?kind&token&cursor&limit` | `{ items: ActivityItem[], nextCursor }` |
 | `/api/activity/stream?token` | Server-Sent Events, `Last-Event-ID` resume |
@@ -89,6 +108,17 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/takeovers/:token/:id` | `Proposal`; 404 if the id belongs to another token |
 | `/api/polls/:governor/:token/:scope` | Raw `poll` row |
 | `/api/stats` | USDC totals (6 decimals) |
+| `/api/catalog` | Loaded catalogue: `root`, taxonomy version, org and entry counts, per-category and per-region org counts, `bucketSizes` |
+| `/api/catalog/search?q&categories&regions&offset&limit` | `{ items: CatalogOrg[], total }` (comma-separated slugs; none means any) |
+| `/api/catalog/pool?categories&regions` | `{ poolSize, buckets: [{ bucket, category, region, size }] }` |
+| `/api/catalog/entries?at=bucket:index,...` | `{ root, items: [{ bucket, index, orgId, proof }] }`, at most 100 entries (what the keeper's `prepareBallot` needs) |
+| `/api/catalog/causes?ids=0x..,...` | `{ items: CatalogOrg[] }` by cause id, at most 50 (names for ballot options) |
+| `/api/catalog/orgs/:id` | `{ root, org, entries }` by org id, cause id, EIN or Endaoment id, entries with proofs |
+
+The `/api/catalog/*` routes answer 503 `catalog_unavailable` until the snapshot at
+`CATALOG_SOURCE` (a directory, or a Swarm gateway URL such as `https://<gateway>/bzz/<swarmRef>`)
+has loaded. The catalogue is held in memory (a full catalogue takes a few hundred MB); clients
+should compare `root` with `CauseCatalog.rootOf` for the version they use.
 
 ```ts
 type Token = {
@@ -98,15 +128,21 @@ type Token = {
   logoRef: Hex | null, contenthash: Hex | null, suppressed: boolean, registeredAt: string | null,
 };
 // Detail only. `profile` is null until the token is registered; `contenthash` null means the
-// registry default applies. Shortlists are null when unset or empty.
+// registry default applies. `shortlist` is the pinned causes in effect for the current epoch
+// (null when none); `shortlistPending` is a list scheduled from a later epoch (`causeIds` may be
+// empty: all pins removed), or null. `focus` is null until `FocusSet` is indexed.
 profile: { label, labelhash, controller, editor, logoRef, contenthash, suppressed, registeredAt,
            textRecords: Record<string, string> } | null;
-shortlist: Hex[] | null; defaultShortlist: Hex[] | null;
+shortlist: Hex[] | null; shortlistPending: { causeIds: Hex[], effectiveFrom: string } | null;
+focus: { categoryMask: string, regionMask: number, categories: string[], regions: string[] } | null;
 
 type Epoch = {
   token, epoch, winningCauseId, finalizedAt, voteCount, donatedAmount, donatedPayout, donatedAt,
-  opened: boolean, openedAt, closed: boolean, closedAt, voterCount: number,
-  fallbackApplied: boolean, governor: Hex | null, scheme: Hex | null,
+  opened: boolean, openedAt, closed: boolean, closedAt, closeFailed: boolean, voterCount: number,
+  fallbackApplied: boolean, fallbackReason: "no_votes" | "timeout" | null,
+  governor: Hex | null, scheme: Hex | null,
+  prepared: boolean, preparedAt, catalogVersion: number | null, poolSize: string | null,
+  pinnedCount: number | null,
 };
 // Detail only. `end` is exclusive; `snapshot` = start - 1 (weights are read there).
 start: string | null; end: string | null; snapshot: string | null; options: Hex[];
@@ -114,16 +150,19 @@ poll: { opened, closed, isFinal, optionCount, counts: string[] | null, ballotCou
 
 type Proposal = {
   proposalId, token, proposer, newController, start, end, executionDeadline: string | null,
-  snapshot, quorumWeight, forWeight, againstWeight, closed, tallied, executed, canceled,
+  snapshot, lookbackSnapshot: string | null, circulatingWeight: string | null,
+  quorumWeight, forWeight, againstWeight, closed, tallied, executed, canceled,
   ballotCount: number, createdAt, txHash,
-  state: "Active" | "Closing" | "Defeated" | "Succeeded" | "Executed" | "Canceled" | "Expired",
+  state: "Active" | "Closing" | "Defeated" | "Succeeded" | "Executed" | "Canceled" | "Expired"
+       | "Superseded",
 };
 ```
 
 `state` follows `TakeoverGovernor.state` using the indexed fields and the server clock: canceled,
 then executed; once tallied, defeated unless FOR reaches the quorum and beats AGAINST, expired after
 the execution deadline, else succeeded; before the tally, active until `end` unless closed early,
-expired after the deadline, else closing.
+expired after the deadline, else closing. An active, closing or succeeded proposal is
+`Superseded` when another proposal of the token executed after it was created.
 
 ### Activity kinds
 

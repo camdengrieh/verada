@@ -186,7 +186,7 @@ contract FeeConsolidatorClaimsTest is LiveBase {
 
     function test_referenceMoves() public {
         PoolId id = quoteUsdcKey.toId();
-        (int24 refBefore,,,) = cons.references(id);
+        (int24 refBefore,,,,) = cons.references(id);
         // Move spot within the deviation band, then convert a day later.
         _swapAs(
             address(this),
@@ -198,7 +198,7 @@ contract FeeConsolidatorClaimsTest is LiveBase {
         assertTrue(spot != refBefore);
         vm.warp(block.timestamp + 1 days);
         src.convert(address(quote), 1e18, to, true);
-        (int24 refAfter, uint40 updatedAt,,) = cons.references(id);
+        (int24 refAfter, uint40 updatedAt,,,) = cons.references(id);
         assertEq(updatedAt, block.timestamp);
         assertTrue(refAfter != refBefore, "reference followed spot");
         int256 moved = int256(refAfter) - int256(refBefore);

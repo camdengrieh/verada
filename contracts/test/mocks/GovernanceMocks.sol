@@ -10,12 +10,19 @@ import {
 
 /// @dev Plaintext voting scheme for tests. Ballots are `abi.encode(uint8 choice)`; the per-option
 ///      tally is kept live in storage and becomes final through `submitTally` (which overrides it
-///      with the supplied cleartexts, proof ignored) or the `finalizeFromBallots` helper.
+///      with the supplied cleartexts, proof ignored) or the `finalizeFromBallots` helper. Options
+///      are bounded 2..MAX_OPTIONS (32 like the Zama scheme by default; tests may lower it so a
+///      ballot fills from pins alone).
 ///      Outcome polls (`requestOutcome`) compute the winner like the FHE scheme from the counts
 ///      (live, or supplied through `submitTally` as a test convenience) or take it verbatim from
 ///      `submitOutcome`.
 contract MockVotingScheme is IOutcomeVotingScheme {
-    uint8 public constant MAX_OPTIONS = 32;
+    uint8 public constant MIN_OPTIONS = 2;
+    uint8 public MAX_OPTIONS = 32;
+
+    function setMaxOptions(uint8 max) external {
+        MAX_OPTIONS = max;
+    }
 
     struct Poll {
         bool opened;
@@ -29,6 +36,12 @@ contract MockVotingScheme is IOutcomeVotingScheme {
         uint64 minWeight;
         uint8 winner;
     }
+
+    /// @dev Test switches for `requestTally`: revert outright, or burn all gas it is given.
+    bool public failRequestTally;
+    bool public burnRequestTally;
+    /// @dev Test switch for `tallyOf`: revert.
+    bool public failTallyOf;
 
     mapping(address governor => bool) private _governors;
     mapping(address governor => mapping(address token => mapping(uint256 scope => Poll))) private
@@ -44,6 +57,12 @@ contract MockVotingScheme is IOutcomeVotingScheme {
         uint64 weight
     );
 
+    function setFailures(bool requestTally_, bool burnRequestTally_, bool tallyOf_) external {
+        failRequestTally = requestTally_;
+        burnRequestTally = burnRequestTally_;
+        failTallyOf = tallyOf_;
+    }
+
     function setGovernor(address governor, bool allowed) external {
         _governors[governor] = allowed;
         emit GovernorSet(governor, allowed);
@@ -52,7 +71,9 @@ contract MockVotingScheme is IOutcomeVotingScheme {
     /// @inheritdoc IVotingScheme
     function open(address token, uint256 scope, uint8 optionCount) external {
         if (!_governors[msg.sender]) revert NotGovernor(msg.sender);
-        if (optionCount == 0 || optionCount > MAX_OPTIONS) revert InvalidOptionCount(optionCount);
+        if (optionCount < MIN_OPTIONS || optionCount > MAX_OPTIONS) {
+            revert InvalidOptionCount(optionCount);
+        }
         Poll storage p = _polls[msg.sender][token][scope];
         if (p.opened) revert PollAlreadyOpen(msg.sender, token, scope);
         p.opened = true;
@@ -88,6 +109,16 @@ contract MockVotingScheme is IOutcomeVotingScheme {
 
     /// @inheritdoc IVotingScheme
     function requestTally(address token, uint256 scope) external {
+        if (failRequestTally) revert("requestTally failed");
+        if (burnRequestTally) {
+            // Spin until the call runs out of gas.
+            uint256 x;
+            while (true) {
+                unchecked {
+                    ++x;
+                }
+            }
+        }
         if (!_governors[msg.sender]) revert NotGovernor(msg.sender);
         Poll storage p = _polls[msg.sender][token][scope];
         if (!p.opened) revert PollNotOpen(msg.sender, token, scope);
@@ -205,6 +236,7 @@ contract MockVotingScheme is IOutcomeVotingScheme {
         view
         returns (bool isFinal, uint64[] memory counts)
     {
+        if (failTallyOf) revert("tallyOf failed");
         Poll storage p = _polls[governor][token][scope];
         return (p.isFinal, p.counts);
     }
@@ -269,6 +301,8 @@ contract MockProfileRegistryLite {
     address public lastSetControllerCaller;
 
     mapping(address token => Record) private _records;
+    mapping(address token => uint64) private _categoryMask;
+    mapping(address token => uint16) private _regionMask;
 
     error NotGovernor();
     error NotRegistered(address token);
@@ -287,9 +321,13 @@ contract MockProfileRegistryLite {
         });
     }
 
-    /// @dev Mirrors the real registry's gate when a governor is configured.
+    /// @dev Mirrors the real registry's gate when a governor is configured: the governor or the
+    ///      current controller.
     function setController(address token, address newController) external {
-        if (governor != address(0) && msg.sender != governor) revert NotGovernor();
+        if (
+            governor != address(0) && msg.sender != governor
+                && msg.sender != _records[token].controller
+        ) revert NotGovernor();
         if (!_records[token].registered) revert NotRegistered(token);
         _records[token].controller = newController;
         setControllerCalls += 1;
@@ -308,5 +346,14 @@ contract MockProfileRegistryLite {
 
     function registeredAtOf(address token) external view returns (uint48) {
         return _records[token].registeredAt;
+    }
+
+    function setFocus(address token, uint64 categoryMask, uint16 regionMask) external {
+        _categoryMask[token] = categoryMask;
+        _regionMask[token] = regionMask;
+    }
+
+    function focusOf(address token) external view returns (uint64, uint16) {
+        return (_categoryMask[token], _regionMask[token]);
     }
 }

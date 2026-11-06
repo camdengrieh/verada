@@ -18,11 +18,16 @@ interface IVeradaFactory {
     /// @param quoteAsset Asset the token is paired against; must be allowed by the QuoteRegistry
     ///        (WETH or an Ondo token).
     /// @param label ENS label registered for the token under the Verada parent name
-    ///        (`<label>.verada.eth`): 3 to 63 bytes of `[a-z0-9-]`, no leading or trailing
+    ///        (`<label>.varada.eth`): 3 to 63 bytes of `[a-z0-9-]`, no leading or trailing
     ///        hyphen, no `--` at positions 3 and 4; must not be taken or reserved for another
     ///        creator. The launch reverts on an invalid or taken label.
     /// @param logoRef Reference to the token logo (a Swarm reference), or zero for none. Served
     ///        as the `verada.logo` text record of the token's ENS name.
+    /// @param categoryMask Cause categories the token's ballots draw from (catalogue category
+    ///        bits; all bits for any). Fixed forever.
+    /// @param regionMask Regions the token's ballots draw from (catalogue region bits; all bits
+    ///        for any). Fixed forever. The latest catalogue must give the focus at least two
+    ///        entries, or the launch reverts.
     struct DeployParams {
         string name;
         string symbol;
@@ -35,6 +40,8 @@ interface IVeradaFactory {
         address quoteAsset;
         string label;
         bytes32 logoRef;
+        uint64 categoryMask;
+        uint16 regionMask;
     }
 
     /// @notice Emitted when a token is launched.
@@ -92,6 +99,9 @@ interface IVeradaFactory {
     /// @notice Launches a live-donation token: same launch as `deployToken`, on the live hook. Every
     ///         swap's fee is converted to USDC and credited to the cause active at that moment;
     ///         holders rotate the cause by private vote every `live.rotationPeriod`.
+    ///         The token's cause focus (`params.categoryMask`, `params.regionMask`) is set and
+    ///         checked exactly as for `deployToken`: the latest catalogue must give it at least
+    ///         two entries, or the launch reverts (`IEpochGovernor.PoolTooSmall`).
     /// @dev Reverts `LiveModeNotConfigured` until `configureLiveMode` was called.
     function deployLiveToken(DeployParams calldata params, LiveParams calldata live)
         external

@@ -115,22 +115,9 @@ contract DeployLive is Deploy {
 
         // Same two-step hand-over as `Deploy`, plus the two live admin contracts.
         if (finalOwner != deployer) {
-            address[11] memory owned = [
-                d.causeRegistry,
-                d.epochGovernor,
-                d.donationDistributor,
-                d.feeVault,
-                d.quoteRegistry,
-                d.feeConsolidator,
-                d.profileRegistry,
-                d.votingScheme,
-                d.takeoverGovernor,
-                l.rotationGovernor,
-                l.liveVault
-            ];
-            for (uint256 i; i < owned.length; ++i) {
-                Ownable(owned[i]).transferOwnership(finalOwner);
-            }
+            _handOver(d, finalOwner);
+            Ownable(l.rotationGovernor).transferOwnership(finalOwner);
+            Ownable(l.liveVault).transferOwnership(finalOwner);
         }
     }
 

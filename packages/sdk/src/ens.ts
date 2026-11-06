@@ -12,7 +12,7 @@ import { getEnsAddress, getEnsText, labelhash, namehash, normalize, packetToByte
 import { ENS_V2_ADDRESSES } from "./addresses.js";
 
 /** Parent ENS name every token gets a subname under. */
-export const ENS_PARENT_NAME = "verada.eth" as const;
+export const ENS_PARENT_NAME = "varada.eth" as const;
 
 /** Shortest label the on-chain registry accepts (`LabelLib.MIN_LENGTH`). */
 export const LABEL_MIN_LENGTH = 3;
@@ -104,16 +104,21 @@ export const ENS_GATEWAY_SUFFIXES = [".eth.limo", ".eth.link", ".bzz.link"] as c
 export interface GatewayHostname {
   /** Gateway suffix that was matched (e.g. `.eth.limo`). */
   gateway: (typeof ENS_GATEWAY_SUFFIXES)[number];
-  /** Full ENS name the hostname represents (e.g. `pepe.verada.eth`). */
+  /** Full ENS name the hostname represents (e.g. `pepe.varada.eth`). */
   ensName: string;
   /** Token label when the hostname is a subname of the parent, else null. */
   label: string | null;
+  /**
+   * Curator agent label for `<cause>.agent.<parent>` (null when malformed), `""` for the agents
+   * index `agent.<parent>`; absent otherwise.
+   */
+  agent?: string | null;
 }
 
 /**
  * Parses a gateway hostname into the ENS name it serves and, if it is a direct subname of
- * `parent`, the token label. `pepe.verada.eth.limo` → `{ ensName: "pepe.verada.eth",
- * label: "pepe" }`; `verada.eth.limo` → label null; unrelated hosts → null. Labels that fail the
+ * `parent`, the token label. `pepe.varada.eth.limo` → `{ ensName: "pepe.varada.eth",
+ * label: "pepe" }`; `varada.eth.limo` → label null; unrelated hosts → null. Labels that fail the
  * on-chain rules return null for `label` so callers fall back to the main page.
  */
 export function parseGatewayHostname(
@@ -134,6 +139,12 @@ export function parseGatewayHostname(
     const suffix = `.${expectedParent}`;
     if (!head.endsWith(suffix)) return { gateway, ensName, label: null };
     const label = head.slice(0, -suffix.length);
+    // `<cause>.agent.<parent>`: a curator agent's page; `agent.<parent>`: the agents index.
+    if (label === "agent") return { gateway, ensName, label: null, agent: "" };
+    if (label.endsWith(".agent") && !label.slice(0, -".agent".length).includes(".")) {
+      const agent = label.slice(0, -".agent".length);
+      return { gateway, ensName, label: null, agent: isValidLabel(agent) ? agent : null };
+    }
     if (label.includes(".")) return { gateway, ensName, label: null };
     return { gateway, ensName, label: isValidLabel(label) ? label : null };
   }
