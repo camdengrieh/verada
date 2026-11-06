@@ -63,9 +63,22 @@ export function labelRedirect(pathname) {
 }
 
 export const NOT_FOUND_HTML = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Not found - Varada</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Not found - Varada</title>
+<link rel="icon" href="data:,">
+<style>
+/* Inline and system fonts only: this page is served at any depth with no assets beside it. */
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;min-height:100dvh;display:grid;place-items:center;padding:1.5rem 1rem;background:#f5eee1;color:#2b2118;font:16px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:28rem;text-align:center}
+h1{margin:0 0 .75rem;font:600 2rem/1.1 ui-serif,Georgia,"Times New Roman",serif}
+p{margin:0 0 1.5rem;color:#4a3b2e}
+a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:0 1.5rem;border-radius:999px;background:#a8432a;color:#fffbf4;font-weight:600;text-decoration:none}
+a:hover{background:#7e2f1c}
+a:focus-visible{outline:2px solid #a8432a;outline-offset:2px}
+</style></head>
 <body><main><h1>Page not found</h1>
-<p><a id="home" href="./">Back to the start</a></p></main>
+<p>That page is not part of this site.</p>
+<a id="home" href="./">Back to the start</a></main>
 <script>
 ${labelRedirect.toString()}
 // Plain-DNS token pages: <site>/<label> opens the token page for that label.
