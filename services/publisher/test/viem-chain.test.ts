@@ -1,4 +1,4 @@
-import { ballotCommitment, rotationPollScope } from "@verada/sdk";
+import { ballotCommitment, periodPollScope, rotationPollScope } from "@verada/sdk";
 import { epochGovernorAbi, rotationGovernorAbi, zamaVotingSchemeAbi } from "@verada/sdk/abis";
 import {
   custom,
@@ -184,6 +184,23 @@ function rotationRpc(opts: { revert?: string } = {}) {
     pollWindow: [999, 1000, 3700],
     outcomeOf: [false, 255],
     outcomeHandle: HANDLE,
+    proposalCount: 2n,
+    proposalState: 3,
+    getProposal: {
+      token: TOKEN,
+      newPeriod: 1,
+      flags: 1,
+      snapshot: 900,
+      end: 2_000,
+      proposer: TOKEN,
+      executionDeadline: 261_200,
+      voters: 4,
+      scheme: ZAMA,
+      quorumWeight: 10n,
+      fromRotation: 0n,
+      holdFrom: 800,
+      executionsAtProposal: 0,
+    },
   };
   const transport = custom({
     async request({ method, params }: { method: string; params: unknown[] }) {
@@ -252,6 +269,32 @@ describe("viem chain: rotation rounds", () => {
     expect(rpc.calls.find((c) => c.fn === "roundOf")).toMatchObject({ to: RG, args: [TOKEN, 8n] });
     expect(rpc.calls.find((c) => c.fn === "roundScheme")).toMatchObject({ to: RG, args: [TOKEN, 8n] });
     expect(rpc.calls.find((c) => c.fn === "outcomeOf")).toMatchObject({ to: ZAMA, args: [RG, TOKEN, scope] });
+  });
+
+  it("reads period-change proposals from the rotation governor", async () => {
+    const rpc = rotationRpc();
+    const { rotation } = liveChain(rpc);
+    expect(await rotation!.proposalCount()).toBe(2n);
+    const p = await rotation!.periodProposal(2n);
+    expect(p).toMatchObject({ state: "Closed", executionDeadline: 261_200n });
+    expect(p.token.toLowerCase()).toBe(TOKEN);
+    expect(p.scheme.toLowerCase()).toBe(ZAMA);
+    expect(rpc.calls.find((c) => c.fn === "proposalState")).toMatchObject({ to: RG, args: [2n] });
+    expect(rpc.calls.find((c) => c.fn === "getProposal")).toMatchObject({ to: RG, args: [2n] });
+  });
+
+  it("sends period-change proposal calls to the rotation governor", async () => {
+    const rpc = rotationRpc();
+    const { writer } = liveChain(rpc);
+    expect(await writer.estimate({ kind: "closePeriodProposal", id: 2n })).toBe(50_000n);
+    expect(await writer.estimate({ kind: "executePeriodProposal", id: 2n })).toBe(50_000n);
+    const cleartexts = encodeAbiParameters([{ type: "uint256" }], [1n]);
+    await writer.estimate({ kind: "submitOutcome", scheme: ZAMA, governor: RG, token: TOKEN, scope: periodPollScope(2n), cleartexts, proof: "0x5eed" });
+    expect(rpc.estimates.map((e) => [e.to, e.fn, e.args])).toEqual([
+      [RG, "closePeriodProposal", [2n]],
+      [RG, "executePeriodProposal", [2n]],
+      [ZAMA, "submitOutcome", [RG, TOKEN, periodPollScope(2n), cleartexts, "0x5eed"]],
+    ]);
   });
 
   it("gives the round preparer its reads through the same client", async () => {

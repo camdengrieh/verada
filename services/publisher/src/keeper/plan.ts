@@ -1,11 +1,13 @@
-import { rotationPollScope, type RoundStatus } from "@verada/sdk";
+import { periodPollScope, rotationPollScope, type RoundStatus } from "@verada/sdk";
 import { zeroAddress, type Address } from "viem";
 import {
   sameAddress,
+  TERMINAL_PERIOD_STATES,
   TERMINAL_PROPOSAL_STATES,
   type EpochView,
   type KeeperAction,
   type Outcome,
+  type PeriodProposalView,
   type ProposalView,
   type RoundView,
   type Tally,
@@ -127,4 +129,36 @@ export function planRound(
   if (outcome.isFinal) return { type: "send", action: { kind: "finalizeRound", token, target } };
   if (v.scheme === zeroAddress || !sameAddress(v.scheme, ctx.zamaScheme)) return none("round scheme is not the Zama scheme");
   return { type: "decrypt", scheme: v.scheme, governor: ctx.rotationGovernor, token, scope: rotationPollScope(target), outcome: true };
+}
+
+/** The outcome is only needed once the proposal's poll was closed for it. */
+export const periodProposalNeedsOutcome = (p: PeriodProposalView) => p.state === "Closed";
+
+/**
+ * Next step for a `RotationGovernor` period-change proposal, from its state and the chain's time
+ * (seconds). Mirrors the takeover steps (close, decrypt, execute) with an outcome-only poll.
+ *
+ * - Active: wait. Defeated, Executed, Expired, Canceled: nothing, ever again.
+ * - Ended: `closePeriodProposal` (below `minVoters` this defeats it, with nothing decrypted).
+ * - Closed, outcome final: `executePeriodProposal` (schedules the new period if FOR won).
+ * - Closed, outcome not final, past `executionDeadline`: `executePeriodProposal`, which expires
+ *   it, freeing the token's slot for that period and starting its cooldown.
+ * - Closed, outcome not final: decrypt the winner and `submitOutcome` (scope
+ *   `PollScopeLib.encode(KIND_PERIOD, id)`), if the proposal's scheme is the Zama scheme.
+ */
+export function planPeriodProposal(
+  id: bigint,
+  p: PeriodProposalView,
+  outcome: Outcome | undefined,
+  now: bigint,
+  ctx: { rotationGovernor: Address; zamaScheme: Address },
+): Step {
+  if (TERMINAL_PERIOD_STATES.includes(p.state)) return none(p.state, true);
+  if (p.state === "None") return none("unknown proposal", true);
+  if (p.state === "Active") return none("voting");
+  if (p.state === "Ended") return { type: "send", action: { kind: "closePeriodProposal", id } };
+  if (!outcome) return none("outcome not read");
+  if (outcome.isFinal || now > p.executionDeadline) return { type: "send", action: { kind: "executePeriodProposal", id } };
+  if (p.scheme === zeroAddress || !sameAddress(p.scheme, ctx.zamaScheme)) return none("proposal scheme is not the Zama scheme");
+  return { type: "decrypt", scheme: p.scheme, governor: ctx.rotationGovernor, token: p.token, scope: periodPollScope(id), outcome: true };
 }

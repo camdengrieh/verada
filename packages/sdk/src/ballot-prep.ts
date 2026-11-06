@@ -404,6 +404,19 @@ export function rotationPollScope(target: bigint): bigint {
   return (POLL_KIND_ROTATION << 248n) | target;
 }
 
+/** `PollScopeLib.KIND_PERIOD`: scope kind of a period-change proposal (the id is the proposal id). */
+export const POLL_KIND_PERIOD = 2n;
+
+/** Voting-scheme scope of period-change proposal `id` (`PollScopeLib.encode(KIND_PERIOD, id)`). */
+export function periodPollScope(id: bigint): bigint {
+  if (id < 0n || id >= 1n << 64n) throw new RangeError("id out of range");
+  return (POLL_KIND_PERIOD << 248n) | id;
+}
+
+/** `IRotationGovernor.ProposalState` (period-change proposals), in enum order. */
+export const PERIOD_PROPOSAL_STATES = ["None", "Active", "Ended", "Closed", "Defeated", "Executed", "Expired", "Canceled"] as const;
+export type PeriodProposalState = (typeof PERIOD_PROPOSAL_STATES)[number];
+
 /** `CatalogBallotBuilder.CURATION_GRACE`: the longest curation grace of a round, in seconds. */
 export const ROUND_CURATION_GRACE = 6n * 3_600n;
 

@@ -1,17 +1,29 @@
 import { buildReport, pickProof, type BuiltRegion } from "@verada/curator";
-import { BUCKET_COUNT, bucketId, categoryMaskOf, causeIdOfOrg, drawIndex, planRotation, regionMaskOf, rotationPollScope } from "@verada/sdk";
+import {
+  BUCKET_COUNT,
+  bucketId,
+  categoryMaskOf,
+  causeIdOfOrg,
+  drawIndex,
+  periodPollScope,
+  planRotation,
+  regionMaskOf,
+  rotationPollScope,
+} from "@verada/sdk";
 import { decodeAbiParameters, type Hex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { Backoff } from "../src/keeper/backoff.js";
 import { createRoundPreparer, type CatalogEntrySource, type PickSource, type RoundReader } from "../src/keeper/ballot.js";
-import type { KeeperAction, RoundView } from "../src/keeper/chain.js";
+import type { KeeperAction, PeriodProposalView, RoundView } from "../src/keeper/chain.js";
 import { createKeeper } from "../src/keeper/keeper.js";
-import { planRound } from "../src/keeper/plan.js";
+import { planPeriodProposal, planRound } from "../src/keeper/plan.js";
 import { collectLogs, EG, FakeChain, FakeRotation, OTHER_SCHEME, RG, TG, token, ZAMA } from "./keeper-fakes.js";
 
 const T1 = token(1);
-/** A weekly token: listed like any other, never registered with the rotation governor. */
+/** A weekly token: listed like any other, registered with the epoch governor, never with the rotation one. */
 const T2 = token(2);
+/** A second live token (same focus as T1). */
+const T3 = token(3);
 const ROOT = `0x${"ab".repeat(32)}` as Hex;
 const HUNGER_AF = bucketId(2, 0);
 const HUNGER_AS = bucketId(2, 1);
@@ -91,9 +103,21 @@ function roundReader(rot: FakeRotation, over: Partial<RoundReader> = {}): RoundR
   };
 }
 
-function setup(opts: { over?: Partial<RoundReader>; picks?: PickSource; preparer?: boolean; dryRun?: boolean } = {}) {
+function setup(
+  opts: {
+    over?: Partial<RoundReader>;
+    picks?: PickSource;
+    preparer?: boolean;
+    dryRun?: boolean;
+    /** Live tokens besides T1. */
+    live?: typeof T1[];
+    decryptFail?: () => Error | undefined;
+  } = {},
+) {
   const chain = new FakeChain();
+  chain.register(T2);
   const rot = new FakeRotation().register(T1);
+  for (const t of opts.live ?? []) rot.register(t);
   chain.rotation = rot;
   let wall = Number(rot.now) * 1000;
   const advance = (seconds: bigint) => {
@@ -104,12 +128,14 @@ function setup(opts: { over?: Partial<RoundReader>; picks?: PickSource; preparer
   const backoff = new Backoff({ now: () => wall });
   const reader = rot.reader();
   const isRegistered = vi.fn(reader.isRegistered);
-  const decryptor = chain.decryptor();
+  const decryptor = chain.decryptor({ fail: () => opts.decryptFail?.() });
+  const chainReader = chain.reader();
+  const weeklyIsRegistered = vi.fn(chainReader.isRegistered);
   const keeper = createKeeper({
-    reader: chain.reader(),
+    reader: { ...chainReader, isRegistered: weeklyIsRegistered },
     writer: chain.writer(),
     decryptor,
-    tokens: async () => [T1, T2],
+    tokens: async () => [T1, T2, ...(opts.live ?? [])],
     epochGovernor: EG,
     takeoverGovernor: TG,
     zamaScheme: ZAMA,
@@ -129,7 +155,7 @@ function setup(opts: { over?: Partial<RoundReader>; picks?: PickSource; preparer
       lookbackRounds: 3,
     },
   });
-  return { chain, rot, keeper, logs, backoff, advance, isRegistered, decryptor };
+  return { chain, rot, keeper, logs, backoff, advance, isRegistered, weeklyIsRegistered, decryptor };
 }
 
 const kinds = (sent: KeeperAction[]) => sent.map((a) => a.kind);
@@ -186,9 +212,25 @@ describe("rotation keeper: preparing rounds", () => {
     expect(a.draws[0]!.orgId).toBe(orgAt(HUNGER_AF, drawIndex(T1, 5n, 1, 0, 50)));
     await keeper.run();
     expect(chain.sent).toHaveLength(1);
-    // Live registration is read once; a weekly token is re-checked each run.
+    // Registration is read once per token: live with the rotation governor, weekly with the
+    // epoch governor (the factory registers a token with exactly one, when it creates it).
+    for (let i = 0; i < 3; i++) await keeper.run();
     expect(isRegistered.mock.calls.filter(([t]) => t === T1)).toHaveLength(1);
-    expect(isRegistered.mock.calls.filter(([t]) => t === T2)).toHaveLength(2);
+    expect(isRegistered.mock.calls.filter(([t]) => t === T2)).toHaveLength(1);
+  });
+
+  it("re-checks a token registered with neither governor, and becomes live once it is", async () => {
+    const T4 = token(4);
+    const { chain, rot, keeper, isRegistered, weeklyIsRegistered } = setup({ live: [T4] });
+    rot.registered.delete(T4.toLowerCase());
+    await keeper.run();
+    await keeper.run();
+    expect(isRegistered.mock.calls.filter(([t]) => t === T4)).toHaveLength(2);
+    expect(weeklyIsRegistered.mock.calls.filter(([t]) => t === T4)).toHaveLength(2);
+    // An RPC that lagged the indexer catches up: the token is live from the next run.
+    rot.register(T4);
+    await keeper.run();
+    expect(chain.sent.filter((a) => "token" in a && a.token === T4).map((a) => a.kind)).toEqual(["prepareRound"]);
   });
 
   it("opens a pin-filled round with openRound", async () => {
@@ -222,7 +264,9 @@ describe("rotation keeper: preparing rounds", () => {
     expect(s1.failed).toBe(1);
     expect(chain.sent).toEqual([]);
     const fail1 = logs.find((l) => l.msg === "keeper step failed")!;
-    expect(fail1.data).toMatchObject({ token: T1, round: 5n, op: "read", retryInSeconds: 300 });
+    expect(fail1.data).toMatchObject({ token: T1, round: 5n, op: "read", retryInSeconds: 300, awaitingCurationGrace: true });
+    // The first report of these missing picks alarms; retries of the same wait do not.
+    expect(fail1.level).toBe("error");
     expect(String(fail1.data!.error)).toMatch(/CuratedPicksUnavailable/);
     expect(backoff.blocked(`round:${T1.toLowerCase()}:5`)).toBe(true);
 
@@ -237,6 +281,7 @@ describe("rotation keeper: preparing rounds", () => {
     const nowMs = Number(rot.now) * 1000;
     expect(fail2.data).toMatchObject({ failures: 2, retryInSeconds: Math.round((retryAt - nowMs) / 1000) });
     expect(fail2.data!.retryInSeconds).toBe(570);
+    expect(fail2.level).toBe("warn");
     advance(569n);
     expect((await keeper.run()).backedOff).toBe(1);
     expect(chain.sent).toEqual([]);
@@ -249,6 +294,23 @@ describe("rotation keeper: preparing rounds", () => {
     const a = chain.sent[0] as Extract<KeeperAction, { kind: "prepareRound" }>;
     expect(a.draws.map((d) => d.orgId)).toEqual((await rotationOnly(5n)).draws.map((d) => d.orgId));
     expect(rot.roundOf(T1, 5n).status).toBe("Open");
+  });
+
+  it("logs missing picks at error once, not for every round of every live token", async () => {
+    const { chain, rot, keeper, logs, advance } = setup({ live: [T3], over: { curationsFor: async () => onChain }, picks: picks({ asia: null }) });
+    rot.curatedUntilGrace = true;
+    // Three hours of 5-minute runs: three rounds per token wait out their grace, then use rotation.
+    for (let i = 0; i < 36; i++) {
+      await keeper.run();
+      advance(300n);
+    }
+    const failed = logs.filter((l) => l.msg === "keeper step failed");
+    expect(failed.length).toBeGreaterThanOrEqual(6);
+    expect(failed.filter((l) => l.level === "error")).toHaveLength(1);
+    expect(failed.every((l) => l.data?.awaitingCurationGrace === true)).toBe(true);
+    expect(kinds(chain.sent).filter((k) => k === "prepareRound").length).toBeGreaterThanOrEqual(6);
+    // Any other failure of a round still logs at error.
+    expect(logs.filter((l) => l.level === "error" && l.msg !== "keeper step failed")).toEqual([]);
   });
 
   it("uses the picks when they turn up during the grace", async () => {
@@ -302,8 +364,36 @@ describe("rotation keeper: closing rounds", () => {
     const reads = rot.reads;
     await keeper.run();
     expect(chain.sent).toHaveLength(4);
-    // Finished rounds are not read again; only the open round 5 and the token's rotation are.
+    // Finished rounds are not read again: only the chain time, the token's rotation, the open
+    // round 5 and the proposal count are.
     expect(rot.reads - reads).toBeLessThanOrEqual(4);
+  });
+
+  it("keeps following a closed round past the lookback until it is finalized", async () => {
+    let outage = true;
+    const { chain, rot, keeper, logs, advance } = setup({ preparer: false, decryptFail: () => (outage ? new Error("relayer down") : undefined) });
+    // Round 3 got ballots; its winner cannot be decrypted for hours. Later rounds get no ballots.
+    rot.openRound(T1, 3n, 2n, 1n);
+    for (let i = 0; i < 36; i++) {
+      await keeper.run();
+      advance(300n);
+    }
+    // Rotation 7 now: the lookback (3 rounds) is [5, 8], round 3 is below it.
+    expect(rot.current()).toBe(7n);
+    expect(rot.roundOf(T1, 3n).status).toBe("Closed");
+    expect(logs.filter((l) => l.msg === "keeper is following an unfinished round past its lookback")).toHaveLength(1);
+    // A late finalize still applies the winner (no later round was applied), so it is driven.
+    outage = false;
+    for (let i = 0; i < 72 && rot.roundOf(T1, 3n).status !== "Applied"; i++) {
+      await keeper.run();
+      advance(300n);
+    }
+    expect(rot.roundOf(T1, 3n).status).toBe("Applied");
+    expect(chain.sent.filter((a) => a.kind === "finalizeRound")).toEqual([{ kind: "finalizeRound", token: T1, target: 3n }]);
+    const reads = rot.reads;
+    await keeper.run();
+    // No longer followed: chain time, rotation, rounds 5..8 and the proposal count.
+    expect(rot.reads - reads).toBeLessThanOrEqual(7);
   });
 
   it("waits for voting to end before closing the current round", async () => {
@@ -391,5 +481,82 @@ describe("rotation keeper: limits", () => {
     const s = await k.run();
     expect(s.capped).toBe(true);
     expect(kinds(chain.sent)).toEqual(["closeRound", "submitOutcome"]);
+  });
+});
+
+describe("planPeriodProposal", () => {
+  const ctx = { rotationGovernor: RG, zamaScheme: ZAMA };
+  const p = (over: Partial<PeriodProposalView>): PeriodProposalView => ({ token: T1, state: "Closed", scheme: ZAMA, executionDeadline: 1_000n, ...over });
+
+  it("closes an ended proposal, decrypts its outcome, then executes it", () => {
+    expect(planPeriodProposal(2n, p({ state: "Active" }), undefined, 10n, ctx)).toEqual({ type: "none", reason: "voting", terminal: false });
+    expect(planPeriodProposal(2n, p({ state: "Ended" }), undefined, 10n, ctx)).toEqual({ type: "send", action: { kind: "closePeriodProposal", id: 2n } });
+    expect(planPeriodProposal(2n, p({}), { isFinal: false, winner: 255 }, 10n, ctx)).toEqual({
+      type: "decrypt",
+      scheme: ZAMA,
+      governor: RG,
+      token: T1,
+      scope: periodPollScope(2n),
+      outcome: true,
+    });
+    expect(planPeriodProposal(2n, p({}), { isFinal: true, winner: 1 }, 10n, ctx)).toEqual({ type: "send", action: { kind: "executePeriodProposal", id: 2n } });
+  });
+
+  it("expires a closed proposal past its execution window, and is done with terminal ones", () => {
+    expect(planPeriodProposal(2n, p({ scheme: OTHER_SCHEME }), { isFinal: false, winner: 255 }, 1_000n, ctx)).toMatchObject({ type: "none", terminal: false });
+    expect(planPeriodProposal(2n, p({ scheme: OTHER_SCHEME }), { isFinal: false, winner: 255 }, 1_001n, ctx)).toEqual({
+      type: "send",
+      action: { kind: "executePeriodProposal", id: 2n },
+    });
+    for (const state of ["Defeated", "Executed", "Expired", "Canceled", "None"] as const) {
+      expect(planPeriodProposal(2n, p({ state }), undefined, 10n, ctx)).toMatchObject({ type: "none", terminal: true });
+    }
+  });
+});
+
+describe("rotation keeper: period-change proposals", () => {
+  it("closes a passed proposal, relays its decrypted outcome and executes it, once", async () => {
+    const { chain, rot, keeper, decryptor, advance } = setup({ preparer: false });
+    const id = rot.proposePeriod(T1, rot.now + 100n, 3n, 1n);
+    let s = await keeper.run();
+    expect(s.periodProposalsChecked).toBe(1);
+    expect(chain.sent).toEqual([]);
+    advance(100n);
+    await keeper.run();
+    expect(kinds(chain.sent)).toEqual(["closePeriodProposal", "submitOutcome", "executePeriodProposal"]);
+    const submit = chain.sent[1] as Extract<KeeperAction, { kind: "submitOutcome" }>;
+    expect(submit).toMatchObject({ governor: RG, token: T1, scope: periodPollScope(id) });
+    expect(decryptor.calls).toEqual([[rot.outcomeOfPeriod(id)!.handle]]);
+    expect(rot.periodState(id)).toBe("Executed");
+    s = await keeper.run();
+    expect(s.periodProposalsChecked).toBe(0);
+    expect(chain.sent).toHaveLength(3);
+  });
+
+  it("closes a proposal below minVoters without decrypting", async () => {
+    const { chain, rot, keeper, decryptor, advance } = setup({ preparer: false });
+    rot.minVoters = 2n;
+    const id = rot.proposePeriod(T1, rot.now + 100n, 1n);
+    advance(100n);
+    await keeper.run();
+    expect(chain.sent).toEqual([{ kind: "closePeriodProposal", id }]);
+    expect(rot.periodState(id)).toBe("Defeated");
+    expect(decryptor.calls).toEqual([]);
+  });
+
+  it("expires a proposal on another scheme once its execution window ends", async () => {
+    const { chain, rot, keeper, decryptor, advance } = setup({ preparer: false });
+    const id = rot.proposePeriod(T1, rot.now + 100n, 2n, 1n, { executionWindow: 600n, scheme: OTHER_SCHEME });
+    advance(100n);
+    await keeper.run();
+    expect(kinds(chain.sent)).toEqual(["closePeriodProposal"]);
+    advance(600n);
+    await keeper.run();
+    expect(kinds(chain.sent)).toEqual(["closePeriodProposal"]);
+    advance(1n);
+    await keeper.run();
+    expect(kinds(chain.sent)).toEqual(["closePeriodProposal", "executePeriodProposal"]);
+    expect(rot.periodState(id)).toBe("Expired");
+    expect(decryptor.calls).toEqual([]);
   });
 });

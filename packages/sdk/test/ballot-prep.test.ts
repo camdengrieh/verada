@@ -11,6 +11,7 @@ import {
   ROUND_CURATION_GRACE,
   roundCall,
   roundCurationGraceEnd,
+  periodPollScope,
   rotationPollScope,
   type BallotReader,
   type RoundReader,
@@ -147,6 +148,13 @@ describe("rotationPollScope", () => {
   it("mirrors PollScopeLib.encode(KIND_ROTATION, target)", () => {
     expect(rotationPollScope(5n)).toBe(0x0100000000000000000000000000000000000000000000000000000000000005n);
     expect(() => rotationPollScope(1n << 64n)).toThrow(RangeError);
+  });
+});
+
+describe("periodPollScope", () => {
+  it("mirrors PollScopeLib.encode(KIND_PERIOD, id)", () => {
+    expect(periodPollScope(3n)).toBe(0x0200000000000000000000000000000000000000000000000000000000000003n);
+    expect(() => periodPollScope(-1n)).toThrow(RangeError);
   });
 });
 

@@ -417,7 +417,10 @@ options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens
   Curations carry a version no newer than that one and count only under it, so a version published
   mid-week does not drop the week's curated phase from later rounds, and a round matches that
   week's weekly ballot. Without a curator clock, or when no version was in effect at the epoch's
-  start, the version at the vote start is used.
+  start, the version at the vote start is used. Off chain this means the catalogue snapshot of the
+  previous version stays in use for the rest of the week: after a mid-week `setVersion` the
+  indexer serves both (`CATALOG_SOURCE=<new>,<previous>`), and the keeper asks for a round's
+  entries by its version's root (`/api/catalog/entries?root=`).
 - **Curation grace.** A round whose buckets have usable curations needs its curated draws only
   until `CatalogBallotBuilder.curationGraceEnd(voteStart, voteEnd)`: `min(6 hours, vote window /
   3)` from the round's own vote start, not the epoch's. The vote window is the period less its
@@ -444,8 +447,12 @@ options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens
   `curationGraceEnd` plus 30 seconds, and its first attempt after the grace prepares the round
   with rotation only. It then closes each ended round that got ballots, relays the public
   decryption of the winner only (`outcomeHandle`, `submitOutcome`) and calls `finalizeRound`.
-  Rounds that ended without ballots are left open: nothing would change. Anyone can still call
-  the functions above themselves.
+  Rounds that ended without ballots are left open: nothing would change. A round still unfinished
+  when it leaves the keeper's lookback is followed until it is final, since a late finalize is
+  `Stale` only once a later round was applied. The keeper also drives period-change proposals:
+  `closePeriodProposal`, the winner's decryption and `submitOutcome`, then
+  `executePeriodProposal` (which also expires a proposal left without an outcome past its
+  execution window). Anyone can still call the functions above themselves.
 
 Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured`,
 `PoolRegistered`, `FeeTaken`, `HeldRetried`; the vault's `LiveTokenRegistered`, `Credited`,

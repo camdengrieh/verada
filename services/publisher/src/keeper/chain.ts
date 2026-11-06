@@ -1,4 +1,4 @@
-import type { RoundStatus } from "@verada/sdk";
+import type { PeriodProposalState, RoundStatus } from "@verada/sdk";
 import type { Address, Hex } from "viem";
 
 /** `ITakeoverGovernor.State`, in enum order. */
@@ -72,6 +72,19 @@ export interface Outcome {
   winner: number;
 }
 
+/** `RotationGovernor` state of one period-change proposal (`proposalState`, `getProposal`). */
+export interface PeriodProposalView {
+  token: Address;
+  state: PeriodProposalState;
+  /** Scheme the proposal's yes/no poll was opened with. */
+  scheme: Address;
+  /** Seconds; after it a closed proposal without a final outcome can only expire. */
+  executionDeadline: bigint;
+}
+
+/** Period-change proposal states a proposal never leaves. */
+export const TERMINAL_PERIOD_STATES: readonly PeriodProposalState[] = ["Defeated", "Executed", "Expired", "Canceled"];
+
 /** Contract reads the keeper bases its decisions on for live-mode tokens (`RotationGovernor`). */
 export interface RotationReader {
   isRegistered(token: Address): Promise<boolean>;
@@ -82,6 +95,9 @@ export interface RotationReader {
   outcomeHandle(scheme: Address, governor: Address, token: Address, scope: bigint): Promise<Hex>;
   /** Latest block timestamp, in seconds. */
   now(): Promise<bigint>;
+  /** `RotationGovernor.proposalCount`: period-change proposals are numbered from 1. */
+  proposalCount(): Promise<bigint>;
+  periodProposal(id: bigint): Promise<PeriodProposalView>;
 }
 
 /** A permissionless transaction the keeper may send. */
@@ -114,6 +130,10 @@ export type KeeperAction =
   | { kind: "finalizeRound"; token: Address; target: bigint }
   /** `IOutcomeVotingScheme.submitOutcome`: the decrypted winner of a poll closed for its outcome. */
   | { kind: "submitOutcome"; scheme: Address; governor: Address; token: Address; scope: bigint; cleartexts: Hex; proof: Hex }
+  /** Rotation governor: ends a period-change vote (asks for its outcome, or defeats it below `minVoters`). */
+  | { kind: "closePeriodProposal"; id: bigint }
+  /** Rotation governor: applies a revealed outcome, or expires a proposal past its execution window. */
+  | { kind: "executePeriodProposal"; id: bigint }
   | { kind: "closeProposal"; id: bigint }
   | { kind: "recordTally"; id: bigint }
   | { kind: "execute"; id: bigint };

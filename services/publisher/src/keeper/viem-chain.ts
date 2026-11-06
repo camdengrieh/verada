@@ -17,7 +17,15 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
-import { ballotCall, ballotCommitment as ballotCommitmentOf, createBallotReader, createRoundReader, ROUND_STATUSES, roundCall } from "@verada/sdk";
+import {
+  ballotCall,
+  ballotCommitment as ballotCommitmentOf,
+  createBallotReader,
+  createRoundReader,
+  PERIOD_PROPOSAL_STATES,
+  ROUND_STATUSES,
+  roundCall,
+} from "@verada/sdk";
 import type { BallotReader, RoundReader } from "./ballot.js";
 import {
   KeeperRevert,
@@ -245,6 +253,16 @@ export function createViemChain(opts: ViemChainOptions): {
       },
       outcomeHandle: (scheme, governor, token, scope) => read<Hex>(scheme, zamaVotingSchemeAbi, "outcomeHandle", [governor, token, scope]),
       now: async () => (await publicClient.getBlock({ blockTag: "latest" })).timestamp,
+      proposalCount: () => read<bigint>(rg, rotationGovernorAbi, "proposalCount"),
+      async periodProposal(id) {
+        const [state, p] = await Promise.all([
+          read<number>(rg, rotationGovernorAbi, "proposalState", [id]),
+          read<{ token: Address; scheme: Address; executionDeadline: number | bigint }>(rg, rotationGovernorAbi, "getProposal", [id]),
+        ]);
+        const s = PERIOD_PROPOSAL_STATES[Number(state)];
+        if (!s) throw new Error(`unknown period proposal state ${state}`);
+        return { token: p.token, state: s, scheme: p.scheme, executionDeadline: BigInt(p.executionDeadline) };
+      },
     };
   }
 
@@ -257,6 +275,9 @@ export function createViemChain(opts: ViemChainOptions): {
       case "closeRound":
       case "finalizeRound":
         return { address: needRotation(), abi: rotationGovernorAbi, functionName: a.kind, args: [a.token, a.target] };
+      case "closePeriodProposal":
+      case "executePeriodProposal":
+        return { address: needRotation(), abi: rotationGovernorAbi, functionName: a.kind, args: [a.id] };
       case "submitOutcome":
         return { address: a.scheme, abi: zamaVotingSchemeAbi, functionName: "submitOutcome", args: [a.governor, a.token, a.scope, a.cleartexts, a.proof] };
       case "openEpoch":

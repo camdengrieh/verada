@@ -1,14 +1,16 @@
-import { rotationPollScope } from "@verada/sdk";
+import { periodPollScope, rotationPollScope } from "@verada/sdk";
 import type { Address } from "viem";
 import type { Log } from "../jobs/types.js";
 import { Backoff } from "./backoff.js";
 import { KeeperRevert, redact, type ChainReader, type ChainWriter, type KeeperAction, type RotationReader } from "./chain.js";
-import type { BallotPreparer, RoundPreparer } from "./ballot.js";
+import { CuratedPicksUnavailable, type BallotPreparer, type RoundPreparer } from "./ballot.js";
 import { checkDecryption, type PublicDecryptor } from "./decrypt.js";
 import {
   epochNeedsTally,
   finalizeNeedsOptions,
+  periodProposalNeedsOutcome,
   planEpoch,
+  planPeriodProposal,
   planProposal,
   planRound,
   proposalNeedsTally,
@@ -22,7 +24,11 @@ export interface RotationDeps {
   reader: RotationReader;
   /** Prepares the next rotation's round; omitted when no catalogue source (indexer). */
   rounds?: RoundPreparer;
-  /** Rounds before the next rotation's that are re-read each run for close, outcome and finalize. Default 24. */
+  /**
+   * Rounds before the next rotation's that are re-read each run for close, outcome and finalize.
+   * Default 24. A round seen open or closed is also followed past the lookback until it is final
+   * (while the process runs; a restart only finds the rounds inside the lookback).
+   */
   lookbackRounds?: number;
 }
 
@@ -38,7 +44,8 @@ export interface KeeperDeps {
   takeoverGovernor: Address;
   /**
    * Live tokens' rotation rounds: prepares each token's next round, closes ended ones, relays the
-   * public decryption of their winner and finalizes them. Omitted when no rotation governor is
+   * public decryption of their winner and finalizes them; and the governor's period-change
+   * proposals (close, decrypt the outcome, execute). Omitted when no rotation governor is
    * configured.
    */
   rotation?: RotationDeps;
@@ -90,6 +97,8 @@ export interface KeeperRunSummary {
   /** Current-epoch openings skipped because the token is idle. */
   idleSkipped: number;
   proposalsChecked: number;
+  /** Rotation governor period-change proposals read this run. */
+  periodProposalsChecked: number;
   /** Live tokens registered with the rotation governor. */
   liveTokens: number;
   roundsChecked: number;
@@ -103,7 +112,11 @@ export interface KeeperRunSummary {
   dryRun: boolean;
 }
 
-type ItemRef = { token: Address; epoch: bigint } | { token: Address; round: bigint } | { proposal: bigint; token?: Address };
+type ItemRef =
+  | { token: Address; epoch: bigint }
+  | { token: Address; round: bigint }
+  | { proposal: bigint; token?: Address }
+  | { periodProposal: bigint; token?: Address };
 
 const describe = (a: KeeperAction): Record<string, unknown> => {
   switch (a.kind) {
@@ -128,6 +141,9 @@ const describe = (a: KeeperAction): Record<string, unknown> => {
       return { tx: a.kind, token: a.token, round: a.target, draws: a.draws.length };
     case "prepareCuratedRound":
       return { tx: a.kind, token: a.token, round: a.target, curated: a.curated.length, draws: a.draws.length };
+    case "closePeriodProposal":
+    case "executePeriodProposal":
+      return { tx: a.kind, periodProposal: a.id };
     default:
       return { tx: a.kind, proposal: a.id };
   }
@@ -153,10 +169,27 @@ export function createKeeper(deps: KeeperDeps) {
   const maxLag = BigInt(deps.maxIndexerLagSeconds ?? 600);
   const now = deps.now ?? Date.now;
   let noFeeReaderLogged = false;
-  /** Lowercase live tokens (registration is permanent); other tokens are re-checked each run. */
+  /** Lowercase live tokens (registration is permanent). */
   const liveTokens = new Set<string>();
+  /**
+   * Lowercase weekly tokens: registered with the epoch governor, so never live (the factory
+   * registers a token with exactly one governor, in its creation transaction). Not read again.
+   * A token registered with neither (e.g. an RPC behind the indexer) is re-checked each run.
+   */
+  const weeklyTokens = new Set<string>();
   /** Per lowercase live token: rounds in a final state, never read again (pruned past the lookback). */
   const doneRounds = new Map<string, Set<bigint>>();
+  /**
+   * Per lowercase live token: rounds below the lookback that were open or closed when last read.
+   * They are followed until final: a late `finalizeRound` still applies the winner unless a later
+   * round was applied first. Bounded per token; the oldest is dropped, with an error.
+   */
+  const carriedRounds = new Map<string, Map<bigint, { warned: boolean }>>();
+  const MAX_CARRIED = 64;
+  /** Period-change proposals in a terminal state: never read again. */
+  const donePeriods = new Set<bigint>();
+  /** `CuratedPicksUnavailable` messages already logged at error for a round (then at warn). */
+  const picksReported = new Set<string>();
   const lookbackRounds = BigInt(deps.rotation?.lookbackRounds ?? 24);
 
   /** Lowercase addresses of active tokens, or null when every epoch should be opened. */
@@ -214,6 +247,7 @@ export function createKeeper(deps: KeeperDeps) {
       ballotsChecked: 0,
       idleSkipped: 0,
       proposalsChecked: 0,
+      periodProposalsChecked: 0,
       liveTokens: 0,
       roundsChecked: 0,
       txs: 0,
@@ -229,7 +263,10 @@ export function createKeeper(deps: KeeperDeps) {
     /**
      * Records a failed step and backs the item off. Logged at `error` (alarmed on by infra), except
      * `NoVotes`: an empty epoch with no default cause is an expected, owner-fixable state, so it stays
-     * at `warn` and just waits out its backoff.
+     * at `warn` and just waits out its backoff. A rotation round waiting out its curation grace for
+     * missing picks (`CuratedPicksUnavailable` with a `retryAt`) logs at `error` the first time
+     * each message is seen (it names the agent, region and epoch), then at `warn`: every round of
+     * every live token in that focus hits the same missing picks until the next weekly epoch.
      */
     const fail = (key: string, ref: ItemRef, op: string, err: unknown) => {
       s.failed++;
@@ -239,7 +276,15 @@ export function createKeeper(deps: KeeperDeps) {
       const data: Record<string, unknown> = { ...ref, op, retryInSeconds: Math.round(delay / 1000), failures: backoff.failures(key) };
       if (err instanceof KeeperRevert) data.revert = err.errorName ?? "unknown";
       else data.error = redact(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
-      const expected = err instanceof KeeperRevert && err.errorName === "NoVotes";
+      let expected = err instanceof KeeperRevert && err.errorName === "NoVotes";
+      if ("round" in ref && err instanceof CuratedPicksUnavailable && retryAt !== undefined) {
+        if (picksReported.has(err.message)) expected = true;
+        else {
+          if (picksReported.size >= 1_000) picksReported.clear();
+          picksReported.add(err.message);
+        }
+        data.awaitingCurationGrace = true;
+      }
       deps.log(expected ? "warn" : "error", "keeper step failed", data);
     };
 
@@ -336,8 +381,10 @@ export function createKeeper(deps: KeeperDeps) {
 
     /**
      * Live tokens: per token, the rounds from `next - lookbackRounds` to the next rotation's round
-     * (`next = currentRotation + 1`), oldest first. The next round is prepared once nobody has;
-     * every ended round with ballots is closed, its winner decrypted and submitted, and finalized.
+     * (`next = currentRotation + 1`), oldest first, after any older round still unfinished when it
+     * left that range. The next round is prepared once nobody has; every ended round with ballots
+     * is closed, its winner decrypted and submitted, and finalized. Then the governor's
+     * period-change proposals: closed, their outcome decrypted and submitted, and executed.
      */
     const runRotation = async (rot: RotationDeps, tokens: Address[]) => {
       let chainNow: bigint;
@@ -350,19 +397,33 @@ export function createKeeper(deps: KeeperDeps) {
         return;
       }
       const ctx = { rotationGovernor: rot.governor, zamaScheme: deps.zamaScheme };
+      const errText = (err: unknown) => redact(err instanceof Error ? err.message : String(err));
+
+      // Which tokens are live: read once per token (concurrently, so JSON-RPC batching applies).
+      const unknown = tokens.filter((t) => !liveTokens.has(t.toLowerCase()) && !weeklyTokens.has(t.toLowerCase()));
+      for (let i = 0; i < unknown.length && !stop(); i += 50) {
+        await Promise.all(
+          unknown.slice(i, i + 50).map(async (token) => {
+            const t = token.toLowerCase();
+            try {
+              if (await rot.reader.isRegistered(token)) liveTokens.add(t);
+              else if (await deps.reader.isRegistered(token)) weeklyTokens.add(t);
+            } catch (err) {
+              deps.log("warn", "keeper could not read the token's registration", { token, error: errText(err) });
+            }
+          }),
+        );
+      }
+
       for (const token of tokens) {
         if (stop()) break;
         const t = token.toLowerCase();
+        if (!liveTokens.has(t)) continue;
         let current: bigint;
         try {
-          if (!liveTokens.has(t)) {
-            // Weekly tokens are never registered here; they cost one read per run.
-            if (!(await rot.reader.isRegistered(token))) continue;
-            liveTokens.add(t);
-          }
           current = await rot.reader.currentRotation(token);
         } catch (err) {
-          deps.log("warn", "keeper could not read the token's rotation", { token, error: redact(err instanceof Error ? err.message : String(err)) });
+          deps.log("warn", "keeper could not read the token's rotation", { token, error: errText(err) });
           continue;
         }
         s.liveTokens++;
@@ -371,8 +432,13 @@ export function createKeeper(deps: KeeperDeps) {
         let done = doneRounds.get(t);
         if (!done) doneRounds.set(t, (done = new Set()));
         for (const target of done) if (target < from) done.delete(target);
+        let carried = carriedRounds.get(t);
+        if (!carried) carriedRounds.set(t, (carried = new Map()));
+        const targets = [...carried.keys()].filter((x) => x < from).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+        for (let target = from; target <= next; target++) targets.push(target);
 
-        for (let target = from; target <= next && !stop(); target++) {
+        for (const target of targets) {
+          if (stop()) break;
           if (done.has(target)) continue;
           s.roundsChecked++;
           const r = await drive(`round:${t}:${target}`, { token, round: target }, async () => {
@@ -385,8 +451,43 @@ export function createKeeper(deps: KeeperDeps) {
             const outcome = roundNeedsOutcome(v) ? await rot.reader.outcomeOf(v.scheme, rot.governor, token, rotationPollScope(target)) : undefined;
             return planRound(token, target, v, outcome, chainNow, ctx);
           });
-          if (r === "done") done.add(target);
+          if (r === "done") {
+            done.add(target);
+            carried.delete(target);
+            continue;
+          }
+          if (target === next) continue;
+          // Unfinished: keep following it once it leaves the lookback.
+          const c = carried.get(target) ?? { warned: false };
+          carried.set(target, c);
+          if (target < from && !c.warned) {
+            c.warned = true;
+            deps.log("warn", "keeper is following an unfinished round past its lookback", { token, round: target, lookbackRounds });
+          }
         }
+        while (carried.size > MAX_CARRIED) {
+          const oldest = [...carried.keys()].reduce((a, b) => (a < b ? a : b));
+          carried.delete(oldest);
+          deps.log("error", "keeper stopped following an unfinished round", { token, round: oldest, maxCarried: MAX_CARRIED });
+        }
+      }
+
+      // Period-change proposals: close, decrypt the yes/no outcome, execute (or expire).
+      let count = 0n;
+      try {
+        count = await rot.reader.proposalCount();
+      } catch (err) {
+        deps.log("error", "keeper could not read the rotation governor's proposal count", { error: errText(err) });
+      }
+      for (let id = 1n; id <= count && !stop(); id++) {
+        if (donePeriods.has(id)) continue;
+        s.periodProposalsChecked++;
+        const r = await drive(`period:${id}`, { periodProposal: id }, async () => {
+          const p = await rot.reader.periodProposal(id);
+          const outcome = periodProposalNeedsOutcome(p) ? await rot.reader.outcomeOf(p.scheme, rot.governor, p.token, periodPollScope(id)) : undefined;
+          return planPeriodProposal(id, p, outcome, chainNow, ctx);
+        });
+        if (r === "done") donePeriods.add(id);
       }
     };
 

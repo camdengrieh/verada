@@ -120,11 +120,11 @@ address to the upload, and the form should leave it out unless the creator asks 
 | `KEEPER_PRIVATE_KEY` | none | secret, keeper signer (0x + 32 bytes); needs ETH for gas only |
 | `ETH_RPC_URL` | none | secret, Ethereum RPC URL or comma list (viem fallback, JSON-RPC batching). Must serve `eth_getLogs` for at least the last `KEEPER_LOOKBACK_EPOCHS` weeks (a full node with logs, not a pruned or free public endpoint) unless `INDEXER_URL` is set; see "Tally keeper" |
 | `EPOCH_GOVERNOR_ADDRESS`, `VOTING_SCHEME_ADDRESS`, `TAKEOVER_GOVERNOR_ADDRESS` | none | required by the keeper; the scheme is the `ZamaVotingScheme` it decrypts for |
-| `ROTATION_GOVERNOR_ADDRESS` | none | live mode's `RotationGovernor`: the keeper also drives live tokens' rotation rounds (see "Tally keeper", step 2). Unset: rounds are left alone |
+| `ROTATION_GOVERNOR_ADDRESS` | none | live mode's `RotationGovernor`: the keeper also drives live tokens' rotation rounds and the governor's period-change proposals (see "Tally keeper", step 2). Unset: both are left alone |
 | `FACTORY_ADDRESS`, `FACTORY_DEPLOY_BLOCK` | none | keeper token discovery fallback (`TokenCreated` logs) when the indexer is down; both needed. `FACTORY_ADDRESS` alone also locates the LP locker for the idle check (without it every epoch is opened) |
 | `KEEPER_MAX_TX_PER_RUN` | `10` | transactions per run (dry run: planned transactions) |
 | `KEEPER_LOOKBACK_EPOCHS` | `4` | epochs `[current - n, current)` checked per token |
-| `KEEPER_LOOKBACK_ROUNDS` | `24` | rotation rounds `[next - n, next]` checked per live token, `next = currentRotation + 1` (1 to 720) |
+| `KEEPER_LOOKBACK_ROUNDS` | `24` | rotation rounds `[next - n, next]` checked per live token, `next = currentRotation + 1` (1 to 720); an unfinished round seen in that range is followed past it while the process runs |
 | `KEEPER_IDLE_EPOCHS` | `2` | a token with no fees, ballots, curation-skip request, pin change or launch in epochs `[current - n, current]` and no uncollected LP fees is idle and its current epoch is not opened; `0` opens every epoch |
 | `KEEPER_INDEXER_MAX_LAG_SECONDS` | `600` | when the indexer's last indexed block (Ponder `/status`) is older than this, the idle check is off for the run and every epoch is opened |
 | `KEEPER_INTERVAL_SECONDS` | `300` | keeper run interval |
@@ -177,8 +177,11 @@ backoff timers.
 2. Rotation rounds of live tokens, with `ROTATION_GOVERNOR_ADDRESS` (before the weekly steps: a
    round's windows are minutes to hours). Live tokens come from the same token list as weekly ones
    (indexer `/api/tokens`, or the factory's `TokenCreated` logs): a token is live when
-   `RotationGovernor.isRegistered` says so, which is read once per live token and every run for
-   the others. For each live token, with `next = currentRotation + 1`, the rounds
+   `RotationGovernor.isRegistered` says so, and weekly when `EpochGovernor.isRegistered` does. The
+   factory registers each token with exactly one of them in its creation transaction, so both
+   answers are read once per token (concurrently, so the RPC batches them); only a token
+   registered with neither yet (an RPC behind the indexer) is re-checked each run. For each live
+   token, with `next = currentRotation + 1`, the rounds
    `[next - KEEPER_LOOKBACK_ROUNDS, next]`, oldest first, skipping rounds already in a final state:
    - round `next`, not prepared, before its vote end: prepared with the SDK's `planRoundOpening`,
      the weekly planner (`CatalogBallotLib`: pins, curated picks, rotation draws seeded by the
@@ -190,7 +193,14 @@ backoff timers.
      cannot be fetched the step fails with `CuratedPicksUnavailable` until the round's curation
      grace ends (`CatalogBallotBuilder.curationGraceEnd`: `min(6 h, vote window / 3)` from the
      vote start, 15 minutes for hourly rotations), and the first attempt after it prepares the
-     round with rotation only (see "Failure handling");
+     round with rotation only (see "Failure handling"). The entries come from the round's own
+     catalogue version, the one in effect at the start of that weekly epoch (`poolOf`), which
+     every round keeps until the next epoch even when a new version is published mid-week; the
+     keeper asks the indexer for it by root (`/api/catalog/entries?root=`). After a mid-week
+     `setVersion`, the indexer must keep serving the previous snapshot as well
+     (`CATALOG_SOURCE=<new>,<previous>`, see `services/indexer/README.md`) until the next weekly
+     epoch starts; otherwise every remaining round of that week fails with `CatalogMismatch`
+     (`indexer serves no catalogue snapshot with root ...`) and gets no ballot;
    - open, voting ended, with ballots: `closeRound` (below the governor's `minVoters` this ends the
      round `NoChange`, with nothing decrypted). Without ballots the round is left open: nothing
      would change and nothing is decrypted, so the transaction is saved, as for an epoch without
@@ -199,8 +209,25 @@ backoff timers.
      value a rotation poll ever reveals) → Zama `publicDecrypt` → `submitOutcome`;
    - closed, outcome final: `finalizeRound` (the winner applies from the next rotation boundary).
    A round never prepared, a final round, or an open round that ended without ballots is never read
-   again. Rounds older than the lookback are not looked at; past rounds can no longer change the
-   cause (a late finalize is `Stale`).
+   again. A round that leaves the lookback unfinished (closed, its outcome not decrypted or not
+   finalized, for example during a Zama relayer outage or with the keeper account out of ETH) is
+   still followed until it is final, and logged once at `warn` (`keeper is following an
+   unfinished round past its lookback`): a late `finalizeRound` is `Stale` only when a later
+   round of the token was applied first, otherwise it still applies the voted winner, from the
+   next boundary. At most 64 such rounds are followed per token; dropping one logs `keeper
+   stopped following an unfinished round` at `error`. This list lives in memory: after a restart
+   the keeper only finds rounds inside the lookback, so after a long outage raise
+   `KEEPER_LOOKBACK_ROUNDS` (or call `closeRound` / `finalizeRound` by hand) before restarting.
+
+   Then the rotation governor's period-change proposals (`proposalCount`, ids from 1), driven like
+   takeovers. `Ended`: `closePeriodProposal` (below `minVoters` this defeats it, with nothing
+   decrypted). `Closed`, outcome not final: the scheme's `outcomeHandle` for scope
+   `PollScopeLib.encode(2, id)` → `publicDecrypt` → `submitOutcome`. `Closed`, outcome final:
+   `executePeriodProposal` (schedules the new period when FOR won). `Closed` past its
+   `executionDeadline` without a final outcome (another scheme, or a relayer outage longer than
+   the execution window): `executePeriodProposal`, which expires it and frees the token's slot
+   for that period. `Active` waits; `Defeated`, `Executed`, `Expired`, `Canceled` are never read
+   again.
 3. The current epoch's ballot, for every registered token, when it is not prepared. Ballots are
    rejected until the epoch is opened, and nothing opens it but this step (or a volunteer). When
    the ballot needs rotation draws (pins do not fill it and the focus pool is not empty) the keeper
@@ -273,7 +300,11 @@ prepares the ballot with rotation only, so it comes within one `KEEPER_INTERVAL_
 A rotation round is capped the same way at its own curation grace end
 (`CatalogBallotBuilder.curationGraceEnd(voteStart, voteEnd)`) plus 30 s, mirrored in the SDK as
 `roundCurationGraceEnd`; with the default 300-second interval an hourly round whose picks never
-arrive is prepared about 15 to 20 minutes into its 45-minute vote window.
+arrive is prepared about 15 to 20 minutes into its 45-minute vote window. Every round of every
+live token in that agent's focus waits for the same missing picks until the next weekly epoch, so
+for rounds the `CuratedPicksUnavailable` failure logs at `error` only the first time each message
+is seen (it names the agent, the region and the epoch), and at `warn` with
+`awaitingCurationGrace: true` after that.
 Failures log `keeper step failed` at `error` with the item, the step and the decoded revert name
 (never its arguments) or a redacted message (no URLs, no addresses). Alarm on `error` lines
 whose msg starts with `keeper`/`tally keeper` and on `job tally-keeper failed` (whole run failed,
@@ -281,7 +312,8 @@ e.g. RPC down). The one expected failure, `NoVotes` (an epoch without ballots wh
 cause is set), logs at `warn`: the owner fixes it with `EpochGovernor.setDefaultCause`, and the
 backoff keeps it from retrying every run. `keeper reached its per-run transaction cap` (warn) means
 the backlog exceeds the cap; it drains over the next runs. Each run ends with `tally keeper run`
-(counts: txs, decrypted, failed, backedOff, capped, halted, liveTokens, roundsChecked).
+(counts: txs, decrypted, failed, backedOff, capped, halted, liveTokens, roundsChecked,
+periodProposalsChecked).
 
 **Funding.**
 - ETH on the keeper account for gas. Rough costs: `closeEpoch`/`closeProposal` call the scheme's
@@ -303,8 +335,8 @@ the backlog exceeds the cap; it drains over the next runs. Each run ends with `t
   funded; one decryption per closed poll that had ballots (epochs without ballots are never
   decrypted). Unfunded or unauthorized relayer requests show up as `op: "decrypt"` errors.
 
-**Privacy.** The keeper never reads voters or ballots, and for rotation rounds decrypts only the
-winner index, never per-option counts. Logs carry token addresses, epochs, rounds, proposal ids,
+**Privacy.** The keeper never reads voters or ballots, and for rotation rounds and period-change
+proposals decrypts only the winner index, never per-option counts. Logs carry token addresses, epochs, rounds, proposal ids,
 option counts, tx hashes and the keeper's own address.
 
 **Rollout.** Start with `KEEPER_ENABLED=true KEEPER_DRY_RUN=true` and check the `keeper dry run`

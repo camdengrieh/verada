@@ -1,4 +1,4 @@
-import type { RoundStatus } from "@verada/sdk";
+import { periodPollScope, rotationPollScope, type PeriodProposalState, type RoundStatus } from "@verada/sdk";
 import { getAddress, keccak256, toHex, zeroAddress, zeroHash, type Address, type Hex } from "viem";
 import {
   KeeperRevert,
@@ -341,8 +341,34 @@ interface OutcomePoll {
   winner: bigint;
   isFinal: boolean;
 }
-type RoundKind = "openRound" | "prepareRound" | "prepareCuratedRound" | "closeRound" | "finalizeRound" | "submitOutcome";
-const ROUND_KINDS: readonly string[] = ["openRound", "prepareRound", "prepareCuratedRound", "closeRound", "finalizeRound", "submitOutcome"];
+interface FakePeriodProposal {
+  token: Address;
+  /** Stored state; `Active` reads as `Ended` from `end`. */
+  state: PeriodProposalState;
+  end: bigint;
+  executionDeadline: bigint;
+  voters: bigint;
+  scheme: Address;
+}
+type RoundKind =
+  | "openRound"
+  | "prepareRound"
+  | "prepareCuratedRound"
+  | "closeRound"
+  | "finalizeRound"
+  | "submitOutcome"
+  | "closePeriodProposal"
+  | "executePeriodProposal";
+const ROUND_KINDS: readonly string[] = [
+  "openRound",
+  "prepareRound",
+  "prepareCuratedRound",
+  "closeRound",
+  "finalizeRound",
+  "submitOutcome",
+  "closePeriodProposal",
+  "executePeriodProposal",
+];
 
 /**
  * In-memory `RotationGovernor` with an hourly schedule from `anchor` (vote window
@@ -357,7 +383,9 @@ export class FakeRotation {
   now = this.anchor + 4n * FakeRotation.PERIOD + 60n;
   registered = new Set<string>();
   rounds = new Map<string, FakeRound>();
+  /** Outcome polls by `token:scope`, rotation rounds and period proposals alike. */
   outcomes = new Map<string, OutcomePoll>();
+  periodProposals = new Map<bigint, FakePeriodProposal>();
   minVoters = 1n;
   /** Models usable curations: until the grace ends a round needs `prepareCuratedRound`. */
   curatedUntilGrace = false;
@@ -396,11 +424,41 @@ export class FakeRotation {
   /** A round opened earlier with `voters` ballots whose hidden winner is option `winner`. */
   openRound(t: Address, target: bigint, voters: bigint, winner = 0n, scheme: Address = ZAMA) {
     Object.assign(this.roundOf(t, target), { status: "Open", voteEnd: this.window(target).voteEnd, voters, scheme });
-    this.outcomes.set(`${t}:${target}`.toLowerCase(), { handle: zeroHash, winner, isFinal: false });
+    this.outcomes.set(this.okey(t, rotationPollScope(target)), { handle: zeroHash, winner, isFinal: false });
+  }
+
+  /** A period-change proposal voting until `end` (seconds) with `voters` ballots; `winner` 1 is FOR. */
+  proposePeriod(t: Address, end: bigint, voters: bigint, winner = 1n, opts: { executionWindow?: bigint; scheme?: Address } = {}) {
+    const id = BigInt(this.periodProposals.size + 1);
+    this.periodProposals.set(id, {
+      token: t,
+      state: "Active",
+      end,
+      executionDeadline: end + (opts.executionWindow ?? 3n * 86_400n),
+      voters,
+      scheme: opts.scheme ?? ZAMA,
+    });
+    this.outcomes.set(this.okey(t, periodPollScope(id)), { handle: zeroHash, winner, isFinal: false });
+    return id;
+  }
+
+  periodState(id: bigint): PeriodProposalState {
+    const p = this.periodProposals.get(id);
+    if (!p) return "None";
+    return p.state === "Active" && this.now >= p.end ? "Ended" : p.state;
+  }
+
+  private okey(t: Address, scope: bigint) {
+    return `${t}:${scope}`.toLowerCase();
   }
 
   outcomeOfRound(t: Address, target: bigint) {
-    return this.outcomes.get(`${t}:${target}`.toLowerCase());
+    return this.outcomes.get(this.okey(t, rotationPollScope(target)));
+  }
+
+  outcomeOfPeriod(id: bigint) {
+    const p = this.periodProposals.get(id);
+    return p && this.outcomes.get(this.okey(p.token, periodPollScope(id)));
   }
 
   winnerOf(h: Hex): bigint | undefined {
@@ -408,10 +466,6 @@ export class FakeRotation {
     return undefined;
   }
 
-  private targetOf(scope: bigint): bigint {
-    if (scope >> 248n !== 1n) throw new Error("not a rotation scope");
-    return scope & ((1n << 64n) - 1n);
-  }
 
   reader(): RotationReader {
     const r = <T>(v: T) => {
@@ -427,11 +481,16 @@ export class FakeRotation {
         return r(view);
       },
       outcomeOf: (scheme, governor, t, scope) => {
-        const o = this.outcomeOfRound(t, this.targetOf(scope));
+        const o = this.outcomes.get(this.okey(t, scope));
         return r({ isFinal: o?.isFinal ?? false, winner: o?.isFinal ? Number(o.winner) : 255 });
       },
-      outcomeHandle: (scheme, governor, t, scope) => r(this.outcomeOfRound(t, this.targetOf(scope))?.handle ?? zeroHash),
+      outcomeHandle: (scheme, governor, t, scope) => r(this.outcomes.get(this.okey(t, scope))?.handle ?? zeroHash),
       now: () => r(this.now),
+      proposalCount: () => r(BigInt(this.periodProposals.size)),
+      periodProposal: (id) => {
+        const p = this.periodProposals.get(id);
+        return r({ token: p?.token ?? zeroAddress, state: this.periodState(id), scheme: p?.scheme ?? zeroAddress, executionDeadline: p?.executionDeadline ?? 0n });
+      },
     };
   }
 
@@ -468,8 +527,7 @@ export class FakeRotation {
       }
       case "submitOutcome": {
         if (!sameAddress(a.governor, RG)) throw revert("PollNotClosed");
-        const target = this.targetOf(a.scope);
-        const o = this.outcomeOfRound(a.token, target);
+        const o = this.outcomes.get(this.okey(a.token, a.scope));
         if (!o || o.handle === zeroHash) throw revert("PollNotClosed");
         if (o.isFinal) throw revert("TallyAlreadyFinal");
         if ((a.cleartexts.length - 2) / 2 !== 32) throw revert("InvalidTallyProof");
@@ -483,6 +541,30 @@ export class FakeRotation {
         if (r.status !== "Closed") throw revert("RoundNotClosed");
         if (!this.outcomeOfRound(a.token, a.target)?.isFinal) throw revert("TallyNotFinal");
         if (!dry) r.status = "Applied";
+        return;
+      }
+      case "closePeriodProposal": {
+        const p = this.periodProposals.get(a.id);
+        if (!p) throw revert("UnknownProposal");
+        if (this.periodState(a.id) !== "Ended") throw revert("NotClosable");
+        if (dry) return;
+        if (p.voters === 0n || p.voters < this.minVoters) {
+          p.state = "Defeated";
+          return;
+        }
+        p.state = "Closed";
+        this.outcomeOfPeriod(a.id)!.handle = keccak256(toHex(`period-outcome-${++this.seq}`));
+        return;
+      }
+      case "executePeriodProposal": {
+        const p = this.periodProposals.get(a.id);
+        if (!p) throw revert("UnknownProposal");
+        if (this.periodState(a.id) !== "Closed") throw revert("NotExecutable");
+        const o = this.outcomeOfPeriod(a.id)!;
+        const late = this.now > p.executionDeadline;
+        if (!o.isFinal && !late) throw revert("TallyNotFinal");
+        if (dry) return;
+        p.state = !o.isFinal || late ? "Expired" : o.winner === 1n ? "Executed" : "Defeated";
         return;
       }
     }
