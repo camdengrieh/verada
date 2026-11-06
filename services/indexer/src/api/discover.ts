@@ -1,4 +1,4 @@
-import { ALL_CATEGORIES_MASK, ALL_REGIONS_MASK, categorySlugs, regionSlugs } from "@varada/sdk";
+import { ALL_CATEGORIES_MASK, ALL_REGIONS_MASK, categorySlugs, donationAssetOrDefault, regionSlugs, type DonationAsset } from "@varada/sdk";
 import type { Hex } from "viem";
 import { periodLength } from "../rotation-schedule";
 import type { TokenRow } from "./types";
@@ -90,9 +90,11 @@ export interface DiscoverItem {
   logoRef: Hex | null;
   creator: Hex;
   feeBps: number;
+  /** Asset `raised`, `platformFees` and every donation are in: 'usdc' (6 decimals) or 'eth' (18). */
+  donationAsset: DonationAsset;
   createdAt: bigint;
   focus: { categoryMask: bigint; regionMask: number; categories: string[]; regions: string[] } | null;
-  /** USDC (6 decimals) credited to causes so far. */
+  /** Donation-asset units credited to causes so far. */
   raised: bigint;
   platformFees: bigint;
   mode: DiscoverMode;
@@ -167,6 +169,7 @@ export function joinDiscover(src: DiscoverSource, nowSec: bigint): DiscoverItem[
         logoRef: t.logoRef,
         creator: t.creator,
         feeBps: t.feeBps,
+        donationAsset: donationAssetOrDefault(t.donationAsset),
         createdAt: t.createdAt,
         focus:
           t.categoryMask !== null && t.regionMask !== null

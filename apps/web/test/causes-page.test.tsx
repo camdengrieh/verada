@@ -54,8 +54,8 @@ beforeEach(() => {
 describe("leaderboardEntries", () => {
   it("names causes from the catalogue and converts USDC to dollars", () => {
     const [a, b] = leaderboardEntries([
-      { rank: 1, causeId: "0xca1", donated: 12_500_000n, donations: 1, tokens: 1, org: { orgId: "0x1", name: "Food Bank", ein: null, country: null, categories: ["homelessness"], regions: [] } },
-      { rank: 2, causeId: "0x1234567890abcdef1234", donated: 1n, donations: 3, tokens: 2, org: null },
+      { rank: 1, causeId: "0xca1", donated: 12_500_000n, donatedEth: 0n, donations: 1, tokens: 1, org: { orgId: "0x1", name: "Food Bank", ein: null, country: null, categories: ["homelessness"], regions: [] } },
+      { rank: 2, causeId: "0x1234567890abcdef1234", donated: 1n, donatedEth: 0n, donations: 3, tokens: 2, org: null },
     ]);
     expect(a).toMatchObject({ name: "Food Bank", raised: 12.5, cause: "homeless", sub: "1 gift from 1 coin" });
     expect(b!.name).toMatch(/^Cause 0x1234/);

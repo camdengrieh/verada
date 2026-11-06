@@ -58,7 +58,7 @@ export function LaunchWizard() {
   const [attempted, setAttempted] = useState<ReadonlySet<number>>(new Set());
   const [stage, setStage] = useState<"idle" | "metadata" | "wallet">("idle");
   const [launchError, setLaunchError] = useState<string>();
-  const [launchedAs, setLaunchedAs] = useState<{ name: string; symbol: string; label: string; live: boolean; rotation?: string }>();
+  const [launchedAs, setLaunchedAs] = useState<{ name: string; symbol: string; label: string; live: boolean; rotation?: string; donationAsset: "usdc" | "eth" }>();
 
   // ---- reads (public data only: nothing here is keyed by the visitor)
 
@@ -217,7 +217,7 @@ export function LaunchWizard() {
         metadataURI = (await new PublisherClient(config.publisherUrl).uploadMetadata(doc.doc)).uri;
       }
       setStage("wallet");
-      setLaunchedAs({ name: parsed.params.name, symbol: parsed.params.symbol, label: parsed.params.label, live: Boolean(parsed.live), rotation: ws.input.rotation });
+      setLaunchedAs({ name: parsed.params.name, symbol: parsed.params.symbol, label: parsed.params.label, live: Boolean(parsed.live), rotation: ws.input.rotation, donationAsset: ws.input.donationAsset ?? "usdc" });
       const c = launchCall(factory, parsed.params, metadataURI, parsed.live);
       await tx.send({ ...c, chainId: config.chainId } as never);
     } catch (e) {
@@ -275,7 +275,7 @@ export function LaunchWizard() {
       content: <PairStep {...stepProps(2)} assets={quotes.assets} loading={quotes.isLoading} marketsLoading={quotes.marketsLoading} failed={Boolean(quotes.error)} retry={quotes.refetch} />,
     },
     { ...STEPS[3], content: <FocusStep {...stepProps(3)} summary={summaryQuery.data} /> },
-    { ...STEPS[4], content: <FeesStep {...stepProps(4)} /> },
+    { ...STEPS[4], content: <FeesStep {...stepProps(4)} quoteDepthUsd={quote?.routeDepthUsd ?? null} /> },
     {
       ...STEPS[5],
       content: <ReviewStep state={ws} quote={quote} causeName={causeName} gas={gas} onEdit={goTo} parseError={parseError} txError={txError} onRerollSalt={rerollSalt} />,

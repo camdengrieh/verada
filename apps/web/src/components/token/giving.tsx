@@ -15,7 +15,8 @@ import { ballotMix, causeName, useCauses, useEpochView } from "@/components/epoc
 import { useAppConfig, useDeps } from "@/components/providers";
 import { agentPath, agentsForFocus, listAgents } from "@/lib/agents";
 import type { TokenDetail, TokenFeeTotals } from "@/lib/indexer";
-import { causeNameOfOrg, poolFigures, usdcToUsd, type LiveView } from "@/lib/token-data";
+import { causeNameOfOrg, poolFigures, usdcToUsd, type DonationUnit, type LiveView, USDC_UNIT } from "@/lib/token-data";
+import { useDonationUnit } from "@/hooks/use-donation-unit";
 import { untilText, usdText } from "@/lib/token-view";
 import { shownOptionSources } from "@/components/epoch-panel";
 import { ballotOptions } from "@/lib/profile";
@@ -26,6 +27,7 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
   const config = useAppConfig();
   const view = useEpochView(token);
   const agents = useAgentsFor(detail);
+  const { unit } = useDonationUnit(detail.donationAsset);
   if (!config.governorAddress || !view.data) return null;
   const { epoch, detail: ed } = view.data;
   const pool = poolFigures(ed);
@@ -36,7 +38,7 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
   const closing = untilText(ed.end, Date.now());
   const curator = agents[0]?.ensName || undefined;
   const voteLabel = ed.poll?.closed || !closing ? "See the result" : "Vote privately";
-  const common = { amount: usdText(usdcToUsd(pool.total)), attributed: usdText(usdcToUsd(pool.earned)), carriedForward: usdText(usdcToUsd(pool.carriedIn)) };
+  const common = { amount: usdText(usdcToUsd(pool.total, unit)), attributed: usdText(usdcToUsd(pool.earned, unit)), carriedForward: usdText(usdcToUsd(pool.carriedIn, unit)) };
 
   if (mix) {
     return <CausePoolCard epoch={Number(epoch)} countdown={closing ? `closes in ${closing}` : "voting closed"} {...common} ballot={mix} curator={curator} onVote={onVote} voteLabel={voteLabel} />;
@@ -44,7 +46,7 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
   return (
     <PoolMeter
       epoch={Number(epoch)}
-      amount={usdcToUsd(pool.total)}
+      amount={usdcToUsd(pool.total, unit)}
       startsAt={ed.start * 1000}
       endsAt={ed.end * 1000}
       attributed={common.attributed}
@@ -58,7 +60,7 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
 }
 
 /** A live-donation token's rotation: who is being given to now and when it changes. */
-export function LiveSummary({ live }: { live: LiveView }) {
+export function LiveSummary({ live, unit = USDC_UNIT }: { live: LiveView; unit?: DonationUnit }) {
   const causes = useCauses();
   const ids = [live.designatedCause, live.nextCause?.causeId].filter((x): x is string => Boolean(x));
   const names = useCatalogNames(ids);
@@ -93,25 +95,29 @@ export function LiveSummary({ live }: { live: LiveView }) {
       <dl className="m-0 grid grid-cols-2 gap-3 border-t border-paper/20 pt-3 text-sm">
         <div>
           <dt className="text-paper/70">Donated</dt>
-          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.donated))}</dd>
+          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.donated, unit))}</dd>
         </div>
         <div>
           <dt className="text-paper/70">Waiting to go out</dt>
-          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.pending))}</dd>
+          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.pending, unit))}</dd>
         </div>
       </dl>
     </Card>
   );
 }
 
-export function FeeSplit({ feeTotals }: { feeTotals: TokenFeeTotals | null | undefined }) {
+export function FeeSplit({ feeTotals, unit = USDC_UNIT, symbol = "USDC", priced = true }: { feeTotals: TokenFeeTotals | null | undefined; unit?: DonationUnit; symbol?: string; priced?: boolean }) {
   return (
     <Card className="gap-3 p-5">
       <h2 className="m-0 font-sans text-base font-semibold">Where each trading fee goes</h2>
+      <p className="m-0 text-sm text-ink-soft">
+        Donations paid in {symbol}
+        {priced ? "" : ". The ETH price is unavailable, so dollar amounts are not shown."}
+      </p>
       <FeeSplitBar
         causeShare={90}
-        causeAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.causeAmount))) : undefined}
-        platformAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.platformAmount))) : undefined}
+        causeAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.causeAmount), unit)) : undefined}
+        platformAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.platformAmount), unit)) : undefined}
       />
     </Card>
   );

@@ -6,7 +6,8 @@ import type { QuoteKind } from "@varada/ui/components/varada/stock-logo";
 import type { TokenSummary as CardToken } from "@varada/ui/components/varada/token-card";
 import type { DiscoverQuery, DiscoverToken } from "./discover-client";
 import { usdValue, type UsdQuote, type UsdValue } from "@varada/sdk";
-import { formatQuote, formatUsdc, formatUsdValue, unitsToNumber } from "./format";
+import { formatDonation, formatQuote, formatUsdValue, unitsToNumber } from "./format";
+import { usdcScaled } from "./donation-asset";
 import type { AppQuoteAsset } from "./quote-assets";
 import { describeQuoteAsset, findQuote } from "./quote-assets";
 
@@ -153,8 +154,10 @@ export interface CardContext {
   assets: readonly AppQuoteAsset[];
   /** Logo of a token from its Swarm reference. */
   logo(ref: string | null): ImageSource | undefined;
-  /** Largest `raised` on the page; the bar shows each token against it. */
+  /** Largest `raised` on the page in USDC-scaled units ({@link raisedScaled}); the bar shows each token against it. */
   maxRaised: bigint;
+  /** USD per ETH, for tokens that donate in ETH. */
+  ethUsd?: number | null;
   /** USD per quote asset from the shared pricing layer; absent or unpriced assets show in their own units. */
   usd?: (quote: string | null | undefined) => UsdQuote | undefined;
 }
@@ -209,8 +212,8 @@ export function toCardToken(t: DiscoverToken, ctx: CardContext): CardToken {
     marketCap: cap === null ? DASH : quoteAmountText(cap, q.symbol, m?.quote, ctx),
     volume24h: m?.quote ? quoteAmountText(unitsToNumber(m.volume24hQuote, qd), q.symbol, m.quote, ctx) : DASH,
     liquidity: m?.quote ? quoteAmountText(unitsToNumber(m.quoteInPool, qd), q.symbol, m.quote, ctx) : DASH,
-    raised: formatUsdc(t.raised),
-    raisedPct: ctx.maxRaised > 0n ? Number((t.raised * 100n) / ctx.maxRaised) : 0,
+    raised: formatDonation(t.raised, t.donationAsset, ctx.ethUsd),
+    raisedPct: ctx.maxRaised > 0n ? Number((raisedScaled(t, ctx.ethUsd) * 100n) / ctx.maxRaised) : 0,
   };
 }
 
@@ -219,6 +222,14 @@ export const shortAddr = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a
 /** The token's page, relative to the site root. */
 export const tokenPath = (address: string) => `token/?address=${address}`;
 
-export function maxRaisedOf(tokens: readonly Pick<DiscoverToken, "raised">[]): bigint {
-  return tokens.reduce((m, t) => (t.raised > m ? t.raised : m), 0n);
+/** `raised` in USDC base units of equal dollar value, so tokens that donate in ETH and in USDC compare. */
+export function raisedScaled(t: Pick<DiscoverToken, "raised" | "donationAsset">, ethUsd: number | null | undefined): bigint {
+  return usdcScaled(t.raised, t.donationAsset, ethUsd);
+}
+
+export function maxRaisedOf(tokens: readonly Pick<DiscoverToken, "raised" | "donationAsset">[], ethUsd?: number | null): bigint {
+  return tokens.reduce((m, t) => {
+    const r = raisedScaled(t, ethUsd);
+    return r > m ? r : m;
+  }, 0n);
 }

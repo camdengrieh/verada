@@ -1,6 +1,7 @@
 import { db } from "ponder:api";
 import * as rawSchema from "ponder:schema";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, lt, lte, or, sql } from "ponder";
+import { donationAssetOrDefault } from "@varada/sdk";
 import type { Hex } from "viem";
 import type { Cursor } from "./cursor";
 import {
@@ -70,6 +71,7 @@ const SPECS: Record<ActivityKind, Spec> = {
         hook: r.hook,
         lpTokenId: r.lpTokenId,
         feeBps: r.feeBps,
+        donationAsset: donationAssetOrDefault(r.donationAsset),
         metadataUri: r.metadataUri,
         blockNumber: r.createdBlock,
       },
@@ -348,7 +350,21 @@ async function listActivity(q: ActivityQuery): Promise<ActivityItem[]> {
       return rows.map((r: unknown) => spec.toItem(r));
     }),
   );
-  return parts.flat().sort(cmp).slice(0, q.limit);
+  const items = parts.flat().sort(cmp).slice(0, q.limit);
+  return withDonationAsset(items);
+}
+
+/**
+ * Tags every token-keyed item with `data.donationAsset` ('usdc' | 'eth'), the unit of its money
+ * amounts (fees, credits, donations, settlements). One query for all tokens on the page. Trades
+ * carry quote-asset amounts and the tag is unused there.
+ */
+async function withDonationAsset(items: ActivityItem[]): Promise<ActivityItem[]> {
+  const tokens = [...new Set(items.filter((i) => i.data.donationAsset === undefined).map((i) => i.token))];
+  if (tokens.length === 0) return items;
+  const rows = await db.select({ address: token.address, donationAsset: token.donationAsset }).from(token).where(inArray(token.address, tokens));
+  const by = new Map(rows.map((r) => [r.address.toLowerCase(), donationAssetOrDefault(r.donationAsset)]));
+  return items.map((i) => (i.data.donationAsset === undefined ? { ...i, data: { ...i.data, donationAsset: by.get(i.token.toLowerCase()) ?? "usdc" } } : i));
 }
 
 const big = (v: unknown) => BigInt((v ?? 0) as string | number | bigint);

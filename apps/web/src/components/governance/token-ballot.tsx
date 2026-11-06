@@ -1,5 +1,6 @@
 "use client";
 
+import { useDonationUnit } from "@/hooks/use-donation-unit";
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@varada/ui/components/ui/badge";
 import { Button } from "@varada/ui/components/ui/button";
@@ -100,6 +101,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
   });
   const epoch = view.data?.epoch;
   const ed = view.data?.detail ?? null;
+  const donation = useDonationUnit(td?.donationAsset ?? token.donationAsset);
   const { options, frozen } = ballotOptions({
     prepared: Boolean(ed?.prepared || ed?.poll?.opened),
     epochOptions: ed?.options ?? [],
@@ -197,7 +199,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
 
   const results = tallyResults(options, ed?.poll?.isFinal ? ed.poll.counts : null);
   const winnerId = ed?.winningCause ?? null;
-  const paid = typeof ed?.donatedAmount === "string" && /^\d+$/.test(ed.donatedAmount) && BigInt(ed.donatedAmount) > 0n ? usdcToUsd(ed.donatedAmount) : null;
+  const paid = typeof ed?.donatedAmount === "string" && /^\d+$/.test(ed.donatedAmount) && BigInt(ed.donatedAmount) > 0n ? usdcToUsd(ed.donatedAmount, donation.unit) : null;
 
   function startVote(optionId: string) {
     setChoiceId(optionId);
@@ -365,7 +367,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
           {winnerId && (
             <p className="m-0 text-sm text-ink-soft">
               {ed?.finalized ? "Paid to" : "Winning cause"}: <strong className="text-ink">{nameOf(winnerId)}</strong>
-              {paid !== null ? ` · ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(paid)} USDC` : ""}
+              {paid !== null ? ` · ${new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(paid)} ${donation.symbol}` : ""}
             </p>
           )}
         </>

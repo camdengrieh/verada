@@ -6,6 +6,7 @@ import {
   REGIONS,
   categoryMaskOf,
   categorySlugs,
+  donationAssetOrDefault,
   agentByLabel,
   effectiveBallotSize,
   MAX_BALLOT_OPTIONS,
@@ -24,7 +25,7 @@ import { type Cursor, decodeCursor, decodeOffset, encodeCursor, encodeOffset } f
 import { pickProofs, verifyReport, type AgentsRepo, type ReportFetcher } from "./agents";
 import type { CatalogStore } from "./catalog";
 import type { CauseSearch } from "./search";
-import { type CauseTotalsRepo, rankCauseTotals, totalsByCategory } from "./cause-totals";
+import { type CauseTotalsRepo, DEFAULT_ETH_USD_REFERENCE, rankCauseTotals, totalsByCategory } from "./cause-totals";
 import {
   corsMiddleware,
   RateLimiter,
@@ -71,6 +72,8 @@ export interface ApiDeps {
   live?: LiveRepo;
   /** Donations per cause; `/api/causes/leaderboard` answers 503 without it. */
   causeTotals?: CauseTotalsRepo;
+  /** USD per ETH used only to order the cause leaderboard; clients convert with a live price. */
+  ethUsdReference?: number;
   /** Trades and holders; `/api/tokens/:address/{trades,holders,market}` answer 503 without it. */
   market?: MarketRepo;
   /** Token list with market summaries; `/api/discover` answers 503 without it. */
@@ -623,6 +626,8 @@ export function createApi(deps: ApiDeps): Hono {
       c,
       {
         ...found.token,
+        // 'usdc' | 'eth': the unit of every amount of this token (fees, credits, donations).
+        donationAsset: donationAssetOrDefault(found.token.donationAsset),
         feeTotals: found.feeTotals,
         profile: profileOf(found.token, found.textRecords),
         shortlist: own.inEffect.length > 0 ? own.inEffect : null,
@@ -870,7 +875,8 @@ export function createApi(deps: ApiDeps): Hono {
       if (o === null) return bad(c, [{ path: "cursor", message: "invalid cursor" }]);
       offset = o;
     }
-    const ranked = rankCauseTotals(await deps.causeTotals.totals());
+    // Ranking mixes USDC and ETH gifts at a reference price (display re-ranks with the live price).
+    const ranked = rankCauseTotals(await deps.causeTotals.totals(), deps.ethUsdReference ?? DEFAULT_ETH_USD_REFERENCE);
     const pageRows = ranked.slice(offset, offset + p.data.limit);
     const orgs = new Map(
       (deps.catalog?.causes(pageRows.map((r) => r.causeId)) ?? []).map((o) => [o.causeId.toLowerCase(), o]),
@@ -883,10 +889,15 @@ export function createApi(deps: ApiDeps): Hono {
       {
         decimals: 6,
         currency: "USDC",
+        // `donated` is USDC (6 decimals) given by USDC-donation tokens; `donatedEth` is wei given by
+        // ETH-donation tokens. USD = donated / 1e6 + donatedEth / 1e18 * ETH price.
+        ethDecimals: 18,
+        ethUsdReference: deps.ethUsdReference ?? DEFAULT_ETH_USD_REFERENCE,
         totals: {
           causes: ranked.length,
           donations: ranked.reduce((n, r) => n + r.donations, 0),
           donated: ranked.reduce((n, r) => n + r.donated, 0n),
+          donatedEth: ranked.reduce((n, r) => n + r.donatedEth, 0n),
         },
         items: pageRows.map((r, i) => {
           const o = orgs.get(r.causeId.toLowerCase());
@@ -894,6 +905,7 @@ export function createApi(deps: ApiDeps): Hono {
             rank: offset + i + 1,
             causeId: r.causeId,
             donated: r.donated,
+            donatedEth: r.donatedEth,
             donations: r.donations,
             tokens: r.tokens,
             org: o
@@ -902,7 +914,7 @@ export function createApi(deps: ApiDeps): Hono {
           };
         }),
         // Per category through the catalogue; empty while the catalogue is not loaded.
-        byCategory: allOrgs ? totalsByCategory(ranked, (id) => byId.get(id.toLowerCase())) : [],
+        byCategory: allOrgs ? totalsByCategory(ranked, (id) => byId.get(id.toLowerCase()), deps.ethUsdReference ?? DEFAULT_ETH_USD_REFERENCE) : [],
         nextCursor: next < ranked.length ? encodeOffset(next) : null,
       },
       CACHE.causes,

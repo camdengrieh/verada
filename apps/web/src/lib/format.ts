@@ -32,6 +32,17 @@ export function formatUsdc(raw: bigint): string {
   return `$${compactFmt.format(n)}`;
 }
 
+/**
+ * An amount in a token's donation asset: dollars when it can be priced ("$12.4"), else in the
+ * asset itself ("0.004 ETH"). USDC is always dollars; ETH needs `ethUsd` (USD per ETH).
+ */
+export function formatDonation(raw: bigint, asset: "usdc" | "eth", ethUsd?: number | null): string {
+  if (asset === "usdc") return formatUsdc(raw);
+  const eth = unitsToNumber(raw, 18);
+  if (typeof ethUsd === "number" && Number.isFinite(ethUsd) && ethUsd > 0) return formatUsd(eth * ethUsd);
+  return `${eth === 0 ? "0" : formatSmallNumber(eth)} ETH`;
+}
+
 /** USD as a float, same style as {@link formatUsdc}. */
 export function formatUsd(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "$0";

@@ -64,6 +64,8 @@ export interface TokenRow {
   createdAt: bigint;
   createdBlock: bigint;
   txHash: Hex;
+  /** 0 USDC, 1 ETH. */
+  donationAsset: number;
   name: string;
   symbol: string;
   label: string | null;

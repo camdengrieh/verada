@@ -43,6 +43,7 @@ export const tokens: TokenRow[] = [T1, T2, T3].map((address, i) => ({
   hook: ADDR,
   lpTokenId: BigInt(i + 1),
   feeBps: 300,
+  donationAsset: 0,
   metadataUri: `bzz://meta-${i}`,
   createdAt: BigInt(1000 + i * 10),
   createdBlock: BigInt(100 + i),

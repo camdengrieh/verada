@@ -1,5 +1,5 @@
 /** Client for the indexer HTTP API: JSON, cursor pagination, bigint values as decimal strings. */
-import { isBallotSize } from "@varada/sdk";
+import { donationAssetOrDefault, isBallotSize, type DonationAsset } from "@varada/sdk";
 
 export interface Page<T> {
   items: T[];
@@ -12,6 +12,8 @@ export interface TokenSummary {
   symbol: string;
   creator?: string;
   feeBps?: number;
+  /** Asset every fee, credit and donation amount of the token is in; absent means USDC. */
+  donationAsset?: DonationAsset;
   metadataURI?: string;
   /** ENS label (`<label>.<parent>`), when the indexer has the profile. */
   label?: string;
@@ -305,6 +307,7 @@ export function toToken(v: unknown): TokenSummary | null {
     symbol: str(v.symbol) ?? "",
     creator: str(v.creator),
     feeBps: typeof v.feeBps === "number" ? v.feeBps : undefined,
+    donationAsset: v.donationAsset === undefined ? undefined : donationAssetOrDefault(v.donationAsset),
     metadataURI: str(v.metadataUri) ?? str(v.metadataURI),
     label: str(v.label),
     controller: nonZero(v.controller, ZERO_ADDRESS) ?? undefined,

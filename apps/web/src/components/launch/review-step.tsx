@@ -100,7 +100,7 @@ export function ReviewStep({
           </span>
           {live ? (
             <span className="mt-1 block text-sm font-normal text-ink-soft">
-              First charity: {causeName ?? "chosen"}. Donates once credit reaches <span className="num">{input.donationThreshold}</span> USDC.
+              First charity: {causeName ?? "chosen"}. Donates once credit reaches <span className="num">{input.donationThreshold}</span> {input.donationAsset === "eth" ? "ETH" : "USDC"}.
             </span>
           ) : null}
         </Row>
@@ -134,6 +134,10 @@ export function ReviewStep({
               </>
             ) : null}
           </span>
+        </Row>
+        <Row label="Donation asset" editStep={4} onEdit={onEdit}>
+          {input.donationAsset === "eth" ? "ETH" : "USDC"}
+          <span className="ml-2 font-normal text-ink-soft">fees convert to {input.donationAsset === "eth" ? "ETH (WETH on chain)" : "USDC"} before they are donated</span>
         </Row>
         <Row label="Trading fee" editStep={4} onEdit={onEdit}>
           <span className="num">{(base / 100).toFixed(base % 100 === 0 ? 0 : 2)}%</span>

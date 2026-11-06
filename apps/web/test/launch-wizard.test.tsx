@@ -72,6 +72,28 @@ describe("FeesStep", () => {
   });
 });
 
+describe("FeesStep donation asset", () => {
+  it("offers USDC and ETH, USDC selected by default, with a hint for the pair", () => {
+    render(<FeesStep {...props(base)} />);
+    expect(screen.getByRole("radio", { name: /^USDC/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^ETH/ })).not.toBeChecked();
+    // The default pair is WETH: ETH needs no conversion.
+    expect(screen.getByText(/ETH looks better for this pair/)).toBeInTheDocument();
+  });
+
+  it("choosing ETH sets the asset and restarts the threshold in ETH", () => {
+    const setInput = vi.fn();
+    render(<FeesStep {...props(base, setInput)} />);
+    fireEvent.click(screen.getByRole("radio", { name: /^ETH/ }));
+    expect(setInput).toHaveBeenCalledWith({ donationAsset: "eth", donationThreshold: "0.01" });
+  });
+
+  it("the success screen says what donations are paid in", () => {
+    render(<LaunchSuccess name="N" symbol="N" label="n-coin" token={null} live={false} donationAsset="eth" onAgain={vi.fn()} />);
+    expect(screen.getByText("Donations paid in ETH")).toBeInTheDocument();
+  });
+});
+
 describe("IdentityStep label errors", () => {
   const identity = (state: WizardState, errors: Record<string, string>) =>
     render(<IdentityStep {...props(state)} errors={errors} labelLoading={false} labelFailed={false} labelEdited setLabelEdited={vi.fn()} onLogo={vi.fn()} onLogoBusy={vi.fn()} />);

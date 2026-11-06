@@ -146,6 +146,16 @@ goes through `createAccountClient`. Transactions go through the wallet's RPC (se
   "trades of address X" or "balance of address X" route; a "my trades" view filters the public
   feed in the browser, and a balance is read through `createAccountClient`.
 
+## Donation asset
+
+- **A per-token public setting.** The launch wizard's choice of donation asset (USDC or ETH) is a
+  field of the factory call and a public view (`donationAssetOf`), like the fee and the cause
+  focus. It names no wallet. The indexer stores it on the token row and tags activity items with
+  it; it never sends the visitor's address anywhere.
+- **Dollar figures use the same public pricing layer.** An ETH-donating token's amounts are
+  converted in the browser with the WETH price read from the pools through the private RPC; the
+  cause totals route returns USDC and ETH sums separately and holds no price.
+
 ## Swaps
 
 - **Pool reads are public.** Prices, pool state, fees and quotes (`StateView`, the V4 quoter) carry no
