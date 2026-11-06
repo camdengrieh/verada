@@ -30,9 +30,9 @@ contract AgentVault is IERC1271, ReentrancyGuard {
     uint16 internal constant REGION_SLOTS = 16;
     bytes4 internal constant ERC1271_MAGIC = 0x1626ba7e;
     /// @dev Transient slot: the address allowed to check a signature, set only during
-    ///      `CuratorRegistry.linkAgentWallet`. keccak256("verada.AgentVault.walletLinkVerifier")
+    ///      `CuratorRegistry.linkAgentWallet`. keccak256("varada.AgentVault.walletLinkVerifier")
     bytes32 internal constant _LINK_VERIFIER_SLOT =
-        0xee9ca1a551eadfaca15bfdd16b8efb633291c04f880540fe3162cca058b8cbd0;
+        0xec5aff2c0d8b3f7adff65d7eccf95d703e57e5454f4948c3f8d8f9f24c5e08b4;
 
     ICuratorRegistry public immutable curators;
     uint8 public immutable categoryBit;
