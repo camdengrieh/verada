@@ -13,7 +13,6 @@ export interface RealDb {
   exec(sql: string): Promise<void>;
   close(): Promise<void>;
   /** The drizzle client, also installed as `db` of the `ponder:api` stand-in. */
-  // biome-ignore lint/suspicious/noExplicitAny: driver-specific type
   db: any;
 }
 

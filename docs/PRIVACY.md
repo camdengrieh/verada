@@ -159,6 +159,11 @@ Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/we
   (`/api/activity`, `/api/activity/stream`) carries only the token, cause, org, amount and flags,
   so it adds no address of anyone who traded. The swapper stays visible only in the separate
   public `trade` rows, which already exist.
+- **The `txHash` is a public link.** Each entry carries the hash of the transaction that emitted the
+  donation, and the feed links it to a block explorer. That transaction is public on chain, and when
+  the donation was made inside a swap (`inSwap`) its sender may be the trader. So an entry names no
+  donor itself, but anyone who follows the hash can see who sent the transaction. Entries made by
+  `flush` come from whoever called it. The indexer stores no more than the hash.
 
 ### x402 payers
 

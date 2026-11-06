@@ -10,6 +10,7 @@ import { useQuoteAssets } from "@/lib/use-quote-assets";
 import { Filters } from "./filters";
 import { HomeHero } from "./hero";
 import { useDiscoverList, useDiscoverState, useLiveActivity, useNow, usePlatformStats, useRel, useTokenLogo } from "./hooks";
+import { LiveActivityFeed } from "./live-activity";
 import { LiveGiving, LiveTicker } from "./live-giving";
 import { CadenceFilter, CauseChooser, PairsPanel } from "./panels";
 import { ResultsEmpty, ResultsError, ResultsSkeleton, TokenResults, useResultsView, ViewToggle } from "./token-results";
@@ -146,6 +147,7 @@ export function DiscoverPage() {
       </section>
 
       <LiveGiving live={live} stats={stats.data} statsLoading={stats.isLoading} assets={quotes.assets} />
+      <LiveActivityFeed live={live} />
     </div>
   );
 }

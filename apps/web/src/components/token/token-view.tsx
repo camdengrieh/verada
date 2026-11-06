@@ -24,6 +24,7 @@ import { formatQuotePrice } from "@/lib/token-market";
 import { usdText } from "@/lib/token-view";
 import { usdcToUsd } from "@/lib/token-data";
 import { factoryAbi } from "@/lib/abis";
+import { LiveActivityFeed } from "@/components/discover/live-activity";
 import { AboutTab } from "./about-tab";
 import { CuratedBy, FeeSplit, LiveSummary, PoolSummary } from "./giving";
 import { HoldersTab } from "./holders-tab";
@@ -102,7 +103,7 @@ function useQuoteAddress(token: Address, fromMarket: string | null | undefined):
   return fromMarket ?? (q.data && !/^0x0{40}$/i.test(q.data) ? q.data : null);
 }
 
-type TabId = "trades" | "holders" | "impact" | "governance" | "about" | "manage";
+type TabId = "trades" | "activity" | "holders" | "impact" | "governance" | "about" | "manage";
 
 export function TokenView({ address, token, source }: { address: Address; token: TokenDetail; source: Source | undefined }) {
   const config = useAppConfig();
@@ -228,6 +229,7 @@ export function TokenView({ address, token, source }: { address: Address; token:
           <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)} variant="brush">
             <TabsList scrollable scrollLabels={{ previous: "Earlier tabs", next: "More tabs" }} aria-label="Token sections">
               <TabsTrigger value="trades">Trades</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
               <TabsTrigger value="holders">Holders</TabsTrigger>
               <TabsTrigger value="impact">Impact</TabsTrigger>
               <TabsTrigger value="governance">Governance</TabsTrigger>
@@ -236,6 +238,9 @@ export function TokenView({ address, token, source }: { address: Address; token:
             </TabsList>
             <TabsContent value="trades">
               <TradesTab symbol={symbol} quote={quote} quoteDecimals={quoteDecimals} tape={tape} onTrade={openTrade} />
+            </TabsContent>
+            <TabsContent value="activity">
+              <LiveActivityFeed token={address} symbol={symbol} title="Activity" />
             </TabsContent>
             <TabsContent value="holders">
               <HoldersTab symbol={symbol} holders={holders} summary={summary} />

@@ -105,7 +105,6 @@ const WEEK = 604_800;
 
 let h: ReturnType<typeof createFakeContext>;
 const block = (n: number, ts: number) => ({ number: BigInt(n), timestamp: BigInt(ts) });
-// biome-ignore lint/suspicious/noExplicitAny: test shim for event payloads
 const run = (fn: any, args: object, id = "e1", b = block(1, 100), address: string = GOV, t = tx) =>
   fn({ event: { args, block: b, transaction: t, id, log: { address } }, context: h.context });
 

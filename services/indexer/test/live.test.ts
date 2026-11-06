@@ -75,7 +75,6 @@ const pks = () =>
 
 let h = createFakeContext(pks());
 const block = (n: number, ts: bigint) => ({ number: BigInt(n), timestamp: ts });
-// biome-ignore lint/suspicious/noExplicitAny: test shim for event payloads
 const run = (fn: any, args: object, id: string, ts: bigint, address: string) =>
   fn({ event: { args, block: block(1, ts), transaction: tx, id, log: { address } }, context: h.context });
 

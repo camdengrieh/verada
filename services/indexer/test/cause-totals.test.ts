@@ -9,7 +9,6 @@ import type { Repo } from "../src/api/types";
 
 declare global {
   interface Response {
-    // biome-ignore lint/suspicious/noExplicitAny: test convenience for JSON bodies
     json(): Promise<any>;
   }
 }
