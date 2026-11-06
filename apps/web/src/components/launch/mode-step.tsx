@@ -76,7 +76,7 @@ export function ModeStep({
         <div className="flex flex-col gap-6 rounded-2xl border border-line bg-paper-card p-4 @lg:p-5">
           <Field>
             <FieldLabel id={`${id}-rot`}>Rotation</FieldLabel>
-            <ToggleGroup type="single" aria-labelledby={`${id}-rot`} value={rotation} onValueChange={(v) => setInput({ rotation: v })} className="w-full flex-wrap">
+            <ToggleGroup type="single" aria-labelledby={`${id}-rot`} value={rotation} onValueChange={(v) => v && setInput({ rotation: v })} className="w-full flex-wrap">
               {ROTATIONS.map((r) => (
                 <ToggleGroupItem key={r.key} value={r.key} aria-label={r.label}>
                   {r.key === "week" ? "Weekly" : r.key}

@@ -97,6 +97,13 @@ const PROFILE_FIELD = [
   ["Discord", "discord"],
 ] as const;
 
+/** Why a registry status stops the launch (taken, or reserved for another wallet); undefined when it does not. */
+export function labelBlockedText(label: string, status: LabelStatus, account?: string): string | undefined {
+  if (status.kind === "taken") return `${label} is already taken`;
+  if (status.kind === "reserved" && !sameAddress(status.allowedCreator, account)) return `${label} is reserved`;
+  return undefined;
+}
+
 /** Field errors of the identity step, from the publisher's own rules (one message per field). */
 export function identityErrors(state: WizardState): StepErrors {
   const errors: StepErrors = {};
@@ -111,10 +118,9 @@ export function identityErrors(state: WizardState): StepErrors {
   const label = input.label.trim();
   if (!isValidLabel(label)) {
     errors.label = label ? "Use 3 to 63 characters: a-z, 0-9 and hyphens, not starting or ending with a hyphen" : "Pick an ENS label";
-  } else if (state.labelStatus?.kind === "taken") {
-    errors.label = `${label} is already taken`;
-  } else if (state.labelStatus?.kind === "reserved" && !sameAddress(state.labelStatus.allowedCreator, state.account)) {
-    errors.label = `${label} is reserved`;
+  } else {
+    const blocked = state.labelStatus ? labelBlockedText(label, state.labelStatus, state.account) : undefined;
+    if (blocked) errors.label = blocked;
   }
   if (state.logoUploading) errors.logo = "Wait for the logo upload to finish";
   else if (!state.logoRef && !input.metadataURI.trim()) errors.logo = "Upload a logo (or set a metadata URI under Advanced)";

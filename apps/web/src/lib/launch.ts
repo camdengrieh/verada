@@ -184,7 +184,7 @@ export function parseLaunchInput(input: LaunchInput): ParseResult {
     const cause = (input.initialCause ?? "").trim();
     if (!isHex(cause) || cause.length !== 66 || /^0x0{64}$/.test(cause)) return { ok: false, error: "Pick the charity that receives the first rotation" };
     const amount = parseUsdc(input.donationThreshold ?? DEFAULT_DONATION_THRESHOLD_USDC);
-    if (amount === null) return { ok: false, error: "Donation threshold must be a USDC amount with at most 6 decimals" };
+    if (amount === null) return { ok: false, error: "Donation threshold must be a plain USDC amount such as 25 or 0.5, with at most 6 decimals" };
     if (amount === 0n) return { ok: false, error: "Donation threshold must be above zero: a zero threshold donates on every swap and adds about 105,000 to 150,000 gas to each" };
     if (amount > BigInt(MAX_DONATION_THRESHOLD_USDC) * 1_000_000n) return { ok: false, error: `Donation threshold can be at most ${MAX_DONATION_THRESHOLD_USDC.toLocaleString("en-US")} USDC` };
     live = { initialCause: cause as Hex, rotationPeriod: rotation.value, donationThreshold: amount };
