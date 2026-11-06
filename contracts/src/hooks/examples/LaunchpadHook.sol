@@ -34,8 +34,10 @@ import {TwapOracleHook} from "../oracle/TwapOracleHook.sol";
 ///      function that two or more bases define is re-declared below, listing every base whose
 ///      definition is still open in `override(...)`, with a body that only calls `super`
 ///      (rule 6), so the C3 linearization runs each feature exactly once, in inheritance list
-///      order. Pay the hook fee as claims (`asClaims = true`) for launches: token settlement of
-///      an exact-output buy needs the pool manager to already hold the input currency.
+///      order. With token settlement (`asClaims = false`) the recipient still receives the
+///      input-side fee of exact-output swaps as ERC-6909 claims (`SwapFeeHook` cannot take
+///      input tokens the pool manager may not hold yet, as on a fresh single-sided launch);
+///      `SwapFeeTaken.asClaims` says which form each fee took.
 ///
 ///      Typical launch, all in one factory transaction:
 ///       1. owner: `setPoolInitializer(factory, true)` (once).

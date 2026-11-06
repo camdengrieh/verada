@@ -55,9 +55,14 @@ import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol
 ///     feature per concrete hook unless the concrete hook splits the data itself.
 ///
 ///  6. Concrete hooks. Solidity requires the concrete contract to re-declare every internal
-///     function that two or more of its bases define (BaseHook counts), listing them in
-///     `override(...)`, with the body `return super._x(...)`. The linearization then calls
-///     every feature exactly once.
+///     function that two or more of its bases define, with the body `return super._x(...)`.
+///     The `override(...)` list names exactly the bases that define the function directly and
+///     are not overridden on some inheritance path: every feature that implements it, plus
+///     BaseHook only when at least one inherited base reaches BaseHook's definition without
+///     overriding it (a feature that does not implement that callback). Listing BaseHook when
+///     every path already overrides it fails with error 2353 ("Invalid contract specified in
+///     override list"); leaving out a base that is still open fails with error 4327. The
+///     linearization then calls every feature exactly once.
 abstract contract BaseHook is IHooks {
     /// @notice The pool manager this hook serves.
     IPoolManager public immutable poolManager;

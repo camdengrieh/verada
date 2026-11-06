@@ -21,6 +21,9 @@ import {LinearDecay} from "../libraries/LinearDecay.sol";
 ///      override and merged with other features through `_mergeLpFeeOverride` (higher fee
 ///      wins). A pool without a schedule passes through unchanged and trades at its stored LP
 ///      fee. Flags: `beforeInitialize` (via PoolAdminHook), `beforeSwap`.
+///
+///      Protocol glue that derives pool config itself (no admin call) writes it through
+///      `_setDecayingFee(poolId, ...)`, which applies the same validation as `setDecayingFee`.
 abstract contract DecayingFeeHook is PoolAdminHook {
     /// @notice A pool's fee schedule.
     /// @param startFee Fee in pips at and before `startTime`.
@@ -67,12 +70,25 @@ abstract contract DecayingFeeHook is PoolAdminHook {
         uint32 duration,
         uint40 startTime
     ) external onlyPoolAdmin(key) {
+        _setDecayingFee(key.toId(), startFee, endFee, duration, startTime);
+    }
+
+    /// @dev Validates and stores the schedule of `id` and emits `DecayingFeeSet`, without the
+    ///      pool admin check. The body of `setDecayingFee` (same rules, `startTime == 0` means
+    ///      now); protocol glue calls it to configure a pool from its own rules (for example in
+    ///      `_beforeInitialize`, where the pool is known to be a dynamic-fee pool).
+    function _setDecayingFee(
+        PoolId id,
+        uint24 startFee,
+        uint24 endFee,
+        uint32 duration,
+        uint40 startTime
+    ) internal {
         if (
             endFee > startFee || startFee > LPFeeLibrary.MAX_LP_FEE
                 || duration > _maxDecayDuration() || (duration == 0 && startFee != endFee)
         ) revert InvalidDecayingFee(startFee, endFee, duration);
         if (startTime == 0) startTime = uint40(block.timestamp);
-        PoolId id = key.toId();
         decayingFee[id] = DecayingFee({
             startFee: startFee, endFee: endFee, duration: duration, startTime: startTime, set: true
         });

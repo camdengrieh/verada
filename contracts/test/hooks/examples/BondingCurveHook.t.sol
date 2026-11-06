@@ -378,7 +378,7 @@ contract BondingCurveHookTest is HookTest {
                 CustomRevert.WrappedError.selector,
                 address(hook),
                 IHooks.beforeAddLiquidity.selector,
-                abi.encodeWithSelector(BondingCurveHook.LiquidityNotAllowed.selector),
+                abi.encodeWithSelector(BondingCurveHook.CurveLiquidityDisabled.selector),
                 abi.encodeWithSelector(Hooks.HookCallFailed.selector)
             )
         );

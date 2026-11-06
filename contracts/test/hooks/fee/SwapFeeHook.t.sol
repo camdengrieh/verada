@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Vm} from "forge-std/Vm.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {IUnlockCallback} from "v4-core/interfaces/callback/IUnlockCallback.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
@@ -11,7 +12,7 @@ import {BeforeSwapDelta} from "v4-core/types/BeforeSwapDelta.sol";
 import {Currency, CurrencyLibrary} from "v4-core/types/Currency.sol";
 import {PoolId} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {SwapParams} from "v4-core/types/PoolOperation.sol";
+import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {BaseHook} from "../../../src/hooks/base/BaseHook.sol";
 import {PoolAdminHook} from "../../../src/hooks/base/PoolAdminHook.sol";
@@ -21,12 +22,14 @@ import {HookTest} from "../utils/HookTest.sol";
 
 // ---------------------------------------------------------------------- harnesses
 
-/// @dev SwapFeeHook with an exemption list, a forced rate, a raised setter cap and a record of
-///      the `_onSwapFeeTaken` call.
+/// @dev SwapFeeHook with an exemption list, a forced rate, a forced token settlement, a raised
+///      setter cap, the internal setter exposed without access control and a record of the
+///      `_onSwapFeeTaken` call.
 contract SwapFeeHarness is SwapFeeHook {
     mapping(address => bool) public exempt;
     bool public forceBps;
     uint16 public forcedBps;
+    bool public forceTokens;
 
     uint256 public taken;
     address public lastSender;
@@ -44,6 +47,27 @@ contract SwapFeeHarness is SwapFeeHook {
     function setForcedBps(bool on, uint16 bps) external {
         forceBps = on;
         forcedBps = bps;
+    }
+
+    function setForceTokens(bool on) external {
+        forceTokens = on;
+    }
+
+    /// @dev Protocol-glue path: no pool admin check.
+    function setSwapFeeInternal(PoolId id, uint16 feeBps, address recipient, bool asClaims)
+        external
+    {
+        _setSwapFee(id, feeBps, recipient, asClaims);
+    }
+
+    function _swapFeeAsClaims(PoolKey calldata key, SwapParams calldata params, bool configured)
+        internal
+        view
+        override
+        returns (bool)
+    {
+        if (forceTokens) return false;
+        return super._swapFeeAsClaims(key, params, configured);
     }
 
     function _maxSwapFeeBps() internal pure override returns (uint16) {
@@ -262,6 +286,7 @@ contract SwapFeeHookTest is HookTest {
         address currency;
         address recipient;
         uint256 amount;
+        bool asClaims;
     }
 
     /// @dev SwapFeeTaken events of the last `_swap`.
@@ -287,13 +312,15 @@ contract SwapFeeHookTest is HookTest {
                 );
             }
             if (logs[i].topics[0] == SwapFeeHook.SwapFeeTaken.selector) {
+                (uint256 amount, bool asClaims) = abi.decode(logs[i].data, (uint256, bool));
                 feeEvents.push(
                     FeeEvent({
                         emitter: logs[i].emitter,
                         poolId: logs[i].topics[1],
                         currency: address(uint160(uint256(logs[i].topics[2]))),
                         recipient: address(uint160(uint256(logs[i].topics[3]))),
-                        amount: abi.decode(logs[i].data, (uint256))
+                        amount: amount,
+                        asClaims: asClaims
                     })
                 );
             }
@@ -312,7 +339,8 @@ contract SwapFeeHookTest is HookTest {
         return manager.balanceOf(owner, c.toId());
     }
 
-    /// @dev Asserts that the hook changed only the unspecified side, by exactly `fee`.
+    /// @dev Asserts that the hook changed only the unspecified side, by exactly `fee`, paid as
+    ///      claims when configured or when the fee is on the input side (exact output).
     function _checkShape(bool zeroForOne, int256 amountSpecified, uint16 bps, bool asClaims)
         internal
     {
@@ -335,7 +363,11 @@ contract SwapFeeHookTest is HookTest {
         assertEq(int256(callerUnspec), int256(poolUnspec) - int256(fee), "unspecified minus fee");
         assertEq(exactIn, poolUnspec > 0, "unspecified is output iff exact-in");
 
-        if (asClaims) {
+        bool paidAsClaims = asClaims || !exactIn;
+        assertEq(feeEvents.length, 1, "one SwapFeeTaken");
+        assertEq(feeEvents[0].amount, fee, "event amount");
+        assertEq(feeEvents[0].asClaims, paidAsClaims, "event form");
+        if (paidAsClaims) {
             assertEq(_claims(recipient, unspec) - claimsBefore, fee, "claims to recipient");
             assertEq(unspec.balanceOf(recipient), tokensBefore, "no tokens");
         } else {
@@ -381,12 +413,98 @@ contract SwapFeeHookTest is HookTest {
         _checkShape(false, -1e15, 100, false);
     }
 
-    function test_exactOutZeroForOne_tokens() public {
+    /// @dev Token mode, exact output: the fee is on the input side and is paid as claims.
+    function test_exactOutZeroForOne_tokensModePaysClaims() public {
         _checkShape(true, 1e15, 100, false);
     }
 
-    function test_exactOutOneForZero_tokens() public {
+    function test_exactOutOneForZero_tokensModePaysClaims() public {
         _checkShape(false, 1e15, 100, false);
+    }
+
+    // ------------------------------------------------------------ token mode on a fresh pool
+
+    /// @dev A pool of two new currencies with single-sided liquidity: currency0 above the price
+    ///      (`inCurrency0`) or currency1 below it. The pool manager holds nothing else of them,
+    ///      so it holds none of the side the pool can receive.
+    function _freshSingleSided(bool inCurrency0)
+        internal
+        returns (PoolKey memory key, Currency c0, Currency c1)
+    {
+        Currency a = deployMintAndApproveCurrency();
+        Currency b = deployMintAndApproveCurrency();
+        (c0, c1) = Currency.unwrap(a) < Currency.unwrap(b) ? (a, b) : (b, a);
+        key = PoolKey(c0, c1, 3000, 60, IHooks(address(hook)));
+        manager.initialize(key, SQRT_PRICE_1_1);
+        (int24 lower, int24 upper) = inCurrency0 ? (int24(60), int24(6000)) : (-6000, -60);
+        modifyLiquidityRouter.modifyLiquidity(
+            key, ModifyLiquidityParams(lower, upper, 1e18, 0), ZERO_BYTES
+        );
+        assertEq((inCurrency0 ? c1 : c0).balanceOf(address(manager)), 0, "fresh");
+    }
+
+    /// @dev Token mode on a fresh single-sided pool: the first swap in the only direction the
+    ///      pool can fill. Output-side fees (exact input) are paid as tokens; input-side fees
+    ///      (exact output) as claims, since the pool manager holds none of the input yet.
+    function _checkFreshShape(bool zeroForOne, int256 amountSpecified) internal {
+        (PoolKey memory key, Currency c0, Currency c1) = _freshSingleSided(!zeroForOne);
+        hook.setSwapFee(key, 100, recipient, false);
+        bool exactIn = amountSpecified < 0;
+        bool specifiedIs0 = exactIn == zeroForOne;
+        Currency unspec = specifiedIs0 ? c1 : c0;
+        Currency input = zeroForOne ? c0 : c1;
+        assertEq(input.balanceOf(address(manager)), 0, "manager holds no input");
+
+        Swapped memory s = _swap(key, zeroForOne, amountSpecified);
+
+        (int128 poolUnspec, int128 callerUnspec) =
+            specifiedIs0 ? (s.pool1, s.caller1) : (s.pool0, s.caller0);
+        uint256 fee = _ceilFee(_abs(poolUnspec), 100);
+        assertGt(fee, 0);
+        assertEq(int256(callerUnspec), int256(poolUnspec) - int256(fee), "unspecified minus fee");
+        assertEq(feeEvents.length, 1, "one SwapFeeTaken");
+        assertEq(feeEvents[0].currency, Currency.unwrap(unspec));
+        assertEq(feeEvents[0].amount, fee);
+        assertEq(feeEvents[0].asClaims, !exactIn, "claims iff input side");
+        if (exactIn) {
+            assertEq(unspec.balanceOf(recipient), fee, "tokens to recipient");
+            assertEq(_claims(recipient, unspec), 0, "no claims");
+        } else {
+            assertEq(_claims(recipient, unspec), fee, "claims to recipient");
+            assertEq(unspec.balanceOf(recipient), 0, "no tokens");
+            // The trader paid the fee on top of the pool's input; it backs the claims.
+            assertEq(input.balanceOf(address(manager)), _abs(poolUnspec) + fee, "claims backed");
+        }
+    }
+
+    function test_freshPool_tokens_exactInZeroForOne() public {
+        _checkFreshShape(true, -1e15);
+    }
+
+    function test_freshPool_tokens_exactInOneForZero() public {
+        _checkFreshShape(false, -1e15);
+    }
+
+    function test_freshPool_tokens_exactOutZeroForOne() public {
+        _checkFreshShape(true, 1e15);
+    }
+
+    function test_freshPool_tokens_exactOutOneForZero() public {
+        _checkFreshShape(false, 1e15);
+    }
+
+    /// @dev The fallback claims are redeemable for the tokens in a later unlock.
+    function test_freshPool_fallbackClaimsRedeemable() public {
+        _checkFreshShape(false, 1e15);
+        // The recipient approves an operator that burns the claims and takes the tokens.
+        Currency c = Currency.wrap(feeEvents[0].currency);
+        uint256 fee = feeEvents[0].amount;
+        ClaimsRedeemer r = new ClaimsRedeemer(manager);
+        vm.prank(recipient);
+        manager.setOperator(address(r), true);
+        r.redeem(recipient, c, fee);
+        assertEq(_claims(recipient, c), 0);
+        assertEq(c.balanceOf(recipient), fee);
     }
 
     function test_exactInZeroForOne_claims() public {
@@ -419,6 +537,7 @@ contract SwapFeeHookTest is HookTest {
             assertEq(e.currency, Currency.unwrap(currency1));
             assertEq(e.recipient, recipient);
             assertEq(e.amount, fee);
+            assertTrue(e.asClaims);
         }
         assertEq(_claims(recipient, currency1), total);
     }
@@ -508,6 +627,60 @@ contract SwapFeeHookTest is HookTest {
         assertEq(h.lastAmount(), fee);
         assertEq(h.lastRecipient(), recipient);
         assertFalse(h.lastAsClaims());
+    }
+
+    function test_exactOutTokenModeReportsClaimsToCallback() public {
+        (SwapFeeHarness h, PoolKey memory key) = _harness();
+        h.setSwapFee(key, 100, recipient, false);
+        Swapped memory s = _swap(key, true, 1e15);
+        uint256 fee = _ceilFee(_abs(s.pool0), 100);
+        assertEq(_claims(recipient, currency0), fee);
+        assertEq(h.lastAmount(), fee);
+        assertTrue(h.lastAsClaims(), "callback gets the form paid");
+    }
+
+    function test_overrideForcesTokensOnExactOut() public {
+        (SwapFeeHarness h, PoolKey memory key) = _harness();
+        h.setSwapFee(key, 100, recipient, false);
+        h.setForceTokens(true);
+        uint256 before = currency0.balanceOf(recipient);
+        Swapped memory s = _swap(key, true, 1e15);
+        uint256 fee = _ceilFee(_abs(s.pool0), 100);
+        assertEq(currency0.balanceOf(recipient) - before, fee, "tokens");
+        assertEq(_claims(recipient, currency0), 0, "no claims");
+        assertFalse(h.lastAsClaims());
+        assertFalse(feeEvents[0].asClaims);
+    }
+
+    function test_internalSetterSkipsAdminCheckButValidates() public {
+        (SwapFeeHarness h, PoolKey memory key) = _harness();
+        PoolId id = key.toId();
+        address stranger = makeAddr("stranger");
+
+        vm.expectEmit(true, false, false, true, address(h));
+        emit SwapFeeHook.SwapFeeSet(id, 77, recipient, false);
+        vm.prank(stranger);
+        h.setSwapFeeInternal(id, 77, recipient, false);
+        (uint16 bps, bool asClaims, address r) = h.swapFee(id);
+        assertEq(bps, 77);
+        assertFalse(asClaims);
+        assertEq(r, recipient);
+
+        vm.expectRevert(abi.encodeWithSelector(SwapFeeHook.InvalidSwapFee.selector, uint16(10_001)));
+        h.setSwapFeeInternal(id, 10_001, recipient, true);
+        vm.expectRevert(
+            abi.encodeWithSelector(SwapFeeHook.InvalidFeeRecipient.selector, address(0))
+        );
+        h.setSwapFeeInternal(id, 1, address(0), true);
+        vm.expectRevert(
+            abi.encodeWithSelector(SwapFeeHook.InvalidFeeRecipient.selector, address(h))
+        );
+        h.setSwapFeeInternal(id, 1, address(h), false);
+
+        // The external setter still needs the admin.
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, id, stranger));
+        h.setSwapFee(key, 1, recipient, true);
     }
 
     function test_overrideRateWithZeroStoredRate() public {
@@ -673,7 +846,7 @@ contract SwapFeeHookTest is HookTest {
         (address h, PoolKey memory key) = _composed(what);
         assertEq(_flags(BaseHook(h).getHookPermissions()), COMPOSED_FLAGS, "merged flags");
 
-        vm.warp(block.timestamp + 30 minutes);
+        vm.warp(vm.getBlockTimestamp() + 30 minutes);
         uint24 expectedLp = MockDecayingFee(h).mockLpFee();
         assertGt(expectedLp, 3000);
         assertLt(expectedLp, 50_000);
@@ -695,7 +868,7 @@ contract SwapFeeHookTest is HookTest {
     }
 
     function test_compositionOrderDoesNotMatter() public {
-        uint256 ts = block.timestamp;
+        uint256 ts = vm.getBlockTimestamp();
         (uint256 outA, uint24 feeA) = _checkComposed("SwapFeeHook.t.sol:DecayThenSwapFee");
         vm.warp(ts);
         deployFreshManagerAndRouters();
@@ -711,5 +884,25 @@ contract SwapFeeHookTest is HookTest {
             _deployHook("SwapFeeHook.t.sol:DecayThenSwapFee", abi.encode(manager), COMPOSED_FLAGS);
         vm.expectRevert();
         initPool(currency0, currency1, IHooks(h), 3000, SQRT_PRICE_1_1);
+    }
+}
+
+/// @dev Burns `owner`'s claims and takes the tokens to `owner`, as an ERC-6909 operator.
+contract ClaimsRedeemer is IUnlockCallback {
+    IPoolManager internal immutable manager;
+
+    constructor(IPoolManager manager_) {
+        manager = manager_;
+    }
+
+    function redeem(address owner, Currency c, uint256 amount) external {
+        manager.unlock(abi.encode(owner, c, amount));
+    }
+
+    function unlockCallback(bytes calldata data) external returns (bytes memory) {
+        (address owner, Currency c, uint256 amount) = abi.decode(data, (address, Currency, uint256));
+        manager.burn(owner, c.toId(), amount);
+        manager.take(c, owner, amount);
+        return "";
     }
 }

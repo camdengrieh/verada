@@ -212,6 +212,20 @@ contract VeradaHook is IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFe
         return uint16(_surchargeBps(_feeConfigs[_tokenOf(key)]));
     }
 
+    /// @dev The consolidator accepts tokens only (`consolidate` checks its ERC-20 balance), so
+    ///      the surcharge is always taken as tokens, also on the input side of exact-output
+    ///      swaps. That take needs the pool manager to hold the input currency at that point
+    ///      (the trader settles after the swap), which the shared pool manager does for the
+    ///      allowed quote assets.
+    function _swapFeeAsClaims(PoolKey calldata, SwapParams calldata, bool)
+        internal
+        pure
+        override
+        returns (bool)
+    {
+        return false;
+    }
+
     /// @dev The surcharge was taken as tokens to the consolidator. It cannot unlock the pool
     ///      manager from inside this swap, so it records the amount and settles it later.
     function _onSwapFeeTaken(
@@ -240,21 +254,13 @@ contract VeradaHook is IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFe
         poolIdOf[token] = id;
 
         // TwapOracleHook seed (its afterInitialize flag is cleared, see the contract notes).
-        _oracleState[id] = OracleState({
-            lastTimestamp: uint40(block.timestamp), tickCumulative: 0, head: 0, count: 1
-        });
-        _observations[id][0] = Observation({timestamp: uint40(block.timestamp), tickCumulative: 0});
+        _seedOracle(id);
 
+        // A flat schedule at the base fee: the LP fee.
         uint24 lpFee = _feeConfigs[token].baseFeeBps * PIPS_PER_BPS;
-        decayingFee[id] = DecayingFee({
-            startFee: lpFee,
-            endFee: lpFee,
-            duration: 0,
-            startTime: uint40(block.timestamp),
-            set: true
-        });
+        _setDecayingFee(id, lpFee, lpFee, 0, 0);
         // The rate comes from `_swapFeeBps`; only the recipient and settlement are stored.
-        swapFee[id] = SwapFee({feeBps: 0, asClaims: false, recipient: feeConsolidator});
+        _setSwapFee(id, 0, feeConsolidator, false);
 
         IConsolidatorPools(feeConsolidator).registerPool(token, key);
     }

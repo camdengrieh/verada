@@ -86,7 +86,7 @@ contract BondingCurveHook is PoolAdminHook, IUnlockCallback {
     /// @notice The curve has not graduated yet.
     error CurveNotGraduated();
     /// @notice Liquidity cannot be added to a curve pool.
-    error LiquidityNotAllowed();
+    error CurveLiquidityDisabled();
     /// @notice The curve is not configured or not seeded.
     error CurveNotReady();
     /// @notice The output of a swap exceeds the reserve that pays it.
@@ -242,7 +242,7 @@ contract BondingCurveHook is PoolAdminHook, IUnlockCallback {
         bytes calldata hookData
     ) internal virtual override returns (bytes4) {
         super._beforeAddLiquidity(sender, key, params, hookData);
-        revert LiquidityNotAllowed();
+        revert CurveLiquidityDisabled();
     }
 
     function _beforeSwap(

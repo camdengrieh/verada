@@ -500,10 +500,10 @@ abstract contract LaunchpadHookTestBase is HookTest {
         assertEq(_balance(currency1, recipient), 0);
     }
 
+    /// @dev Token settlement, exact-out buy after an earlier buy: the fee is on the input side,
+    ///      so it is paid as claims even though the manager now holds currency1.
     function test_swap_hookFeeExactOutBuy() public {
         _launch();
-        // Token settlement takes the fee out of the pool manager inside the swap, so the manager
-        // must already hold the input currency; an earlier buy brings it in.
         _swap(false, -1e18);
         uint256 r1 = _balance(currency1, recipient);
         uint256 t0 = _balance(currency0, address(this));
@@ -513,7 +513,8 @@ abstract contract LaunchpadHookTestBase is HookTest {
 
         // Exact-out buy: the unspecified currency is currency1 (the input).
         uint256 fee = _ceilDiv(_abs(a1) * HOOK_FEE_BPS, 10_000);
-        assertEq(_balance(currency1, recipient) - r1, fee, "recipient");
+        assertEq(manager.balanceOf(recipient, currency1.toId()), fee, "recipient claims");
+        assertEq(_balance(currency1, recipient), r1, "no tokens");
         assertEq(t1 - _balance(currency1, address(this)), _abs(a1) + fee, "trader in");
         assertEq(_balance(currency0, address(this)) - t0, _abs(a0), "trader out");
     }
@@ -531,13 +532,31 @@ abstract contract LaunchpadHookTestBase is HookTest {
     }
 
     /// @dev Token settlement on the first exact-output buy of a fresh single-sided pool: the fee
-    ///      is in currency1, which the manager does not hold yet, so the swap reverts. Launches
-    ///      that pay the fee as tokens should expect this; claims avoid it.
-    function test_swap_hookFeeAsTokensExactOutOnFreshPoolReverts() public {
+    ///      is in currency1, which the manager does not hold yet, so it is minted as claims
+    ///      instead of taken (taking it would revert). The swap succeeds.
+    function test_swap_hookFeeAsTokensExactOutOnFreshPoolPaysClaims() public {
         _launch(false);
         assertEq(currency1.balanceOf(address(manager)), 0);
-        vm.expectRevert();
-        swap(launchKey, false, 1e17, ZERO_BYTES);
+        uint256 t1 = _balance(currency1, address(this));
+        (, int128 a1,) = _swap(false, 1e17);
+        uint256 fee = _ceilDiv(_abs(a1) * HOOK_FEE_BPS, 10_000);
+        assertGt(fee, 0);
+        assertEq(manager.balanceOf(recipient, currency1.toId()), fee, "claims");
+        assertEq(_balance(currency1, recipient), 0, "no tokens");
+        assertEq(t1 - _balance(currency1, address(this)), _abs(a1) + fee, "trader in");
+        assertEq(currency1.balanceOf(address(manager)), _abs(a1) + fee, "claims backed");
+    }
+
+    /// @dev Token settlement on the first exact-input buy of a fresh pool: the fee is in the
+    ///      output (currency0, held by the manager as launch liquidity) and paid as tokens.
+    function test_swap_hookFeeAsTokensExactInOnFreshPoolPaysTokens() public {
+        _launch(false);
+        assertEq(currency1.balanceOf(address(manager)), 0);
+        (int128 a0,,) = _swap(false, -1e17);
+        uint256 fee = _ceilDiv(_abs(a0) * HOOK_FEE_BPS, 10_000);
+        assertGt(fee, 0);
+        assertEq(_balance(currency0, recipient), fee, "tokens");
+        assertEq(manager.balanceOf(recipient, currency0.toId()), 0, "no claims");
     }
 
     function test_swap_hookFeeExactInSell() public {

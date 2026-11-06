@@ -89,7 +89,7 @@ abstract contract TwapOracleHook is BaseHook, ITwapOracle {
 
     // ------------------------------------------------------------------ callbacks
 
-    /// @dev Seeds checkpoint 0 at the initialization time with a zero accumulator.
+    /// @dev Seeds the oracle of the pool being initialized (`_seedOracle`).
     function _afterInitialize(
         address sender,
         PoolKey calldata key,
@@ -97,7 +97,16 @@ abstract contract TwapOracleHook is BaseHook, ITwapOracle {
         int24 tick
     ) internal virtual override returns (bytes4 selector) {
         selector = super._afterInitialize(sender, key, sqrtPriceX96, tick);
-        PoolId id = key.toId();
+        _seedOracle(key.toId());
+    }
+
+    /// @dev Starts the oracle of `id`: checkpoint 0 at `block.timestamp` with a zero
+    ///      accumulator. Until it runs, the pool has no oracle (`observationCount == 0`, accrual
+    ///      is a no-op). The seed does not depend on the tick (the first accrual reads the pool's
+    ///      tick), so a composer that must keep `afterInitialize` off can clear that flag in its
+    ///      `_hookPermissions` and call this from `_beforeInitialize` instead. Call it once per
+    ///      pool, at initialization: seeding again would restart the accumulator.
+    function _seedOracle(PoolId id) internal {
         _oracleState[id] = OracleState({
             lastTimestamp: uint40(block.timestamp), tickCumulative: 0, head: 0, count: 1
         });

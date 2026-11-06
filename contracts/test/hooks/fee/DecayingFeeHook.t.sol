@@ -90,6 +90,21 @@ contract DecayingWithStub is DecayingFeeHook, FlatFeeStub {
     }
 }
 
+/// @dev Exposes the internal setter (the protocol-glue path) without access control.
+contract DecayingFeeHarness is DecayingFeeHook {
+    constructor(IPoolManager m) BaseHook(m) {}
+
+    function setDecayingFeeInternal(
+        PoolId poolId,
+        uint24 startFee,
+        uint24 endFee,
+        uint32 duration,
+        uint40 startTime
+    ) external {
+        _setDecayingFee(poolId, startFee, endFee, duration, startTime);
+    }
+}
+
 // ---------------------------------------------------------------------- tests
 
 contract DecayingFeeHookTest is HookTest {
@@ -97,6 +112,9 @@ contract DecayingFeeHookTest is HookTest {
 
     uint160 internal constant FLAGS = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG;
     uint24 internal constant DYNAMIC = LPFeeLibrary.DYNAMIC_FEE_FLAG;
+    /// @dev Block time set in `setUp`. Tests warp to absolute times derived from it: under the
+    ///      IR pipeline a local copy of `block.timestamp` may be re-read after `vm.warp`.
+    uint256 internal constant T0 = 1_700_000_000;
 
     DecayingFeeExample internal hook;
     PoolKey internal poolKey;
@@ -107,7 +125,7 @@ contract DecayingFeeHookTest is HookTest {
     function setUp() public {
         deployFreshManagerAndRouters();
         deployMintAndApprove2Currencies();
-        vm.warp(1_700_000_000);
+        vm.warp(T0);
         hook = DecayingFeeExample(
             _deployHook("DecayingFeeExample.sol:DecayingFeeExample", abi.encode(manager), FLAGS)
         );
@@ -224,23 +242,23 @@ contract DecayingFeeHookTest is HookTest {
 
     function test_setDecayingFeeStoresAndEmits() public {
         vm.expectEmit(true, true, true, true, address(hook));
-        emit DecayingFeeHook.DecayingFeeSet(id, 100_000, 3000, 3600, uint40(block.timestamp));
+        emit DecayingFeeHook.DecayingFeeSet(id, 100_000, 3000, 3600, uint40(T0));
         hook.setDecayingFee(poolKey, 100_000, 3000, 3600, 0);
         (uint24 s, uint24 e, uint32 d, uint40 st, bool set) = hook.decayingFee(id);
         assertEq(s, 100_000);
         assertEq(e, 3000);
         assertEq(d, 3600);
-        assertEq(st, block.timestamp, "zero start time means now");
+        assertEq(st, T0, "zero start time means now");
         assertTrue(set);
         assertEq(hook.currentFee(id), 100_000);
     }
 
     function test_setDecayingFeeExplicitStartTimeAndReplace() public {
-        uint40 future = uint40(block.timestamp + 100);
+        uint40 future = uint40(T0 + 100);
         hook.setDecayingFee(poolKey, 50_000, 1000, 1000, future);
-        vm.warp(block.timestamp + 99);
+        vm.warp(T0 + 99);
         assertEq(hook.currentFee(id), 50_000, "before start");
-        vm.warp(block.timestamp + 1 + 500);
+        vm.warp(T0 + 100 + 500);
         assertEq(hook.currentFee(id), 1000 + 49_000 / 2);
 
         // Replaced: a flat fee from now on.
@@ -323,7 +341,7 @@ contract DecayingFeeHookTest is HookTest {
         vm.prank(address(0));
         vm.expectRevert(abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, id, address(0)));
         hook.setDecayingFee(poolKey, 0, 0, 0, 0);
-        vm.warp(block.timestamp + 600);
+        vm.warp(T0 + 600);
         assertEq(_swapFee(poolKey), 2000);
     }
 
@@ -351,21 +369,20 @@ contract DecayingFeeHookTest is HookTest {
     }
 
     function test_swapFeeDecaysOverWindow() public {
-        uint256 t0 = block.timestamp;
         hook.setDecayingFee(poolKey, 100_000, 3000, 3600, 0);
         assertEq(_swapFee(poolKey), 100_000, "t0");
 
-        vm.warp(t0 + 1000);
+        vm.warp(T0 + 1000);
         // 3000 + ceil(97_000 * 2600 / 3600) = 3000 + ceil(70_055.6) = 73_056
         assertEq(hook.currentFee(id), 73_056);
         assertEq(_swapFee(poolKey), 73_056, "mid window");
 
-        vm.warp(t0 + 1800);
+        vm.warp(T0 + 1800);
         assertEq(_swapFee(poolKey), 51_500, "half way");
 
-        vm.warp(t0 + 3600);
+        vm.warp(T0 + 3600);
         assertEq(_swapFee(poolKey), 3000, "end");
-        vm.warp(t0 + 365 days);
+        vm.warp(T0 + 365 days);
         assertEq(_swapFee(poolKey), 3000, "long after");
     }
 
@@ -438,12 +455,61 @@ contract DecayingFeeHookTest is HookTest {
         (DecayingWithStub h, PoolKey memory k) = _deployComposed();
         assertEq(_swapFee(k), 3000, "unset: stub's fee passes through");
 
-        uint256 t0 = block.timestamp;
         h.setDecayingFee(k, 10_000, 1000, 1000, 0);
         assertEq(_swapFee(k), 10_000, "decay above stub");
-        vm.warp(t0 + 500);
+        vm.warp(T0 + 500);
         assertEq(_swapFee(k), 5500);
-        vm.warp(t0 + 900);
+        vm.warp(T0 + 900);
         assertEq(_swapFee(k), 3000, "decay (1900) below stub");
+    }
+
+    // ------------------------------------------------------------ internal setter
+
+    function test_internalSetterSkipsAdminCheckButValidates() public {
+        DecayingFeeHarness h = DecayingFeeHarness(
+            _deployHook("DecayingFeeHook.t.sol:DecayingFeeHarness", abi.encode(manager), FLAGS)
+        );
+        (PoolKey memory k, PoolId kid) = initPoolAndAddLiquidity(
+            currency0, currency1, IHooks(address(h)), DYNAMIC, SQRT_PRICE_1_1
+        );
+
+        // No admin check: a stranger writes the schedule; zero start time means now.
+        vm.expectEmit(true, true, true, true, address(h));
+        emit DecayingFeeHook.DecayingFeeSet(kid, 20_000, 2000, 900, uint40(T0));
+        vm.prank(stranger);
+        h.setDecayingFeeInternal(kid, 20_000, 2000, 900, 0);
+        (uint24 s, uint24 e, uint32 d, uint40 st, bool set) = h.decayingFee(kid);
+        assertEq(s, 20_000);
+        assertEq(e, 2000);
+        assertEq(d, 900);
+        assertEq(st, T0);
+        assertTrue(set);
+        assertEq(_swapFee(k), 20_000, "applied in swaps");
+
+        // Same validation as the external setter.
+        vm.expectRevert(
+            abi.encodeWithSelector(DecayingFeeHook.InvalidDecayingFee.selector, 1000, 2000, 10)
+        );
+        h.setDecayingFeeInternal(kid, 1000, 2000, 10, 0);
+        vm.expectRevert(
+            abi.encodeWithSelector(DecayingFeeHook.InvalidDecayingFee.selector, 2000, 1000, 0)
+        );
+        h.setDecayingFeeInternal(kid, 2000, 1000, 0, 0);
+        uint24 tooHigh = uint24(LPFeeLibrary.MAX_LP_FEE + 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(DecayingFeeHook.InvalidDecayingFee.selector, tooHigh, 0, 10)
+        );
+        h.setDecayingFeeInternal(kid, tooHigh, 0, 10, 0);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DecayingFeeHook.InvalidDecayingFee.selector, 2000, 1000, 30 days + 1
+            )
+        );
+        h.setDecayingFeeInternal(kid, 2000, 1000, 30 days + 1, 0);
+
+        // The external setter still needs the admin.
+        vm.prank(stranger);
+        vm.expectRevert(abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, kid, stranger));
+        h.setDecayingFee(k, 0, 0, 0, 0);
     }
 }

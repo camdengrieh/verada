@@ -134,6 +134,33 @@ contract FeeThenOracle is StubFeeFeature, TwapOracleHook {
     }
 }
 
+/// @dev A composer that keeps `afterInitialize` off: it clears the flag and seeds the oracle
+///      in `beforeInitialize` through `_seedOracle`.
+contract BeforeInitSeededOracle is TwapOracleHook {
+    constructor(IPoolManager m) BaseHook(m) TwapOracleHook(60, 8) {}
+
+    function _hookPermissions(Hooks.Permissions memory p)
+        internal
+        pure
+        override
+        returns (Hooks.Permissions memory)
+    {
+        p = super._hookPermissions(p);
+        p.afterInitialize = false;
+        p.beforeInitialize = true;
+        return p;
+    }
+
+    function _beforeInitialize(address s, PoolKey calldata k, uint160 px)
+        internal
+        override
+        returns (bytes4 sel)
+    {
+        sel = super._beforeInitialize(s, k, px);
+        _seedOracle(k.toId());
+    }
+}
+
 // ---------------------------------------------------------------------- tests
 
 contract TwapOracleHookTest is HookTest {
@@ -534,5 +561,37 @@ contract TwapOracleHookTest is HookTest {
 
     function test_composed_feeThenOracle() public {
         _checkComposed("TwapOracleHook.t.sol:FeeThenOracle");
+    }
+
+    // ------------------------------------------------------------------ seeding
+
+    function test_seedOracle_inBeforeInitialize() public {
+        address h = _deployHook(
+            "TwapOracleHook.t.sol:BeforeInitSeededOracle",
+            abi.encode(manager),
+            Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
+        );
+        Hooks.Permissions memory p = BaseHook(h).getHookPermissions();
+        assertFalse(p.afterInitialize, "afterInitialize off");
+
+        (PoolKey memory k, PoolId id) = _pool(h, 3000, -700);
+        assertEq(ITwapOracle(h).observationCount(id), 1, "seeded before initialize");
+        (uint40 ts, int56 cum) = ITwapOracle(h).observation(id, 0);
+        assertEq(ts, T0);
+        assertEq(cum, 0);
+
+        // The seed does not need the tick: the first accrual reads it from the pool.
+        vm.warp(T0 + 120);
+        assertEq(_swapTo(k, 300), 300);
+        assertEq(ITwapOracle(h).observationCount(id), 2);
+        (ts, cum) = ITwapOracle(h).observation(id, 1);
+        assertEq(ts, T0 + 120);
+        assertEq(cum, -700 * 120);
+
+        vm.warp(T0 + 180);
+        (bool ok, int24 avg, uint32 span) = ITwapOracle(h).twapTick(id, 180);
+        assertTrue(ok);
+        assertEq(span, 180);
+        assertEq(int256(avg), _refFloor(int256(-700) * 120 + int256(300) * 60, 180));
     }
 }
