@@ -173,7 +173,7 @@ export interface QuoteAssetRow {
   decimals?: number;
 }
 
-export const ACTIVITY_KINDS = ["launch", "fees", "consolidated", "donation", "vote", "epoch"] as const;
+export const ACTIVITY_KINDS = ["launch", "fees", "consolidated", "donation", "vote", "epoch", "trade"] as const;
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 
 export interface ActivityItem {
@@ -509,6 +509,150 @@ export function toActivity(v: unknown): ActivityItem | null {
   };
 }
 
+/** One swap on a token's pool (`/api/tokens/:address/trades`). Raw amounts in base units. */
+export interface MarketTrade {
+  id: string;
+  side: "buy" | "sell";
+  /** Transaction sender (a smart account shows its bundler). */
+  trader: string;
+  tokenAmount: bigint;
+  quote: string;
+  quoteAmount: bigint;
+  quoteDecimals: number | null;
+  /** Quote per whole token after the swap; null until the quote's decimals are known. */
+  price: number | null;
+  timestamp: number;
+  txHash: string;
+}
+
+export type HolderLabel = "pool" | "creator" | "burn" | "vault";
+
+export interface TokenHolder {
+  rank: number;
+  account: string;
+  balance: bigint;
+  /** Percent of supply. */
+  share: number;
+  label: HolderLabel | null;
+}
+
+export interface HolderSummary {
+  holders: number;
+  newHolders24h: number;
+  supply: bigint;
+  poolShare: number;
+  creatorShare: number;
+  contractShare: number;
+  /** Ten largest holders excluding the pool, burn address and platform vaults. */
+  top10Share: number;
+  buckets: { label: string; holders: number; share: number }[];
+  history: { day: number; holders: number }[];
+}
+
+export interface MarketHour {
+  hour: number;
+  buys: number;
+  sells: number;
+  buyQuote: bigint;
+  sellQuote: bigint;
+  closePrice: number | null;
+}
+
+export interface MarketSnapshot {
+  quote: string | null;
+  quoteDecimals: number | null;
+  price: number | null;
+  lastTradeAt: number | null;
+  window: { hours: number; trades: number; buys: number; sells: number; buyQuote: bigint; sellQuote: bigint; volumeQuote: bigint; buyShare: number | null };
+  hourly: MarketHour[];
+}
+
+const HOLDER_LABELS: readonly HolderLabel[] = ["pool", "creator", "burn", "vault"];
+
+/** Decimal string or safe integer to bigint; 0n for anything else. */
+function big(v: unknown): bigint {
+  if (typeof v === "string" && /^-?\d+$/.test(v)) return BigInt(v);
+  if (typeof v === "number" && Number.isSafeInteger(v)) return BigInt(v);
+  return 0n;
+}
+
+const finite = (v: unknown): number | null => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+export function toMarketTrade(v: unknown): MarketTrade | null {
+  if (!isRecord(v) || typeof v.id !== "string" || (v.side !== "buy" && v.side !== "sell")) return null;
+  const trader = str(v.trader);
+  const txHash = str(v.txHash);
+  const timestamp = toSeconds(v.timestamp);
+  if (!trader || !txHash || timestamp === undefined) return null;
+  return {
+    id: v.id,
+    side: v.side,
+    trader,
+    tokenAmount: big(v.tokenAmount),
+    quote: str(v.quote) ?? "",
+    quoteAmount: big(v.quoteAmount),
+    quoteDecimals: finite(v.quoteDecimals),
+    price: finite(v.price),
+    timestamp,
+    txHash,
+  };
+}
+
+export function toHolder(v: unknown): TokenHolder | null {
+  if (!isRecord(v)) return null;
+  const account = str(v.account);
+  const rank = num(v.rank);
+  if (!account || rank === undefined) return null;
+  const label = HOLDER_LABELS.find((l) => l === v.label) ?? null;
+  return { rank, account, balance: big(v.balance), share: finite(v.share) ?? 0, label };
+}
+
+export function toHolderSummary(v: unknown): HolderSummary | null {
+  if (!isRecord(v) || num(v.holders) === undefined) return null;
+  const list = (x: unknown) => (Array.isArray(x) ? x.filter(isRecord) : []);
+  return {
+    holders: num(v.holders)!,
+    newHolders24h: num(v.newHolders24h) ?? 0,
+    supply: big(v.supply),
+    poolShare: finite(v.poolShare) ?? 0,
+    creatorShare: finite(v.creatorShare) ?? 0,
+    contractShare: finite(v.contractShare) ?? 0,
+    top10Share: finite(v.top10Share) ?? 0,
+    buckets: list(v.buckets).map((b) => ({ label: str(b.label) ?? "", holders: num(b.holders) ?? 0, share: finite(b.share) ?? 0 })),
+    history: list(v.history).flatMap((d) => {
+      const day = toSeconds(d.day);
+      const holders = num(d.holders);
+      return day === undefined || holders === undefined ? [] : [{ day, holders }];
+    }),
+  };
+}
+
+export function toMarketSnapshot(v: unknown): MarketSnapshot | null {
+  if (!isRecord(v) || !isRecord(v.window)) return null;
+  const w = v.window;
+  return {
+    quote: str(v.quote) ?? null,
+    quoteDecimals: finite(v.quoteDecimals),
+    price: finite(v.price),
+    lastTradeAt: toSeconds(v.lastTradeAt) ?? null,
+    window: {
+      hours: num(w.hours) ?? 0,
+      trades: num(w.trades) ?? 0,
+      buys: num(w.buys) ?? 0,
+      sells: num(w.sells) ?? 0,
+      buyQuote: big(w.buyQuote),
+      sellQuote: big(w.sellQuote),
+      volumeQuote: big(w.volumeQuote),
+      buyShare: finite(w.buyShare),
+    },
+    hourly: (Array.isArray(v.hourly) ? v.hourly.filter(isRecord) : []).flatMap((h) => {
+      const hour = toSeconds(h.hour);
+      if (hour === undefined) return [];
+      return [{ hour, buys: num(h.buys) ?? 0, sells: num(h.sells) ?? 0, buyQuote: big(h.buyQuote), sellQuote: big(h.sellQuote), closePrice: finite(h.closePrice) }];
+    }),
+  };
+}
+
 /** Search results carry `id`; /api/causes rows carry `causeId`. */
 export function toCause(v: unknown): CauseSummary | null {
   if (!isRecord(v)) return null;
@@ -643,6 +787,29 @@ export class IndexerClient {
   /** Allowlisted quote assets (root-level legacy route). */
   async quoteAssets(): Promise<QuoteAssetRow[]> {
     return toPage(await this.get("/quote-assets", { active: "true" }), toQuoteAsset).items;
+  }
+
+  /** Trades of a token, newest first. "My trades" filter this list in the browser (docs/PRIVACY.md). */
+  async trades(token: string, opts: { cursor?: string; limit?: number; side?: "buy" | "sell" } = {}): Promise<Page<MarketTrade>> {
+    return toPage(await this.get(`/api/tokens/${token}/trades`, opts), toMarketTrade);
+  }
+
+  /** Largest holders with share of supply; `exclude: "contracts"` leaves out the pool and vaults. */
+  async holders(token: string, opts: { limit?: number; exclude?: "contracts" } = {}): Promise<{ holders: number; supply: bigint; items: TokenHolder[] }> {
+    const body = await this.get(`/api/tokens/${token}/holders`, opts);
+    const page = toPage(body, toHolder);
+    const b = isRecord(body) ? body : {};
+    return { holders: num(b.holders) ?? 0, supply: big(b.supply), items: page.items };
+  }
+
+  /** Holder concentration and bands; null before the token's first transfer. */
+  async holderSummary(token: string): Promise<HolderSummary | null> {
+    return this.orNull(async () => toHolderSummary(await this.get(`/api/tokens/${token}/holders/summary`)));
+  }
+
+  /** Hourly volume, buy share and price over the last `hours` (1–168). */
+  async market(token: string, hours = 24): Promise<MarketSnapshot | null> {
+    return toMarketSnapshot(await this.get(`/api/tokens/${token}/market`, { hours }));
   }
 
   private async orNull<T>(fn: () => Promise<T | null>): Promise<T | null> {
