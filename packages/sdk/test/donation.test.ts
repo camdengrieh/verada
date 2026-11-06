@@ -7,6 +7,7 @@ import {
   donationCall,
   epochFinalizeNeedsOptions,
   epochNeedsTally,
+  isRevertError,
   planDonation,
   planEpochGovernor,
   remainingStages,
@@ -314,5 +315,13 @@ describe("revertErrorName", () => {
   it("decodes custom errors and ignores other errors", () => {
     expect(revertErrorName(revert(feeVaultAbi as Abi, "NothingToSettle", [T, 4n]))).toBe("NothingToSettle");
     expect(revertErrorName(new Error("x"))).toBeUndefined();
+  });
+
+  it("recognizes a revert from another copy of viem by name, through its cause chain", () => {
+    const foreign = Object.assign(new Error("reverted"), { name: "ContractFunctionRevertedError", data: { errorName: "FeesPending" } });
+    const wrapped = Object.assign(new Error("execution reverted"), { name: "ContractFunctionExecutionError", cause: foreign });
+    expect(isRevertError(wrapped)).toBe(true);
+    expect(revertErrorName(wrapped)).toBe("FeesPending");
+    expect(isRevertError(Object.assign(new Error("fetch failed"), { cause: new Error("ECONNRESET") }))).toBe(false);
   });
 });

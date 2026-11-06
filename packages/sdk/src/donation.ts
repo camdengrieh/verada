@@ -11,7 +11,7 @@
  * read by `createDonationReader`; `donationCall` turns a `send` step into a contract call for any
  * viem or wagmi writer.
  */
-import { BaseError, ContractFunctionRevertedError, zeroAddress, type Abi, type Address, type Hex } from "viem";
+import { ContractFunctionRevertedError, zeroAddress, type Abi, type Address, type Hex } from "viem";
 import { donationDistributorAbi, epochGovernorAbi, feeVaultAbi, zamaVotingSchemeAbi } from "./abis/index.js";
 import { ballotCommitment } from "./catalog.js";
 
@@ -315,12 +315,31 @@ export function donationCall(
   }
 }
 
+type RevertLike = { name?: unknown; data?: { errorName?: string }; signature?: string; reason?: string; cause?: unknown };
+
+/**
+ * The `ContractFunctionRevertedError` in an error's cause chain, if any. Matched by name as well as
+ * class: the client may come from another copy of viem (each workspace package can resolve its
+ * own), and `instanceof` fails across copies.
+ */
+function findRevert(err: unknown): RevertLike | undefined {
+  let e: unknown = err;
+  for (let depth = 0; e && typeof e === "object" && depth < 32; depth++) {
+    if (e instanceof ContractFunctionRevertedError || (e as RevertLike).name === "ContractFunctionRevertedError") return e as RevertLike;
+    e = (e as RevertLike).cause;
+  }
+  return undefined;
+}
+
+/** Whether an error is a contract revert (as opposed to an RPC or network failure). */
+export function isRevertError(err: unknown): boolean {
+  return findRevert(err) !== undefined;
+}
+
 /** Decoded custom error name of a revert, if any (arguments are dropped). */
 export function revertErrorName(err: unknown): string | undefined {
-  if (!(err instanceof BaseError)) return undefined;
-  const r = err.walk((e) => e instanceof ContractFunctionRevertedError);
-  if (r instanceof ContractFunctionRevertedError) return r.data?.errorName ?? r.signature ?? r.reason;
-  return undefined;
+  const r = findRevert(err);
+  return r ? (r.data?.errorName ?? r.signature ?? r.reason) : undefined;
 }
 
 // ---------------------------------------------------------------- reader
@@ -352,10 +371,9 @@ export function createDonationReader(client: DonationReadClient, addrs: Donation
       await client.simulateContract({ address, abi, functionName, args } as never);
       return { ok: true };
     } catch (err) {
+      if (!isRevertError(err)) throw err;
       const name = revertErrorName(err);
-      if (name !== undefined) return { ok: false, error: name };
-      if (err instanceof BaseError && err.walk((e) => e instanceof ContractFunctionRevertedError)) return { ok: false };
-      throw err;
+      return name !== undefined ? { ok: false, error: name } : { ok: false };
     }
   };
 
