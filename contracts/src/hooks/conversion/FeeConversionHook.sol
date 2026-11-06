@@ -200,6 +200,16 @@ abstract contract FeeConversionHook is BaseHook, IUnlockCallback {
         hookNonReentrant
         returns (uint256 out)
     {
+        return _retryHeld(bucket, currency, amount);
+    }
+
+    /// @dev Body of `retryHeld`. Precondition: the caller holds the shared lock in `LOCK_CALL`
+    ///      (`hookNonReentrant` or an equivalent check). A concrete hook that exposes its own
+    ///      retry entry point (other key, other errors) sets the lock and calls this.
+    function _retryHeld(bytes32 bucket, Currency currency, uint256 amount)
+        internal
+        returns (uint256 out)
+    {
         if (poolManager.isUnlocked()) revert PoolManagerBusy();
         if (amount == 0) revert NothingToRetry();
         uint256 held = heldFees[bucket][currency];
@@ -258,13 +268,35 @@ abstract contract FeeConversionHook is BaseHook, IUnlockCallback {
             heldFees[bucket][currency] += amount;
             totalHeld[currency] += amount;
             emit FeeHeld(bucket, currency, amount, reason);
+            _onFeeHeld(bucket, currency, amount, reason);
         }
     }
 
-    /// @dev Burns `amount` of this hook's `currency` claims, swaps them exact-input along the
-    ///      route (none when `currency` is the target), pays the result out and notifies.
+    /// @dev Converts `amount` of this hook's `currency` claims (`_executeConversion`), pays the
+    ///      result out (`_settleConverted`) and notifies (`_onFeeConverted`).
     function _convert(bytes32 bucket, Currency currency, uint256 amount, bool inSwap)
         internal
+        returns (uint256 out)
+    {
+        out = _executeConversion(bucket, currency, amount, inSwap);
+        if (out == 0) revert SlippageExceeded(0, 1);
+
+        _settleConverted(bucket, out);
+        _onFeeConverted(bucket, currency, amount, out, inSwap);
+        emit FeeConverted(bucket, currency, amount, out, inSwap);
+    }
+
+    /// @dev Turns `amount` of this hook's `currency` claims into `out` of `conversionTarget`,
+    ///      leaving this hook with a pool manager credit of `out` in the target for
+    ///      `_settleConverted`. Default: burn the claims and swap exact-input along the stored
+    ///      route (no hop when `currency` is the target), each hop under `_hopMinOutput`.
+    ///      Override to delegate to an external converter (it then burns the claims as an
+    ///      ERC-6909 operator and pays the target itself; pair it with a `_settleConverted`
+    ///      override that does not take again). Runs inside the try frame in a swap, so any
+    ///      revert holds the fee.
+    function _executeConversion(bytes32, Currency currency, uint256 amount, bool inSwap)
+        internal
+        virtual
         returns (uint256 out)
     {
         poolManager.burn(address(this), currency.toId(), amount);
@@ -277,11 +309,6 @@ abstract contract FeeConversionHook is BaseHook, IUnlockCallback {
                 (current, out) = _convertHop(route[i], current, out, inSwap);
             }
         }
-        if (out == 0) revert SlippageExceeded(0, 1);
-
-        _settleConverted(bucket, out);
-        _onFeeConverted(bucket, currency, amount, out, inSwap);
-        emit FeeConverted(bucket, currency, amount, out, inSwap);
     }
 
     /// @dev One exact-input hop with the guard's minimum and a full-fill check.
@@ -378,6 +405,14 @@ abstract contract FeeConversionHook is BaseHook, IUnlockCallback {
         uint256 out,
         bool inSwap
     ) internal virtual {}
+
+    /// @dev Called when an in-swap conversion did not run or failed and `amount` was added to
+    ///      the held amounts, with the same `reason` as `FeeHeld`. Runs in the swap, inside
+    ///      `_conversionFallbackReserve()`: keep it cheap (an event, a transient write). Default
+    ///      no-op.
+    function _onFeeHeld(bytes32 bucket, Currency currency, uint256 amount, bytes4 reason)
+        internal
+        virtual {}
 
     /// @dev Gas used between the gas check and the try (synced-currency read, call setup).
     function _conversionPreTryGas() internal pure virtual returns (uint256) {

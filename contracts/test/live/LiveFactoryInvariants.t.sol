@@ -592,8 +592,8 @@ contract LiveFactoryInvariantsTest is LiveFactoryBase {
             for (uint256 i; i < handler.tokenCount(); ++i) {
                 if (handler.quoteOfToken(i) == qs[q]) sum += _sumHeld(handler.tokenAt(i));
             }
-            assertEq(_claims(address(hook), qs[q]), hook.totalHeld(qs[q]), "claims");
-            assertEq(hook.totalHeld(qs[q]), sum, "total held");
+            assertEq(_claims(address(hook), qs[q]), hook.totalHeld(Currency.wrap(qs[q])), "claims");
+            assertEq(hook.totalHeld(Currency.wrap(qs[q])), sum, "total held");
         }
         for (uint256 i; i < handler.tokenCount(); ++i) {
             address t = handler.tokenAt(i);

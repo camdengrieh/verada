@@ -368,8 +368,8 @@ contract LiveInvariantsTest is LiveBase {
     function invariant_H1_claimsBackHolds() public view {
         address[2] memory qs = [address(quote), address(weth)];
         for (uint256 i; i < 2; ++i) {
-            assertEq(_claims(address(hook), qs[i]), hook.totalHeld(qs[i]));
-            assertEq(hook.totalHeld(qs[i]), _sumHeld(qs[i]));
+            assertEq(_claims(address(hook), qs[i]), hook.totalHeld(Currency.wrap(qs[i])));
+            assertEq(hook.totalHeld(Currency.wrap(qs[i])), _sumHeld(qs[i]));
         }
     }
 

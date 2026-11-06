@@ -72,7 +72,11 @@ contract LiveFailureModesTest is LiveBase {
             } else {
                 assertEq(hook.heldRaw(address(token), CAUSE_A), heldBefore + f, "held");
             }
-            assertEq(_claims(address(hook), address(quote)), hook.totalHeld(address(quote)), "H1");
+            assertEq(
+                _claims(address(hook), address(quote)),
+                hook.totalHeld(Currency.wrap(address(quote))),
+                "H1"
+            );
             assertGe(
                 usdc.balanceOf(address(vault)), vault.platformAccrued() + vault.totalPending(), "V1"
             );

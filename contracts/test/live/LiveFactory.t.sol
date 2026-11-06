@@ -7,6 +7,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
+import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
@@ -536,7 +537,7 @@ contract LiveFactoryTest is LiveFactoryBase {
         _sellExactIn(key, t, 1e20);
         _sellExactOut(key, t, 1e16);
         assertEq(_pending(t, CAUSE_A), 0);
-        assertEq(hook.totalHeld(address(quote)), 0);
+        assertEq(hook.totalHeld(Currency.wrap(address(quote))), 0);
         assertEq(usdc.balanceOf(address(vault)), vault.platformAccrued());
 
         vm.prank(keeper);

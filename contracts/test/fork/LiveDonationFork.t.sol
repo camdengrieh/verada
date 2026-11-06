@@ -380,7 +380,8 @@ contract LiveDonationForkTest is Test {
         uint256 held = hook.heldRaw(address(token), causeDeployed);
         if (held == 0) assertGt(IERC20(USDC).balanceOf(ORG_DEPLOYED_ADDR), before);
         assertEq(
-            PM.balanceOf(address(hook), Currency.wrap(AMZN_ON).toId()), hook.totalHeld(AMZN_ON)
+            PM.balanceOf(address(hook), Currency.wrap(AMZN_ON).toId()),
+            hook.totalHeld(Currency.wrap(AMZN_ON))
         );
     }
 }

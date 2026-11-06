@@ -19,6 +19,9 @@ import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
 import {VeradaToken} from "../../src/VeradaToken.sol";
+import {
+    FeeConversionHook as FeeConversionHookEvents
+} from "../../src/hooks/conversion/FeeConversionHook.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
@@ -94,7 +97,7 @@ contract VeradaLiveHookTest is LiveBase {
 
     function _assertFullyConverted() internal view {
         assertEq(_claims(address(hook), address(quote)), 0, "hook holds no claims");
-        assertEq(hook.totalHeld(address(quote)), 0, "nothing held");
+        assertEq(hook.totalHeld(Currency.wrap(address(quote))), 0, "nothing held");
         assertEq(
             usdc.balanceOf(address(vault)),
             vault.platformAccrued() + vault.totalPending(),
@@ -525,10 +528,17 @@ contract VeradaLiveHookTest is LiveBase {
     }
 
     function test_unusedCallbacks_revert() public {
+        // Every callback is pool-manager only (BaseHook), including the unused ones.
+        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        hook.afterInitialize(address(0), liveKey, 0, 0);
+        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        hook.beforeDonate(address(0), liveKey, 0, 0, "");
+        vm.startPrank(address(manager));
         vm.expectRevert(IVeradaLiveHook.HookNotImplemented.selector);
         hook.afterInitialize(address(0), liveKey, 0, 0);
         vm.expectRevert(IVeradaLiveHook.DonateNotAllowed.selector);
         hook.beforeDonate(address(0), liveKey, 0, 0, "");
+        vm.stopPrank();
     }
 
     /// @dev Audit regression: `PoolManager.donate` to a live pool used to accrue fee growth to
@@ -570,7 +580,7 @@ contract VeradaLiveHookTest is LiveBase {
     function test_heldFee_attributedAndBacked() public {
         uint256 f = _holdOne(1e18);
         assertEq(hook.heldRaw(address(token), CAUSE_A), f);
-        assertEq(hook.totalHeld(address(quote)), f);
+        assertEq(hook.totalHeld(Currency.wrap(address(quote))), f);
         assertEq(_claims(address(hook), address(quote)), f, "H1: claims back the hold");
     }
 
@@ -634,6 +644,84 @@ contract VeradaLiveHookTest is LiveBase {
         RetryFromUnlock r = new RetryFromUnlock(manager, hook);
         vm.expectRevert(IVeradaLiveHook.PoolManagerBusy.selector);
         r.run(address(token), CAUSE_A, f);
+    }
+
+    // ------------------------------------------------------------------ composition
+
+    function _bucket(address t, bytes32 cause) internal pure returns (bytes32) {
+        return keccak256(abi.encode(t, cause));
+    }
+
+    /// @dev The bundled hook's ABI is served unchanged through `IVeradaLiveHook`, including
+    ///      `totalHeld(address)`, which is `FeeConversionHook.totalHeld(Currency)`.
+    function test_composition_interfaceAbi() public {
+        uint256 f = _holdOne(1e18);
+        IVeradaLiveHook i = IVeradaLiveHook(address(hook));
+        assertEq(i.totalHeld(address(quote)), f);
+        assertEq(i.heldRaw(address(token), CAUSE_A), f);
+        assertEq(i.quoteOf(address(token)), address(quote));
+        assertTrue(i.configured(address(token)));
+        assertTrue(i.poolInitialized(address(token)));
+        assertEq(i.vault(), address(vault));
+        assertEq(i.currentFeeBps(address(token)), hook.currentFeeBps(address(token)));
+        assertEq(i.feeConfig(address(token)).baseFeeBps, BASE_BPS);
+        assertGt(i.retryHeld(address(token), CAUSE_A, f), 0);
+        assertEq(i.totalHeld(address(quote)), 0);
+    }
+
+    /// @dev Generic views agree with the Verada views: the bucket of a hold is
+    ///      `keccak256(token, cause)`, the target is USDC and the gas requirement is the live one.
+    function test_composition_genericViews() public {
+        uint256 f = _holdOne(1e18);
+        assertEq(hook.heldFees(_bucket(address(token), CAUSE_A), Currency.wrap(address(quote))), f);
+        assertEq(Currency.unwrap(hook.conversionTarget()), address(usdc));
+        assertEq(hook.conversionGasRequired(), hook.LIVE_GAS_REQUIRED() - hook.PRE_TRY_GAS());
+        assertEq(
+            hook.conversionRoute(Currency.wrap(address(quote))).length, 0, "routes: consolidator"
+        );
+        assertFalse(hook.isPoolInitializer(address(this)), "gate rule is factory-only");
+    }
+
+    /// @dev A hold reports the generic `FeeHeld` and the Verada `FeeTaken` with the same reason.
+    function test_composition_holdEmitsBothEvents() public {
+        cons.setSource(address(hook), false);
+        vm.recordLogs();
+        _buyExactIn(liveKey, address(token), 1e18);
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        assertEq(_count(logs, FeeConversionHookEvents.FeeHeld.selector), 1);
+        (,,, uint256 f,, bool conv, bytes4 fail) = _lastFeeTaken(logs);
+        assertFalse(conv);
+        assertEq(fail, IFeeConsolidator.NotAuthorized.selector);
+        assertEq(hook.heldRaw(address(token), CAUSE_A), f);
+    }
+
+    /// @dev The bucket-keyed retry of `FeeConversionHook` carries no Verada context (token,
+    ///      cause), so it reverts and the hold is unchanged. Retries go through
+    ///      `retryHeld(token, causeId, amount)`.
+    function test_composition_bucketRetryReverts() public {
+        uint256 f = _holdOne(1e18);
+        bytes32 bucket = _bucket(address(token), CAUSE_A);
+        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        hook.retryHeld(bucket, Currency.wrap(address(quote)), f);
+        assertEq(hook.heldRaw(address(token), CAUSE_A), f, "unchanged");
+        assertEq(_claims(address(hook), address(quote)), f);
+    }
+
+    function test_composition_convertInline_onlySelf() public {
+        vm.expectRevert(IVeradaLiveHook.NotSelf.selector);
+        hook.convertInline(bytes32(0), Currency.wrap(address(quote)), 1);
+    }
+
+    /// @dev Retry inside a swap of this hook (lock held) reverts `Busy`.
+    function test_composition_retryDuringSwapLockIsBusy() public {
+        uint256 f = _holdOne(1e18);
+        SwapParams memory p = SwapParams({
+            zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: MIN_PRICE_LIMIT
+        });
+        vm.prank(address(manager));
+        hook.beforeSwap(address(this), liveKey, p, "");
+        vm.expectRevert(IVeradaLiveHook.Busy.selector);
+        hook.retryHeld(address(token), CAUSE_A, f);
     }
 
     /// @dev Votes cause `target` in for the next rotation, then warps into it.
