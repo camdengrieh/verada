@@ -1,14 +1,18 @@
 import { DataSection } from "./sections/data";
+import { EffectsSection } from "./sections/effects";
 import { FoundationsSection } from "./sections/foundations";
 import { MarketsSection } from "./sections/markets";
 import { MotionSection } from "./sections/motion";
+import { NavigationSection } from "./sections/navigation";
 import { PrimitivesSection } from "./sections/primitives";
 import { VaradaSection } from "./sections/varada";
 
 const TOC = [
   { id: "foundations", label: "Foundations" },
   { id: "motion", label: "Motion & feedback" },
+  { id: "effects", label: "Effects" },
   { id: "primitives", label: "Primitives & overlays" },
+  { id: "navigation", label: "Tabs, tooltips & dividers" },
   { id: "data", label: "Data, motion & trading" },
   { id: "markets", label: "Ondo stocks & liquidity" },
   { id: "varada", label: "Varada components" },
@@ -46,7 +50,9 @@ export default function DesignPage() {
         <main className="flex min-w-0 flex-[999_1_640px] flex-col gap-16">
           <FoundationsSection />
           <MotionSection />
+          <EffectsSection />
           <PrimitivesSection />
+          <NavigationSection />
           <DataSection />
           <MarketsSection />
           <VaradaSection />
