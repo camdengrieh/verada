@@ -1,0 +1,37 @@
+{
+  "_comment": "Quote assets and their routes to USDC for ConfigureRoutes.s.sol. Every pool below was found initialised on Ethereum mainnet (v4 PoolManager 0x000000000004444c5dc75cB358380D2e3dE08A90). Add the other Ondo stocks (TSLAon, SPYon, QQQon, IAUon, FLHYon, BILon, SGOVon, USFRon, STRCon) only after confirming each pool id exists and is liquid; v3 hops follow the v3 QuoteRegistry route format.",
+  "assets": [
+    {
+      "symbol": "WETH",
+      "asset": "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2",
+      "kind": 0,
+      "route": [
+        {"currency0": "0x0000000000000000000000000000000000000000", "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "fee": 500, "tickSpacing": 10, "hooks": "0x0000000000000000000000000000000000000000"}
+      ]
+    },
+    {
+      "symbol": "WBTC",
+      "asset": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599",
+      "kind": 0,
+      "route": [
+        {"currency0": "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", "currency1": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "fee": 500, "tickSpacing": 10, "hooks": "0x0000000000000000000000000000000000000000"}
+      ]
+    },
+    {
+      "symbol": "AMZNon",
+      "asset": "0xbb8774FB97436d23d74C1b882E8E9A69322cFD31",
+      "kind": 1,
+      "route": [
+        {"currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "currency1": "0xbb8774FB97436d23d74C1b882E8E9A69322cFD31", "fee": 10000, "tickSpacing": 100, "hooks": "0x0000000000000000000000000000000000000000"}
+      ]
+    },
+    {
+      "symbol": "SLVon",
+      "asset": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4",
+      "kind": 1,
+      "route": [
+        {"currency0": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "currency1": "0xF3e4872e6a4cF365888D93b6146a2bAA7348F1A4", "fee": 10000, "tickSpacing": 200, "hooks": "0x0000000000000000000000000000000000000000"}
+      ]
+    }
+  ]
+}
