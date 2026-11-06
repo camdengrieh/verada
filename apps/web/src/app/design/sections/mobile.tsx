@@ -7,6 +7,7 @@ import { MobileHeader } from "@verada/ui/components/mobile/mobile-header";
 import { MobilePairPicker, type PairOption } from "@verada/ui/components/mobile/mobile-pair-picker";
 import type { MobileSearchResult } from "@verada/ui/components/mobile/mobile-search-sheet";
 import { MobileTradeSheet } from "@verada/ui/components/mobile/mobile-trade-sheet";
+import { MobileTradesSheet } from "@verada/ui/components/mobile/mobile-trades-sheet";
 import { MobileVoteSheet } from "@verada/ui/components/mobile/mobile-vote-sheet";
 import { PullToRefresh } from "@verada/ui/components/mobile/pull-to-refresh";
 import { StickyActionBar } from "@verada/ui/components/mobile/sticky-action-bar";
@@ -21,11 +22,14 @@ import { LiquidityPanel } from "@verada/ui/components/varada/liquidity-panel";
 import { PriceChange } from "@verada/ui/components/varada/price-change";
 import type { VaradaLinkProps } from "@verada/ui/components/varada/shared";
 import { TokenCard, type TokenSummary } from "@verada/ui/components/varada/token-card";
+import { TradeTicker } from "@verada/ui/components/varada/trade-feed";
+import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
 import type { TradeSide, TradeToken } from "@verada/ui/components/varada/trade-panel";
 import { useAssetUrl } from "@verada/ui/lib/assets";
 import { quoteAssetLogo } from "@/lib/asset-packs";
 import { siteBase } from "@/lib/base";
 import { GallerySection, Specimen } from "../section";
+import { SAMPLE_HOLDERS, SAMPLE_INSIGHTS, useSampleStream } from "./activity";
 
 /* ---------- sample data (not live) ---------- */
 
@@ -525,6 +529,56 @@ function VoteScreen() {
   );
 }
 
+function ActivityScreen() {
+  const tokens = useTokens();
+  const coin = tokens[0]!;
+  const reduced = usePrefersReducedMotion();
+  const { open, inline, setOpen } = usePreviewSheet();
+  const trades = useSampleStream(!reduced, 10, 30);
+  return (
+    <DemoNav.Provider value={() => undefined}>
+      <Phone label="Trades and holders">
+        {(frame) => (
+          <>
+            <MobileHeader homeHref="#m-discover" LinkComponent={DemoLink} privacy="private" wallet={connect} title="Harambe's Wish" />
+            <div className="flex flex-col gap-3 px-4 pt-4">
+              <div className="flex items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element -- static Swarm export, like the library's own images */}
+                <img src={coin.art?.src} alt="" className="size-14 rounded-2xl bg-sage-tint object-contain" />
+                <div className="flex flex-col">
+                  <strong className="font-display text-xl">Harambe&apos;s Wish</strong>
+                  <span className="text-[13px]">
+                    <span className="num">$0.00000412</span> <PriceChange value={18.42} className="text-[13px]" />
+                  </span>
+                </div>
+              </div>
+              <TradeTicker trades={trades} limit={6} />
+              {!open ? (
+                <Button size="lg" className="h-13" onClick={() => setOpen(true)}>
+                  Trades and holders
+                </Button>
+              ) : null}
+            </div>
+            {open && inline ? <div aria-hidden="true" className="absolute inset-0 z-40 bg-ink/40" onClick={() => setOpen(false)} /> : null}
+            <MobileTradesSheet
+              open={open}
+              onOpenChange={setOpen}
+              container={frame}
+              inline={inline}
+              symbol="$HARAMBE"
+              name="Harambe's Wish"
+              trades={trades}
+              holders={SAMPLE_HOLDERS}
+              totalHolders={3_402}
+              insights={SAMPLE_INSIGHTS}
+            />
+          </>
+        )}
+      </Phone>
+    </DemoNav.Provider>
+  );
+}
+
 function LaunchScreen() {
   const { open, inline, setOpen } = usePreviewSheet();
   const [pair, setPair] = useState("NVDAon");
@@ -607,6 +661,9 @@ export function MobileSection() {
         </Specimen>
         <Specimen label="Vote sheet" source="Ballot list in a drawer with a pinned vote button">
           <VoteScreen />
+        </Specimen>
+        <Specimen label="Trades and holders" source="Trade tape and holders tabs in a drawer; the tape keeps streaming">
+          <ActivityScreen />
         </Specimen>
         <Specimen label="Launch pair picker" source="Crypto and stock tabs in a drawer, sticky Back / Next">
           <LaunchScreen />

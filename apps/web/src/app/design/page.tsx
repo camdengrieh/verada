@@ -1,3 +1,4 @@
+import { ActivitySection } from "./sections/activity";
 import { DataSection } from "./sections/data";
 import { EffectsSection } from "./sections/effects";
 import { EnsSection } from "./sections/ens";
@@ -22,6 +23,7 @@ const TOC = [
   { id: "data", label: "Data, motion & trading" },
   { id: "markets", label: "Pairs, stocks & liquidity" },
   { id: "metrics", label: "Trading metrics" },
+  { id: "activity", label: "Trades & holders" },
   { id: "ens", label: "ENS names" },
   { id: "impact", label: "Raised for causes" },
   { id: "varada", label: "Varada components" },
@@ -67,6 +69,7 @@ export default function DesignPage() {
           <DataSection />
           <MarketsSection />
           <MetricsSection />
+          <ActivitySection />
           <EnsSection />
           <ImpactSection />
           <VaradaSection />
