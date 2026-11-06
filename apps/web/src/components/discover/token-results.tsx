@@ -14,7 +14,8 @@ import { TokenCard, type TokenSummary as CardToken } from "@varada/ui/components
 import { TokenRow } from "@varada/ui/components/varada/token-row";
 import { CauseChip } from "@varada/ui/components/varada/cause-chip";
 import type { DiscoverToken } from "@/lib/discover-client";
-import { givingOf, maxRaisedOf, toCardToken, tokenPath, type CardContext } from "@/lib/discover";
+import { givingOf, maxRaisedOf, quoteUsdValue, toCardToken, tokenPath, type CardContext } from "@/lib/discover";
+import { formatUsdPrice } from "@/lib/token-market";
 import { compact, formatSmallNumber, timeAgo, unitsToNumber } from "@/lib/format";
 import { useSentinel } from "./hooks";
 
@@ -78,6 +79,8 @@ interface Row {
   /** Sort keys: null changes sort last. */
   change: number;
   price: number;
+  /** Token price in dollars with its "~" flag, null when the quote asset has no price. */
+  priceUsd: { usd: number; approx: boolean } | null;
   cap: number;
   volume: number;
   liquidity: number;
@@ -92,6 +95,9 @@ function tableRows(tokens: readonly DiscoverToken[], ctx: CardContext, href: (pa
   return tokens.map((t) => {
     const m = t.market;
     const qd = m?.quoteDecimals ?? 18;
+    // Sort keys are dollars when the quote is priced, so a WETH pair and an NVDAon pair order against each other.
+    const perQuote = m?.quote ? (ctx.usd?.(m.quote)?.priceUsd ?? null) : null;
+    const k = perQuote ?? 1;
     const card = toCardToken(t, ctx);
     return {
       id: t.address,
@@ -99,10 +105,11 @@ function tableRows(tokens: readonly DiscoverToken[], ctx: CardContext, href: (pa
       card,
       token: t,
       change: m?.change24h ?? -Infinity,
-      price: m?.price ?? -1,
-      cap: m && m.price !== null && m.supply !== null ? m.price * unitsToNumber(m.supply, 18) : -1,
-      volume: m ? unitsToNumber(m.volume24hQuote, qd) : -1,
-      liquidity: m ? unitsToNumber(m.quoteInPool, qd) : -1,
+      price: m?.price != null ? m.price * k : -1,
+      priceUsd: m?.price != null && m.quote ? quoteUsdValue(m.price, m.quote, ctx) : null,
+      cap: m && m.price !== null && m.supply !== null ? m.price * unitsToNumber(m.supply, 18) * k : -1,
+      volume: m ? unitsToNumber(m.volume24hQuote, qd) * k : -1,
+      liquidity: m ? unitsToNumber(m.quoteInPool, qd) * k : -1,
       holders: m?.holders ?? -1,
       raised: unitsToNumber(t.raised, 6),
       age: t.createdAt ?? 0,
@@ -148,7 +155,13 @@ function buildColumns(nowSeconds: number) {
     col.accessor("price", {
       header: "Price",
       meta: { numeric: true, priority: 3, label: "Price in its pair" },
-      cell: ({ row }) => (row.original.token.market?.price == null ? dash : <span title={`In ${row.original.card.quote.symbol}`}>{formatSmallNumber(row.original.token.market.price)}</span>),
+      cell: ({ row }) => {
+        const m = row.original.token.market;
+        if (m?.price == null) return dash;
+        const inQuote = `${formatSmallNumber(m.price)} ${row.original.card.quote.symbol}`;
+        const usd = row.original.priceUsd;
+        return usd ? <span title={inQuote}>{formatUsdPrice(usd.usd, usd.approx)}</span> : <span title={`In ${row.original.card.quote.symbol}`}>{formatSmallNumber(m.price)}</span>;
+      },
     }),
     col.accessor("change", {
       header: "24h",

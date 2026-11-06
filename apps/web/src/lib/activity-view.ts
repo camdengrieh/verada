@@ -1,7 +1,7 @@
 import type { ActivityItem as FeedRow } from "@varada/ui/components/data/activity-list";
 import type { ActivityContext } from "./activity";
 import { formatUsdc } from "./agents";
-import { formatQuote, timeAgo, unitsToNumber } from "./format";
+import { formatQuote, formatQuoteAsUsd, timeAgo, unitsToNumber } from "./format";
 import type { ActivityItem } from "./indexer";
 
 const short = (v: string) => (v.length > 12 ? `${v.slice(0, 6)}...${v.slice(-4)}` : v);
@@ -57,12 +57,17 @@ function tradeRow(item: ActivityItem, ctx: ActivityContext): FeedRow | null {
   const side = item.data.side;
   if (side !== "buy" && side !== "sell") return null;
   const amount = bigOf(item.data.quoteAmount);
-  const q = ctx.quoteOf(typeof item.data.quote === "string" ? item.data.quote : undefined);
+  const quoteAddress = typeof item.data.quote === "string" ? item.data.quote : undefined;
+  const q = ctx.quoteOf(quoteAddress);
+  const usd = ctx.usdOf?.(quoteAddress);
+  const units = amount !== null && q ? unitsToNumber(amount, q.decimals) : null;
   return {
     id: item.id,
     kind: side,
     title: `${side === "buy" ? "Bought" : "Sold"} ${dollar(ctx.symbolOf(item.token))}`,
-    amount: amount !== null && q ? formatQuote(unitsToNumber(amount, q.decimals), q.symbol) : undefined,
+    amount: units !== null && q ? formatQuoteAsUsd(units, q.symbol, usd) : undefined,
+    // The quote asset's own amount stays as the secondary line when the headline is dollars.
+    ...(units !== null && q && usd?.priceUsd != null ? { meta: formatQuote(units, q.symbol) } : {}),
     amountTone: side === "buy" ? "gain" : "loss",
     time: timeAgo(item.timestamp, ctx.nowSeconds),
     dateTime: iso(item.timestamp),

@@ -7,6 +7,7 @@ import { useAppConfig } from "@/components/providers";
 import { stocksTabEmpty, TABS, TAB_LABELS, type DiscoverState, type DiscoverTab } from "@/lib/discover";
 import { errorText } from "@/components/use-tx";
 import { useQuoteAssets } from "@/lib/use-quote-assets";
+import { useUsdQuotes } from "@/hooks/use-usd-quotes";
 import { Filters } from "./filters";
 import { HomeHero } from "./hero";
 import { useDiscoverList, useDiscoverState, useLiveActivity, useNow, usePlatformStats, useRel, useTokenLogo } from "./hooks";
@@ -44,6 +45,7 @@ export function DiscoverPage() {
   const rel = useRel();
   const [state, update] = useDiscoverState();
   const quotes = useQuoteAssets();
+  const usd = useUsdQuotes();
   const stats = usePlatformStats();
   const live = useLiveActivity();
   const logo = useTokenLogo();
@@ -64,7 +66,7 @@ export function DiscoverPage() {
   const filtered = Boolean(state.q || state.pair || state.category || state.region || state.mode || state.cadence || state.tab === "stocks" || state.tab === "live" || state.tab === "cause");
   const nowSeconds = now ? Math.floor(now.getTime() / 1000) : 0;
   const href = useCallback((path: string) => rel(path), [rel]);
-  const ctx = useMemo(() => ({ parent: config.ensParentName, assets: quotes.assets, logo }), [config.ensParentName, quotes.assets, logo]);
+  const ctx = useMemo(() => ({ parent: config.ensParentName, assets: quotes.assets, logo, usd: usd.quoteFor }), [config.ensParentName, quotes.assets, logo, usd.quoteFor]);
 
   const refresh = useCallback(async () => {
     await Promise.all([list.refetch(), stats.refetch()]);

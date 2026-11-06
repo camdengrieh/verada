@@ -5,7 +5,8 @@ import type { ImageSource, WashTone } from "@varada/ui/components/varada/shared"
 import type { QuoteKind } from "@varada/ui/components/varada/stock-logo";
 import type { TokenSummary as CardToken } from "@varada/ui/components/varada/token-card";
 import type { DiscoverQuery, DiscoverToken } from "./discover-client";
-import { formatQuote, formatUsdc, unitsToNumber } from "./format";
+import { usdValue, type UsdQuote, type UsdValue } from "@varada/sdk";
+import { formatQuote, formatUsdc, formatUsdValue, unitsToNumber } from "./format";
 import type { AppQuoteAsset } from "./quote-assets";
 import { describeQuoteAsset, findQuote } from "./quote-assets";
 
@@ -154,6 +155,19 @@ export interface CardContext {
   logo(ref: string | null): ImageSource | undefined;
   /** Largest `raised` on the page; the bar shows each token against it. */
   maxRaised: bigint;
+  /** USD per quote asset from the shared pricing layer; absent or unpriced assets show in their own units. */
+  usd?: (quote: string | null | undefined) => UsdQuote | undefined;
+}
+
+/** USD value of `units` whole units of the quote asset, with the "~" flag; null without a price. */
+export function quoteUsdValue(units: number, quote: string | null | undefined, ctx: Pick<CardContext, "usd">): UsdValue | null {
+  return usdValue(units, quote ? ctx.usd?.(quote) : undefined);
+}
+
+/** A quote-asset amount for display: dollars ("~$1.2K") when the quote is priced, its own units otherwise. */
+export function quoteAmountText(units: number, symbol: string, quote: string | null | undefined, ctx: Pick<CardContext, "usd">): string {
+  const v = quoteUsdValue(units, quote, ctx);
+  return v ? formatUsdValue(v.usd, v.approx) : formatQuote(units, symbol);
 }
 
 export function quoteOf(address: string | null | undefined, assets: readonly AppQuoteAsset[]) {
@@ -173,7 +187,7 @@ export function marketCapQuote(t: DiscoverToken): number | null {
 
 const DASH = "–";
 
-/** The library's card data for a token. Money is in the quote asset (no oracle), USDC only for what was raised. */
+/** The library's card data for a token. Money is in dollars at the quote asset's on-chain price (no oracle), in the quote asset's own units when it has no price. */
 export function toCardToken(t: DiscoverToken, ctx: CardContext): CardToken {
   const m = t.market;
   const q = quoteOf(m?.quote, ctx.assets) ?? { symbol: "–", kind: "crypto" as QuoteKind, logo: undefined };
@@ -192,9 +206,9 @@ export function toCardToken(t: DiscoverToken, ctx: CardContext): CardToken {
     quote: { symbol: q.symbol, kind: q.kind, logo: q.logo },
     cause: chip.cause,
     causeLabel: chip.label,
-    marketCap: cap === null ? DASH : formatQuote(cap, q.symbol),
-    volume24h: m?.quote ? formatQuote(unitsToNumber(m.volume24hQuote, qd), q.symbol) : DASH,
-    liquidity: m?.quote ? formatQuote(unitsToNumber(m.quoteInPool, qd), q.symbol) : DASH,
+    marketCap: cap === null ? DASH : quoteAmountText(cap, q.symbol, m?.quote, ctx),
+    volume24h: m?.quote ? quoteAmountText(unitsToNumber(m.volume24hQuote, qd), q.symbol, m.quote, ctx) : DASH,
+    liquidity: m?.quote ? quoteAmountText(unitsToNumber(m.quoteInPool, qd), q.symbol, m.quote, ctx) : DASH,
     raised: formatUsdc(t.raised),
     raisedPct: ctx.maxRaised > 0n ? Number((t.raised * 100n) / ctx.maxRaised) : 0,
   };

@@ -189,3 +189,25 @@ FORK_RPC_URL=http://127.0.0.1:8546 pnpm --filter @varada/sdk exec vitest run tes
 The first run is slow (cold storage reads over the network); later runs read the cached state.
 `evm_snapshot` stalls a fork with this much cached state, so the tests do not use snapshots: each one
 measures balance deltas and the time-travel test runs last.
+
+## USD pricing (no oracle, no contract change)
+
+Fees accrue in the quote asset and consolidate to USDC along the `QuoteRegistry` route, so the pools
+already say what a quote asset is worth. One layer prices every figure the app shows in dollars:
+
+- `packages/sdk/src/swap/usd.ts` (pure): per-hop price (any decimals, inverted pools), per-hop depth
+  (twice the USD value of the output-side virtual reserve), route price and depth (the thinnest hop),
+  the confidence flag (`high` from $25k of depth, else `low`), `pickUsdQuote`, `usdValue`, `rankByDepth`.
+- `usd-discover.ts`: the fallback, the deepest route of pools the swap engine finds (up to 3 hops).
+- Web: `lib/usd-pricing.ts` + `hooks/use-usd-quotes.ts`. Order: dollar stablecoin = $1, then the
+  registry route (already read by `readQuoteMarkets`), then the discovered route; the deeper of the two
+  wins, ties go to the registry. An Ondo stock or ETF outside the US session is flagged `marketClosed`.
+- A thin or closed-market price prints with "~" and a note; the quote asset's own amount stays as the
+  secondary line. Pairs are ordered by route depth (deepest first).
+- The indexer stays in quote units. Historic figures (24 h volume, trade values, holder values) are
+  converted at today's price and labelled so; there is no price snapshot table.
+
+`packages/sdk/test/usd.fork.test.ts` reads real mainnet pools (any mainnet RPC works, it only reads):
+`FORK_RPC_URL=<rpc> pnpm --filter @varada/sdk exec vitest run test/usd.fork.test.ts`. On 2026-11-07 it
+priced USDon at $0.988 ($887k deep), QQQon $672.76 ($353k, via USDT and ETH), SPYon $742.28 ($101k),
+AMZNon $259.95 ($33k), GOOGLon $287.43 ($27k), and the thinner USOon, SLVon, TSLAon, CRCLon as `low`.

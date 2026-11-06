@@ -2,7 +2,8 @@ import type { ActivityFeedItem } from "@varada/ui/components/varada/activity-fee
 import type { ActivityTickerItem } from "@varada/ui/components/varada/activity-ticker";
 import type { CauseName } from "@varada/ui/components/varada/cause-icon";
 import type { ActivityItem } from "./indexer";
-import { formatQuote, formatUsdc, timeAgo, unitsToNumber } from "./format";
+import type { UsdQuote } from "@varada/sdk";
+import { formatQuoteAsUsd, formatUsdc, timeAgo, unitsToNumber } from "./format";
 
 /** Turns indexer activity into the library's ticker and feed rows. Pure; the page supplies the lookups. */
 export interface ActivityContext {
@@ -10,6 +11,8 @@ export interface ActivityContext {
   symbolOf(token: string | undefined): string | undefined;
   /** Symbol and decimals of a quote asset address. */
   quoteOf(address: string | undefined): { symbol: string; decimals: number } | undefined;
+  /** USD per quote asset (the shared pricing layer); trades show in dollars when it is known. */
+  usdOf?(address: string | undefined): UsdQuote | undefined;
   /** Name and category of the cause behind a cause id. */
   causeOf(causeId: string | undefined): { name: string; cause: CauseName } | undefined;
   nowSeconds: number;
@@ -27,7 +30,7 @@ export function toTickerItem(a: ActivityItem, ctx: ActivityContext): ActivityTic
       const amount = bigOf(a.data.quoteAmount);
       const q = ctx.quoteOf(typeof a.data.quote === "string" ? a.data.quote : undefined);
       if (!side || amount === null || !q) return null;
-      return { id: a.id, kind: side, symbol, text: formatQuote(unitsToNumber(amount, q.decimals), q.symbol) };
+      return { id: a.id, kind: side, symbol, text: formatQuoteAsUsd(unitsToNumber(amount, q.decimals), q.symbol, ctx.usdOf?.(typeof a.data.quote === "string" ? a.data.quote : undefined)) };
     }
     case "donation": {
       const amount = bigOf(a.data.amount);
