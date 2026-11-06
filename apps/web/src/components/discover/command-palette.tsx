@@ -9,9 +9,10 @@ import { Compass, Coins, HandHeart, Search, User, Vote } from "@varada/ui/compon
 import { Kbd } from "@varada/ui/components/ui/kbd";
 import { CauseIcon } from "@varada/ui/components/varada/cause-icon";
 import { useAppConfig, useDeps } from "@/components/providers";
-import { NAV_ITEMS, useRel } from "@/components/nav";
+import { NAV_ITEMS } from "@/components/nav";
 import { causeNameOf, shortAddr, tokenPath } from "@/lib/discover";
 import { fetchDiscover } from "@/lib/discover-client";
+import { useRel } from "./hooks";
 
 const PAGE_ICONS = { "": Compass, "launch/": Coins, "causes/": HandHeart, "governance/": Vote, "agent/": User } as const;
 

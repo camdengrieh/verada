@@ -9,7 +9,7 @@ Images ship only as optimised copies under `assets/`, within a size budget (see 
 
 | Route | Purpose |
 |---|---|
-| `/` | Token list (`GET /api/tokens`, chain-log fallback), or a token's page when served on its ENS name (see Hostname routing) |
+| `/` | Discover: hero with platform totals, Trending / New / Stocks & RWA / By cause / Live donation lists with market data (`GET /api/discover`; plain `/api/tokens` then chain-log fallback), live giving; or a token's page when served on its ENS name (see Hostname routing) |
 | `/launch/` | Launch wizard (identity, giving mode, pair, cause focus, fees, review): logo and metadata uploads, ENS label, `VaradaFactory.deployToken` or `deployLiveToken` |
 | `/token/?address=0x...` | Single client-side token page; the address is read from the query (or `#0x...` hash), or resolved from `?label=` |
 | `/causes/` | Cause categories with catalogue counts and totals, the most-given-to leaderboard (`GET /api/causes/leaderboard`), the catalogue browser (category x region x name, offset paging, a filter sheet on phones) and Endaoment search (`GET /api/causes/search`). Filters live in `?category=&region=&q=` |
@@ -72,6 +72,17 @@ build-time defaults from `NEXT_PUBLIC_*` (see `.env.example`). Public values onl
 
 All values are zod-validated; an invalid or missing file falls back to the defaults. `public/config.json`
 ships a local-development default (indexer on 42069, publisher on 42070).
+
+## Discover (home)
+
+`components/discover/*` renders the home page from `GET /api/discover` (one request per cursor page, never per token):
+
+- Tabs and filters live in the query string (`?tab=stocks&pair=NVDAon&category=hunger&region=africa&mode=live&cadence=24h&q=`), read and written without navigating (`lib/discover.ts`: `parseState`, `stateToSearch`, `buildQuery`). The header search and the palette (Cmd/Ctrl+K: coins, causes, pages) set `q` on the home list in place.
+- Lists are cards, compact rows or the sortable `DataTable` (cards on phones; the remembered choice is in `localStorage`). Infinite scroll uses an IntersectionObserver sentinel with a Load more button; on phones the list sits in the library `PullToRefresh` and filters in the `FilterSheet`.
+- Money is shown in each coin's quote asset (price, market cap, volume 24h, and "liquidity", the quote side of the pool); there is no USD oracle for coins. Only what a coin raised is USDC. A coin that has not traded shows dashes, not zeros.
+- Pairs come from the quote registry allowlist (`/quote-assets`) with names, kinds and logos from the SDK and `asset-packs.ts` (`lib/quote-assets.ts`). `lib/quote-markets.ts` adds each asset's fee route (`QuoteRegistry.routeOf`), USD price and depth from the pools along that route (v4 StateView; depth is virtual reserves at the current price), and Ondo's pause state, through the public-scope private RPC. When the chain does not answer, the pair list says so.
+- The US session label uses `lib/market-calendar.ts` (2026 holidays only; extend yearly).
+- Live strip, donations feed and the total raised use the SSE stream (`lib/activity-stream.ts`; polling when indexer traffic is routed privately). No request carries a wallet address.
 
 ## Data layer
 

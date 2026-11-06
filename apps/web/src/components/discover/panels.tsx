@@ -96,7 +96,7 @@ function PairLink({ href, children, onPick, ...props }: VaradaLinkProps & { onPi
  * Stocks &amp; RWA: the allowlisted tokenized assets with price, depth, fee route and market status (the
  * US session, or Ondo's pause), each row opening the coins paired with it.
  */
-export function PairsPanel({ assets, selected, onPick, loading }: { assets: readonly AppQuoteAsset[]; selected: string | null; onPick(symbol: string | null): void; loading: boolean }) {
+export function PairsPanel({ assets, selected, onPick, loading, marketsLoading }: { assets: readonly AppQuoteAsset[]; selected: string | null; onPick(symbol: string | null): void; loading: boolean; marketsLoading: boolean }) {
   const now = useNow(30_000);
   const Link = useMemo(() => {
     const L = (p: VaradaLinkProps) => <PairLink {...p} onPick={onPick} />;
@@ -108,8 +108,14 @@ export function PairsPanel({ assets, selected, onPick, loading }: { assets: read
     return <EmptyState size="compact" icon={<Coins />} title="No tokenized stocks yet" body="Ondo stocks and ETFs appear here once the quote registry allowlists them as pairs." />;
   }
   if (!now) return <Skeleton className="h-48 rounded-[24px]" />;
+  const marketsUnavailable = !marketsLoading && stocks.every((a) => a.route === undefined && a.price === undefined);
   return (
     <div className="flex flex-col gap-2">
+      {marketsUnavailable ? (
+        <p role="note" className="m-0 rounded-2xl border border-line bg-paper-card px-4 py-3 text-sm text-ink-soft">
+          Prices, liquidity and fee routes are read from the chain, which did not answer. Until it does, those columns show as empty, not as missing.
+        </p>
+      ) : null}
       {selected ? (
         <p className="m-0 text-sm text-ink-soft">
           Showing coins paired with <strong className="num">{selected}</strong>.{" "}

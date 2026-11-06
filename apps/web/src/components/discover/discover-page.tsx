@@ -124,7 +124,7 @@ export function DiscoverPage() {
           </TabsList>
           <TabsContent value={state.tab} className="mt-4 flex flex-col gap-4">
             {state.tab === "cause" ? <CauseChooser selected={state.category} onSelect={(category) => update({ category })} /> : null}
-            {state.tab === "stocks" ? <PairsPanel assets={quotes.assets} selected={state.pair} onPick={(pair) => update({ pair })} loading={quotes.isLoading} /> : null}
+            {state.tab === "stocks" ? <PairsPanel assets={quotes.assets} selected={state.pair} onPick={(pair) => update({ pair })} loading={quotes.isLoading} marketsLoading={quotes.marketsLoading} /> : null}
             {state.tab === "live" ? <CadenceFilter value={state.cadence} onChange={(cadence) => update({ cadence })} /> : null}
             <Filters state={state} assets={quotes.assets} onChange={update} />
             {source && source !== "market" ? (

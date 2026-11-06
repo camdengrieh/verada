@@ -43,12 +43,14 @@ export function activeFilterCount(s: DiscoverState): number {
 
 function FilterSelect({ label, value, onValueChange, children }: { label: string; value: string; onValueChange(v: string): void; children: React.ReactNode }) {
   return (
-    <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger aria-label={label} className="min-w-[9.5rem]">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>{children}</SelectContent>
-    </Select>
+    <div className="w-44 shrink-0">
+      <Select value={value} onValueChange={onValueChange}>
+        <SelectTrigger aria-label={label}>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>{children}</SelectContent>
+      </Select>
+    </div>
   );
 }
 

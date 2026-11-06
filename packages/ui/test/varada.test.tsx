@@ -22,6 +22,12 @@ beforeAll(() => {
 });
 
 describe("PriceChange", () => {
+  it("shows a dash and says there were no trades when there is nothing to compare", () => {
+    const { container } = render(<PriceChange value={null} />);
+    expect(container.querySelector("[data-direction=none]")).not.toBeNull();
+    expect(container.textContent).toContain("–");
+    expect(container.textContent).toContain("No trades in 24h");
+  });
   it("shows the up glyph and says the direction in words", () => {
     const { container } = render(<PriceChange value={18.42} />);
     const visible = container.querySelector("[aria-hidden='true']");
