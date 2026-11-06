@@ -1,24 +1,29 @@
 import type { ActivityItem as FeedRow } from "@varada/ui/components/data/activity-list";
 import type { ActivityContext } from "./activity";
-import { formatUsdc } from "./agents";
-import { formatQuote, formatQuoteAsUsd, timeAgo, unitsToNumber } from "./format";
+import { formatDonation, formatQuote, formatQuoteAsUsd, timeAgo, unitsToNumber } from "./format";
+import { donationAssetOrDefault, EXTERNAL_ADDRESSES } from "@varada/sdk";
 import type { ActivityItem } from "./indexer";
 
 const short = (v: string) => (v.length > 12 ? `${v.slice(0, 6)}...${v.slice(-4)}` : v);
 const dollar = (s: string | undefined) => (s ? `$${s.replace(/^\$/, "")}` : "a coin");
 const bigOf = (v: unknown): bigint | null =>
   typeof v === "string" && /^\d+$/.test(v) ? BigInt(v) : typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? BigInt(v) : null;
+/** A money amount of an item in its token's donation asset (the indexer tags items with `donationAsset`). */
+function donationText(item: ActivityItem, amount: bigint, ctx?: ActivityContext): string {
+  const ethUsd = ctx?.usdOf?.(EXTERNAL_ADDRESSES.weth)?.priceUsd ?? null;
+  return formatDonation(amount, donationAssetOrDefault(item.data.donationAsset), ethUsd);
+}
 const iso = (t: number | undefined) => (t === undefined ? undefined : new Date(t * 1000).toISOString());
 
 /**
- * Feed row for a `live_donation` item: USDC the live vault sent to a cause's org, in a swap or by
+ * Feed row for a `live_donation` item: the donation asset (USDC or ETH) the live vault sent to a cause's org, in a swap or by
  * `flush`. The event names no donor, so the row shows only the cause and the org. With a context
  * the cause id is replaced by the catalogue's name.
  */
 export function liveDonationRow(item: ActivityItem, ctx?: ActivityContext): FeedRow | null {
   if (item.kind !== "live_donation") return null;
-  const raw = item.data.amount;
-  const amount = typeof raw === "string" || typeof raw === "bigint" ? formatUsdc(raw) : "0";
+  const raw = bigOf(item.data.amount);
+  const amount = raw === null ? "$0" : donationText(item, raw, ctx);
   const causeId = typeof item.data.causeId === "string" ? item.data.causeId : undefined;
   const name = ctx?.causeOf(causeId)?.name;
   const cause = name ?? (causeId ? short(causeId) : "cause");
@@ -29,7 +34,7 @@ export function liveDonationRow(item: ActivityItem, ctx?: ActivityContext): Feed
     tag: "Live gift",
     title: `Donated to ${cause}`,
     meta: [org ? `org ${org}` : null, item.data.inSwap === true ? "in a swap" : "by flush"].filter(Boolean).join(" · "),
-    amount: `$${amount}`,
+    amount,
     amountTone: "cause",
     time: ctx && item.timestamp !== undefined ? timeAgo(item.timestamp, ctx.nowSeconds) : undefined,
     dateTime: iso(item.timestamp),
@@ -45,7 +50,7 @@ function donationRow(item: ActivityItem, ctx: ActivityContext): FeedRow | null {
     id: item.id,
     kind: "give",
     title: `${dollar(ctx.symbolOf(item.token))} gave to ${cause ? cause.name : "a cause"}`,
-    amount: `$${formatUsdc(amount)}`,
+    amount: donationText(item, amount, ctx),
     amountTone: "cause",
     time: timeAgo(item.timestamp, ctx.nowSeconds),
     dateTime: iso(item.timestamp),

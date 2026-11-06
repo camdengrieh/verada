@@ -335,7 +335,7 @@ describe("history", () => {
     expect(table).toHaveTextContent("Harambe (HAR)");
     expect(table).toHaveTextContent("$2,500");
     await waitFor(() => expect(within(section).getByText("Donations to winners")).toBeInTheDocument());
-    expect(within(section).getByText("Causes by USDC received")).toBeInTheDocument();
+    expect(within(section).getByText("Causes by value received")).toBeInTheDocument();
     expect(indexer.activity).toHaveBeenCalledWith(expect.objectContaining({ kind: "epoch" }));
     expect(indexer.activity).toHaveBeenCalledWith(expect.objectContaining({ kind: "donation" }));
   });

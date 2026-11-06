@@ -34,3 +34,15 @@ export function donationAssetHint(quoteAddress: string, depths: { usdcDepthUsd?:
   }
   return { suggest: null, text: "Route depth for this pair could not be read. Either choice works; pick the asset your charities would rather receive." };
 }
+
+/** A donation asset as a dollar unit: ETH needs `ethUsd` (USD per ETH; unknown counts as 0, see `donationPriced`). */
+export function donationUnitOf(asset: DonationAsset, ethUsd: number | null | undefined): { decimals: number; usd: number } {
+  return asset === "usdc" ? { decimals: 6, usd: 1 } : { decimals: 18, usd: typeof ethUsd === "number" && ethUsd > 0 ? ethUsd : 0 };
+}
+
+/** An amount in USDC base units (6 decimals) with the same dollar value, to compare and sum across assets. */
+export function usdcScaled(amount: bigint, asset: DonationAsset, ethUsd: number | null | undefined): bigint {
+  if (asset !== "eth") return amount;
+  const usd = typeof ethUsd === "number" && ethUsd > 0 ? Math.round(ethUsd * 100) : 0;
+  return (amount * BigInt(usd)) / (100n * 10n ** 12n);
+}

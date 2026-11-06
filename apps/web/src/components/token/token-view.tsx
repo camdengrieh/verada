@@ -25,6 +25,7 @@ import { usdNotes } from "@varada/sdk";
 import { useQuoteUsd } from "@/hooks/use-usd-quotes";
 import { usdText } from "@/lib/token-view";
 import { usdcToUsd } from "@/lib/token-data";
+import { useDonationUnit } from "@/hooks/use-donation-unit";
 import { factoryAbi } from "@/lib/abis";
 import { LiveActivityFeed } from "@/components/discover/live-activity";
 import { AboutTab } from "./about-tab";
@@ -135,8 +136,10 @@ export function TokenView({ address, token, source }: { address: Address; token:
 
   const figures = useMarketFigures(market.data, address, summary.data, nowSec);
   const feeTotals = token.feeTotals;
+  const donation = useDonationUnit(token.donationAsset);
+  const donationInfo = useMemo(() => ({ unit: donation.unit, symbol: donation.symbol }), [donation.unit, donation.symbol]);
   const isLive = Boolean(live.data);
-  const raisedUsd = isLive ? usdcToUsd(live.data!.totals.credited) : feeTotals ? usdcToUsd(BigInt(feeTotals.causeAmount)) : source === "indexer" ? 0 : null;
+  const raisedUsd = isLive ? usdcToUsd(live.data!.totals.credited, donation.unit) : feeTotals ? usdcToUsd(BigInt(feeTotals.causeAmount), donation.unit) : source === "indexer" ? 0 : null;
   const sym = quote?.symbol ?? "";
   // USD per quote asset: USDC is $1, WETH and the Ondo assets come from their pools (shared pricing layer).
   const { quote: usdQuote } = useQuoteUsd(quote?.address);
@@ -231,6 +234,7 @@ export function TokenView({ address, token, source }: { address: Address; token:
             onTrade={openTrade}
             extraMetrics={liquidity}
             usd={usdQuote}
+            donation={donationInfo}
           />
         </div>
 
@@ -238,8 +242,8 @@ export function TokenView({ address, token, source }: { address: Address; token:
           <div id="trade" className="scroll-mt-24 empty:hidden">
             {wide ? <TradeAside token={address} symbol={symbol} causeName={causeName} causeIcon={causeIcon} onSwapped={onSwapped} /> : null}
           </div>
-          {live.data ? <LiveSummary live={live.data} /> : <PoolSummary token={address} detail={token} onVote={() => showTab("governance")} />}
-          <FeeSplit feeTotals={feeTotals} />
+          {live.data ? <LiveSummary live={live.data} unit={donation.unit} /> : <PoolSummary token={address} detail={token} onVote={() => showTab("governance")} />}
+          <FeeSplit feeTotals={feeTotals} unit={donation.unit} symbol={donation.symbol} priced={donation.priced} />
         </aside>
 
         <div ref={tabsRef} className="min-w-0 scroll-mt-24 lg:col-start-1 lg:row-start-2">
@@ -263,7 +267,7 @@ export function TokenView({ address, token, source }: { address: Address; token:
               <HoldersTab symbol={symbol} holders={holders} summary={summary} tokenUsd={tokenUsd} />
             </TabsContent>
             <TabsContent value="impact">
-              <ImpactTab token={address} symbol={symbol} live={live.data ?? null} feeTotals={feeTotals} epoch={epochView.data?.epoch} />
+              <ImpactTab token={address} symbol={symbol} live={live.data ?? null} feeTotals={feeTotals} epoch={epochView.data?.epoch} donationAsset={donation.asset} />
             </TabsContent>
             <TabsContent value="governance" className="flex flex-col gap-8">
               <EpochPanel token={address} detail={token} />

@@ -1,3 +1,4 @@
+import { usdcScaled } from "./donation-asset";
 import { CATEGORIES, REGIONS } from "@varada/sdk";
 import { isCauseName, type CauseName } from "@varada/ui/components/varada/cause-icon";
 import { IndexerError, type IndexerClient } from "./indexer";
@@ -64,8 +65,10 @@ export interface LeaderboardOrg {
 export interface LeaderboardRow {
   rank: number;
   causeId: string;
-  /** USDC base units (6 decimals). */
+  /** USDC base units (6 decimals) from coins that donate in USDC. */
   donated: bigint;
+  /** Wei from coins that donate in ETH. */
+  donatedEth: bigint;
   donations: number;
   /** Coins that gave to this cause. */
   tokens: number;
@@ -76,12 +79,13 @@ export interface LeaderboardRow {
 export interface CategoryTotal {
   slug: string;
   donated: bigint;
+  donatedEth: bigint;
   donations: number;
   causes: number;
 }
 
 export interface CauseLeaderboardPage {
-  totals: { causes: number; donations: number; donated: bigint };
+  totals: { causes: number; donations: number; donated: bigint; donatedEth: bigint };
   items: LeaderboardRow[];
   byCategory: CategoryTotal[];
   nextCursor: string | null;
@@ -104,6 +108,7 @@ function toRow(v: unknown): LeaderboardRow | null {
     rank: int(v.rank),
     causeId: v.causeId,
     donated: big(v.donated),
+    donatedEth: big(v.donatedEth),
     donations: int(v.donations),
     tokens: int(v.tokens),
     org:
@@ -118,10 +123,10 @@ export function toLeaderboardPage(v: unknown): CauseLeaderboardPage | null {
   const t = isRecord(v.totals) ? v.totals : {};
   const cursor = v.nextCursor;
   return {
-    totals: { causes: int(t.causes), donations: int(t.donations), donated: big(t.donated) },
+    totals: { causes: int(t.causes), donations: int(t.donations), donated: big(t.donated), donatedEth: big(t.donatedEth) },
     items: v.items.map(toRow).filter((r): r is LeaderboardRow => r !== null),
     byCategory: (Array.isArray(v.byCategory) ? v.byCategory : []).flatMap((c): CategoryTotal[] =>
-      isRecord(c) && typeof c.slug === "string" ? [{ slug: c.slug, donated: big(c.donated), donations: int(c.donations), causes: int(c.causes) }] : [],
+      isRecord(c) && typeof c.slug === "string" ? [{ slug: c.slug, donated: big(c.donated), donatedEth: big(c.donatedEth), donations: int(c.donations), causes: int(c.causes) }] : [],
     ),
     nextCursor: typeof cursor === "string" && cursor !== "" ? cursor : null,
   };
@@ -135,6 +140,17 @@ export async function fetchCauseLeaderboard(client: Pick<IndexerClient, "get">, 
     if (e instanceof IndexerError && (e.status === 503 || e.status === 404)) return null;
     throw e;
   }
+}
+
+/**
+ * Folds the ETH-donation column into the USDC one at `ethUsd` (USD per ETH), so every figure
+ * downstream is one number of USDC base units; re-ranks rows by the live price. With no price the
+ * ETH part counts as zero.
+ */
+export function leaderboardInUsd(page: CauseLeaderboardPage, ethUsd: number | null | undefined): CauseLeaderboardPage {
+  const fold = <T extends { donated: bigint; donatedEth: bigint }>(x: T): T => ({ ...x, donated: x.donated + usdcScaled(x.donatedEth, "eth", ethUsd), donatedEth: 0n });
+  const items = page.items.map(fold).sort((a, b) => (a.donated === b.donated ? a.rank - b.rank : a.donated > b.donated ? -1 : 1));
+  return { ...page, totals: fold(page.totals), items, byCategory: page.byCategory.map(fold).sort((a, b) => (a.donated === b.donated ? 0 : a.donated > b.donated ? -1 : 1)) };
 }
 
 /** USDC base units as a number of dollars (display only; amounts stay bigint elsewhere). */

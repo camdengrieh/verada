@@ -1,4 +1,5 @@
 "use client";
+import { EXTERNAL_ADDRESSES } from "@varada/sdk";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PullToRefresh } from "@varada/ui/components/mobile/pull-to-refresh";
@@ -66,7 +67,7 @@ export function DiscoverPage() {
   const filtered = Boolean(state.q || state.pair || state.category || state.region || state.mode || state.cadence || state.tab === "stocks" || state.tab === "live" || state.tab === "cause");
   const nowSeconds = now ? Math.floor(now.getTime() / 1000) : 0;
   const href = useCallback((path: string) => rel(path), [rel]);
-  const ctx = useMemo(() => ({ parent: config.ensParentName, assets: quotes.assets, logo, usd: usd.quoteFor }), [config.ensParentName, quotes.assets, logo, usd.quoteFor]);
+  const ctx = useMemo(() => ({ parent: config.ensParentName, assets: quotes.assets, logo, usd: usd.quoteFor, ethUsd: usd.quoteFor(EXTERNAL_ADDRESSES.weth)?.priceUsd ?? null }), [config.ensParentName, quotes.assets, logo, usd.quoteFor]);
 
   const refresh = useCallback(async () => {
     await Promise.all([list.refetch(), stats.refetch()]);

@@ -228,7 +228,7 @@ export interface TokenResultsProps {
 
 /** Cards, compact rows or the sortable table, with an infinite-scroll sentinel and a Load more button. */
 export function TokenResults({ tokens, ctx, view, href, nowSeconds, hasMore, loadingMore, onLoadMore, scrollRoot, footer }: TokenResultsProps) {
-  const full: CardContext = useMemo(() => ({ ...ctx, maxRaised: maxRaisedOf(tokens) }), [ctx, tokens]);
+  const full: CardContext = useMemo(() => ({ ...ctx, maxRaised: maxRaisedOf(tokens, ctx.ethUsd) }), [ctx, tokens]);
   const sentinel = useSentinel(onLoadMore, hasMore && !loadingMore, scrollRoot);
   const go = (path: string) => () => {
     window.location.href = href(path);

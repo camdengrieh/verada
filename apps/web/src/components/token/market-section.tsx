@@ -13,7 +13,7 @@ import { HandHeart } from "@varada/ui/components/ui/icons";
 import type { HolderSummary, MarketSnapshot, MarketTrade } from "@/lib/indexer";
 import type { QuoteInfo } from "@/lib/quote-info";
 import { candlesFromHours, formatQuotePrice, HOUR, marketStats, percentChange, pressureWindows, quoteNumberFormat, RANGE_HOURS, RANGES, toUnits, tradePoints, TOKEN_DECIMALS, volumeBars, type Range } from "@/lib/token-market";
-import { usdcToUsd } from "@/lib/token-data";
+import { usdcToUsd, type DonationUnit } from "@/lib/token-data";
 import type { TokenFeeTotals } from "@/lib/indexer";
 
 /** Seconds since the epoch, refreshed on an interval so ranges and 24h windows keep moving. */
@@ -47,8 +47,11 @@ export function metricList(opts: {
   feeTotals: TokenFeeTotals | null | undefined;
   /** USD per quote asset from the shared pricing layer; absent or unpriced: the quote asset's own units. */
   usd?: UsdQuote | null;
+  /** The token's donation asset as a dollar unit; USDC when absent. */
+  donation?: { unit: DonationUnit; symbol: string };
 }): TradingMetric[] {
   const { quote, figures, summary, feeTotals } = opts;
+  const donationUnit = opts.donation?.unit;
   const sym = quote?.symbol ?? "";
   // USDC is $1; any other quote is priced by its pools. Without a price the figures stay in quote units.
   const perQuote = quote?.usd ? 1 : (opts.usd?.priceUsd ?? null);
@@ -99,11 +102,11 @@ export function metricList(opts: {
     out.push({
       key: "fees",
       label: "Fees to causes",
-      value: usdcToUsd(BigInt(feeTotals.causeAmount)),
+      value: usdcToUsd(BigInt(feeTotals.causeAmount), donationUnit),
       format: USD_COMPACT,
       tone: "cause",
       icon: <HandHeart />,
-      hint: "90% of fees, paid in USDC",
+      hint: `90% of fees, paid in ${opts.donation?.symbol ?? "USDC"}`,
     });
   }
   return out;
@@ -136,16 +139,17 @@ export interface MarketSectionProps {
   extraMetrics?: TradingMetric[];
   /** USD per quote asset (shared pricing layer). */
   usd?: UsdQuote | null;
+  donation?: { unit: DonationUnit; symbol: string };
 }
 
-export function MarketSection({ address, symbol, quote, market, loading, error, onRetry, summary, feeTotals, trades, nowSec, onTrade, extraMetrics, usd }: MarketSectionProps) {
+export function MarketSection({ address, symbol, quote, market, loading, error, onRetry, summary, feeTotals, trades, nowSec, onTrade, extraMetrics, usd, donation }: MarketSectionProps) {
   const [range, setRange] = useState<Range>("24H");
   const figures = useMarketFigures(market, address, summary, nowSec);
   const metrics = useMemo(() => {
-    const list = metricList({ quote, figures, summary, feeTotals, usd });
+    const list = metricList({ quote, figures, summary, feeTotals, usd, donation });
     if (extraMetrics?.length) list.splice(Math.min(3, list.length), 0, ...extraMetrics);
     return list;
-  }, [quote, figures, summary, feeTotals, extraMetrics, usd]);
+  }, [quote, figures, summary, feeTotals, extraMetrics, usd, donation]);
 
   const candles = useMemo(() => (market && quote ? candlesFromHours(market, address, nowSec) : []), [market, quote, address, nowSec]);
   const shown = useMemo(() => {
