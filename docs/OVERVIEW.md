@@ -119,6 +119,59 @@ validates every response and fails over across `indexerUrls`.
 
 ## Running everything locally
 
+### One command: `pnpm dev:up`
+
+A complete local stack on a fork of mainnet, for trying the app end to end:
+
+```sh
+export FORK_RPC_URL=<a mainnet RPC URL>    # or put FORK_RPC_URL=... in a gitignored .env.local at the repo root
+pnpm dev:up      # under 2 minutes warm; a clean clone also installs, fetches submodules and compiles (about 3 minutes with a warm pnpm store, longer on a cold network)
+pnpm dev:down    # stops everything it started
+```
+
+`dev:up` (`tools/dev/up.mjs`) does, in order, and stops with the tail of the failing log if a step fails:
+
+1. **Preflight**: `anvil`, `forge`, `cast` and `pnpm` on the PATH; a Node 22.12+ for Ponder (the running Node if it
+   is new enough, else `NODE22_BIN`, else the newest 22+ under `~/.nvm`); missing dependencies are installed
+   (`pnpm install` under that Node 22, contract submodules, `pnpm install --ignore-workspace` in `contracts/`).
+2. **Ports**: three random free ports above 20000 (anvil, indexer, web). Pin one with `DEV_ANVIL_PORT`,
+   `DEV_INDEXER_PORT` or `DEV_WEB_PORT`; a pinned port that is busy is an error, not a silent change.
+3. **anvil** forked from `FORK_RPC_URL` (chain id 1, `--auto-impersonate`; `FORK_BLOCK_NUMBER` pins the block).
+   The URL goes to anvil only. Every log line and message is scrubbed of it, its path segments (API keys) and
+   its credentials, so a banner or an upstream error never leaks it.
+4. **Test wallet**: a fresh random key (`cast wallet new`, never an anvil dev account, which carry EIP-7702
+   delegations on mainnet forks), funded with 1000 ETH and 100,000 USDC. The key lives in `.dev/test-key`
+   (mode 600) and is deleted by `dev:down`.
+5. **Deploy**: `contracts/script/E2eFixture.s.sol` (the fixture behind `apps/web/test/fork`) deploys the whole
+   system with the wallet as owner, plain-ballot mock voting scheme, a two-organisation catalogue, one curator
+   agent and one launched, traded token. The node's clock is then moved to two hours into epoch 1, where the
+   fixture's catalogue has a pool. Addresses are copied to `.dev/fixture.json`.
+6. **Indexer**: Ponder (`ponder dev`, Node 22) on the fork, `START_BLOCK` the deployment block, every address
+   from the fixture, embedded PGlite. Waits for `GET /ready`. `services/indexer/.ponder` is removed first,
+   because its sync cache is keyed by chain id 1 and would replay another fork's logs.
+7. **Web**: `next dev` with build-time variables pointing at the fork and the indexer, `passthrough` private
+   RPC (so no mixnet), `NEXT_PUBLIC_DEV_PLAIN_BALLOTS=true`, `NEXT_PUBLIC_DEV_STACK=true` (the tracked
+   `public/config.json` must not override the dev services) and `NEXT_PUBLIC_DEV_WALLET_KEY`. That last one
+   makes the app announce a **Varada Dev Wallet** over EIP-6963 (`src/lib/dev-wallet.ts`), so it appears in the
+   wallet picker like a browser wallet. The helper page `/dev-wallet/` shows its address and balances and can
+   reset the ETH and USDC balance or move the chain clock one hour or one day. The wallet reads and signs
+   against the fork directly (not through the private RPC; it is local). Without the key, as in every real
+   build, neither the wallet module nor the page exists: `next.config.mjs` inlines the key as empty so the
+   bundler drops the module, and only then adds `*.dev.tsx` to the page extensions (`(dev)/dev-wallet`).
+
+It prints the URLs when everything answers. Flags: `--no-indexer` (the app then reads from the chain), `--no-web`.
+
+Processes run detached, one process group each, with logs in `.dev/{anvil,indexer,web,deploy}.log` (gitignored).
+`.dev/state.json` records pid and start time of each; `pnpm dev:down` signals a process only when the start
+time still matches (a recycled pid is left alone), sends SIGTERM to the group, then SIGKILL after 8 s, and
+removes the state and key (`pnpm dev:down --purge` also deletes the logs). Ctrl-C during `dev:up` and any failed step
+run the same cleanup; running `dev:up` while a stack is up is refused, and a stale state from a crash is cleared.
+
+Not covered: the publisher (uploads), Swarm, ENS resolution, a real Zama relayer (ballots are plaintext to the
+mock scheme) and the cause catalogue API (`CATALOG_SOURCE`).
+
+The rest of this section runs the pieces separately.
+
 Needs Node 22.12 or newer for Ponder (the web app, SDK and tests run on Node 20), pnpm 10, and
 Foundry for contracts.
 

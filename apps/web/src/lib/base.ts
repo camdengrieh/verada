@@ -3,7 +3,7 @@
  * /bzz/<hash>/, on a bzz subdomain and at the root of an ENS gateway alike.
  * Top-level routes are exactly one directory deep, so strip a known route.
  */
-export const ROUTES = ["launch", "causes", "governance", "token", "design", "404"] as const;
+export const ROUTES = ["launch", "causes", "governance", "token", "design", "dev-wallet", "404"] as const;
 
 /** `agent/`, `agent/<label>/` and `agent/<label>/<region>/` are one to three directories deep. */
 const AGENT_PATH = /^(.*\/)agent(?:\/[^/]+){0,2}\/?(?:index\.html)?$/;
