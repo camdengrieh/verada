@@ -38,7 +38,6 @@ contract VaradaResolverTest is Test {
     address internal token = makeAddr("pepe-token");
 
     bytes internal siteHash = ContenthashLib.swarm(keccak256("site"));
-    bytes internal pepeHash = ContenthashLib.swarm(keccak256("pepe-site"));
 
     function setUp() public {
         registry = new TokenProfileRegistry(address(this), factory, PARENT_NODE);
@@ -233,13 +232,8 @@ contract VaradaResolverTest is Test {
 
     function test_child_contenthash() public {
         bytes memory name = _name("pepe.varada.eth");
-        assertEq(_rHash(name, PEPE_NODE), siteHash, "default");
-        vm.prank(creator);
-        registry.setContenthash(token, pepeHash);
-        assertEq(_rHash(name, PEPE_NODE), pepeHash, "override");
-        vm.prank(creator);
-        registry.setContenthash(token, "");
-        assertEq(_rHash(name, PEPE_NODE), siteHash, "cleared");
+        assertEq(_rHash(name, PEPE_NODE), siteHash, "the one site");
+        assertEq(_rHash(PARENT_DNS, PARENT_NODE), siteHash, "same as the parent");
         registry.setDefaultContenthash("");
         assertEq(_rHash(name, PEPE_NODE), "", "no default");
     }
@@ -421,10 +415,8 @@ contract VaradaResolverTest is Test {
 
     // ------------------------------------------------------------------ multicall
 
-    function test_multicall_viaResolve() public {
+    function test_multicall_viaResolve() public view {
         bytes memory name = _name("pepe.varada.eth");
-        vm.prank(creator);
-        registry.setContenthash(token, pepeHash);
 
         bytes[] memory calls = new bytes[](7);
         calls[0] = _addrCall(PEPE_NODE);
@@ -440,7 +432,7 @@ contract VaradaResolverTest is Test {
         assertEq(out.length, 7);
         assertEq(abi.decode(out[0], (address)), token);
         assertEq(abi.decode(out[1], (string)), "https://pepe.example");
-        assertEq(abi.decode(out[2], (bytes)), pepeHash);
+        assertEq(abi.decode(out[2], (bytes)), siteHash);
         assertEq(out[3].length, 0, "unsupported item is empty");
         assertEq(abi.decode(out[4], (bytes)), abi.encodePacked(token));
         assertEq(
@@ -474,9 +466,7 @@ contract VaradaResolverTest is Test {
         assertEq(out.length, 0);
     }
 
-    function test_multicall_direct() public {
-        vm.prank(creator);
-        registry.setContenthash(token, pepeHash);
+    function test_multicall_direct() public view {
         bytes32 dogeNode = _node("doge");
 
         bytes[] memory calls = new bytes[](8);
@@ -528,14 +518,10 @@ contract VaradaResolverTest is Test {
         assertEq(resolver.text(_node("doge"), "url"), "");
     }
 
-    function test_legacy_contenthash() public {
+    function test_legacy_contenthash() public view {
         assertEq(resolver.contenthash(PEPE_NODE), siteHash);
         assertEq(resolver.contenthash(PARENT_NODE), siteHash);
         assertEq(resolver.contenthash(_node("doge")), "");
-        vm.prank(creator);
-        registry.setContenthash(token, pepeHash);
-        assertEq(resolver.contenthash(PEPE_NODE), pepeHash);
-        assertEq(resolver.contenthash(PARENT_NODE), siteHash);
     }
 
     // ------------------------------------------------------------------ ERC-165

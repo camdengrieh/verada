@@ -44,12 +44,12 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 
 | Table | Key | Source |
 | --- | --- | --- |
-| `token` | `address` | `TokenCreated`; `name`/`symbol` read from the token at the launch block (empty strings if the read fails); profile columns (`label`, `labelhash`, `controller`, `editor`, `logoRef`, `contenthash`, `suppressed`, `registeredAt`) mirrored from `token_profile`; `categoryMask`, `regionMask` mirrored from `token_focus` |
+| `token` | `address` | `TokenCreated`; `name`/`symbol` read from the token at the launch block (empty strings if the read fails); profile columns (`label`, `labelhash`, `controller`, `editor`, `logoRef`, `suppressed`, `registeredAt`) mirrored from `token_profile`; `categoryMask`, `regionMask` mirrored from `token_focus` |
 | `token_focus` | `token` | `FocusSet`: the cause focus fixed at launch (emitted before `TokenCreated`) |
 | `catalog_version` | `version` | `CatalogVersionSet`: root, Swarm reference, entry count and `setAt` (a version applies to epochs starting after it) |
 | `token_profile` | `token` | `TokenRegistered` and the registry's profile events. Kept separately because the registry emits before the factory in the launch transaction |
 | `token_text_record` | `token, key` | `TextChanged` (latest value per key) |
-| `profile_update` | event id | One row per controller, editor, text, logo or contenthash change (the logo set during registration is not counted) |
+| `profile_update` | event id | One row per controller, editor, text or logo change (the logo set during registration is not counted) |
 | `fee_total`, `fee_collection`, `fee_consolidation`, `consolidation_failure`, `consolidation_total` | | Fee vault and consolidator. `FeesCollected` is one deposit with its totals: `fee_total.collections` counts deposits, and `fee_collection.depositSeq` is the token's 1-based deposit number |
 | `fee_attribution` | event id | `FeesAttributed`: one non-zero part of a deposit, `causeAmount` earned in `accrualEpoch` credited to the pool of `epoch` (the accrual epoch, or the first unsettled one after it). Emitted just before the deposit's `FeesCollected`; the parts share its `depositSeq` and sum to its `causeAmount` |
 | `cause_pool_attribution` | `token, epoch, accrualEpoch` | Running sum of `FeesAttributed` per pool epoch and accrual epoch (`causeAmount`, `parts`); the rows of an epoch sum to `epoch.causeAttributed` |
@@ -191,13 +191,13 @@ type Token = {
   address, creator, pool, hook, lpTokenId, feeBps, metadataUri, createdAt, createdBlock, txHash,
   name: string, symbol: string,
   label: string | null, labelhash: Hex | null, controller: Hex | null, editor: Hex | null,
-  logoRef: Hex | null, contenthash: Hex | null, suppressed: boolean, registeredAt: string | null,
+  logoRef: Hex | null, suppressed: boolean, registeredAt: string | null,
 };
-// Detail only. `profile` is null until the token is registered; `contenthash` null means the
-// registry default applies. `shortlist` is the pinned causes in effect for the current epoch
+// Detail only. `profile` is null until the token is registered.
+// `shortlist` is the pinned causes in effect for the current epoch
 // (null when none); `shortlistPending` is a list scheduled from a later epoch (`causeIds` may be
 // empty: all pins removed), or null. `focus` is null until `FocusSet` is indexed.
-profile: { label, labelhash, controller, editor, logoRef, contenthash, suppressed, registeredAt,
+profile: { label, labelhash, controller, editor, logoRef, suppressed, registeredAt,
            textRecords: Record<string, string> } | null;
 shortlist: Hex[] | null; shortlistPending: { causeIds: Hex[], effectiveFrom: string } | null;
 // `ballotSize`: the protocol `cap` (32 until one is indexed), the token's own `choice` (0 follows
@@ -251,7 +251,7 @@ expired after the deadline, else closing. An active, closing or succeeded propos
 | Kind | Timestamp | `data` |
 | --- | --- | --- |
 | `token_registered` | registration | `label`, `labelhash` |
-| `profile_updated` | change | `field` (`controller`, `editor`, `text`, `logo`, `contenthash`), `key` (text only), `value` |
+| `profile_updated` | change | `field` (`controller`, `editor`, `text`, `logo`), `key` (text only), `value` |
 | `epoch_opened` | `openedAt` | `epoch`, `governor`, `scheme` |
 | `epoch_closed` | `closedAt` | `epoch`, `voterCount` |
 | `takeover_proposed` | creation | `proposalId`, `proposer`, `newController`, `start`, `end`, `quorumWeight` |

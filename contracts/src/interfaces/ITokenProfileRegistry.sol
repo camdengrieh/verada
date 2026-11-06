@@ -3,9 +3,10 @@ pragma solidity ^0.8.26;
 
 /// @title ITokenProfileRegistry
 /// @notice Per-token profile written at launch: the ENS label under the Varada parent name, the
-///         accounts allowed to edit records, ENS text records, the logo reference and an optional
-///         contenthash override. The factory registers; the controller (initially the creator)
-///         edits and may delegate to an editor; the takeover governor can replace the controller.
+///         accounts allowed to edit records, ENS text records and the logo reference. The factory
+///         registers; the controller (initially the creator) edits and may delegate to an editor;
+///         the takeover governor can replace the controller. Every name serves the one site
+///         contenthash set by the owner: no profile can point its subname at another site.
 interface ITokenProfileRegistry {
     struct Profile {
         address controller;
@@ -15,7 +16,6 @@ interface ITokenProfileRegistry {
         bytes32 labelhash;
         bytes32 logoRef;
         string label;
-        bytes contenthash;
     }
 
     struct Reservation {
@@ -36,7 +36,6 @@ interface ITokenProfileRegistry {
     );
     event EditorChanged(address indexed token, address indexed editor);
     event TextChanged(address indexed token, string indexed indexedKey, string key, string value);
-    event ContenthashChanged(address indexed token, bytes hash);
     event LogoChanged(address indexed token, bytes32 logoRef);
     event SuppressionChanged(address indexed token, bool suppressed);
     event GovernorChanged(address indexed governor);
@@ -84,12 +83,11 @@ interface ITokenProfileRegistry {
 
     function setLogoRef(address token, bytes32 logoRef) external;
     function setText(address token, string calldata key, string calldata value) external;
-    /// @notice Sets a per-token contenthash; empty bytes clears it (falls back to the default).
-    function setContenthash(address token, bytes calldata hash) external;
 
     // ------------------------------------------------------------------ owner
 
     function setGovernor(address governor) external;
+    /// @notice Sets the site contenthash served for the parent name and every registered subname.
     function setDefaultContenthash(bytes calldata hash) external;
     function setPlatformAddress(address platformAddress) external;
     function setParentText(string calldata key, string calldata value) external;
@@ -123,8 +121,6 @@ interface ITokenProfileRegistry {
     function registeredAtOf(address token) external view returns (uint48);
     function isSuppressed(address token) external view returns (bool);
     function text(address token, string calldata key) external view returns (string memory);
-    /// @notice The token's contenthash override if set, otherwise the default site contenthash.
-    function contenthashOf(address token) external view returns (bytes memory);
     function tokenByLabelhash(bytes32 labelhash) external view returns (address);
     function tokenByNode(bytes32 node) external view returns (address);
     function reservationOf(bytes32 labelhash) external view returns (Reservation memory);

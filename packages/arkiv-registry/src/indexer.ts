@@ -3,7 +3,7 @@ import { z } from "zod";
 
 /**
  * Shapes of the read-only indexer API rows the mirror consumes. Fields the indexer is still
- * gaining (label, controller, editor, logoRef, contenthash, name, symbol, textRecords) are
+ * gaining (label, controller, editor, logoRef, name, symbol, textRecords) are
  * optional, so the mirror works before and after that change. Unknown keys are stripped.
  */
 
@@ -34,7 +34,6 @@ export const IndexerTokenSchema = z.object({
   controller: optional(AddressSchema),
   editor: optional(AddressSchema),
   logoRef: optional(z.string().max(130)),
-  contenthash: optional(HexSchema.max(4096)),
   name: optional(z.string().max(1024)),
   symbol: optional(z.string().max(255)),
   /** ENS text records keyed by record key (`url`, `description`, `com.twitter`, ...). */

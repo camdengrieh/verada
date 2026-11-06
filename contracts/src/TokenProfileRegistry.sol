@@ -147,14 +147,6 @@ contract TokenProfileRegistry is ITokenProfileRegistry, Ownable2Step {
         emit TextChanged(token, key, key, value);
     }
 
-    /// @inheritdoc ITokenProfileRegistry
-    function setContenthash(address token, bytes calldata hash) external {
-        Profile storage p = _editable(token);
-        if (hash.length > MAX_CONTENTHASH_LENGTH) revert ContenthashTooLong(hash.length);
-        p.contenthash = hash;
-        emit ContenthashChanged(token, hash);
-    }
-
     // ------------------------------------------------------------------ owner
 
     /// @inheritdoc ITokenProfileRegistry
@@ -273,12 +265,6 @@ contract TokenProfileRegistry is ITokenProfileRegistry, Ownable2Step {
     /// @inheritdoc ITokenProfileRegistry
     function text(address token, string calldata key) external view returns (string memory) {
         return _texts[token][key];
-    }
-
-    /// @inheritdoc ITokenProfileRegistry
-    function contenthashOf(address token) external view returns (bytes memory) {
-        bytes storage h = _profiles[token].contenthash;
-        return h.length != 0 ? h : _defaultContenthash;
     }
 
     /// @inheritdoc ITokenProfileRegistry

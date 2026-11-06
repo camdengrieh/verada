@@ -38,8 +38,6 @@ contract EnsResolutionForkTest is Test, Deploy {
     uint256 internal constant PARENT_LABEL_ID = uint256(keccak256("varada"));
     bytes32 internal constant SITE_REF =
         0x2222222222222222222222222222222222222222222222222222222222222222;
-    bytes32 internal constant OVERRIDE_REF =
-        0x3333333333333333333333333333333333333333333333333333333333333333;
 
     address internal deployer = makeAddr("deployer");
     address internal owner = makeAddr("owner");
@@ -148,15 +146,9 @@ contract EnsResolutionForkTest is Test, Deploy {
         assertEq(abi.decode(res, (bytes)), abi.encodePacked(tokenAddr));
     }
 
-    function test_subnameContenthashDefaultsToSiteAndCanBeOverridden() public {
+    function test_subnameContenthashIsTheSite() public view {
         assertEq(_contenthash("pepe.varada.eth"), ContenthashLib.swarm(SITE_REF));
-        assertEq(_contenthash("varada.eth"), ContenthashLib.swarm(SITE_REF));
-
-        vm.prank(creator);
-        TokenProfileRegistry(d.profileRegistry)
-            .setContenthash(tokenAddr, ContenthashLib.swarm(OVERRIDE_REF));
-        assertEq(_contenthash("pepe.varada.eth"), ContenthashLib.swarm(OVERRIDE_REF));
-        assertEq(_contenthash("varada.eth"), ContenthashLib.swarm(SITE_REF), "parent unchanged");
+        assertEq(_contenthash("varada.eth"), ContenthashLib.swarm(SITE_REF), "same as parent");
     }
 
     function test_textRecordsAndLogo() public {

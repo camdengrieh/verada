@@ -52,7 +52,6 @@ export async function onTokenCreated({
       controller: p?.controller ?? null,
       editor: p?.editor ?? null,
       logoRef: p?.logoRef ?? null,
-      contenthash: p?.contenthash ?? null,
       suppressed: p?.suppressed ?? false,
       registeredAt: p?.registeredAt ?? null,
       categoryMask: f?.categoryMask ?? null,

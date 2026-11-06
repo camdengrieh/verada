@@ -39,7 +39,7 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 | `VaradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Varada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. `deployLiveToken` runs the same launch on the live hook and registers the token with the live vault and rotation governor instead. |
 | `QuoteRegistry` | Owner-managed allowlist of quote assets. |
 | `FeeConsolidator` | Swaps collected fees into USDC through Uniswap v4 before the split. |
-| `TokenProfileRegistry` | Per-token profile: ENS label, controller and editor roles, text records, logo reference, contenthash override, suppression flag, and the cause focus (category and region masks, written once at launch). Factory-written at launch; the takeover governor may replace a controller. |
+| `TokenProfileRegistry` | Per-token profile: ENS label, controller and editor roles, text records, logo reference, suppression flag, and the cause focus (category and region masks, written once at launch). Factory-written at launch; the takeover governor may replace a controller. |
 | `VaradaResolver` | Stateless ENSIP-10 wildcard resolver for `varada.eth`: answers `addr`, `text`, `contenthash` for every `<label>.varada.eth` from the registry, and for `agent.varada.eth` and every `<label>.agent.varada.eth` from `CuratorRegistry`. |
 | `TakeoverGovernor` | Community takeover votes that replace a token's profile controller. |
 | `ZamaVotingScheme` | `IVotingScheme` implementation that hides ballot choices with Zama FHEVM and reveals only aggregates. |
@@ -259,7 +259,7 @@ while voting is still open, may cancel.
 Key events consumed by the indexer and SDK: `TokenCreated`, `FeesCollected`, `CauseAdded`,
 `CauseDeactivated`, `CatalogVersionSet`, `FocusSet`, `BallotPrepared`, `EpochOpened`, `EpochClosed`,
 `EpochFinalized`, `Donated`, `VoteCast`, `CuratedPicksUsed`,
-`TokenRegistered`, `ControllerChanged`, `EditorChanged`, `TextChanged`, `ContenthashChanged`,
+`TokenRegistered`, `ControllerChanged`, `EditorChanged`, `TextChanged`,
 `LogoChanged`, the scheme's `PollOpened`/`BallotCast`/`TallyRequested`/`TallySubmitted` and the
 takeover governor's `TakeoverProposed`/`TakeoverVoteCast`/`TakeoverTallied`/`TakeoverExecuted`,
 the curator registry's `AgentRegistered`/`SignerSet`/`ActiveSet`/`AgentWalletLinked`/`CurationSet`/`CurationsSubmitted`
@@ -516,8 +516,8 @@ Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured
 Every launch registers a label in `TokenProfileRegistry`; `<label>.varada.eth` exists exactly when
 the token exists, with no per-name ENS transaction. `varada.eth` is registered on ENSv2 and its
 resolver is `VaradaResolver`, an ENSIP-10 wildcard resolver that the Universal Resolver reaches
-for every subname. Records: `addr` is the token address and can never change; `contenthash` is the
-registry's default (the dApp's Swarm feed manifest) unless the controller sets an override; text
+for every subname. Records: `addr` is the token address and can never change; `contenthash` is always the
+registry's default (the dApp's Swarm feed manifest), so every subname is the one site; text
 records (`url`, `description`, `avatar`, `com.twitter`, `org.telegram`, `com.discord`) are edited by
 the controller or an appointed editor; `varada.logo` is synthesized from the on-chain logo
 reference. The registry owner can reserve labels and suppress a profile (the resolver then answers
@@ -782,7 +782,7 @@ browser --ENS name--> gateway (eth.limo, bzz.link) --contenthash (feed manifest)
 
 The indexer exposes JSON over HTTPS with CORS, cursor pagination and bigint values as decimal
 strings: `/health`, `/api/tokens` (rows now carry `name`, `symbol` and the ENS profile columns
-`label`, `controller`, `editor`, `logoRef`, `contenthash`, `suppressed`), `/api/tokens/:address`
+`label`, `controller`, `editor`, `logoRef`, `suppressed`), `/api/tokens/:address`
 (plus `profile` with text records, `shortlist` (pinned causes) and `focus`), `/api/tokens/by-label/:label`,
 `/api/activity` (filterable, newest first; kinds include `token_registered`, `profile_updated`,
 `epoch_opened`, `epoch_closed`, `takeover_proposed`, `takeover_executed`, `tally_submitted`),

@@ -95,7 +95,6 @@ describe("token profiles", () => {
       controller: "0x00000000000000000000000000000000000000c1",
       editor: "0x00000000000000000000000000000000000000c2",
       logoRef: `0x${"200".padStart(64, "0")}`,
-      contenthash: "0xe301",
       suppressed: false,
     });
     const t3 = b.items.find((t: { address: string }) => t.address === T3);
@@ -111,7 +110,6 @@ describe("token profiles", () => {
       controller: "0x00000000000000000000000000000000000000c1",
       editor: "0x00000000000000000000000000000000000000c2",
       logoRef: `0x${"200".padStart(64, "0")}`,
-      contenthash: "0xe301",
       suppressed: false,
       registeredAt: "1000",
       textRecords: { "com.twitter": "alpha", url: "https://alpha.example" },

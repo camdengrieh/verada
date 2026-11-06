@@ -23,7 +23,7 @@ interface ICuratorIdentity {
 ///         `<label>.<parent>` registered in the `TokenProfileRegistry`. The parent resolves to the
 ///         platform address and the default site contenthash; a child resolves to its token
 ///         address, its text records (with `varada.logo` synthesized from the logo reference) and
-///         its contenthash override or the default. Unknown and suppressed labels resolve to
+///         the site contenthash shared by every name. Unknown and suppressed labels resolve to
 ///         zero values rather than reverting, so clients see "no record" instead of an error.
 ///         Curator agents resolve as `<label>.agent.<parent>` (the agent's vault, its description,
 ///         gateway URL and ERC-8004 registration) and `agent.<parent>` is the agents index.
@@ -297,10 +297,10 @@ contract VaradaResolver is
         return registry.text(token, key);
     }
 
+    /// @dev Every known name is the one site; unknown and suppressed labels answer empty bytes.
     function _contenthash(bool isParent, address token) internal view returns (bytes memory) {
-        if (isParent) return registry.defaultContenthash();
-        if (token == address(0)) return "";
-        return registry.contenthashOf(token);
+        if (!isParent && token == address(0)) return "";
+        return registry.defaultContenthash();
     }
 
     // ------------------------------------------------------------------ curator agents

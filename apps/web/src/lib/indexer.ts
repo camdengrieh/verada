@@ -18,7 +18,6 @@ export interface TokenSummary {
   controller?: string;
   editor?: string;
   logoRef?: string;
-  contenthash?: string;
   suppressed?: boolean;
 }
 
@@ -30,8 +29,6 @@ export interface TokenProfile {
   editor: string | null;
   /** bytes32 Swarm reference, or null when unset. */
   logoRef: string | null;
-  /** Contenthash override, or null when the default applies. */
-  contenthash: string | null;
   suppressed: boolean;
   registeredAt?: number;
   textRecords: Record<string, string>;
@@ -302,7 +299,6 @@ export function toToken(v: unknown): TokenSummary | null {
     controller: nonZero(v.controller, ZERO_ADDRESS) ?? undefined,
     editor: nonZero(v.editor, ZERO_ADDRESS) ?? undefined,
     logoRef: nonZero(v.logoRef, ZERO_BYTES32) ?? undefined,
-    contenthash: nonZero(v.contenthash, ZERO_BYTES32) ?? undefined,
     suppressed: typeof v.suppressed === "boolean" ? v.suppressed : undefined,
   };
 }
@@ -319,7 +315,6 @@ export function toProfile(v: unknown): TokenProfile | null {
     controller: nonZero(v.controller, ZERO_ADDRESS),
     editor: nonZero(v.editor, ZERO_ADDRESS),
     logoRef: nonZero(v.logoRef, ZERO_BYTES32),
-    contenthash: nonZero(v.contenthash, ZERO_BYTES32),
     suppressed: bool(v.suppressed),
     registeredAt: num(v.registeredAt),
     textRecords: texts,
@@ -337,7 +332,6 @@ export function toTokenDetail(v: unknown): TokenDetail | null {
       controller: t.controller ?? null,
       editor: t.editor ?? null,
       logoRef: t.logoRef ?? null,
-      contenthash: t.contenthash ?? null,
       suppressed: t.suppressed ?? false,
       textRecords: {},
     };

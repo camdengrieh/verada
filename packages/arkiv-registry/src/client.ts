@@ -158,7 +158,6 @@ export function encodeProfileFields(v: Partial<ProfileValues>) {
     discord?: ReturnType<typeof str>;
     description?: ReturnType<typeof bytes>;
     logoRef?: ReturnType<typeof str>;
-    contenthash?: ReturnType<typeof str>;
     updatedAtBlock?: ReturnType<typeof u64>;
   } = {};
   if (v.core !== undefined) out.core = key(v.core);
@@ -172,7 +171,6 @@ export function encodeProfileFields(v: Partial<ProfileValues>) {
   if (v.discord !== undefined) out.discord = str(v.discord);
   if (v.description !== undefined) out.description = bytes(stringToHex(v.description));
   if (v.logoRef !== undefined) out.logoRef = str(v.logoRef);
-  if (v.contenthash !== undefined) out.contenthash = str(v.contenthash);
   if (v.updatedAtBlock !== undefined) out.updatedAtBlock = u64(v.updatedAtBlock);
   return out;
 }
@@ -270,7 +268,6 @@ export function decodeProfile(row: ProfileRow): StoredProfile {
   if (row.discord) values.discord = row.discord.value;
   if (row.description) values.description = hexToString(row.description.value);
   if (row.logoRef) values.logoRef = row.logoRef.value;
-  if (row.contenthash) values.contenthash = row.contenthash.value;
   return { ...system(row), values };
 }
 

@@ -115,8 +115,8 @@ ships a local-development default (indexer on 42069, publisher on 42070).
   (`/api/catalog/causes`), a "ballot not prepared yet" state (only the pins are known until the
   rotation draws are made), poll state, per-option totals once the tally is decrypted, the connected
   account's weight and `hasVoted` (account-scoped client, never the indexer), and the vote form.
-- `edit-profile-panel.tsx` (controller or editor): `setText` per key, `setLogoRef` via a new upload,
-  `setContenthash` (`bzz://<ref>` or raw hex; empty restores the default) and, for the controller, `setEditor`.
+- `edit-profile-panel.tsx` (controller or editor): `setText` per key, `setLogoRef` via a new upload
+  and, for the controller, `setEditor`. There is no per-token contenthash: every name is the one site.
 - `shortlist-editor.tsx` ("Pinned causes", controller): up to 8 catalogue orgs inside the token's
   focus, picked with the catalogue browser; each is saved with its in-focus entry and Merkle proof
   through `EpochGovernor.setShortlist`. Changes take effect from the next epoch once the current

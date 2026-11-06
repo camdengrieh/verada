@@ -18,14 +18,13 @@ export const token = onchainTable(
     symbol: t.text().notNull().default(""),
     /**
      * Profile fields mirrored from `token_profile` (null until the registry has registered the
-     * token). `contenthash` is the per-token override; null means the registry default applies.
+     * token).
      */
     label: t.text(),
     labelhash: t.hex(),
     controller: t.hex(),
     editor: t.hex(),
     logoRef: t.hex(),
-    contenthash: t.hex(),
     suppressed: t.boolean().notNull().default(false),
     registeredAt: t.bigint(),
     /** Cause focus mirrored from `token_focus` (null until known). */
@@ -52,7 +51,6 @@ export const tokenProfile = onchainTable("token_profile", (t) => ({
   controller: t.hex(),
   editor: t.hex(),
   logoRef: t.hex(),
-  contenthash: t.hex(),
   suppressed: t.boolean().notNull(),
   registeredAt: t.bigint().notNull(),
   txHash: t.hex().notNull(),
@@ -74,8 +72,8 @@ export const tokenTextRecord = onchainTable(
 );
 
 /**
- * One profile change, for the activity feed. `field` is `controller`, `editor`, `text`, `logo`
- * or `contenthash`; `key` is the text record key (text only) and `value` the new value.
+ * One profile change, for the activity feed. `field` is `controller`, `editor`, `text` or
+ * `logo`; `key` is the text record key (text only) and `value` the new value.
  */
 export const profileUpdate = onchainTable(
   "profile_update",

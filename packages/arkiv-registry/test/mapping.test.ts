@@ -138,17 +138,15 @@ describe("toProfileDraft / toTokenProfile", () => {
     });
     expect("twitter" in p).toBe(false);
   });
-  it("prefers explicit controller, editor, contenthash and update block", () => {
+  it("prefers explicit controller, editor and update block", () => {
     const t = token({
       controller: "0x4444444444444444444444444444444444444444",
       editor: "0x5555555555555555555555555555555555555555",
-      contenthash: `0xE40101FA011B20${LOGO}`,
       updatedAtBlock: "21000500",
     });
     const p = toProfileDraft(t, 1);
     expect(p.controller).toBe("0x4444444444444444444444444444444444444444");
     expect(p.editor).toBe("0x5555555555555555555555555555555555555555");
-    expect(p.contenthash).toBe(`0xe40101fa011b20${LOGO}`);
     expect(p.updatedAtBlock).toBe(21000500n);
   });
   it("caps the description at 8 KiB", () => {

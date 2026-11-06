@@ -131,7 +131,6 @@ export interface VaradaEventMap {
   ControllerChanged: ControllerChangedEvent;
   EditorChanged: EditorChangedEvent;
   TextChanged: TextChangedEvent;
-  ContenthashChanged: ContenthashChangedEvent;
   LogoChanged: LogoChangedEvent;
   SuppressionChanged: SuppressionChangedEvent;
   EpochOpened: EpochOpenedEvent;
@@ -182,11 +181,6 @@ export interface TextChangedEvent {
   indexedKey: Hex;
   key: string;
   value: string;
-}
-
-export interface ContenthashChangedEvent {
-  token: Address;
-  hash: Hex;
 }
 
 export interface LogoChangedEvent {

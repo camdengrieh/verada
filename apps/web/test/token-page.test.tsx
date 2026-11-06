@@ -35,7 +35,6 @@ const fixtures: Record<string, unknown> = {
       controller: CONTROLLER,
       editor: "0x0000000000000000000000000000000000000000",
       logoRef: `0x${LOGO}`,
-      contenthash: "0x",
       suppressed: false,
       registeredAt: "1700000000",
       textRecords: { url: "https://mooncat.example", "com.twitter": "mooncat", description: "A cat on the moon" },

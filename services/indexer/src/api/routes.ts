@@ -265,7 +265,6 @@ function profileOf(t: TokenRow, textRecords: { key: string; value: string }[]) {
     controller: t.controller,
     editor: t.editor,
     logoRef: t.logoRef,
-    contenthash: t.contenthash,
     suppressed: t.suppressed,
     registeredAt: t.registeredAt,
     textRecords: Object.fromEntries(textRecords.map((r) => [r.key, r.value])),

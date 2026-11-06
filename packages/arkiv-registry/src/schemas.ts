@@ -53,7 +53,6 @@ export const TokenProfile = defineSchema("varada.token-profile", {
   /** UTF-8 description bytes (str columns cap at 128 bytes). */
   description: bytes().optional(),
   logoRef: str().optional(),
-  contenthash: str().optional(),
   updatedAtBlock: u64(),
 });
 

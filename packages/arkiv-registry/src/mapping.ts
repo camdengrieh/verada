@@ -74,13 +74,6 @@ export function normalizeLogoRef(input: string | null | undefined): string | und
   }
 }
 
-function normalizeContenthash(input: string | null | undefined): string | undefined {
-  if (!input) return undefined;
-  const h = input.toLowerCase();
-  if (!/^0x[0-9a-f]+$/.test(h) || h === "0x") return undefined;
-  return fitStr(h);
-}
-
 const lower = (a: string) => a.toLowerCase();
 
 /** `,a,b,` when the slugs fit a 128-byte column; `*` for a mask covering every defined bit. */
@@ -137,7 +130,6 @@ export function toProfileDraft(t: IndexerToken, chainId: number | bigint): Profi
     discord: fitStr(text[TOKEN_TEXT_KEYS.discord]),
     description: description ? truncateStr(description, MAX_DESCRIPTION_BYTES) : undefined,
     logoRef: normalizeLogoRef(t.logoRef),
-    contenthash: normalizeContenthash(t.contenthash),
   };
   for (const f of PROFILE_OPTIONAL_FIELDS) {
     const v = optional[f];

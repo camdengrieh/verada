@@ -54,7 +54,6 @@ export const tokens: TokenRow[] = [T1, T2, T3].map((address, i) => ({
   controller: LABELS[i] ? ADDR : null,
   editor: i === 0 ? NEW_CONTROLLER : null,
   logoRef: i === 0 ? H(0x200) : null,
-  contenthash: i === 0 ? ("0xe301" as Hex) : null,
   suppressed: i === 1,
   registeredAt: LABELS[i] ? BigInt(1000 + i * 10) : null,
   categoryMask: i === 0 ? 12n : null,

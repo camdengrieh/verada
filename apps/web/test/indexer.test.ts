@@ -150,11 +150,11 @@ describe("profile, epoch and takeover routes", () => {
     const d = toTokenDetail({
       address: "0x1",
       label: "pepe",
-      profile: { label: "pepe", controller: "0xc", editor: `0x${"0".repeat(40)}`, logoRef: `0x${"0".repeat(64)}`, contenthash: "0x", suppressed: false, textRecords: { url: "https://x", empty: "" } },
+      profile: { label: "pepe", controller: "0xc", editor: `0x${"0".repeat(40)}`, logoRef: `0x${"0".repeat(64)}`, suppressed: false, textRecords: { url: "https://x", empty: "" } },
       shortlist: ["0xa"],
       focus: { categoryMask: "12", regionMask: 3, categories: ["hunger", "children-youth"], regions: ["africa", "asia"] },
     });
-    expect(d?.profile).toMatchObject({ label: "pepe", controller: "0xc", editor: null, logoRef: null, contenthash: null, textRecords: { url: "https://x" } });
+    expect(d?.profile).toMatchObject({ label: "pepe", controller: "0xc", editor: null, logoRef: null, textRecords: { url: "https://x" } });
     expect(d?.shortlist).toEqual(["0xa"]);
     expect(d?.focus).toEqual({ categoryMask: "12", regionMask: 3, categories: ["hunger", "children-youth"], regions: ["africa", "asia"] });
     const flat = toTokenDetail({ address: "0x1", label: "pepe", controller: "0xc", logoRef: `0x${"ab".repeat(32)}` });

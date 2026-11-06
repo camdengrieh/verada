@@ -26,7 +26,6 @@ convenience copy; Ethereum mainnet remains the source of truth.
 | | `website`, `twitter`, `telegram`, `discord` | str, optional | | ENS text records `url`, `com.twitter`, `org.telegram`, `com.discord` |
 | | `description` | bytes, optional | | UTF-8, capped at 8 KiB |
 | | `logoRef` | str, optional | | current logo |
-| | `contenthash` | str, optional | | EIP-1577 hex |
 | | `updatedAtBlock` | u64 | | Ethereum block of the last profile change |
 | `varada.cause` (`Cause`) | `causeId` | str | yes | on-chain cause id (bytes32 hex) |
 | | `orgId` | str | yes | Endaoment org id (empty until the indexer serves it) |

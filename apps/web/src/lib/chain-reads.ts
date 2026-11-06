@@ -109,7 +109,6 @@ export async function chainProfile(client: PublicClient, cfg: AppConfig, token: 
     controller: nz(p.controller),
     editor: nz(p.editor),
     logoRef: nz(p.logoRef),
-    contenthash: nz(p.contenthash),
     suppressed: p.suppressed,
     registeredAt: Number(p.registeredAt),
     textRecords,

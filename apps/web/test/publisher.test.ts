@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { addPin, ballotOptions, entryInFocus, parseContenthashInput, type PinDraft } from "@/lib/profile";
+import { addPin, ballotOptions, entryInFocus, type PinDraft } from "@/lib/profile";
 import { checkLogoFile, PublisherClient, PublisherError } from "@/lib/publisher";
 
 const REF = "ab".repeat(32);
@@ -50,15 +50,6 @@ describe("PublisherClient", () => {
 });
 
 describe("profile helpers", () => {
-  it("parses contenthash overrides", () => {
-    expect(parseContenthashInput("")).toEqual({ ok: true, value: "0x" });
-    expect(parseContenthashInput(`bzz://${REF}`)).toEqual({ ok: true, value: `0xe40101fa011b20${REF}` });
-    expect(parseContenthashInput(REF)).toEqual({ ok: true, value: `0xe40101fa011b20${REF}` });
-    expect(parseContenthashInput("0xE301")).toEqual({ ok: true, value: "0xe301" });
-    expect(parseContenthashInput("ipfs://x").ok).toBe(false);
-    expect(parseContenthashInput("0x123").ok).toBe(false);
-  });
-
   it("keeps pins distinct and at most PINNED_MAX (8)", () => {
     const pin = (n: number): PinDraft => ({
       causeId: `0x${n.toString(16).padStart(64, "0")}`,

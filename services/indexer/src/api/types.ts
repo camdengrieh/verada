@@ -70,7 +70,6 @@ export interface TokenRow {
   controller: Hex | null;
   editor: Hex | null;
   logoRef: Hex | null;
-  contenthash: Hex | null;
   suppressed: boolean;
   registeredAt: bigint | null;
   categoryMask: bigint | null;

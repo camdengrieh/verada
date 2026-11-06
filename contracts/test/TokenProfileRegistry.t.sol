@@ -98,7 +98,6 @@ contract TokenProfileRegistryTest is Test {
         assertEq(p.labelhash, keccak256("pepe"));
         assertEq(p.logoRef, LOGO);
         assertEq(p.label, "pepe");
-        assertEq(p.contenthash, "");
     }
 
     function test_register_noLogoEmitsNoLogoChanged() public {
@@ -520,66 +519,12 @@ contract TokenProfileRegistryTest is Test {
         registry.setLogoRef(token, next);
     }
 
-    function test_setContenthash_overrideAndClear() public {
+    function test_noPerTokenContenthash() public {
         _register(token, "pepe", creator, 0);
-        bytes memory site = ContenthashLib.swarm(keccak256("site"));
-        registry.setDefaultContenthash(site);
-        assertEq(registry.contenthashOf(token), site, "default fallback");
-
-        bytes memory mine = ContenthashLib.swarm(keccak256("mine"));
-        vm.expectEmit(true, true, true, true, address(registry));
-        emit ITokenProfileRegistry.ContenthashChanged(token, mine);
         vm.prank(creator);
-        registry.setContenthash(token, mine);
-        assertEq(registry.contenthashOf(token), mine, "override");
-        assertEq(registry.getProfile(token).contenthash, mine);
-
-        // Clearing falls back to the default again.
-        vm.expectEmit(true, true, true, true, address(registry));
-        emit ITokenProfileRegistry.ContenthashChanged(token, "");
-        vm.prank(creator);
-        registry.setContenthash(token, "");
-        assertEq(registry.contenthashOf(token), site);
-        assertEq(registry.getProfile(token).contenthash, "");
-
-        // The editor may set it too.
-        vm.prank(creator);
-        registry.setEditor(token, editor);
-        vm.prank(editor);
-        registry.setContenthash(token, mine);
-        assertEq(registry.contenthashOf(token), mine);
-    }
-
-    function test_setContenthash_tooLong() public {
-        _register(token, "pepe", creator, 0);
-        bytes memory max = new bytes(256);
-        vm.prank(creator);
-        registry.setContenthash(token, max);
-        assertEq(registry.contenthashOf(token).length, 256);
-
-        bytes memory over = new bytes(257);
-        vm.prank(creator);
-        vm.expectRevert(
-            abi.encodeWithSelector(ITokenProfileRegistry.ContenthashTooLong.selector, 257)
-        );
-        registry.setContenthash(token, over);
-    }
-
-    function test_setContenthash_controllerOrEditorOnly() public {
-        _register(token, "pepe", creator, 0);
-        vm.prank(other);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                ITokenProfileRegistry.NotControllerOrEditor.selector, token, other
-            )
-        );
-        registry.setContenthash(token, hex"01");
-    }
-
-    function test_contenthashOf_unregisteredFallsBackToDefault() public {
-        bytes memory site = ContenthashLib.swarm(keccak256("site"));
-        registry.setDefaultContenthash(site);
-        assertEq(registry.contenthashOf(other), site);
+        (bool ok,) = address(registry)
+            .call(abi.encodeWithSignature("setContenthash(address,bytes)", token, hex"01"));
+        assertFalse(ok, "no per-token contenthash: every name serves the one site");
     }
 
     // ------------------------------------------------------------------ owner admin

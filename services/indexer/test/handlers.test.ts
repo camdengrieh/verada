@@ -66,7 +66,6 @@ import {
   onQuoteAssetReactivated,
 } from "../src/handlers/quote";
 import {
-  onContenthashChanged,
   onControllerChanged,
   onEditorChanged,
   onLogoChanged,
@@ -189,7 +188,6 @@ describe("TokenCreated", () => {
       controller: T2,
       editor: null,
       logoRef: logo,
-      contenthash: null,
       suppressed: false,
       registeredAt: 100n,
     });
@@ -416,7 +414,6 @@ describe("token profile registry", () => {
         controller: T2,
         editor: null,
         logoRef: null,
-        contenthash: null,
         suppressed: false,
         registeredAt: 100n,
         txHash: tx.hash,
@@ -424,27 +421,23 @@ describe("token profile registry", () => {
     ]);
   });
 
-  it("mirrors controller, editor, logo, contenthash and suppression onto the token row", async () => {
+  it("mirrors controller, editor, logo and suppression onto the token row", async () => {
     await register();
     await run(onTokenCreated, launch, "c1");
     const logo = `0x${"99".repeat(32)}` as const;
     await run(onEditorChanged, { token: T1, editor: WETH }, "p1", block(2, 200), REGISTRY, tx2);
     await run(onLogoChanged, { token: T1, logoRef: logo }, "p2", block(2, 200), REGISTRY, tx2);
-    await run(onContenthashChanged, { token: T1, hash: "0xe301" }, "p3", block(2, 200), REGISTRY, tx2);
     await run(onSuppressionChanged, { token: T1, suppressed: true }, "p4", block(2, 200), REGISTRY, tx2);
-    expect(h.rows(token)[0]).toMatchObject({ editor: WETH, logoRef: logo, contenthash: "0xe301", suppressed: true });
+    expect(h.rows(token)[0]).toMatchObject({ editor: WETH, logoRef: logo, suppressed: true });
     await run(onEditorChanged, { token: T1, editor: ZERO }, "p5", block(3, 300), REGISTRY, tx2);
     await run(onControllerChanged, { token: T1, previousController: T2, newController: ONDO }, "p6", block(3, 300), REGISTRY, tx2);
-    await run(onContenthashChanged, { token: T1, hash: "0x" }, "p7", block(3, 300), REGISTRY, tx2);
-    expect(h.rows(token)[0]).toMatchObject({ controller: ONDO, editor: null, contenthash: null });
+    expect(h.rows(token)[0]).toMatchObject({ controller: ONDO, editor: null });
     expect(h.rows(tokenProfile)[0]).toMatchObject({ controller: ONDO, editor: null, logoRef: logo, suppressed: true });
     expect(h.rows(profileUpdate).map((r) => r.field)).toEqual([
       "editor",
       "logo",
-      "contenthash",
       "editor",
       "controller",
-      "contenthash",
     ]);
     expect(h.rows(profileUpdate).find((r) => r.id === "p6")).toMatchObject({
       token: T1,

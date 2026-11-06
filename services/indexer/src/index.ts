@@ -45,7 +45,6 @@ import {
   onQuoteAssetReactivated,
 } from "./handlers/quote";
 import {
-  onContenthashChanged,
   onControllerChanged,
   onEditorChanged,
   onLogoChanged,
@@ -123,7 +122,6 @@ ponder.on("TokenProfileRegistry:TokenRegistered", onTokenRegistered);
 ponder.on("TokenProfileRegistry:ControllerChanged", onControllerChanged);
 ponder.on("TokenProfileRegistry:EditorChanged", onEditorChanged);
 ponder.on("TokenProfileRegistry:TextChanged", onTextChanged);
-ponder.on("TokenProfileRegistry:ContenthashChanged", onContenthashChanged);
 ponder.on("TokenProfileRegistry:LogoChanged", onLogoChanged);
 ponder.on("TokenProfileRegistry:SuppressionChanged", onSuppressionChanged);
 ponder.on("ZamaVotingScheme:PollOpened", onPollOpened);

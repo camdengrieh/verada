@@ -25,7 +25,6 @@ export const PROFILE_OPTIONAL_FIELDS = [
   "discord",
   "description",
   "logoRef",
-  "contenthash",
 ] as const;
 export type ProfileOptionalField = (typeof PROFILE_OPTIONAL_FIELDS)[number];
 
@@ -42,7 +41,6 @@ export interface ProfileValues {
   discord?: string;
   description?: string;
   logoRef?: string;
-  contenthash?: string;
   updatedAtBlock: bigint;
 }
 

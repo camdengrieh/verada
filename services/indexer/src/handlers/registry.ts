@@ -8,7 +8,6 @@ interface ProfilePatch {
   controller?: Hex | null;
   editor?: Hex | null;
   logoRef?: Hex | null;
-  contenthash?: Hex | null;
   suppressed?: boolean;
 }
 
@@ -32,7 +31,7 @@ async function logUpdate(
   db: Db,
   event: { id: string; block: { timestamp: bigint }; transaction: { hash: Hex } },
   address: Hex,
-  field: "controller" | "editor" | "text" | "logo" | "contenthash",
+  field: "controller" | "editor" | "text" | "logo",
   value: string,
   key: string | null = null,
 ) {
@@ -64,7 +63,6 @@ export async function onTokenRegistered({
     controller: orNull(controller),
     editor: null,
     logoRef: orNull(logoRef),
-    contenthash: null,
     suppressed: false,
     registeredAt: event.block.timestamp,
   };
@@ -118,19 +116,6 @@ export async function onTextChanged({
     await context.db.insert(tokenTextRecord).values({ ...pk, ...patch });
   }
   await logUpdate(context.db, event, address, "text", value, key);
-}
-
-export async function onContenthashChanged({
-  event,
-  context,
-}: {
-  event: Event<"TokenProfileRegistry:ContenthashChanged">;
-  context: Context<"TokenProfileRegistry:ContenthashChanged">;
-}) {
-  const { token: address, hash } = event.args;
-  // Empty bytes clear the override; the registry default applies again.
-  await patchProfile(context.db, address, { contenthash: hash === "0x" ? null : hash });
-  await logUpdate(context.db, event, address, "contenthash", hash);
 }
 
 export async function onLogoChanged({
