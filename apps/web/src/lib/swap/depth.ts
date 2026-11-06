@@ -1,17 +1,18 @@
 import type { PublicClient } from "viem";
-import { USDC, discoverPools, enumerateRoutes, pickBestQuote, routingNodes, WETH, type RoutingConfig, type SwapAsset } from "@varada/sdk";
+import { SwapError, USDC, discoverPools, enumerateRoutes, pickBestQuote, routingNodes, WETH, type RoutingConfig, type SwapAsset } from "@varada/sdk";
 
 export interface QuoteDepth {
   /** Trade size in USD that was quoted. */
   sizeUsd: number;
-  /** Price impact in percent of selling that much of the quote asset for USDC, excluding fees. */
-  impactPct: number;
+  /** Price impact in percent of selling that much of the quote asset for USDC, excluding fees. Null: no route of existing pools can fill that size (a thin pool). */
+  impactPct: number | null;
 }
 
 /**
  * How deep the way from the quote asset to USDC is (the way a token's fees are converted before they
  * are donated): the price impact of selling `sizeUsd` of the quote asset for USDC along the best
- * route of existing v4 pools. Null when there is no route or no price.
+ * route of existing v4 pools. `impactPct` is null when the routes are too thin to fill the size; the whole
+ * result is null when there is no route, no price or the read failed.
  */
 export async function loadQuoteRouteDepth(chain: PublicClient, quote: SwapAsset, quoteUsd: number | null, sizeUsd = 10_000, routing: RoutingConfig = {}): Promise<QuoteDepth | null> {
   if (!quoteUsd || quoteUsd <= 0) return null;
@@ -27,7 +28,7 @@ export async function loadQuoteRouteDepth(chain: PublicClient, quote: SwapAsset,
       states: new Map(pools.map((p) => [p.poolId, p])),
     });
     return { sizeUsd, impactPct: best.priceImpactPct };
-  } catch {
-    return null;
+  } catch (e) {
+    return e instanceof SwapError && (e.reason === "insufficient-liquidity" || e.reason === "price-impact") ? { sizeUsd, impactPct: null } : null;
   }
 }

@@ -208,7 +208,7 @@ vi.mock("@/components/swap", () => ({
   },
 }));
 vi.mock("@/hooks/use-swap-market", () => ({
-  usePoolMarket: () => ({ market: { tvlUsd: 123_456, tvlQuote: 50, quote: { symbol: "WETH" } }, quoteUsd: 2400, loading: false, error: null, refresh: vi.fn() }),
+  usePoolMarket: () => ({ market: { tvlUsd: 9_000_000, tvlQuote: 3750, depthUsd: 123_456, depthQuote: 50, quote: { symbol: "WETH" } }, quoteUsd: 2400, loading: false, error: null, refresh: vi.fn() }),
   useUsdPrices: () => ({ data: new Map() }),
 }));
 const viewport = { wide: true };

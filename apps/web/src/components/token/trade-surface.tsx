@@ -66,8 +66,9 @@ export function useLiquidityMetric(token: string, symbol: string): TradingMetric
   const { market } = usePoolMarket(resolved.data ?? null);
   return useMemo(() => {
     if (!market) return [];
-    if (market.tvlUsd != null) return [{ key: "liquidity", label: "Liquidity", value: market.tvlUsd, format: { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 }, hint: "Pool value, both sides" }];
-    if (market.tvlQuote != null) return [{ key: "liquidity", label: `Liquidity (${market.quote.symbol})`, value: market.tvlQuote, format: { notation: "compact", maximumFractionDigits: 2 }, hint: "Pool value, both sides" }];
+    const hint = `${market.quote.symbol} held by the pool, which is what sells are paid from`;
+    if (market.depthUsd != null) return [{ key: "liquidity", label: "Liquidity", value: market.depthUsd, format: { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 }, hint }];
+    if (market.depthQuote != null) return [{ key: "liquidity", label: `Liquidity (${market.quote.symbol})`, value: market.depthQuote, format: { notation: "compact", maximumFractionDigits: 2 }, hint }];
     return [];
   }, [market]);
 }
