@@ -38,9 +38,12 @@ export interface HeroTokenProps extends Omit<ComponentProps<"section">, "childre
   art: ReactNode;
   /** Formatted price ("$0.000412"). */
   price: string;
-  /** 24h change in percent. */
-  change24h: number;
-  cause: CauseName;
+  /** 24h change in percent; omitted, no change is shown (a coin with no trades yet). */
+  change24h?: number;
+  /** The coin's cause focus; omitted when it is open to every cause. */
+  cause?: CauseName;
+  /** More chips after the cause (further causes, quote asset…). */
+  extraChips?: ReactNode;
   causeRegions?: readonly string[];
   giving: GivingMode;
   /** Short line under the name. */
@@ -63,6 +66,7 @@ export function HeroToken({
   price,
   change24h,
   cause,
+  extraChips,
   causeRegions,
   giving,
   tagline,
@@ -106,7 +110,8 @@ export function HeroToken({
         <motion.div className="flex min-w-0 flex-col gap-4" {...container}>
           <motion.div className="flex flex-wrap items-center gap-2" {...item}>
             <ModeBadge giving={giving} long />
-            <CauseChip cause={cause} regions={causeRegions} />
+            {cause ? <CauseChip cause={cause} regions={causeRegions} /> : null}
+            {extraChips}
           </motion.div>
           <motion.div className="flex flex-col gap-1.5" {...item}>
             <HeroHeading id={titleId} level={headingLevel} className="text-4xl leading-none @md:text-5xl @5xl:text-6xl">
@@ -124,7 +129,7 @@ export function HeroToken({
               <span className="sr-only">Price </span>
               {price}
             </span>
-            <PriceChange value={change24h} showPeriod className="text-base" />
+            {change24h !== undefined ? <PriceChange value={change24h} showPeriod className="text-base" /> : null}
           </motion.div>
           {actions.length ? (
             <motion.div {...item}>
