@@ -7,6 +7,11 @@ describe("describeQuoteAsset", () => {
   it("names WETH as crypto", () => {
     expect(describeQuoteAsset(EXTERNAL_ADDRESSES.weth)).toEqual({ symbol: "WETH", name: "Wrapped Ether", kind: "crypto" });
   });
+  it("names the registry's other crypto quote assets, with the symbol as the logo key", () => {
+    expect(describeQuoteAsset("0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599")).toEqual({ symbol: "WBTC", name: "Wrapped Bitcoin", kind: "crypto" });
+    expect(describeQuoteAsset("0x7f39c581f595b53c5cb19bd0b3f8da6c935e2ca0")).toMatchObject({ symbol: "wstETH", kind: "crypto" });
+    expect(describeQuoteAsset("0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf").symbol).toBe("cbBTC");
+  });
   it("maps Ondo stocks and ETFs with the issuer's name", () => {
     expect(describeQuoteAsset(ONDO_TOKENS.NVDAon.address)).toEqual({ symbol: "NVDAon", name: "NVIDIA", kind: "stock" });
     expect(describeQuoteAsset(ONDO_TOKENS.SPYon.address)).toMatchObject({ symbol: "SPYon", kind: "etf", name: "SPDR S&P 500 ETF Trust" });

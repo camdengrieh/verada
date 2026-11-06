@@ -9,7 +9,7 @@ Code: `packages/sdk/src/swap` (no React, no network assumptions beyond a viem-st
 
 ## Pools
 
-Every Varada token has one pool: the token against its quote asset (WETH or an Ondo token), dynamic
+Every Varada token has one pool: the token against its quote asset (any registry-listed asset: WETH, other liquid crypto, or an Ondo token), dynamic
 fee flag `0x800000`, tick spacing 200 (`VaradaFactory.TICK_SPACING`), `hooks` = the token's hook
 (`VaradaHook`, or `VaradaLiveHook` for live-donation tokens; the indexer's `token.hook`).
 `varadaPoolKey(token, quote, hook)` sorts the currencies and `poolIdOf(key)` is

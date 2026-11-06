@@ -112,14 +112,54 @@ These steps are owner transactions that the script cannot send. Do them in this 
 4. **Add a fallback cause and set it as the default:** `CauseRegistry.addCause`, then
    `EpochGovernor.setDefaultCause`. **Required:** without it, an epoch with no ballots cannot pay out.
 5. **Add the quote assets and their routes:** `QuoteRegistry.addQuoteAssetWithRoute`. Do not add a
-   quote asset whose balances can shrink.
+   quote asset whose balances can shrink. Any ERC-20 qualifies: the registry needs only the asset,
+   a label (`Kind`, which nothing reads but the UI) and a hookless v4 route of at most three hops
+   that ends in USDC. Adding a new asset is configuration, never a contract change; the factory
+   only reads `isAllowed` and `decimals`, and the consolidator only follows the route.
+   `script/AddQuoteAssets.s.sol` does this for the curated set (see "Quote assets" below).
 6. **Seed the route price references:** `FeeConsolidator.seedReferences` (or `setReference`) for every
    route pool. **Required:** until then, every route hop reverts and fees stay held.
+   `AddQuoteAssets` seeds the pools it uses that have no reference yet.
 7. **Register the curator agents** in `CuratorRegistry`, and link each agent wallet
    (`linkAgentWallet`).
 8. **Fund the Zama fee account** used by the tally keeper (see `services/publisher`).
 9. **Set the site contenthash** with `TokenProfileRegistry.setDefaultContenthash`, after the first site
    publish, if `SITE_SWARM_REF` was not known at deploy time.
+
+### Quote assets
+
+Tokens accrue fees in their quote asset and consolidate to USDC; the quote asset can be WETH, any
+other liquid crypto asset, or an Ondo token. USD pricing for the UI comes from the same on-chain
+pools (no oracle), and the pickers order assets by route depth.
+
+```bash
+# Dry run (default; reads the live registry and pools, broadcasts nothing even with --broadcast):
+QUOTE_REGISTRY=0x.. FEE_CONSOLIDATOR=0x.. forge script script/AddQuoteAssets.s.sol --rpc-url $ETH_RPC_URL
+# Apply (the signer must own both contracts; use a keystore or hardware wallet):
+APPLY=1 QUOTE_REGISTRY=0x.. FEE_CONSOLIDATOR=0x.. forge script script/AddQuoteAssets.s.sol \
+  --rpc-url $ETH_RPC_URL --broadcast --account <owner keystore>
+# ASSETS=WBTC,cbBTC limits the run to those symbols.
+```
+
+Survey (Ethereum mainnet, hookless v4 pools, price impact of a swap to USDC along the best route,
+from `V4Quoter`, 7 Nov 2026):
+
+| Asset | Route | $10k | $100k | Verdict |
+| --- | --- | --- | --- | --- |
+| WBTC | WBTC/USDC 0.3% | about 0% | 0.2% | included |
+| cbBTC | cbBTC/USDC 0.3% | about 0% | 0.1% | included |
+| wstETH | wstETH/ETH 0.01%, ETH/USDC 0.05% | 0.1% | 2.2% | included |
+| UNI | UNI/USDC 0.3% | 0.2% | 2.3% | included |
+| AAVE | AAVE/USDC 0.3% | 0.3% | 2.7% | included |
+| LINK | LINK/ETH 0.3%, ETH/USDC 0.05% | 0.6% | 2.7% | included (the direct USDC pool is 12% at $100k) |
+| USDT | USDT/USDC 0.01% | 0.01% | 9% | left out: fine for small trades, thin beyond $50k |
+| DAI | via ETH (the USDC pools are out of range) | 4.5% | 18% | left out |
+
+The bar is 3% at $100k. Ondo tokens: of the 451 in the SDK list, only AMZNon, TSLAon, GOOGLon, USOon,
+USDon (USDC pools) and SPYon (through ETH) have a hookless pool; all are thin (a $1k swap moves the
+price 2% to 9%), so they are registered for completeness and the web app gates their launches on depth.
+CRCLon and SLVon have a pool but no quotable depth and are skipped. Re-run the dry run before
+applying: it re-checks every hop and skips (and logs) what has gone.
 
 ## 4. After launch
 

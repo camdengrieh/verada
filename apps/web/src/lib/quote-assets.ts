@@ -18,10 +18,28 @@ export interface AppQuoteAsset extends QuoteAsset {
 /** Ondo's own groupings, as library kinds. Currencies and portfolios are "tokenized assets". */
 const ONDO_KIND: Record<OndoTokenKind, QuoteAssetKind> = { Stock: "stock", ETF: "etf", Currency: "rwa", Portfolio: "rwa" };
 
-const CRYPTO: ReadonlyMap<string, { symbol: string; name: string }> = new Map([
-  [EXTERNAL_ADDRESSES.weth.toLowerCase(), { symbol: "WETH", name: "Wrapped Ether" }],
-  [EXTERNAL_ADDRESSES.usdc.toLowerCase(), { symbol: "USDC", name: "USD Coin" }],
-]);
+/**
+ * Names for crypto quote assets. The registry decides which assets are launchable (any ERC-20 with
+ * a route to USDC, whatever its `Kind` label); this table only names the ones the app knows. The
+ * symbol doubles as the logo key under `public/assets/tokens`. An address not listed here still
+ * appears, by its short address, so adding an asset on-chain never needs a web release.
+ */
+const CRYPTO: ReadonlyMap<string, { symbol: string; name: string }> = new Map(
+  (
+    [
+      [EXTERNAL_ADDRESSES.weth, "WETH", "Wrapped Ether"],
+      [EXTERNAL_ADDRESSES.usdc, "USDC", "USD Coin"],
+      ["0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599", "WBTC", "Wrapped Bitcoin"],
+      ["0xcbB7C0000aB88B473b1f5aFd9ef808440eed33Bf", "cbBTC", "Coinbase Wrapped BTC"],
+      ["0x7f39C581F595B53c5cb19bD0b3f8dA6c935E2Ca0", "wstETH", "Wrapped stETH"],
+      ["0x514910771AF9Ca656af840dff83E8264EcF986CA", "LINK", "Chainlink"],
+      ["0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", "UNI", "Uniswap"],
+      ["0x7Fc66500c84A76Ad7e9c93437bFc5Ac33E2DDaE9", "AAVE", "Aave"],
+      ["0x6B175474E89094C44Da98b954EedeAC495271d0F", "DAI", "Dai"],
+      ["0xdAC17F958D2ee523a2206206994597C13D831ec7", "USDT", "Tether USD"],
+    ] as const
+  ).map(([address, symbol, name]) => [address.toLowerCase(), { symbol, name }] as const),
+);
 
 export const shortAddress = (a: string) => (a.length > 12 ? `${a.slice(0, 6)}…${a.slice(-4)}` : a);
 

@@ -9,8 +9,8 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
 
 /// @title QuoteRegistry
-/// @notice Owner-managed allowlist of assets a token's pool may be paired against (WETH and
-///         verified Ondo tokens), plus the Uniswap v4 route that converts each asset into the
+/// @notice Owner-managed allowlist of assets a token's pool may be paired against (any ERC-20 with a route to USDC: WETH, other liquid crypto and
+///         verified Ondo tokens; `Kind` is only a label), plus the Uniswap v4 route that converts each asset into the
 ///         settlement asset (USDC).
 /// @dev A route is an ordered list of pool keys. Starting from the quote asset, every hop
 ///      swaps the current currency for the other currency of the pool, and the last hop must
