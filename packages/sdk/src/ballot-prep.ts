@@ -5,9 +5,12 @@
  * `prepareBallot` or `prepareCuratedBallot`, or `requestCurationSkip` first when a curator's picks
  * cannot be obtained) and builds its arguments; `ballotCall` turns that into
  * a contract call for any viem or wagmi writer.
+ *
+ * Live tokens' rotation rounds are prepared by the same planner (`planRoundOpening`, `roundCall`),
+ * since both governors build ballots with `CatalogBallotLib`.
  */
 import { zeroAddress, type Abi, type Address, type Hex } from "viem";
-import { causeCatalogAbi, causeRegistryAbi, curatorRegistryAbi, epochGovernorAbi, tokenProfileRegistryAbi } from "./abis/index.js";
+import { causeCatalogAbi, causeRegistryAbi, curatorRegistryAbi, epochGovernorAbi, rotationGovernorAbi, tokenProfileRegistryAbi } from "./abis/index.js";
 import { AGENT_CATEGORIES, curatedQuotas, planBallot, type CurationSlot } from "./agents.js";
 import { bucketParts, DRAW_FACTOR, drawIndex, focusBuckets, locate, REGIONS } from "./catalog.js";
 
@@ -131,17 +134,77 @@ const none = (reason: string, terminal = false): BallotStep => ({ type: "none", 
 export async function planBallotOpening(deps: BallotPreparerDeps, token: Address, epoch: bigint): Promise<BallotStep> {
   const r = deps.reader;
   if (await r.isPrepared(token, epoch)) return none("ballot prepared", true);
+  const plan = await planCatalogBallot<BallotStep>(deps, token, epoch, epoch, async (err) => {
+    // Missing picks: ask for the skip, which applies CURATION_GRACE later. Until then the governor
+    // still takes a curated ballot from anyone holding the picks; from then, prepareBallot skips
+    // the curated phase and rotation fills the ballot rather than leaving the epoch closed.
+    if (!r.curationSkipAt || !r.now) throw err;
+    const skipAt = await r.curationSkipAt(token, epoch);
+    if (skipAt === 0n) return { type: "send", action: { kind: "requestCurationSkip", token, epoch } };
+    if ((await r.now()) < skipAt) {
+      // Retry no later than the skip, when rotation becomes possible (a margin for block time).
+      err.retryAt = Number(skipAt) * 1000 + RETRY_MARGIN_MS;
+      throw err;
+    }
+    return null;
+  });
+  switch (plan.kind) {
+    case "early":
+      return plan.step;
+    case "open":
+      return { type: "send", action: { kind: "openEpoch", token, epoch } };
+    case "rotation":
+      return { type: "send", action: { kind: "prepareBallot", token, epoch, draws: plan.draws } };
+    case "curated":
+      return { type: "send", action: { kind: "prepareCuratedBallot", token, epoch, curated: plan.curated, draws: plan.draws } };
+  }
+}
+
+/** A retry waits this long past the moment the curated phase may be skipped (block time margin). */
+export const RETRY_MARGIN_MS = 30_000;
+
+/**
+ * Chain reads every catalogue ballot needs, weekly or rotation: `round` is the epoch or the target
+ * rotation, since both governors expose these views with the same signatures.
+ */
+export type CatalogBallotReader = Pick<
+  BallotReader,
+  "poolOf" | "pinned" | "ballotSize" | "focusOf" | "bucketSizes" | "catalogRoot" | "isBlocked" | "curationsFor"
+>;
+
+/** The ballot {@link planCatalogBallot} built, or the caller's own step when picks are missing. */
+type CatalogPlan<E> =
+  | { kind: "open" }
+  | { kind: "rotation"; draws: DrawArg[] }
+  | { kind: "curated"; curated: CuratedDrawArg[]; draws: DrawArg[] }
+  | { kind: "early"; step: E };
+
+/**
+ * `CatalogBallotLib` planned locally (`planBallot`): pins, then the curated phase over the
+ * curations of weekly epoch `curationEpoch` (null: no curated phase), then rotation draws seeded by
+ * `round` (`drawIndex(token, round, version, k, pool)`, the same seed in both governors). When a
+ * usable curation's picks cannot be obtained, `missing` decides: a step to send instead, null to
+ * drop the curated phase so rotation fills the ballot, or a throw. The indexer supplies catalogue
+ * entries, pick leaves and their proofs, and both must match the roots on chain.
+ */
+async function planCatalogBallot<E>(
+  deps: { reader: CatalogBallotReader; entries: CatalogEntrySource; picks?: PickSource },
+  token: Address,
+  round: bigint,
+  curationEpoch: bigint | null,
+  missing: (err: CuratedPicksUnavailable) => Promise<E | null>,
+): Promise<CatalogPlan<E>> {
+  const r = deps.reader;
   const [{ version, poolSize }, pinnedAll, size, focus] = await Promise.all([
-    r.poolOf(token, epoch),
-    r.pinned(token, epoch),
+    r.poolOf(token, round),
+    r.pinned(token, round),
     r.ballotSize(),
     r.focusOf(token),
   ]);
-  const open: BallotStep = { type: "send", action: { kind: "openEpoch", token, epoch } };
-  if (version === 0 || poolSize === 0n) return open;
+  if (version === 0 || poolSize === 0n) return { kind: "open" };
   const pinned: Hex[] = [];
   for (const c of pinnedAll) if (!(await r.isBlocked(c))) pinned.push(c);
-  if (pinned.length >= size) return open;
+  if (pinned.length >= size) return { kind: "open" };
 
   const [bucketSizes, root] = await Promise.all([r.bucketSizes(version), r.catalogRoot(version)]);
   const fb = focusBuckets(bucketSizes, focus.categoryMask, focus.regionMask);
@@ -150,7 +213,8 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
   const slots = size - pinned.length;
 
   // Curated phase: the agents' picks for the focus buckets, with proofs, from the indexer.
-  const onChain = r.curationsFor && fb.length > 0 ? await r.curationsFor(epoch, version, fb.map((b) => b.bucket)) : [];
+  const onChain =
+    curationEpoch !== null && r.curationsFor && fb.length > 0 ? await r.curationsFor(curationEpoch, version, fb.map((b) => b.bucket)) : [];
   let curations: (CurationSlot & { picksRoot: Hex })[] = onChain.filter((c) => c.count > 0 && c.weight > 0).sort((a, b) => a.bucket - b.bucket);
   let quotas = curatedQuotas(slots, curations);
   const picks = new Map<string, PickWithProof>();
@@ -162,9 +226,9 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
       const label = AGENT_CATEGORIES.find((a) => a.bit === categoryBit)?.ensLabel;
       const region = REGIONS.find((x) => x.bit === regionBit)?.slug;
       if (!deps.picks || !label || !region) throw new CuratedPicksUnavailable(`no pick source for bucket ${c.bucket}`);
-      const got = await deps.picks.picks(label, epoch, region);
+      const got = await deps.picks.picks(label, curationEpoch!, region);
       if (!got || got.picksRoot.toLowerCase() !== c.picksRoot.toLowerCase()) {
-        throw new CuratedPicksUnavailable(`${label}/${region} picks for epoch ${epoch} are not published with root ${c.picksRoot}`);
+        throw new CuratedPicksUnavailable(`${label}/${region} picks for epoch ${curationEpoch} are not published with root ${c.picksRoot}`);
       }
       for (const p of got.items) picks.set(`${c.bucket}:${p.rank}`, p);
       for (let rank = 0; rank < quotas[i]!; rank++) {
@@ -172,17 +236,9 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
       }
     }
   } catch (err) {
-    // Missing picks: ask for the skip, which applies CURATION_GRACE later. Until then the governor
-    // still takes a curated ballot from anyone holding the picks; from then, prepareBallot skips
-    // the curated phase and rotation fills the ballot rather than leaving the epoch closed.
-    if (!(err instanceof CuratedPicksUnavailable) || !r.curationSkipAt || !r.now) throw err;
-    const skipAt = await r.curationSkipAt(token, epoch);
-    if (skipAt === 0n) return { type: "send", action: { kind: "requestCurationSkip", token, epoch } };
-    if ((await r.now()) < skipAt) {
-      // Retry no later than the skip, when rotation becomes possible (a margin for block time).
-      err.retryAt = Number(skipAt) * 1000 + 30_000;
-      throw err;
-    }
+    if (!(err instanceof CuratedPicksUnavailable)) throw err;
+    const step = await missing(err);
+    if (step !== null) return { kind: "early", step };
     curations = [];
     quotas = [];
     picks.clear();
@@ -201,7 +257,7 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
     }
   });
   for (let k = 0; k < budget; k++) {
-    const idx = sequential ? k : drawIndex(token, epoch, version, k, total);
+    const idx = sequential ? k : drawIndex(token, round, version, k, total);
     const at = locate(bucketSizes, focus.categoryMask, focus.regionMask, idx);
     wanted.set(`${at.bucket}:${at.index}`, at);
   }
@@ -226,7 +282,7 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
 
   const blocked = new Map<string, boolean>();
   const plan = await planBallot(
-    { token, epoch, version, bucketSizes, categoryMask: focus.categoryMask, regionMask: focus.regionMask, pinned, ballotSize: size, curations },
+    { token, epoch: round, version, bucketSizes, categoryMask: focus.categoryMask, regionMask: focus.regionMask, pinned, ballotSize: size, curations },
     {
       entryAt: async (bucket, index) => (await entry(bucket, index)).orgId,
       async pickAt(bucket, rank) {
@@ -242,7 +298,7 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
     },
   );
   const draws = plan.draws.map((d) => ({ orgId: d.orgId, proof: got.get(`${d.bucket}:${d.index}`)!.proof }));
-  if (plan.curated.length === 0) return { type: "send", action: { kind: "prepareBallot", token, epoch, draws } };
+  if (plan.curated.length === 0) return { kind: "rotation", draws };
   const curated = plan.curated.map((c) => {
     const pick = picks.get(`${c.bucket}:${c.rank}`)!;
     const e = c.entryOrgId ? got.get(`${c.bucket}:${c.catalogIndex}`)! : null;
@@ -255,7 +311,7 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
       entryProof: e ? e.proof : [],
     };
   });
-  return { type: "send", action: { kind: "prepareCuratedBallot", token, epoch, curated, draws } };
+  return { kind: "curated", curated, draws };
 }
 
 /** {@link planBallotOpening} bound to its sources. */
@@ -322,6 +378,200 @@ export function createBallotReader(client: BallotReadClient, epochGovernor: Addr
       const curators = await (curatorsOf ??= read<Address>(eg, epochGovernorAbi, "curators"));
       if (curators === zeroAddress) return [];
       const cs = await read<readonly { picksRoot: Hex; count: number; weight: number }[]>(curators, curatorRegistryAbi, "curationsFor", [epoch, version, buckets]);
+      return cs.map((c, i) => ({ bucket: buckets[i]!, picksRoot: c.picksRoot, count: Number(c.count), weight: Number(c.weight) }));
+    },
+  };
+}
+
+// ---------------------------------------------------------------- live mode: rotation rounds
+
+/** `IRotationGovernor.RoundStatus`, in enum order. */
+export const ROUND_STATUSES = ["None", "Open", "Closed", "NoChange", "Applied", "Stale", "InactiveWinner", "NoBallot"] as const;
+export type RoundStatus = (typeof ROUND_STATUSES)[number];
+
+/** `PollScopeLib.KIND_ROTATION`: scope kind of a rotation poll (the id is the target rotation). */
+export const POLL_KIND_ROTATION = 1n;
+
+/** Voting-scheme scope of the rotation poll for `target` (`PollScopeLib.encode(KIND_ROTATION, target)`). */
+export function rotationPollScope(target: bigint): bigint {
+  if (target < 0n || target >= 1n << 64n) throw new RangeError("target out of range");
+  return (POLL_KIND_ROTATION << 248n) | target;
+}
+
+/** `CatalogBallotBuilder.CURATION_GRACE`: the longest curation grace of a round, in seconds. */
+export const ROUND_CURATION_GRACE = 6n * 3_600n;
+
+/**
+ * End of a round's curation grace, in seconds. Mirrors `CatalogBallotBuilder.curationGraceEnd`:
+ * `voteStart + min(CURATION_GRACE, (voteEnd - voteStart) / 3)`, which is the round's close buffer
+ * (15 minutes for hourly rotations, 3 hours for 12-hour ones, 6 hours for longer ones).
+ */
+export function roundCurationGraceEnd(voteStart: bigint, voteEnd: bigint): bigint {
+  const grace = (voteEnd - voteStart) / 3n;
+  return voteStart + (grace < ROUND_CURATION_GRACE ? grace : ROUND_CURATION_GRACE);
+}
+
+/** Chain reads round preparation needs (`RotationGovernor` and its linked contracts). */
+export interface RoundReader extends CatalogBallotReader {
+  /** `roundOf(token, target).status`. */
+  roundStatus(token: Address, target: bigint): Promise<RoundStatus>;
+  currentRotation(token: Address): Promise<bigint>;
+  /** `pollWindow(token, target)`, in seconds (zeros without a schedule for `target`). */
+  pollWindow(token: Address, target: bigint): Promise<{ snapshot: bigint; voteStart: bigint; voteEnd: bigint }>;
+  /** `curationEpochOf(token, target)`: the weekly epoch whose curations feed the round. */
+  curationEpochOf(token: Address, target: bigint): Promise<{ ok: boolean; epoch: bigint }>;
+  /** Latest block timestamp, in seconds. */
+  now(): Promise<bigint>;
+}
+
+/** The permissionless call that prepares (and opens) a token's next rotation round. */
+export type RoundAction =
+  /** `openRound(token)`: no draws (pins fill the ballot, or there is no catalogue pool). */
+  | { kind: "openRound"; token: Address; target: bigint }
+  | { kind: "prepareRound"; token: Address; target: bigint; draws: DrawArg[] }
+  | { kind: "prepareCuratedRound"; token: Address; target: bigint; curated: CuratedDrawArg[]; draws: DrawArg[] };
+
+export type RoundStep = { type: "none"; reason: string; terminal: boolean } | { type: "send"; action: RoundAction };
+
+/** `{ address, abi, functionName, args }` of a round action on the rotation governor. */
+export function roundCall(action: RoundAction, rotationGovernor: Address): { address: Address; abi: Abi; functionName: string; args: readonly unknown[] } {
+  const base = { address: rotationGovernor, abi: rotationGovernorAbi as Abi };
+  switch (action.kind) {
+    case "openRound":
+      return { ...base, functionName: "openRound", args: [action.token] };
+    case "prepareRound":
+      return { ...base, functionName: "prepareRound", args: [action.token, action.target, action.draws] };
+    case "prepareCuratedRound":
+      return { ...base, functionName: "prepareCuratedRound", args: [action.token, action.target, action.curated, action.draws] };
+  }
+}
+
+export interface RoundPreparerDeps {
+  reader: RoundReader;
+  entries: CatalogEntrySource;
+  picks?: PickSource;
+}
+
+const noneRound = (reason: string, terminal = false): RoundStep => ({ type: "none", reason, terminal });
+
+/**
+ * Plans the preparation of round `target` of a live token, the poll on the cause of rotation
+ * `target`, which only the next rotation's round (`target = currentRotation + 1`) can get, during
+ * its vote window. The ballot is planned exactly like a weekly one ({@link planBallotOpening}, the
+ * same `CatalogBallotLib`): pins, then the curated picks of the weekly epoch containing the vote
+ * start (`curationEpochOf`), then rotation draws seeded by `target`. There is no skip request in
+ * live mode: when a usable curation's picks cannot be obtained, the plan fails with
+ * {@link CuratedPicksUnavailable} until the round's curation grace ends (`retryAt` is then, plus a
+ * margin for block time), and from then the round is prepared with rotation only, as the builder
+ * skips the curated phase of a round prepared without curated draws after its grace.
+ */
+export async function planRoundOpening(deps: RoundPreparerDeps, token: Address, target: bigint): Promise<RoundStep> {
+  const r = deps.reader;
+  const status = await r.roundStatus(token, target);
+  if (status !== "None") return noneRound("round prepared", true);
+  const [current, window, now] = await Promise.all([r.currentRotation(token), r.pollWindow(token, target), r.now()]);
+  if (target <= current) return noneRound("round can no longer be prepared", true);
+  if (target !== current + 1n) return noneRound("round is not the next rotation's");
+  if (window.voteEnd === 0n) return noneRound("round has no vote window", true);
+  // The rotation moves on at `start(target)`; the round is then out of reach for good.
+  if (now >= window.voteEnd) return noneRound("round's vote window ended");
+  const curation = await r.curationEpochOf(token, target);
+  const graceEnd = roundCurationGraceEnd(window.voteStart, window.voteEnd);
+  const plan = await planCatalogBallot<RoundStep>(deps, token, target, curation.ok ? curation.epoch : null, async (err) => {
+    if (now < graceEnd) {
+      // Until the grace ends the builder requires the curated draws; retry then at the latest.
+      err.retryAt = Number(graceEnd) * 1000 + RETRY_MARGIN_MS;
+      throw err;
+    }
+    return null;
+  });
+  switch (plan.kind) {
+    case "early":
+      return plan.step;
+    case "open":
+      return { type: "send", action: { kind: "openRound", token, target } };
+    case "rotation":
+      return { type: "send", action: { kind: "prepareRound", token, target, draws: plan.draws } };
+    case "curated":
+      return { type: "send", action: { kind: "prepareCuratedRound", token, target, curated: plan.curated, draws: plan.draws } };
+  }
+}
+
+/** {@link planRoundOpening} bound to its sources. */
+export function createRoundPreparer(deps: RoundPreparerDeps) {
+  return { plan: (token: Address, target: bigint) => planRoundOpening(deps, token, target) };
+}
+
+export type RoundPreparer = ReturnType<typeof createRoundPreparer>;
+
+/**
+ * viem-backed {@link RoundReader}. Catalogue, cause registry and profile registry addresses come
+ * from the governor's immutables and are read once; the curator registry (set once by the owner)
+ * is cached once it is set.
+ */
+export function createRoundReader(client: BallotReadClient, rotationGovernor: Address): RoundReader {
+  const rg = rotationGovernor;
+  const abi = rotationGovernorAbi as Abi;
+  const read = <T>(address: Address, abi_: Abi, functionName: string, args: readonly unknown[] = []) =>
+    client.readContract({ address, abi: abi_, functionName, args } as never) as Promise<T>;
+  let linked: Promise<{ catalog: Address; registry: Address; profiles: Address }> | undefined;
+  const links = () =>
+    (linked ??= Promise.all([
+      read<Address>(rg, abi, "catalog"),
+      read<Address>(rg, abi, "causeRegistry"),
+      read<Address>(rg, abi, "profileRegistry"),
+    ]).then(([catalog, registry, profiles]) => ({ catalog, registry, profiles }))).catch((err: unknown) => {
+      linked = undefined;
+      throw err;
+    });
+  let curatorsOf: Address | undefined;
+  return {
+    async roundStatus(token, target) {
+      const [status] = await read<readonly [number, ...unknown[]]>(rg, abi, "roundOf", [token, target]);
+      const s = ROUND_STATUSES[Number(status)];
+      if (!s) throw new Error(`unknown round status ${status}`);
+      return s;
+    },
+    currentRotation: (token) => read<bigint>(rg, abi, "currentRotation", [token]),
+    async pollWindow(token, target) {
+      const [snapshot, voteStart, voteEnd] = await read<readonly [number | bigint, number | bigint, number | bigint]>(rg, abi, "pollWindow", [token, target]);
+      return { snapshot: BigInt(snapshot), voteStart: BigInt(voteStart), voteEnd: BigInt(voteEnd) };
+    },
+    async curationEpochOf(token, target) {
+      const [ok, epoch] = await read<readonly [boolean, bigint]>(rg, abi, "curationEpochOf", [token, target]);
+      return { ok, epoch };
+    },
+    async poolOf(token, target) {
+      const [version, poolSize] = await read<readonly [number, bigint]>(rg, abi, "poolOf", [token, target]);
+      return { version: Number(version), poolSize };
+    },
+    pinned: (token, target) => read<readonly Hex[]>(rg, abi, "shortlistFor", [token, target]),
+    ballotSize: async () => Number(await read<bigint>(rg, abi, "ballotSize")),
+    async focusOf(token) {
+      const { profiles } = await links();
+      const [categoryMask, regionMask] = await read<readonly [bigint, number]>(profiles, tokenProfileRegistryAbi, "focusOf", [token]);
+      return { categoryMask, regionMask: Number(regionMask) };
+    },
+    async bucketSizes(version) {
+      const { catalog } = await links();
+      return (await read<readonly number[]>(catalog, causeCatalogAbi, "bucketSizesOf", [version])).map(Number);
+    },
+    async catalogRoot(version) {
+      const { catalog } = await links();
+      return read<Hex>(catalog, causeCatalogAbi, "rootOf", [version]);
+    },
+    async isBlocked(causeId) {
+      const { registry } = await links();
+      return read<boolean>(registry, causeRegistryAbi, "isBlocked", [causeId]);
+    },
+    now: async () => ((await client.getBlock({ blockTag: "latest" } as never)) as { timestamp: bigint }).timestamp,
+    async curationsFor(epoch, version, buckets) {
+      if (!curatorsOf) {
+        const c = await read<Address>(rg, abi, "curators");
+        if (c === zeroAddress) return [];
+        curatorsOf = c;
+      }
+      const cs = await read<readonly { picksRoot: Hex; count: number; weight: number }[]>(curatorsOf, curatorRegistryAbi, "curationsFor", [epoch, version, buckets]);
       return cs.map((c, i) => ({ bucket: buckets[i]!, picksRoot: c.picksRoot, count: Number(c.count), weight: Number(c.weight) }));
     },
   };
