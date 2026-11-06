@@ -138,6 +138,7 @@ export function GovernancePanel() {
       <section aria-label="Governance" className="@container grid grid-cols-1 gap-6">
         <PageHeading capText={capText} />
         <EmptyState
+          headingLevel={2}
           icon={<Vote />}
           title="Governance is not set up on this site"
           body="The site's config.json has no governorAddress, so there is no epoch to read or vote in."
@@ -179,6 +180,7 @@ export function GovernancePanel() {
       )}
       {tokens.data && board.length === 0 && (
         <EmptyState
+          headingLevel={2}
           icon={<Vote />}
           title="No tokens have launched yet"
           body="Ballots appear here as soon as a token exists. Launch one and its holders vote on where its fees go."

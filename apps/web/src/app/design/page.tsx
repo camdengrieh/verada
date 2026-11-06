@@ -59,7 +59,7 @@ export default function DesignPage() {
             ))}
           </ol>
         </nav>
-        <main className="flex min-w-0 flex-[999_1_640px] flex-col gap-16">
+        <div className="flex min-w-0 flex-[999_1_640px] flex-col gap-16">
           <FoundationsSection />
           <HeroesSection />
           <MotionSection />
@@ -74,7 +74,7 @@ export default function DesignPage() {
           <ImpactSection />
           <VaradaSection />
           <MobileSection />
-        </main>
+        </div>
       </div>
       <footer className="border-t border-line px-4 py-6 text-sm text-muted-foreground sm:px-10">
         <div className="mx-auto max-w-[1360px]">

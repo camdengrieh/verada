@@ -10,6 +10,7 @@ export function ScrollArea({ className, children, ...props }: ComponentProps<typ
     <ScrollAreaPrimitive.Root data-slot="scroll-area" className={cn("relative overflow-hidden", className)} {...props}>
       <ScrollAreaPrimitive.Viewport
         data-slot="scroll-area-viewport"
+        tabIndex={0}
         className="size-full rounded-[inherit] outline-none transition-[box-shadow] focus-visible:ring-[3px] focus-visible:ring-ring/40"
       >
         {children}

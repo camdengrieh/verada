@@ -96,7 +96,6 @@ export function DiscoverPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="sr-only">Varada: memecoins that give back</h1>
       <LiveTicker live={live} assets={quotes.assets} />
       <HomeHero stats={stats.data} />
 

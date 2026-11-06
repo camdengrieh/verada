@@ -12,7 +12,7 @@ export interface EmptyStateProps extends Omit<ComponentProps<"div">, "title"> {
   body?: ReactNode;
   /** Buttons or links. */
   action?: ReactNode;
-  headingLevel?: 2 | 3 | 4;
+  headingLevel?: 1 | 2 | 3 | 4;
   /** `compact` for table bodies and side panels. */
   size?: "default" | "compact";
 }
@@ -29,7 +29,7 @@ export function EmptyState({
   className,
   ...props
 }: EmptyStateProps) {
-  const Heading = `h${headingLevel}` as "h2" | "h3" | "h4";
+  const Heading = `h${headingLevel}` as "h1" | "h2" | "h3" | "h4";
   const tile = "flex size-12 items-center justify-center rounded-xl border border-line bg-paper-card text-ink-soft [&_svg:not([class*='size-'])]:size-5";
   return (
     <div

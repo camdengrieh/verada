@@ -284,7 +284,7 @@ export function ChartTimeframes({ options, value, onChange, label = "Chart timef
             aria-pressed={on}
             onClick={() => onChange(opt)}
             className={cn(
-              "num inline-flex min-h-11 min-w-11 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors",
+              "num inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors",
               on ? "bg-paper-card text-ink shadow-paper" : "text-ink-muted hover:text-ink",
             )}
           >

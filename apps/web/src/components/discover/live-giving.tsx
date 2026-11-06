@@ -75,7 +75,7 @@ export function LiveGiving({ live, stats, statsLoading, assets }: { live: LiveAc
           announce
           emptyText="No donations yet. The first one lands here the moment it settles."
           footer={
-            <a href={rel("governance/")} className="text-sm font-semibold text-sage-ink underline-offset-4 hover:underline">
+            <a href={rel("governance/")} className="inline-flex min-h-11 items-center text-sm font-semibold text-sage-ink underline-offset-4 hover:underline">
               See how causes are chosen
             </a>
           }

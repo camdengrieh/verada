@@ -17,7 +17,7 @@ import { readTokenAddress } from "@/lib/token-address";
 function Notice({ role, title, body, action }: { role: "status" | "alert"; title: string; body?: ReactNode; action?: ReactNode }) {
   return (
     <section role={role} className="rounded-[32px] border border-line bg-card">
-      <EmptyState headingLevel={2} title={title} body={body} action={action} />
+      <EmptyState headingLevel={1} title={title} body={body} action={action} />
     </section>
   );
 }
@@ -65,7 +65,7 @@ export function TokenDetail({ label: labelProp }: { label?: string | null }) {
 
   const home = <Button variant="outline" onClick={() => (window.location.href = rel(""))}>See all tokens</Button>;
   if (label) {
-    if (resolved.isLoading) return <div role="status" aria-label={`Resolving ${label}.${config.ensParentName}`}><span className="sr-only">Resolving {label}.{config.ensParentName}</span><TokenHeroSkeleton /></div>;
+    if (resolved.isLoading) return <TokenHeroSkeleton title={`Resolving ${label}.${config.ensParentName}`} />;
     if (resolved.error)
       return (
         <Notice
