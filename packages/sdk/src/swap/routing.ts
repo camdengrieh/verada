@@ -7,7 +7,8 @@
  * nodes joined by a free wrap / unwrap edge. Uniswap v3 and v2 liquidity is NOT searched.
  */
 import { getAddress, type Address } from "viem";
-import { DEFAULT_ENVIRONMENT, DEFAULT_FEE_TIERS, DEFAULT_HUBS, MAX_ROUTE_POOL_HOPS } from "./constants.js";
+import { DEFAULT_ENVIRONMENT, DEFAULT_FEE_TIERS, DEFAULT_HUBS, MAX_ROUTE_POOL_HOPS, ONDO_FEE_TIERS } from "./constants.js";
+import { isOndoToken } from "../ondo.js";
 import { buildPoolKey, poolIdOf, readPoolStates, type ReadClient } from "./pool.js";
 import { NATIVE_CURRENCY, type PoolKey, type PoolState, type Route, type RouteStep, type SwapAsset, type SwapEnvironment } from "./types.js";
 
@@ -18,6 +19,8 @@ export interface RoutingConfig {
   /** More nodes to search through, e.g. allowlisted Ondo quote assets. */
   extraHubs?: readonly SwapAsset[];
   feeTiers?: readonly { fee: number; tickSpacing: number }[];
+  /** Added for pairs with an Ondo token. Default {@link ONDO_FEE_TIERS}; [] searches `feeTiers` only. */
+  ondoFeeTiers?: readonly { fee: number; tickSpacing: number }[];
   /** Most pool hops (the wrap / unwrap edge is free). Default 3. */
   maxHops?: number;
   /** Pools kept per asset pair, deepest first. Default 2. */
@@ -36,6 +39,7 @@ export function resolveRoutingConfig(cfg: RoutingConfig = {}): ResolvedRouting {
     hubs: cfg.hubs ?? DEFAULT_HUBS,
     extraHubs: cfg.extraHubs ?? [],
     feeTiers: cfg.feeTiers ?? DEFAULT_FEE_TIERS,
+    ondoFeeTiers: cfg.ondoFeeTiers ?? ONDO_FEE_TIERS,
     maxHops: Math.min(cfg.maxHops ?? MAX_ROUTE_POOL_HOPS, MAX_ROUTE_POOL_HOPS),
     poolsPerPair: cfg.poolsPerPair ?? 2,
     maxCandidates: cfg.maxCandidates ?? 10,
@@ -58,7 +62,14 @@ export function routingNodes(cfg: RoutingConfig, endpoints: readonly Address[]):
  * include a core node are generated: the satellites (a user's Ondo token, the quote asset, registry
  * assets) connect to the hubs, not to each other, which keeps the number of reads linear in them.
  */
-export function candidatePoolKeys(nodes: readonly Address[], feeTiers: readonly { fee: number; tickSpacing: number }[] = DEFAULT_FEE_TIERS, core?: readonly Address[]): PoolKey[] {
+export function candidatePoolKeys(
+  nodes: readonly Address[],
+  feeTiers: readonly { fee: number; tickSpacing: number }[] = DEFAULT_FEE_TIERS,
+  core?: readonly Address[],
+  /** Added (deduplicated) for pairs that include an Ondo token; pass [] to turn off. */
+  ondoFeeTiers: readonly { fee: number; tickSpacing: number }[] = ONDO_FEE_TIERS,
+): PoolKey[] {
+  const ondoTiers = ondoFeeTiers.filter((o) => !feeTiers.some((t) => t.fee === o.fee && t.tickSpacing === o.tickSpacing));
   const coreSet = core ? new Set(core.map(key)) : null;
   const keys: PoolKey[] = [];
   for (let i = 0; i < nodes.length; i++) {
@@ -66,7 +77,8 @@ export function candidatePoolKeys(nodes: readonly Address[], feeTiers: readonly 
       const a = nodes[i]!;
       const b = nodes[j]!;
       if (coreSet && !coreSet.has(key(a)) && !coreSet.has(key(b))) continue;
-      for (const t of feeTiers) keys.push(buildPoolKey({ currencyA: a, currencyB: b, fee: t.fee, tickSpacing: t.tickSpacing }));
+      const tiers = ondoTiers.length > 0 && (isOndoToken(a) || isOndoToken(b)) ? [...feeTiers, ...ondoTiers] : feeTiers;
+      for (const t of tiers) keys.push(buildPoolKey({ currencyA: a, currencyB: b, fee: t.fee, tickSpacing: t.tickSpacing }));
     }
   }
   return keys;
@@ -97,7 +109,7 @@ export async function discoverPools(
   opts: { now?: number; bypassCache?: boolean } = {},
 ): Promise<PoolState[]> {
   const c = resolveRoutingConfig(cfg);
-  const keys = [...candidatePoolKeys(nodes, c.feeTiers, c.hubs.map((h) => h.address)), ...extra];
+  const keys = [...candidatePoolKeys(nodes, c.feeTiers, c.hubs.map((h) => h.address), c.ondoFeeTiers), ...extra];
   const cacheKey = keys.map((k) => poolIdOf(k)).join(",") + c.env.stateView;
   const now = opts.now ?? Date.now();
   const hit = discoveryCache.get(cacheKey);

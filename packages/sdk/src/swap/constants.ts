@@ -43,6 +43,30 @@ export const DEFAULT_FEE_TIERS: readonly { fee: number; tickSpacing: number }[] 
   { fee: 10_000, tickSpacing: 100 },
 ];
 
+/**
+ * Extra hookless v4 tiers that Ondo tokens use, searched only for pairs with an Ondo token
+ * (`candidatePoolKeys`), so a WETH/USDC lookup does not pay for them. Found on mainnet in the Ondo
+ * liquidity survey: v4 lets a pool pick any fee and tick spacing, and these were chosen by whoever
+ * seeded the pool (5% / 500, 4.99% / 499, 3.8% / 380, 0.65% / 65, 0.51% / 51, 0.9% / 90,
+ * 0.25% / 25, plus the two most common others: 2% / 200 and 4.995% / 500). Pools on any other tier
+ * are still invisible: pass `feeTiers` or an `extra` pool key.
+ *
+ * Cost: `ondoFeeTiers.length` more pool keys per (Ondo token, hub) pair, two `StateView` calls each,
+ * all inside the single multicall that discovery already makes (9 tiers x 6 hubs x 2 = 108 inner
+ * calls per Ondo token, about 10 KB of calldata, still one eth_call).
+ */
+export const ONDO_FEE_TIERS: readonly { fee: number; tickSpacing: number }[] = [
+  { fee: 50_000, tickSpacing: 500 },
+  { fee: 49_900, tickSpacing: 499 },
+  { fee: 38_000, tickSpacing: 380 },
+  { fee: 6_500, tickSpacing: 65 },
+  { fee: 5_100, tickSpacing: 51 },
+  { fee: 9_000, tickSpacing: 90 },
+  { fee: 2_500, tickSpacing: 25 },
+  { fee: 20_000, tickSpacing: 200 },
+  { fee: 49_950, tickSpacing: 500 },
+];
+
 export const DEFAULT_ENVIRONMENT: SwapEnvironment = {
   weth: EXTERNAL_ADDRESSES.weth,
   usdc: EXTERNAL_ADDRESSES.usdc,
