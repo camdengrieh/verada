@@ -115,4 +115,41 @@ describe("CatalogBrowser", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Pin Org 0" }));
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ name: "Org 0" }));
   });
+
+  it("offers the cause and region pickers as keyboard-reachable chips inside the token's focus", async () => {
+    wrap(<CatalogBrowser onSelect={() => {}} within={{ categories: ["hunger", "clean-water"], regions: ["africa", "asia"] }} />);
+    const causes = screen.getByRole("group", { name: /Causes/ });
+    expect(within(causes).getAllByRole("checkbox").map((c) => (c as HTMLInputElement).labels?.[0]?.textContent)).toEqual(["Hunger & famine", "Clean water & sanitation"]);
+    expect(causes).toHaveTextContent("none chosen: any");
+    // Painted art next to the label, hidden from assistive tech.
+    expect(causes.querySelectorAll("img[aria-hidden='true']")).toHaveLength(2);
+    fireEvent.click(within(causes).getByRole("checkbox", { name: "Hunger & famine" }));
+    expect(within(causes).getByRole("checkbox", { name: "Hunger & famine" })).toBeChecked();
+    expect(causes).toHaveTextContent("1 chosen");
+    await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).includes("categories=hunger&"))).toBe(true));
+    expect(within(screen.getByRole("group", { name: /Regions/ })).getAllByRole("checkbox")).toHaveLength(2);
+  });
+
+  it("marks chosen organizations and disables the rest once the limit is reached", async () => {
+    const onSelect = vi.fn();
+    wrap(<CatalogBrowser onSelect={onSelect} selectLabel="Pin" selectedLabel="Pinned" selectedIds={["0xCA0"]} full="All 1 pin slots are used." />);
+    const note = await screen.findByRole("note");
+    expect(note).toHaveTextContent("All 1 pin slots are used.");
+    await screen.findByText("Org 1");
+    const cards = document.querySelectorAll("[data-slot='org-card']");
+    expect(cards[0]).toHaveAttribute("data-selected", "true");
+    expect(within(cards[0] as HTMLElement).getByText("Pinned")).toBeInTheDocument();
+    expect(within(cards[0] as HTMLElement).queryByRole("button")).toBeNull();
+    const other = screen.getByRole("button", { name: "Pin Org 1" });
+    expect(other).toBeDisabled();
+    expect(other).toHaveAccessibleDescription("All 1 pin slots are used.");
+    fireEvent.click(other);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps the buttons live while there is room", async () => {
+    wrap(<CatalogBrowser onSelect={() => {}} selectLabel="Pin" selectedIds={[]} />);
+    expect(await screen.findByRole("button", { name: "Pin Org 2" })).toBeEnabled();
+    expect(screen.queryByRole("note")).toBeNull();
+  });
 });

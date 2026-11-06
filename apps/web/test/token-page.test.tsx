@@ -550,6 +550,9 @@ describe("token page", () => {
     const pinned = screen.getByRole("region", { name: "Pinned causes" });
     await waitFor(() => expect(within(pinned).getByRole("button", { name: "Unpin Alpha Fund" })).toBeInTheDocument());
     expect(within(pinned).getByRole("button", { name: "Unpin Beta Trust" })).toBeInTheDocument();
+    expect(within(pinned).getByRole("progressbar", { name: "Pinned" })).toHaveAttribute("aria-valuenow", "2");
+    expect(pinned).toHaveTextContent("2 of 8");
+    expect(pinned).toHaveTextContent("at most 32");
   });
 
   it("lets the controller choose the ballot size, with the gas hint", async () => {
