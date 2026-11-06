@@ -3,8 +3,8 @@ import type { ComponentProps } from "react";
 import { cn } from "@varada/ui/lib/utils";
 
 export interface PriceChangeProps extends Omit<ComponentProps<"span">, "children"> {
-  /** Change in percent (18.4 means +18.4%). */
-  value: number;
+  /** Change in percent (18.4 means +18.4%). `null` when there is nothing to compare (no trades in the window): shows a dash. */
+  value: number | null;
   /** Window named in the screen-reader text and, with `showPeriod`, on screen. */
   period?: string;
   showPeriod?: boolean;
@@ -20,6 +20,14 @@ export function formatPercent(value: number, decimals = 1): string {
  * screen-reader sentence as well as colour.
  */
 export function PriceChange({ value, period = "24h", showPeriod = false, decimals = 1, className, ...props }: PriceChangeProps) {
+  if (value === null) {
+    return (
+      <span data-slot="price-change" data-direction="none" className={cn("num inline-flex items-baseline whitespace-nowrap font-semibold text-ink-muted", className)} {...props}>
+        <span aria-hidden="true">–</span>
+        <span className="sr-only">No trades in {period}</span>
+      </span>
+    );
+  }
   const rounded = Number(value.toFixed(decimals));
   const dir = rounded > 0 ? "up" : rounded < 0 ? "down" : "flat";
   const pct = formatPercent(rounded, decimals);

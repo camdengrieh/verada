@@ -25,10 +25,12 @@ export interface TokenSummary {
   artAlt?: string;
   wash?: WashTone;
   giving: GivingMode;
-  /** 24h change in percent. */
-  change24h: number;
+  /** 24h change in percent; null when the coin has not traded in the window (shows a dash). */
+  change24h: number | null;
   quote: { symbol: string; kind: QuoteKind; logo?: ImageSource };
   cause: CauseName;
+  /** Overrides the cause chip's text ("3 causes", "Any cause") when the focus is not a single category. */
+  causeLabel?: string;
   /** Formatted money ("$412K"). */
   marketCap: string;
   volume24h: string;
@@ -105,7 +107,7 @@ export function TokenCard({ token: t, href, onBuy, LinkComponent = DefaultLink, 
           </div>
           <div className="flex flex-wrap gap-1.5">
             <PairChip coinSymbol={t.symbol} quoteSymbol={t.quote.symbol} quoteKind={t.quote.kind} quoteLogo={t.quote.logo} label={t.quote.symbol} quoteOnly />
-            <CauseChip cause={t.cause} />
+            <CauseChip cause={t.cause} label={t.causeLabel} />
           </div>
           <Divider variant="dashed" />
           <dl className="m-0 grid grid-cols-2 gap-2 @2xs:grid-cols-3">
