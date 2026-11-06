@@ -1,7 +1,7 @@
 // Adapted from two 21st.dev preloaders: @kedhareswer/animator-title-preloader (id 38994), whose load
 // is staged as a drawing pipeline (rough sketch, ink, paint, final), and @gaxocif204/preloader
 // (id 13967), which lifts away with a curved trailing edge once the page is ready. Rebuilt on
-// motion/react with the Varada mark, a watercolour Wash and status copy for config + Nym start-up;
+// motion/react with the Varada mark, a watercolour Wash and status copy for config + mixnet start-up;
 // GSAP, WebGL and the original palettes are gone.
 "use client";
 
@@ -13,7 +13,7 @@ import { LogoMark } from "@varada/ui/components/varada/logo-mark";
 import { BrushUnderline, PaperGrain, Wash, type WashBlob } from "@varada/ui/components/varada/watercolour";
 import { cn } from "@varada/ui/lib/utils";
 
-export const DEFAULT_LOADING_MESSAGES = ["Loading configuration", "Connecting privately through Nym…", "Reading the chain"];
+export const DEFAULT_LOADING_MESSAGES = ["Loading configuration", "Connecting privately through the mixnet…", "Reading the chain"];
 
 export type LoadingStepStatus = "pending" | "active" | "done" | "error";
 
@@ -147,7 +147,7 @@ export interface LoadingScreenProps {
   messages?: string[];
   /** Milliseconds per status line. */
   interval?: number;
-  /** Optional real progress (config, Nym worker, first chain read). Announced to screen readers. */
+  /** Optional real progress (config, mixnet worker, first chain read). Announced to screen readers. */
   steps?: LoadingStep[];
   /** Accessible name of the loading state. */
   label?: string;

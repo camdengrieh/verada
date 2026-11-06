@@ -255,7 +255,7 @@ function ButtonEffects() {
 
 /* ──────────────────────────────────────────────────────── loading screen ── */
 
-const STEP_LABELS = ["Loading configuration", "Connecting privately through Nym…", "Reading the chain"];
+const STEP_LABELS = ["Loading configuration", "Connecting privately through the mixnet…", "Reading the chain"];
 
 function stepsAt(done: number): LoadingStep[] {
   return STEP_LABELS.map((label, i) => ({ id: `s${i}`, label, status: i < done ? "done" : i === done ? "active" : "pending" }));
@@ -312,7 +312,7 @@ function LoadingDemo() {
   return (
     <Specimen label="Loading screen" source="21st.dev @kedhareswer/animator-title-preloader (38994) + @gaxocif204/preloader (13967)">
       <p className="text-sm text-ink-soft">
-        Shown while the app waits for its config and the Nym private-RPC worker: the mark is sketched, then inked, over a blooming wash.
+        Shown while the app waits for its config and the private-RPC worker: the mark is sketched, then inked, over a blooming wash.
         When <code className="num">ready</code> flips it lifts away.
       </p>
       <div className="relative isolate h-[24rem] overflow-hidden rounded-2xl border border-line bg-card">

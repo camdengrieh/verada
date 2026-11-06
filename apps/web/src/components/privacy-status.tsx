@@ -39,7 +39,7 @@ export function usePrivacyState(): { state: PrivacyState; network: string; direc
 
 /**
  * Shows how this page reaches the chain, and lets the user choose what goes
- * through the anon network. The anon worker (Nym's is ~18 MB) starts on the first
+ * through the anon network. The anon worker (a mixnet client of several MB) starts on the first
  * chain read; once a wallet is connected, or Varada API routing is on, this panel
  * starts it straight away so the network bootstraps before it is needed.
  */
@@ -121,7 +121,7 @@ export function PrivacyStatus({ onDetails }: { onDetails?: () => void }) {
 }
 
 const KIND_BADGE: Record<RouteKind, { label: string; tone: "cause" | "rwa" | "neutral" | "live" }> = {
-  mixnet: { label: "Through Nym", tone: "cause" },
+  mixnet: { label: "Through the mixnet", tone: "cause" },
   direct: { label: "Direct", tone: "rwa" },
   wallet: { label: "Your wallet", tone: "neutral" },
   chain: { label: "On chain", tone: "neutral" },

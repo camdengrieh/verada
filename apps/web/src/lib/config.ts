@@ -19,8 +19,10 @@ export interface PrivateRpcConfig {
   /** RPC endpoints reached through the anon network, in failover order. Some providers refuse Tor/mixnet exits. */
   rpcUrls: string[];
   /**
-   * Used once, directly (not anonymized), to read the specifier contract on mainnet.
-   * It learns only that this IP is loading an anon-rpc worker. Defaults to the first rpcUrl.
+   * Used directly (not anonymized) for the bootstrap read of the specifier contract, on the
+   * chain that contract lives on: mainnet for Nym and Tor, Sepolia for Nox. It learns only that
+   * this IP is loading an anon-rpc worker. Defaults to the first rpcUrl for mainnet specifiers
+   * and to the network's own public RPC list otherwise.
    */
   bootstrapRpcUrl?: string;
 }
@@ -128,7 +130,7 @@ export function envDefaults(): AppConfig {
     zamaRelayerUrl: url(process.env.NEXT_PUBLIC_ZAMA_RELAYER_URL),
     devPlainBallots: process.env.NEXT_PUBLIC_DEV_PLAIN_BALLOTS === "true",
     privateRpc: {
-      network: isAnonNetworkId(network) ? network : "nym",
+      network: isAnonNetworkId(network) ? network : "nox",
       rpcUrls: defaultRpcUrls(rpcUrl, process.env.NEXT_PUBLIC_PRIVATE_RPC_URLS),
     },
   };

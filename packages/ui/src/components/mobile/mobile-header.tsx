@@ -12,8 +12,8 @@ import { cn } from "@varada/ui/lib/utils";
 import { MobileSearchSheet, type MobileSearchSheetProps } from "./mobile-search-sheet";
 
 const PRIVACY: Record<PrivacyState, { label: string; dot: string }> = {
-  connecting: { label: "Connecting privately through the Nym mixnet", dot: "bg-ochre motion-safe:animate-pulse" },
-  private: { label: "Private RPC on: reads go through the Nym mixnet", dot: "bg-sage" },
+  connecting: { label: "Connecting privately through the mixnet", dot: "bg-ochre motion-safe:animate-pulse" },
+  private: { label: "Private RPC on: reads go through the mixnet", dot: "bg-sage" },
   failed: { label: "Private RPC failed: the mixnet route is down, retrying", dot: "bg-terracotta" },
   direct: { label: "Not anonymised: reads go to a public RPC that can see your IP", dot: "bg-ochre-ink" },
 };

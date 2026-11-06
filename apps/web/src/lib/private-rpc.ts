@@ -1,6 +1,6 @@
 /**
  * Private RPC: every chain read leaves the browser through an anon-rpc worker
- * (Nym or Tor, running sandboxed in a null-origin iframe), so the RPC provider
+ * (Nox, Nym or Tor, running sandboxed in a null-origin iframe), so the RPC provider
  * never sees the user's IP address and cannot link one account's queries to another's.
  *
  * Two scopes:
@@ -16,7 +16,7 @@
  */
 import { fallback, http, type Address, type Transport } from "viem";
 import type { AnonFetch, AnonRpcWorker, RpcProvider, WorkerInit } from "@anon-rpc/browser-harness";
-import { ANON_NETWORKS } from "./anon-networks";
+import { ANON_NETWORKS, type AnonNetwork } from "./anon-networks";
 import type { PrivateRpcConfig } from "./config";
 
 export type PrivateRpcStatus =
@@ -34,6 +34,15 @@ export class PrivateRpcUnavailableError extends Error {
   ) {
     super(message);
     this.name = "PrivateRpcUnavailableError";
+  }
+}
+
+/** The bootstrap RPC serves a different chain than the one the specifier contract lives on. */
+export class BootstrapChainError extends Error {
+  readonly code = "bootstrap-chain";
+  constructor(message: string) {
+    super(message);
+    this.name = "BootstrapChainError";
   }
 }
 
@@ -56,22 +65,35 @@ function randomKey(): string {
   return globalThis.crypto.randomUUID();
 }
 
-/** Plain JSON-RPC provider for the one direct bootstrap read (the specifier's workerHash/resolvers). */
-export function jsonRpcProvider(url: string, fetchImpl: typeof fetch): RpcProvider {
+/**
+ * Plain JSON-RPC provider for the direct bootstrap reads (the specifier's workerHash and
+ * resolvers). Tries `urls` in order and answers from the first that returns a result.
+ */
+export function jsonRpcProvider(urls: string | readonly string[], fetchImpl: typeof fetch): RpcProvider {
+  const list = typeof urls === "string" ? [urls] : [...urls];
+  if (list.length === 0) throw new Error("bootstrap RPC list is empty");
   let id = 0;
   return {
     async request({ method, params }) {
-      const res = await fetchImpl(url, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params: params ?? [] }),
-        // Keep the one direct request free of cookies and referrer.
-        credentials: "omit",
-        referrerPolicy: "no-referrer",
-      });
-      const body = (await res.json()) as { result?: unknown; error?: { message?: string } };
-      if (body.error) throw new Error(body.error.message ?? "bootstrap RPC error");
-      return body.result;
+      let lastError: unknown;
+      for (const url of list) {
+        try {
+          const res = await fetchImpl(url, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ jsonrpc: "2.0", id: ++id, method, params: params ?? [] }),
+            // Keep the direct requests free of cookies and referrer.
+            credentials: "omit",
+            referrerPolicy: "no-referrer",
+          });
+          const body = (await res.json()) as { result?: unknown; error?: { message?: string } };
+          if (body.error) throw new Error(body.error.message ?? "bootstrap RPC error");
+          return body.result;
+        } catch (e) {
+          lastError = e;
+        }
+      }
+      throw lastError instanceof Error ? lastError : new Error(String(lastError));
     },
   };
 }
@@ -101,7 +123,7 @@ export class PrivateRpc {
     this.directFetch = opts.directFetch ?? ((...a) => fetch(...a));
   }
 
-  get network() {
+  get network(): AnonNetwork {
     return ANON_NETWORKS[this.cfg.network];
   }
 
@@ -146,20 +168,57 @@ export class PrivateRpc {
     return this.account ? { kind: "account", address: this.account } : { kind: "public" };
   }
 
+  /**
+   * RPCs for the direct bootstrap read of the specifier contract: the configured override, else
+   * the network's own list when its specifier is not on the app's chain (Nox: Sepolia), else the
+   * first anonymized RPC (mainnet specifiers).
+   */
+  bootstrapRpcUrls(): readonly string[] {
+    if (this.cfg.bootstrapRpcUrl) return [this.cfg.bootstrapRpcUrl];
+    const own = this.network.bootstrapRpcUrls;
+    if (own && own.length > 0) return own;
+    return this.cfg.rpcUrls.slice(0, 1);
+  }
+
+  /**
+   * The specifier is read from the chain it lives on. A bootstrap RPC of another chain would make
+   * the harness fail on an empty contract, so name the mismatch first. An RPC that cannot answer
+   * `eth_chainId` is left to the harness, which reports its own error.
+   */
+  private async checkSpecifierChain(provider: RpcProvider): Promise<void> {
+    let answer: unknown;
+    try {
+      answer = await provider.request({ method: "eth_chainId", params: [] });
+    } catch {
+      return;
+    }
+    if (typeof answer !== "string" || !/^0x[0-9a-fA-F]+$/.test(answer)) return;
+    const got = Number.parseInt(answer, 16);
+    const want = this.network.specifierChainId;
+    if (got !== want) {
+      throw new BootstrapChainError(
+        `bootstrap RPC serves chain ${got}, but the ${this.network.label} specifier lives on chain ${want}`,
+      );
+    }
+  }
+
   /** Start the worker if it isn't running. Safe to call repeatedly. */
   start(): Promise<WorkerLike> {
     if (this.worker) return this.worker;
     this.setStatus({ state: "connecting" });
-    const bootstrapUrl = this.cfg.bootstrapRpcUrl ?? this.cfg.rpcUrls[0];
+    const boot = this.bootstrapRpcUrls();
+    const rpcProvider = boot.length > 0 ? jsonRpcProvider(boot, this.directFetch) : undefined;
     const init: WorkerInit = {
       address: this.specifier,
       config: this.cfg.workerConfig as WorkerInit["config"],
-      preExisting: bootstrapUrl ? { rpcProvider: jsonRpcProvider(bootstrapUrl, this.directFetch) } : undefined,
+      preExisting: rpcProvider ? { rpcProvider } : undefined,
     };
-    const p = this.factory(init).then(async (w) => {
-      await w.ready;
-      return w;
-    });
+    const p = (rpcProvider ? this.checkSpecifierChain(rpcProvider) : Promise.resolve())
+      .then(() => this.factory(init))
+      .then(async (w) => {
+        await w.ready;
+        return w;
+      });
     this.worker = p;
     p.then(
       () => this.worker === p && this.setStatus({ state: "ready" }),
