@@ -6,6 +6,9 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import {DonationAsset} from "./interfaces/IDonationAsset.sol";
+import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
+import {IFeeVault} from "./interfaces/IFeeVault.sol";
 import {ICauseRegistry} from "./interfaces/ICauseRegistry.sol";
 import {IDonationDistributor} from "./interfaces/IDonationDistributor.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
@@ -49,6 +52,9 @@ contract DonationDistributor is IDonationDistributor, Ownable2Step, ReentrancyGu
     mapping(address token => mapping(uint256 epoch => uint256)) public pending;
     /// @notice Total recorded-but-undonated settlement asset across all epochs.
     uint256 public reserved;
+    /// @notice Total recorded-but-undonated WETH (epochs of `Eth` tokens), converted to USDC
+    ///         through the consolidator when donated.
+    uint256 public reservedEth;
 
     constructor(
         address initialOwner,
@@ -85,11 +91,20 @@ contract DonationDistributor is IDonationDistributor, Ownable2Step, ReentrancyGu
         if (distributed[token][epoch]) revert AlreadyDistributed(token, epoch);
         if (amount == 0) return;
 
-        uint256 newReserved = reserved + amount;
-        if (IERC20(settlementAsset).balanceOf(address(this)) < newReserved) {
-            revert InsufficientBalance();
+        if (_assetOf(token) == DonationAsset.Eth) {
+            address weth = IFeeVault(msg.sender).weth();
+            uint256 newReservedEth = reservedEth + amount;
+            if (IERC20(weth).balanceOf(address(this)) < newReservedEth) {
+                revert InsufficientBalance();
+            }
+            reservedEth = newReservedEth;
+        } else {
+            uint256 newReserved = reserved + amount;
+            if (IERC20(settlementAsset).balanceOf(address(this)) < newReserved) {
+                revert InsufficientBalance();
+            }
+            reserved = newReserved;
         }
-        reserved = newReserved;
         pending[token][epoch] += amount;
     }
 
@@ -113,25 +128,60 @@ contract DonationDistributor is IDonationDistributor, Ownable2Step, ReentrancyGu
         // Effects before interactions.
         distributed[token][epoch] = true;
         pending[token][epoch] = 0;
-        reserved -= amount;
+
+        // `amount` is in the token's donation asset; Endaoment takes USDC, so an `Eth` pool is
+        // converted first (all or nothing: a failed conversion reverts and the epoch stays
+        // pending).
+        DonationAsset da = _assetOf(token);
+        uint256 donated = amount;
+        if (da == DonationAsset.Eth) {
+            reservedEth -= amount;
+            donated = _toUsdc(amount);
+        } else {
+            reserved -= amount;
+        }
 
         address org = cause.orgAddress;
         IERC20 usdc = IERC20(settlementAsset);
 
         if (org.code.length == 0) {
-            usdc.forceApprove(address(endaomentFactory), amount);
-            address deployed = endaomentFactory.deployOrgAndDonate(cause.orgId, amount);
+            usdc.forceApprove(address(endaomentFactory), donated);
+            address deployed = endaomentFactory.deployOrgAndDonate(cause.orgId, donated);
             if (deployed != org) revert OrgAddressMismatch(cause.orgId, org, deployed);
             _requireCleared(usdc, address(endaomentFactory));
             emit OrgDeployed(cause.orgId, org);
         } else {
             if (!endaomentRegistry.isActiveEntity(org)) revert OrgNotActive(org);
-            usdc.forceApprove(org, amount);
-            IEndaomentOrg(org).donate(amount);
+            usdc.forceApprove(org, donated);
+            IEndaomentOrg(org).donate(donated);
             _requireCleared(usdc, org);
         }
 
-        emit Donated(token, epoch, causeId, org, amount);
+        emit Donated(token, epoch, causeId, org, amount, da, donated);
+    }
+
+    /// @dev The donation asset the fee vault keeps `token` in. A vault without the getter (or an
+    ///      account that is not a contract) means `Usdc`.
+    function _assetOf(address token) private view returns (DonationAsset) {
+        (bool ok, bytes memory ret) =
+            feeVault.staticcall(abi.encodeCall(IFeeVault.donationAssetOf, (token)));
+        if (!ok || ret.length != 32) return DonationAsset.Usdc;
+        return abi.decode(ret, (uint256)) == 1 ? DonationAsset.Eth : DonationAsset.Usdc;
+    }
+
+    /// @dev Converts `amount` WETH held here into USDC through the consolidator (which must list
+    ///      this contract as a source). Returns the USDC received.
+    function _toUsdc(uint256 amount) private returns (uint256 usdcOut) {
+        IFeeVault vault = IFeeVault(feeVault);
+        address weth = vault.weth();
+        address cons = vault.consolidator();
+        IERC20(weth).forceApprove(cons, amount);
+        uint256 before = IERC20(settlementAsset).balanceOf(address(this));
+        usdcOut = IFeeConsolidator(cons).convertDonation(amount, address(this));
+        if (IERC20(settlementAsset).balanceOf(address(this)) - before != usdcOut) {
+            revert InsufficientBalance();
+        }
+        if (IERC20(weth).allowance(address(this), cons) != 0) revert AllowanceNotCleared(cons);
     }
 
     /// @inheritdoc IDonationDistributor

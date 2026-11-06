@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {DonationAsset} from "./IDonationAsset.sol";
+
 /// @title IDonationDistributor
 /// @notice Pays an epoch's cause funds (USDC) to the winning Endaoment org. Deployed orgs get
 ///         `donate`; undeployed orgs get `deployOrgAndDonate` (decided on-chain by code length).
@@ -11,7 +13,9 @@ interface IDonationDistributor {
         uint256 indexed epoch,
         bytes32 indexed causeId,
         address payout,
-        uint256 amount
+        uint256 amount,
+        DonationAsset asset,
+        uint256 usdcAmount
     );
 
     /// @notice Emitted when the org had to be deployed as part of the donation.

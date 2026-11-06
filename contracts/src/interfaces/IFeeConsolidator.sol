@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {DonationAsset} from "./IDonationAsset.sol";
+
 /// @title IFeeConsolidator
 /// @notice Swaps raw fees (token side and quote side) into the settlement asset (USDC) through
 ///         Uniswap v4 and hands the proceeds to the fee vault. A failed route never reverts the
@@ -22,6 +24,10 @@ interface IFeeConsolidator {
     );
 
     event MaxSlippageBpsUpdated(uint256 maxSlippageBps);
+
+    /// @notice `amount` WETH from `source` became `usdcOut` USDC (an `Eth` cause pool pushed to
+    ///         Endaoment, which takes USDC).
+    event DonationConverted(address indexed source, uint256 amount, uint256 usdcOut);
 
     /// @notice Emitted when a source's ERC-6909 claims were converted into the settlement asset.
     /// @param source The source whose claims were burned.
@@ -51,6 +57,21 @@ interface IFeeConsolidator {
 
     /// @notice Receives raw fees for `token` earned in the current epoch. `amount` of `currency`
     ///         must already be transferred before the call. Must not revert on route failure.
+    /// @notice WETH, the on-chain form of the `Eth` donation asset.
+    function weth() external view returns (address);
+
+    /// @notice Like `convertClaims` with a chosen donation asset (`convertClaims` is `Usdc`).
+    function convertClaimsTo(
+        address currency,
+        uint256 amount,
+        address to,
+        bool inSwap,
+        DonationAsset da
+    ) external returns (uint256 out);
+
+    /// @notice Pulls `amount` WETH from the caller and pays the USDC it converts to to `to`.
+    function convertDonation(uint256 amount, address to) external returns (uint256 usdcOut);
+
     function consolidate(address token, address currency, uint256 amount) external;
 
     /// @notice Like `consolidate`, for fees earned evenly between `accruedSince` and now (LP fees

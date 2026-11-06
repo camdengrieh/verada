@@ -40,6 +40,7 @@ import {
     MockQuoteRegistry,
     MockWeth
 } from "./mocks/FactoryMocks.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 contract VaradaFactoryTest is Test {
     using PoolIdLibrary for PoolKey;
@@ -137,6 +138,55 @@ contract VaradaFactoryTest is Test {
         governor.init(address(factory));
     }
 
+    // ------------------------------------------------------------------ donation asset
+
+    function test_donationAsset_defaultsToUsdc() public {
+        (address token,) = _deploy(creator, _params(bytes32(uint256(70))));
+        assertEq(uint256(factory.donationAssetOf(token)), 0);
+        assertEq(vault.donationAssetOf(token), 0);
+    }
+
+    function test_donationAsset_ethIsStoredAndRegisteredWithVault() public {
+        registry.setTokens(address(weth), address(usdcLike));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(uint256(71)));
+        p.donationAsset = DonationAsset.Eth;
+        (address token,) = _deploy(creator, p);
+        assertEq(uint256(factory.donationAssetOf(token)), 1);
+        assertEq(vault.donationAssetOf(token), 1);
+        assertTrue(vault.registered(token));
+    }
+
+    function test_donationAsset_revertsWithoutRouteToChosenAsset() public {
+        IVaradaFactory.DeployParams memory p = _params(bytes32(uint256(72)));
+        p.quoteAsset = address(ondo8);
+        p.donationAsset = DonationAsset.Eth;
+        registry.setNoRoute(address(ondo8), DonationAsset.Eth, true);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IVaradaFactory.DonationRouteMissing.selector, address(ondo8), DonationAsset.Eth
+            )
+        );
+        vm.prank(creator);
+        factory.deployToken(p);
+        // The same quote still launches with USDC.
+        p.donationAsset = DonationAsset.Usdc;
+        _deploy(creator, p);
+    }
+
+    function test_donationAsset_ethNeedsWethToUsdcRouteForThePush() public {
+        registry.setTokens(address(weth), address(usdcLike));
+        registry.setNoRoute(address(weth), DonationAsset.Usdc, true);
+        IVaradaFactory.DeployParams memory p = _params(bytes32(uint256(73)));
+        p.donationAsset = DonationAsset.Eth;
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IVaradaFactory.DonationRouteMissing.selector, address(weth), DonationAsset.Usdc
+            )
+        );
+        vm.prank(creator);
+        factory.deployToken(p);
+    }
+
     // ------------------------------------------------------------------ helpers
 
     /// @dev A label unique per salt, so tests that launch several tokens never collide.
@@ -158,7 +208,8 @@ contract VaradaFactoryTest is Test {
             label: _label(salt),
             logoRef: bytes32(0),
             categoryMask: FOCUS_CATEGORIES,
-            regionMask: FOCUS_REGIONS
+            regionMask: FOCUS_REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
     }
 
@@ -652,7 +703,8 @@ contract VaradaFactoryTest is Test {
             label: "fuzz",
             logoRef: salt,
             categoryMask: FOCUS_CATEGORIES,
-            regionMask: FOCUS_REGIONS
+            regionMask: FOCUS_REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
         address predicted = factory.predictTokenAddress(who, p);
         (address token, uint256 id) = _deploy(who, p);

@@ -45,6 +45,7 @@ import {MockEndaomentRegistry, MockOrgFactory} from "../mocks/EndaomentMocks.sol
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
 import {LiveBase} from "./LiveBase.sol";
 import {LiveUSDC} from "./LiveMocks.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 /// @dev Integration fixture: the whole system as the deploy script wires it, with tokens launched
 ///      through the real VaradaFactory. Real PoolManager, PositionManager and Permit2, real
@@ -223,7 +224,8 @@ abstract contract LiveFactoryBase is LiveBase {
             _label(salt),
             bytes32(0),
             FOCUS_CATEGORIES,
-            FOCUS_REGIONS
+            FOCUS_REGIONS,
+            DonationAsset.Usdc
         );
     }
 

@@ -38,6 +38,7 @@ import {IVaradaFactory} from "../src/interfaces/IVaradaFactory.sol";
 import {IVotingScheme} from "../src/interfaces/IVotingScheme.sol";
 import {MockVotingScheme} from "../test/mocks/GovernanceMocks.sol";
 import {CatalogPublish} from "../test/utils/CatalogFixture.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 interface IWETH9 is IERC20 {
     function deposit() external payable;
@@ -107,7 +108,8 @@ contract E2eFixture is Deploy {
             label: "fork-coin",
             logoRef: bytes32(uint256(0xabc)),
             categoryMask: CatalogPublish.CATEGORIES,
-            regionMask: CatalogPublish.REGIONS
+            regionMask: CatalogPublish.REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
         (address token,) = VaradaFactory(d.factory).deployToken(p);
 
