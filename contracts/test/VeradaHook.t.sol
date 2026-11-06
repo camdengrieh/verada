@@ -8,14 +8,16 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
 import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
-import {BalanceDelta} from "v4-core/types/BalanceDelta.sol";
+import {BalanceDelta, toBalanceDelta} from "v4-core/types/BalanceDelta.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
-import {ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
+import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {HookMiner} from "../script/HookMiner.sol";
 import {VeradaHook} from "../src/VeradaHook.sol";
+import {BaseHook} from "../src/hooks/base/BaseHook.sol";
+import {PoolAdminHook} from "../src/hooks/base/PoolAdminHook.sol";
 import {IVeradaHook} from "../src/interfaces/IVeradaHook.sol";
 import {MockConsolidator} from "./utils/MockConsolidator.sol";
 
@@ -295,7 +297,7 @@ contract VeradaHookTest is Deployers {
         hook.configureToken(token, _cfg(300, 0, 0));
         PoolKey memory k =
             PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(address(hook)));
-        vm.expectRevert(VeradaHook.NotPoolManager.selector);
+        vm.expectRevert(BaseHook.NotPoolManager.selector);
         hook.beforeInitialize(address(this), k, SQRT_PRICE_1_1);
     }
 
@@ -469,7 +471,11 @@ contract VeradaHookTest is Deployers {
         (ok, avg, span) = hook.twapTick(token, 1000);
         assertTrue(ok);
         assertEq(span, 1000);
-        assertEq(avg, int24((int256(moved) * 600) / 1000));
+        // The average rounds toward negative infinity (the v3 oracle convention).
+        int256 num = int256(moved) * 600;
+        int256 q = num / 1000;
+        if (num % 1000 != 0 && num < 0) --q;
+        assertEq(avg, int24(q));
     }
 
     function test_oracle_sameBlockSwapsDoNotMoveTwap() public {
@@ -495,6 +501,89 @@ contract VeradaHookTest is Deployers {
         (bool ok,, uint32 span) = hook.twapTick(token, 1800);
         assertTrue(ok);
         assertGe(span, 1800);
+    }
+
+    // ------------------------------------------------------------------ generic hook API
+
+    function test_generic_onlyFactoryInitializes() public {
+        assertTrue(hook.isPoolInitializer(address(this)));
+        assertFalse(hook.isPoolInitializer(address(0xBEEF)));
+        hook.configureToken(token, _cfg(300, 0, 0));
+        PoolKey memory k =
+            PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(address(hook)));
+        vm.prank(address(0xBEEF));
+        vm.expectRevert();
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertFalse(hook.poolInitialized(token));
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertTrue(hook.poolInitialized(token));
+        assertEq(PoolId.unwrap(hook.poolIdOf(token)), PoolId.unwrap(k.toId()));
+    }
+
+    function test_generic_featureConfigWrittenAtInit() public {
+        _setupPools(250, 5000, 120);
+        PoolId id = hookKey.toId();
+        // DecayingFeeHook: flat schedule at the base fee (pips).
+        (uint24 startFee, uint24 endFee, uint32 duration,, bool set) = hook.decayingFee(id);
+        assertTrue(set);
+        assertEq(startFee, 25_000);
+        assertEq(endFee, 25_000);
+        assertEq(duration, 0);
+        assertEq(hook.currentFee(id), 25_000);
+        // SwapFeeHook: tokens to the consolidator; the rate comes from the surcharge schedule.
+        (uint16 feeBps, bool asClaims, address recipient) = hook.swapFee(id);
+        assertEq(feeBps, 0);
+        assertFalse(asClaims);
+        assertEq(recipient, address(vault));
+        // TwapOracleHook: seeded at initialization.
+        assertEq(hook.observationCount(id), 1);
+        assertEq(hook.observationInterval(), hook.OBS_INTERVAL());
+        assertEq(hook.observationCapacity(), hook.OBS_CAPACITY());
+    }
+
+    function test_generic_configFrozen() public {
+        _setupPools(BASE_BPS, 5000, 120);
+        PoolId id = hookKey.toId();
+        assertEq(hook.poolAdmin(id), address(0));
+        bytes memory notAdmin =
+            abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, id, address(this));
+        vm.expectRevert(notAdmin);
+        hook.setDecayingFee(hookKey, 0, 0, 0, 0);
+        vm.expectRevert(notAdmin);
+        hook.setSwapFee(hookKey, 0, address(0), false);
+        vm.expectRevert(notAdmin);
+        hook.transferPoolAdmin(hookKey, address(this));
+    }
+
+    function test_generic_twapByPoolIdMatchesToken() public {
+        _setupPools(BASE_BPS, 0, 0);
+        skip(400);
+        swap(hookKey, true, -100_000e18, ZERO_BYTES);
+        skip(600);
+        (bool okA, int24 a, uint32 spanA) = hook.twapTick(token, 900);
+        (bool okB, int24 b, uint32 spanB) = hook.twapTick(hookKey.toId(), 900);
+        assertTrue(okA && okB);
+        assertEq(a, b);
+        assertEq(spanA, spanB);
+        (bool okC,,) = hook.twapTick(address(0x1234), 60);
+        assertFalse(okC);
+    }
+
+    function test_consolidatorSwapsAreExempt() public {
+        _setupPools(BASE_BPS, 5000, 120);
+        SwapParams memory params =
+            SwapParams({zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: 0});
+        BalanceDelta d = toBalanceDelta(-1e18, 9e17);
+        // Called by the pool manager on behalf of the consolidator: no surcharge, no take.
+        vm.prank(address(manager));
+        (bytes4 sel, int128 hookDelta) = hook.afterSwap(address(vault), hookKey, params, d, "");
+        assertEq(sel, IHooks.afterSwap.selector);
+        assertEq(hookDelta, 0);
+        assertEq(vault.calls(), 0);
+        // Any other sender pays: the hook tries to take the surcharge (the manager is locked here).
+        vm.prank(address(manager));
+        vm.expectRevert();
+        hook.afterSwap(address(this), hookKey, params, d, "");
     }
 
     // ------------------------------------------------------------------ fuzz
