@@ -19,7 +19,7 @@ import { causeNameOfOrg, poolFigures, usdcToUsd, type LiveView } from "@/lib/tok
 import { untilText, usdText } from "@/lib/token-view";
 import { shownOptionSources } from "@/components/epoch-panel";
 import { ballotOptions } from "@/lib/profile";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 
 /** This week's cause pool: the amount so far, when voting closes and how the ballot is made up. */
 export function PoolSummary({ token, detail, onVote }: { token: Address; detail: TokenDetail; onVote: () => void }) {

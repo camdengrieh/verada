@@ -26,6 +26,11 @@ describe("postexport", () => {
   it("keeps the 404 page free of external assets", () => {
     expect(NOT_FOUND_HTML).not.toMatch(/src="|rel="stylesheet"/);
   });
+
+  it("styles the 404 page inline (no unstyled default markup) without fetching anything", () => {
+    expect(NOT_FOUND_HTML).toMatch(/<style>[\s\S]*min-height:44px[\s\S]*<\/style>/);
+    expect(NOT_FOUND_HTML).not.toMatch(/url\(|@import/);
+  });
 });
 
 const REF = "ab".repeat(32);

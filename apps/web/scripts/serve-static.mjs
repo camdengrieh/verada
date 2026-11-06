@@ -16,6 +16,13 @@ const TYPES = {
   ".json": "application/json",
   ".txt": "text/plain; charset=utf-8",
   ".map": "application/json",
+  ".svg": "image/svg+xml",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".ico": "image/x-icon",
+  ".woff2": "font/woff2",
 };
 
 createServer((req, res) => {

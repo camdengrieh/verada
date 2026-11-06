@@ -314,7 +314,7 @@ export function Stepper({
                 <span
                   aria-hidden="true"
                   className={cn(
-                    "h-0.5 min-w-2 flex-1 rounded-full transition-colors duration-300",
+                    "h-0.5 min-w-0 flex-1 rounded-full transition-colors duration-300",
                     vertical && "md:ml-[25px] md:h-5 md:w-0.5 md:min-w-0 md:flex-none",
                     done ? "bg-sage" : "bg-line",
                   )}

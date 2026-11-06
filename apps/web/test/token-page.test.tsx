@@ -595,7 +595,7 @@ describe("token page", () => {
     const curated = await screen.findByRole("region", { name: "Curated by" });
     const card = await within(curated).findByRole("region", { name: "hunger.agent.varada.eth" });
     // Relative: the same build is served from many hosts and under /bzz/<hash>/.
-    expect(within(card).getByRole("link", { name: "Read the weekly report" })).toHaveAttribute("href", "./agent/hunger/");
+    expect(within(card).getByRole("link", { name: "Read the weekly report" })).toHaveAttribute("href", "/agent/hunger/");
     expect(within(card)).toBeDefined();
     expect(card).toHaveTextContent("Paused");
     expect(within(curated).queryByText(/homeless\.agent/)).toBeNull();
