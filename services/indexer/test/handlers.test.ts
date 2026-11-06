@@ -818,6 +818,8 @@ describe("registrations", () => {
       "LiveDonationVault:Donated",
       "RotationGovernor:CauseScheduled",
       "RotationGovernor:PeriodChangeScheduled",
+      "RotationGovernor:BallotPrepared",
+      "RotationGovernor:CuratedPicksUsed",
     ]) {
       expect(handlers.some((m) => `${m[1]}:${m[2]}` === event), event).toBe(true);
     }

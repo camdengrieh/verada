@@ -1,14 +1,13 @@
 import type { Context, Event } from "ponder:registry";
-import { liveCauseSchedule, liveRound, liveSchedule } from "ponder:schema";
+import { liveBallot, liveCauseSchedule, liveRound, liveSchedule } from "ponder:schema";
 import { sync } from "../rotation-schedule";
 
-// RotationGovernor: only the events that move a live token's designated cause or its rotation
-// period. Ballots, polls and period proposals are not indexed here. Keep every RotationGovernor
-// handler in this file; the governor's candidate selection is being reworked and these
-// signatures are to be re-checked against the regenerated ABI.
+// RotationGovernor: the events that move a live token's designated cause or its rotation period,
+// plus each round's frozen ballot. Votes, poll opening/closing and period proposals are not
+// indexed here. Keep every RotationGovernor handler in this file.
 
-/** `RoundStatus` enum order. */
-export const ROUND_STATUSES = ["None", "Open", "Closed", "NoChange", "Applied", "Stale", "InactiveWinner"] as const;
+/** `IRotationGovernor.RoundStatus` enum order. */
+export const ROUND_STATUSES = ["None", "Open", "Closed", "NoChange", "Applied", "Stale", "InactiveWinner", "NoBallot"] as const;
 
 /** Registration fixes rotation 0: the initial cause, the period and the schedule anchor. */
 export async function onRotationTokenRegistered({ event, context }: { event: Event<"RotationGovernor:TokenRegistered">; context: Context<"RotationGovernor:TokenRegistered"> }) {
@@ -75,4 +74,47 @@ export async function onPeriodChangeScheduled({ event, context }: { event: Event
     switchAt,
     periodChanges: cur.periodChanges + 1,
   });
+}
+
+/**
+ * Curated phase of round `target`: `drawn` picks checked, `included` placed after the pins, from
+ * weekly epoch `curationEpoch`. Emitted only when the phase consumed a pick, just before
+ * `BallotPrepared` in the same transaction, which fills in the rest of the row.
+ */
+export async function onRotationCuratedPicksUsed({ event, context }: { event: Event<"RotationGovernor:CuratedPicksUsed">; context: Context<"RotationGovernor:CuratedPicksUsed"> }) {
+  const { token, target, curationEpoch, drawn, included } = event.args;
+  const key = { token, target };
+  const curated = { curationEpoch, curatedDrawn: Number(drawn), curatedIncluded: Number(included) };
+  if (await context.db.find(liveBallot, key)) await context.db.update(liveBallot, key).set(curated);
+  else
+    await context.db.insert(liveBallot).values({
+      ...key,
+      ...curated,
+      catalogVersion: 0,
+      poolSize: 0n,
+      pinned: 0,
+      options: [],
+      preparedAt: event.block.timestamp,
+      txHash: event.transaction.hash,
+    });
+}
+
+/**
+ * Round `target`'s ballot is frozen (`prepareRound` / `prepareCuratedRound`): `options` are cause
+ * ids, pins first, then curated picks, then rotation draws. Prepared once per round; a ballot with
+ * fewer than two options is followed by `RoundFinalized(NoBallot)`.
+ */
+export async function onRotationBallotPrepared({ event, context }: { event: Event<"RotationGovernor:BallotPrepared">; context: Context<"RotationGovernor:BallotPrepared"> }) {
+  const { token, target, catalogVersion, poolSize, pinned, options } = event.args;
+  const key = { token, target };
+  const row = {
+    catalogVersion: Number(catalogVersion),
+    poolSize,
+    pinned: Number(pinned),
+    options: [...options],
+    preparedAt: event.block.timestamp,
+    txHash: event.transaction.hash,
+  };
+  if (await context.db.find(liveBallot, key)) await context.db.update(liveBallot, key).set(row);
+  else await context.db.insert(liveBallot).values({ ...key, ...row, curationEpoch: null, curatedDrawn: 0, curatedIncluded: 0 });
 }

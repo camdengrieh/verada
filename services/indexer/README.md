@@ -72,7 +72,8 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 | `claims_conversion` | event id | Consolidator `ClaimsConverted` (`convertClaims`, used by the live hook) |
 | `live_schedule` | `token` | Rotation schedule mirroring `RotationScheduleLib`: governor `TokenRegistered` (anchor, period), `PeriodChangeScheduled` (pending period from `pendingFrom`) |
 | `live_cause_schedule` | `token, fromRotation` | Designated cause from a rotation on: the initial cause at rotation 0, then each `CauseScheduled` |
-| `live_round` | `token, target` | `RoundFinalized`: `status` (`RoundStatus` name), `winner`, `effectiveFrom` |
+| `live_round` | `token, target` | `RoundFinalized`: `status` (`RoundStatus` name, including `NoBallot`), `winner`, `effectiveFrom` |
+| `live_ballot` | `token, target` | Frozen ballot of a rotation poll (`BallotPrepared`): catalogue version, pool size, pin count, option cause ids; curated counts and epoch from `CuratedPicksUsed` |
 
 **Epoch timing.** `epochZeroStart` is an immutable aligned to a whole week since unix time 0.
 `EpochOpened` and `VoteCast` only happen during the epoch they name, so the first of them gives
@@ -99,9 +100,10 @@ epoch at the event is at least `effectiveFrom - 1`: a stored list scheduled from
 applied and becomes `previousCauseIds`; a list that has not applied yet is simply replaced. The API
 resolves the list in effect from the epoch clock and the server time.
 
-**Live rotations.** Only the RotationGovernor events that move the designated cause or the
+**Live rotations.** The RotationGovernor events that move the designated cause or the
 rotation period are indexed (`TokenRegistered`, `CauseScheduled`, `RoundFinalized`,
-`PeriodChangeScheduled`); ballots and period proposals are not. The API derives the current
+`PeriodChangeScheduled`), plus each round's frozen ballot (`BallotPrepared`, `CuratedPicksUsed`);
+votes, poll opening and closing, and period proposals are not. The API derives the current
 rotation from `live_schedule` with the same arithmetic as `RotationScheduleLib`, and the
 designated cause is the `live_cause_schedule` row with the highest `fromRotation` at or below it.
 

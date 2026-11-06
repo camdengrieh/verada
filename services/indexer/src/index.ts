@@ -79,6 +79,8 @@ import {
 import {
   onCauseScheduled,
   onPeriodChangeScheduled,
+  onRotationBallotPrepared,
+  onRotationCuratedPicksUsed,
   onRotationTokenRegistered,
   onRoundFinalized,
 } from "./handlers/rotation";
@@ -154,8 +156,10 @@ ponder.on("LiveDonationVault:Donated", onLiveDonated);
 ponder.on("LiveDonationVault:DonationDeferred", onDonationDeferred);
 ponder.on("LiveDonationVault:PlatformWithdrawn", onPlatformWithdrawn);
 ponder.on("LiveDonationVault:Skimmed", onSkimmed);
-// RotationGovernor: designated-cause and period changes only (see handlers/rotation.ts).
+// RotationGovernor: designated-cause and period changes, and frozen ballots (see handlers/rotation.ts).
 ponder.on("RotationGovernor:TokenRegistered", onRotationTokenRegistered);
 ponder.on("RotationGovernor:CauseScheduled", onCauseScheduled);
 ponder.on("RotationGovernor:RoundFinalized", onRoundFinalized);
 ponder.on("RotationGovernor:PeriodChangeScheduled", onPeriodChangeScheduled);
+ponder.on("RotationGovernor:CuratedPicksUsed", onRotationCuratedPicksUsed);
+ponder.on("RotationGovernor:BallotPrepared", onRotationBallotPrepared);

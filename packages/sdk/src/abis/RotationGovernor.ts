@@ -14,6 +14,11 @@ export const rotationGovernorAbi = [
         "internalType": "contract ICauseRegistry"
       },
       {
+        "name": "catalog_",
+        "type": "address",
+        "internalType": "contract ICauseCatalog"
+      },
+      {
         "name": "profileRegistry_",
         "type": "address",
         "internalType": "contract ITokenProfileRegistry"
@@ -62,6 +67,19 @@ export const rotationGovernorAbi = [
       }
     ],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "DRAW_FACTOR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -144,6 +162,19 @@ export const rotationGovernorAbi = [
   {
     "type": "function",
     "name": "OPTION_FOR",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "PINNED_MAX",
     "inputs": [],
     "outputs": [
       {
@@ -269,6 +300,32 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "ballotBuilder",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract CatalogBallotBuilder"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ballotSize",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "cancelPeriodProposal",
     "inputs": [
       {
@@ -279,6 +336,19 @@ export const rotationGovernorAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "catalog",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -377,6 +447,48 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "curationEpochOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "ok",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "curators",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract ICuratorRegistry"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "currentRotation",
     "inputs": [
       {
@@ -396,16 +508,42 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
-    "name": "defaultShortlist",
-    "inputs": [],
+    "name": "drawIndex",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "version",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "k",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
     "outputs": [
       {
         "name": "",
-        "type": "bytes32[]",
-        "internalType": "bytes32[]"
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -892,6 +1030,137 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "poolOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "version",
+        "type": "uint32",
+        "internalType": "uint32"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "prepareCuratedRound",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "curated",
+        "type": "tuple[]",
+        "internalType": "struct IEpochGovernor.CuratedDraw[]",
+        "components": [
+          {
+            "name": "catalogIndex",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "pickOrgId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "pickProof",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          },
+          {
+            "name": "entryOrgId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "entryProof",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      },
+      {
+        "name": "draws",
+        "type": "tuple[]",
+        "internalType": "struct IEpochGovernor.Draw[]",
+        "components": [
+          {
+            "name": "orgId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "proof",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "prepareRound",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "draws",
+        "type": "tuple[]",
+        "internalType": "struct IEpochGovernor.Draw[]",
+        "components": [
+          {
+            "name": "orgId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "proof",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "profileRegistry",
     "inputs": [],
     "outputs": [
@@ -1122,6 +1391,30 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "roundOptionOrgIds",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "roundScheme",
     "inputs": [
       {
@@ -1159,12 +1452,12 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
-    "name": "setDefaultShortlist",
+    "name": "setCuratorRegistry",
     "inputs": [
       {
-        "name": "causes",
-        "type": "bytes32[]",
-        "internalType": "bytes32[]"
+        "name": "curators_",
+        "type": "address",
+        "internalType": "contract ICuratorRegistry"
       }
     ],
     "outputs": [],
@@ -1246,9 +1539,31 @@ export const rotationGovernorAbi = [
         "internalType": "address"
       },
       {
-        "name": "causes",
-        "type": "bytes32[]",
-        "internalType": "bytes32[]"
+        "name": "pins",
+        "type": "tuple[]",
+        "internalType": "struct IEpochGovernor.Pin[]",
+        "components": [
+          {
+            "name": "orgId",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "bucket",
+            "type": "uint16",
+            "internalType": "uint16"
+          },
+          {
+            "name": "index",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "proof",
+            "type": "bytes32[]",
+            "internalType": "bytes32[]"
+          }
+        ]
       }
     ],
     "outputs": [],
@@ -1269,7 +1584,50 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "shortlistFor",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "shortlistOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bytes32[]",
+        "internalType": "bytes32[]"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "shortlistOrgIdsOf",
     "inputs": [
       {
         "name": "token",
@@ -1343,6 +1701,49 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "event",
+    "name": "BallotPrepared",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "catalogVersion",
+        "type": "uint32",
+        "indexed": false,
+        "internalType": "uint32"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "pinned",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "options",
+        "type": "bytes32[]",
+        "indexed": false,
+        "internalType": "bytes32[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "CauseScheduled",
     "inputs": [
       {
@@ -1374,13 +1775,62 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "event",
-    "name": "DefaultShortlistSet",
+    "name": "CuratedPicksUsed",
     "inputs": [
       {
-        "name": "causes",
-        "type": "bytes32[]",
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "target",
+        "type": "uint64",
+        "indexed": true,
+        "internalType": "uint64"
+      },
+      {
+        "name": "curationEpoch",
+        "type": "uint256",
         "indexed": false,
-        "internalType": "bytes32[]"
+        "internalType": "uint256"
+      },
+      {
+        "name": "drawn",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "included",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CuratorRegistrySet",
+    "inputs": [
+      {
+        "name": "curators",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "epochZeroStart",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "epochLength",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1914,6 +2364,16 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "CuratorClockNotSet",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "CuratorRegistryAlreadySet",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InactiveCause",
     "inputs": [
       {
@@ -1925,8 +2385,72 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "IncompleteBallot",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "round",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "needed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "IncompleteCuratedBallot",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "round",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "needed",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "IndexOverflow",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidCuratedDraw",
+    "inputs": [
+      {
+        "name": "k",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidDraw",
+    "inputs": [
+      {
+        "name": "k",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2052,6 +2576,17 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "NotInCatalog",
+    "inputs": [
+      {
+        "name": "orgId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "NotProposer",
     "inputs": [
       {
@@ -2079,6 +2614,22 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "OutOfFocus",
+    "inputs": [
+      {
+        "name": "orgId",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "bucket",
+        "type": "uint16",
+        "internalType": "uint16"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "OwnableInvalidOwner",
     "inputs": [
       {
@@ -2096,6 +2647,22 @@ export const rotationGovernorAbi = [
         "name": "account",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "PoolTooSmall",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },
@@ -2235,15 +2802,31 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "error",
-    "name": "TooManyOptions",
+    "name": "TooManyCuratedDraws",
     "inputs": [
       {
-        "name": "count",
+        "name": "supplied",
         "type": "uint256",
         "internalType": "uint256"
       },
       {
-        "name": "max",
+        "name": "used",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "TooManyDraws",
+    "inputs": [
+      {
+        "name": "supplied",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "used",
         "type": "uint256",
         "internalType": "uint256"
       }

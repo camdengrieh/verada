@@ -834,6 +834,32 @@ export const liveRound = onchainTable(
   }),
 );
 
+/**
+ * Frozen ballot of a rotation poll (`BallotPrepared`): `options` are cause ids, the first
+ * `pinned` of them the token's pins, then `curatedIncluded` curated picks, then rotation draws.
+ * The curated counts come from a `CuratedPicksUsed` earlier in the same transaction (0 without
+ * one, and `curationEpoch` null). With fewer than two options the round ends `NoBallot`.
+ */
+export const liveBallot = onchainTable(
+  "live_ballot",
+  (t) => ({
+    token: t.hex().notNull(),
+    target: t.bigint().notNull(),
+    catalogVersion: t.integer().notNull(),
+    poolSize: t.bigint().notNull(),
+    pinned: t.integer().notNull(),
+    options: t.hex().array().notNull(),
+    curationEpoch: t.bigint(),
+    curatedDrawn: t.integer().notNull(),
+    curatedIncluded: t.integer().notNull(),
+    preparedAt: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.token, table.target] }),
+  }),
+);
+
 export const tokenRelations = relations(token, ({ many, one }) => ({
   feeTotals: many(feeTotal),
   epochs: many(epoch),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   claimsConversion,
+  liveBallot,
   liveCauseSchedule,
   liveCauseTotal,
   liveDonation,
@@ -33,8 +34,11 @@ import {
 import {
   onCauseScheduled,
   onPeriodChangeScheduled,
+  onRotationBallotPrepared,
+  onRotationCuratedPicksUsed,
   onRotationTokenRegistered,
   onRoundFinalized,
+  ROUND_STATUSES,
 } from "../src/handlers/rotation";
 import { indexAt, type Schedule, startOf, sync } from "../src/rotation-schedule";
 import { fixtureRepo } from "./api.fixtures";
@@ -66,6 +70,7 @@ const pks = () =>
     [liveSchedule, ["token"]],
     [liveCauseSchedule, ["token", "fromRotation"]],
     [liveRound, ["token", "target"]],
+    [liveBallot, ["token", "target"]],
   ]);
 
 let h = createFakeContext(pks());
@@ -170,6 +175,35 @@ describe("live handlers", () => {
     const t2 = 1000n + 3n * HOUR + DAY + 5n;
     await run(onPeriodChangeScheduled, { token: T, id: 2n, newPeriod: 4, fromRotation: 5n, switchAt: 1000n + 3n * HOUR + 2n * DAY }, "pc2", t2, GOV);
     expect(h.rows(liveSchedule)[0]).toMatchObject({ anchorTime: 1000n + 3n * HOUR, anchorIndex: 3n, period: 2, pendingPeriod: 4, pendingFrom: 5n, periodChanges: 2 });
+  });
+
+  it("names every RoundStatus, NoBallot last", () => {
+    expect(ROUND_STATUSES).toHaveLength(8);
+    expect(ROUND_STATUSES[7]).toBe("NoBallot");
+  });
+
+  it("records frozen ballots with their curated counts", async () => {
+    await launch();
+    const C3 = `0x${"33".repeat(32)}` as const;
+    // Curated round: CuratedPicksUsed precedes BallotPrepared in the same transaction.
+    await run(onRotationCuratedPicksUsed, { token: T, target: 1n, curationEpoch: 6n, drawn: 2, included: 1 }, "cp", 1000n + 10n, GOV);
+    await run(onRotationBallotPrepared, { token: T, target: 1n, catalogVersion: 3, poolSize: 40n, pinned: 1, options: [C1, C2, C3] }, "bp", 1000n + 10n, GOV);
+    expect(h.rows(liveBallot)[0]).toMatchObject({
+      target: 1n,
+      catalogVersion: 3,
+      poolSize: 40n,
+      pinned: 1,
+      options: [C1, C2, C3],
+      curationEpoch: 6n,
+      curatedDrawn: 2,
+      curatedIncluded: 1,
+      preparedAt: 1010n,
+    });
+    // No curated phase; a one-option ballot ends NoBallot.
+    await run(onRotationBallotPrepared, { token: T, target: 2n, catalogVersion: 3, poolSize: 1n, pinned: 0, options: [C2] }, "bp2", 1000n + HOUR + 10n, GOV);
+    await run(onRoundFinalized, { token: T, target: 2n, status: 7, winner: `0x${"00".repeat(32)}`, effectiveFrom: 0n }, "rf2", 1000n + HOUR + 10n, GOV);
+    expect(h.rows(liveBallot)[1]).toMatchObject({ target: 2n, options: [C2], curationEpoch: null, curatedDrawn: 0, curatedIncluded: 0 });
+    expect(h.rows(liveRound)[0]?.status).toBe("NoBallot");
   });
 
   it("ignores a period change for an unregistered token", async () => {
