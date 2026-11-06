@@ -42,7 +42,8 @@ export interface BallotOptionProps extends Omit<ComponentProps<typeof RadioGroup
 
 /**
  * One charity on the ballot, as a radio card. Must sit inside a radix `RadioGroup.Root` (BallotList
- * provides one), which gives roving focus: Tab enters the group, arrow keys move and select.
+ * provides one), which gives roving focus: Tab enters the group, arrow keys move and select. The card
+ * is a size container: under 288px the source tag drops under the name and the icon shrinks.
  */
 export function BallotOption({ option: o, className, ...props }: BallotOptionProps) {
   return (
@@ -51,22 +52,26 @@ export function BallotOption({ option: o, className, ...props }: BallotOptionPro
       data-slot="ballot-option"
       aria-label={`${o.org}, ${CAUSE_SHORT_LABELS[o.category]}, ${o.region}, ${SOURCE_LABELS[o.source]}: ${SOURCE_HINT[o.source]}`}
       className={cn(
-        "group flex min-h-16 w-full items-center gap-3 rounded-2xl border-2 border-line bg-paper-card px-3 py-2.5 text-left text-ink transition-colors",
+        "group @container flex min-h-16 w-full items-center gap-3 rounded-2xl border-2 border-line bg-paper-card px-3 py-2.5 text-left text-ink transition-colors",
         "hover:border-line-strong data-[state=checked]:border-sage data-[state=checked]:bg-sage-tint/60",
         "disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
       {...props}
     >
-      <CauseIcon cause={o.category} size={42} decorative />
+      <CauseIcon cause={o.category} size={42} decorative className="@max-3xs:size-8" />
       <span className="flex min-w-0 flex-1 flex-col">
-        <strong className="truncate text-[15px]">{o.org}</strong>
+        <strong className="truncate text-[15px] @max-2xs:text-sm">{o.org}</strong>
         <span className="truncate text-xs text-ink-muted">
           {CAUSE_SHORT_LABELS[o.category]} · {o.region}
           {o.score ? <span className="num"> · {o.score}</span> : null}
         </span>
+        {/* Below 288px the source tag moves under the name instead of taking width beside it. */}
+        <span aria-hidden="true" className="hidden text-[11px] font-bold text-ink-soft @max-2xs:block">
+          {SOURCE_LABELS[o.source]}
+        </span>
       </span>
-      <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold", SOURCE_TAG[o.source])}>{SOURCE_LABELS[o.source]}</span>
+      <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold @max-2xs:hidden", SOURCE_TAG[o.source])}>{SOURCE_LABELS[o.source]}</span>
       <span
         aria-hidden="true"
         className="grid size-6 shrink-0 place-items-center rounded-full border-2 border-line-strong group-data-[state=checked]:border-sage group-data-[state=checked]:bg-sage"

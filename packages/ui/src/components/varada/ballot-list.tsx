@@ -4,6 +4,7 @@
 import { Search } from "lucide-react";
 import { RadioGroup, Tabs } from "radix-ui";
 import { useId, useMemo, useState, type ComponentProps, type ReactNode } from "react";
+import { Divider } from "@verada/ui/components/ui/divider";
 import { cn } from "@verada/ui/lib/utils";
 import { BallotOption, SOURCE_LABELS, type BallotOptionData, type BallotSource } from "./ballot-option";
 import { CAUSE_LABELS, CAUSE_SHORT_LABELS } from "./cause-icon";
@@ -41,6 +42,10 @@ function matches(o: BallotOptionData, q: string): boolean {
 /**
  * The weekly ballot: search, All / Pinned / Curated / Rotation tabs, and a radio group of options
  * with roving focus (arrow keys move and select, Tab leaves the group).
+ *
+ * A size container: one column of options with the tabs two by two in a phone-width card, the tabs
+ * in one row from 448px, search and tabs side by side with two columns of options from 672px, and
+ * three columns from 1024px. The footer stacks (full-width button) until 672px.
  */
 export function BallotList({
   options,
@@ -79,10 +84,10 @@ export function BallotList({
   const tabLabel = (g: BallotGroup) => `${g === "all" ? "All" : SOURCE_LABELS[g]} ${counts[g]}`;
 
   return (
-    <div data-slot="ballot-list" className={cn("flex flex-col gap-3 rounded-[26px] border border-line bg-card p-[18px]", className)} {...props}>
+    <div data-slot="ballot-list" className={cn("@container flex flex-col gap-3 rounded-[26px] border border-line bg-card p-[18px]", className)} {...props}>
       <Tabs.Root value={group} onValueChange={(g) => setGroup(g as BallotGroup)} className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <div className="flex min-h-11 flex-[1_1_260px] items-center gap-2 rounded-xl border-[1.5px] border-line-strong bg-paper-card px-3 focus-within:border-ink focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring">
+        <div className="flex flex-col gap-2.5 @2xl:flex-row @2xl:items-center">
+          <div className="flex min-h-11 min-w-0 items-center gap-2 rounded-xl border-[1.5px] border-line-strong bg-paper-card px-3 focus-within:border-ink focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring @2xl:flex-1">
             <Search aria-hidden="true" className="size-4 text-ink-muted" />
             <label htmlFor={`${id}-q`} className="sr-only">
               Search the ballot
@@ -96,12 +101,12 @@ export function BallotList({
               className="min-h-10 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-muted focus-visible:outline-none"
             />
           </div>
-          <Tabs.List aria-label="Ballot source" className="flex flex-wrap gap-1 rounded-full bg-sand p-1">
+          <Tabs.List aria-label="Ballot source" className="grid grid-cols-2 gap-1 rounded-[24px] bg-sand p-1 @md:flex @md:rounded-full">
             {GROUPS.map((g) => (
               <Tabs.Trigger
                 key={g}
                 value={g}
-                className="min-h-11 rounded-full px-3.5 text-[13px] font-semibold text-ink transition-colors hover:bg-line data-[state=active]:bg-ink data-[state=active]:text-paper"
+                className="min-h-11 rounded-full px-3.5 text-[13px] font-semibold whitespace-nowrap text-ink transition-colors hover:bg-line data-[state=active]:bg-ink data-[state=active]:text-paper @md:flex-1 @2xl:flex-none"
               >
                 {tabLabel(g)}
               </Tabs.Trigger>
@@ -117,7 +122,7 @@ export function BallotList({
                   onValueChange={choose}
                   aria-label={label}
                   disabled={disabled}
-                  className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,300px),1fr))] gap-2"
+                  className="grid grid-cols-1 gap-2 @2xl:grid-cols-2 @5xl:grid-cols-3"
                 >
                   {visible.map((o) => (
                     <BallotOption key={o.id} option={o} />
@@ -135,7 +140,14 @@ export function BallotList({
       <span className="sr-only" role="status">
         {query ? `${visible.length} of ${options.length} charities shown` : ""}
       </span>
-      {footer ? <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-line pt-3">{footer}</div> : null}
+      {footer ? (
+        <>
+          <Divider variant="dashed" />
+          <div data-slot="ballot-footer" className="flex flex-col items-stretch gap-3 @2xl:flex-row @2xl:flex-wrap @2xl:items-center">
+            {footer}
+          </div>
+        </>
+      ) : null}
     </div>
   );
 }
