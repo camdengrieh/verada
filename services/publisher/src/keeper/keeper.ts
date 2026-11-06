@@ -209,6 +209,13 @@ export function createKeeper(deps: KeeperDeps) {
    */
   const picksReported = new Map<string, { pagedAt: number; failures: number }>();
   const lookbackRounds = BigInt(deps.rotation?.lookbackRounds ?? 24);
+  /**
+   * A transaction of ours may still be in the mempool: set at start (a restart may follow a send
+   * whose receipt never came) and after a send or receipt failure, cleared once
+   * `writer.hasPendingTx` says the nonce is clear. Reads always see `latest`, so a step still in
+   * flight would otherwise plan, estimate and go out again at the next nonce, then revert.
+   */
+  let mayHavePendingTx = true;
 
   /** Lowercase addresses of active tokens, or null when every epoch should be opened. */
   async function activeSet(current: bigint): Promise<Set<string> | null> {
@@ -386,6 +393,23 @@ export function createKeeper(deps: KeeperDeps) {
           return "open";
         }
 
+        if (mayHavePendingTx && deps.writer.hasPendingTx) {
+          let pending: boolean;
+          try {
+            pending = await deps.writer.hasPendingTx();
+          } catch (err) {
+            fail(key, ref, "pendingTx", err);
+            s.halted = true;
+            return "open";
+          }
+          if (pending) {
+            deps.log("warn", "keeper has a transaction pending; not sending until it is mined or dropped", { ...describe(action), account: deps.writer.account });
+            s.halted = true;
+            return "open";
+          }
+          mayHavePendingTx = false;
+        }
+
         const limit = (gas * buffer) / 100n;
         try {
           s.txs++;
@@ -397,8 +421,10 @@ export function createKeeper(deps: KeeperDeps) {
           deps.log("info", "keeper tx mined", { ...describe(action), hash: r.hash, gasUsed: r.gasUsed });
           backoff.clear(key);
         } catch (err) {
-          // A send or receipt failure may leave a pending nonce: stop the run rather than stack more.
+          // A send or receipt failure may leave a pending nonce: stop the run rather than stack more,
+          // and check the nonce before the next send.
           fail(key, ref, action.kind, err);
+          mayHavePendingTx = true;
           s.halted = true;
           return "open";
         }

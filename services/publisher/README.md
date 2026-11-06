@@ -260,7 +260,7 @@ backoff timers.
 4. Epochs, for every token (indexer `/api/tokens`, all pages; `TokenCreated` logs of `FACTORY_ADDRESS`
    from `FACTORY_DEPLOY_BLOCK` when the indexer fails) and every epoch in
    `[current - KEEPER_LOOKBACK_EPOCHS, current)`, skipping unregistered tokens and epochs already
-   done (finalized, or with the donation addresses donated or found empty):
+   done (finalized, or with the donation addresses donated):
    - never opened, or opened with `voterCount == 0`: `finalizeEpoch` (the default cause wins; the
      epoch is not closed, which saves a public decryption);
    - opened with ballots, not closed: `closeEpoch` (makes the tallies publicly decryptable);
@@ -278,11 +278,13 @@ backoff timers.
      `planDonation` (`src/keeper/donate.ts`; the web app's donation card runs the same plan) over
      chain state, including a simulated `settle` or `distribute`. Not settled: `FeeVault.settle`,
      which first brings the epoch's outstanding fees in; while it would revert `FeesPending` the
-     epoch waits (until `SETTLE_GRACE`, 7 days, after its end at the latest), and `NothingToSettle`
-     (an empty pool) ends the epoch with nothing to donate. Settled: `DonationDistributor.distribute`
+     epoch waits (until `SETTLE_GRACE`, 7 days, after its end at the latest). `NothingToSettle` (an
+     empty pool) is logged once at `info` but does not end the epoch: `FeeVault.depositFees`
+     credits late fees to the oldest unsettled epoch at or after their accrual epoch, so the epoch
+     can still fill up, and it is re-read every run while in the lookback. Settled: `DonationDistributor.distribute`
      to the winning Endaoment org. `OrgNotActive` and `OrgAddressMismatch` need the owner or
      Endaoment, so they are logged once at `warn` (`keeper cannot donate the epoch`) and the epoch
-     is re-read every run until they clear. The epoch is done once donated or empty. Without the two
+     is re-read every run until they clear. The epoch is done once donated. Without the two
      addresses a finalized epoch is done, as before. Keep `KEEPER_LOOKBACK_EPOCHS` at 2 or more so
      an epoch whose fees stay pending is still in range when its settle grace ends.
 
@@ -303,7 +305,10 @@ each within `uint64` and equal to that handle's clear value, then submits those 
 **Transactions.** One viem wallet client and one account, one transaction at a time: gas estimate
 (a revert here costs nothing), send with 120% of the estimate, wait for the receipt. At most
 `KEEPER_MAX_TX_PER_RUN` per run. A send or receipt failure stops the run so no second nonce is
-used while one may be pending. Run a single publisher task.
+used while one may be pending. After such a failure, and once after a start, the keeper compares
+the account's `pending` and `latest` nonces before its next send and stops the run (`keeper has a
+transaction pending`, at `warn`) while they differ, so a step whose receipt timed out is not sent
+again while it can still be mined. Run a single publisher task.
 
 **Failure handling.** A failed step backs its item off in memory: 5 min, doubling to 6 h, reset on
 success; the item is retried on the first run after its backoff ends. One exception is capped: when a

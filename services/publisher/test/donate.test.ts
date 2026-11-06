@@ -189,17 +189,26 @@ describe("keeper donations", () => {
     expect(kinds(chain)).toEqual(["settle", "distribute"]);
   });
 
-  it("treats an empty pool as nothing to donate and stops there", async () => {
+  it("logs an empty epoch once and keeps re-reading it, since late fees can still land in it", async () => {
     const chain = new FakeChain().register(T1);
     chain.epochOf(T1, 9n).finalized = true;
     const vault = new FakeVault(chain);
     const { keeper, logs } = setup(chain, vault);
     await keeper.run();
+    await keeper.run();
     expect(kinds(chain)).toEqual([]);
-    expect(logs.find((l) => l.msg === "keeper found nothing to donate for the epoch")).toMatchObject({ level: "info", data: { token: T1, epoch: 9n } });
+    const empty = logs.filter((l) => l.msg === "keeper found nothing to donate for the epoch");
+    expect(empty).toEqual([{ level: "info", msg: "keeper found nothing to donate for the epoch", data: { token: T1, epoch: 9n } }]);
+    // The consolidator later deposits fees attributed to the still unsettled epoch.
+    vault.of(T1, 9n).pool = 300n;
     const reads = vault.reads;
     await keeper.run();
-    expect(vault.reads).toBe(reads);
+    expect(vault.reads).toBeGreaterThan(reads);
+    expect(kinds(chain)).toEqual(["settle", "distribute"]);
+    // Donated: never read again.
+    const after = vault.reads;
+    await keeper.run();
+    expect(vault.reads).toBe(after);
   });
 
   it("reports an inactive org at warn once and keeps following the epoch", async () => {

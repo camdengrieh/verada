@@ -324,6 +324,13 @@ export function createViemChain(opts: ViemChainOptions): {
       const r = await publicClient.waitForTransactionReceipt({ hash, timeout: opts.receiptTimeoutMs ?? 5 * 60_000 });
       return { hash, status: r.status, gasUsed: r.gasUsed };
     },
+    async hasPendingTx() {
+      const [pending, latest] = await Promise.all([
+        publicClient.getTransactionCount({ address: account.address, blockTag: "pending" }),
+        publicClient.getTransactionCount({ address: account.address, blockTag: "latest" }),
+      ]);
+      return pending > latest;
+    },
   };
 
   let factoryLogs: FactoryLogReader | undefined;

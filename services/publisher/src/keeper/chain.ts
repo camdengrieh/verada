@@ -154,6 +154,13 @@ export interface ChainWriter {
   estimate(action: KeeperAction): Promise<bigint>;
   /** Sends with the given gas limit and waits for the receipt. */
   send(action: KeeperAction, gas: bigint): Promise<TxResult>;
+  /**
+   * Whether the account has a transaction sent and not yet mined (pending nonce above the latest
+   * one). Checked before sending after a send or receipt failure, and once after a start, so a
+   * step whose receipt timed out is not sent again while the first is still in the mempool.
+   * Omitted: not checked.
+   */
+  hasPendingTx?(): Promise<boolean>;
 }
 
 /** A call that would revert. `errorName` is the decoded custom error (arguments are dropped). */
