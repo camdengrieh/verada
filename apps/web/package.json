@@ -10,6 +10,7 @@
     "verify:export": "node scripts/verify-export.mjs",
     "e2e": "node scripts/e2e.mjs",
     "check:private-rpc": "node scripts/private-rpc-check.mjs",
+    "check:private-rpc-session": "node scripts/private-rpc-session.mjs",
     "a11y": "node scripts/a11y.mjs",
     "build:verify": "pnpm run build && node scripts/verify-export.mjs",
     "typecheck": "tsc --noEmit",

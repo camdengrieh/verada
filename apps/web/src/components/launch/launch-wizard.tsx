@@ -26,7 +26,8 @@ import {
 import { PublisherClient } from "@/lib/publisher";
 import { findQuote } from "@/lib/quote-assets";
 import { useQuoteAssets } from "@/lib/use-quote-assets";
-import { useAppConfig, useDeps } from "@/components/providers";
+import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
+import { createAccountClient } from "@/lib/account-reads";
 import { errorText, useTx } from "@/components/use-tx";
 import { FeesStep } from "./fees-step";
 import { FocusStep } from "./focus-step";
@@ -46,6 +47,7 @@ export function LaunchWizard() {
   const deps = useDeps();
   const { address: account } = useAccount();
   const publicClient = usePublicClient({ chainId: config.chainId });
+  const rpc = usePrivateRpc();
   const tx = useTx();
   const qc = useQueryClient();
 
@@ -161,7 +163,8 @@ export function LaunchWizard() {
     queryKey: ["launch-estimate", factory, account, estimateKey],
     queryFn: async () => {
       const client = publicClient!;
-      const gas = await client.estimateContractGas({ ...call!, account: account! } as never);
+      // The estimate names the account as `from`: read it under the account's own isolation key (docs/PRIVACY.md).
+      const gas = await createAccountClient(rpc, account!).estimateContractGas({ ...call!, account: account! } as never);
       const gasPrice = await client.getGasPrice().catch(() => null);
       return { gas, gasPrice };
     },

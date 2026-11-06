@@ -164,6 +164,15 @@ export function PrivacyMenu() {
   const [prefs, setPrefs] = usePrivacyPrefs();
   const [details, setDetails] = useState(false);
   const [intro, setIntro] = useState(false);
+  const rpc = usePrivateRpc();
+  const { isConnected } = useAccount();
+
+  // Start the worker as soon as a wallet connects or API routing is on. The popover content unmounts
+  // while closed, so this cannot live in PrivacyStatus alone: the pill would say "Connecting" with
+  // nothing running until the user opened it.
+  useEffect(() => {
+    if (isConnected || prefs.routeIndexer) void rpc.start().catch(() => {});
+  }, [rpc, isConnected, prefs.routeIndexer]);
 
   // Offered once per browser, after the page has mounted so the static export never renders it.
   useEffect(() => {
