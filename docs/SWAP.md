@@ -112,3 +112,27 @@ The wallet's own RPC sees the signed transaction (docs/PRIVACY.md).
   token's total supply (the launch position holds the whole supply), so they drift by any tokens that
   were burned. 24 h change and volume come from the indexer and are absent when it is unreachable.
 - USD prices are mid prices of the shortest route to USDC (no oracle); an asset without a route has none.
+
+## Tests
+
+Unit tests (always run): `pnpm --filter @varada/sdk test` (pool keys, routing, calldata decoded
+back to commands and actions, fees, Permit2 planning, error mapping, compliance, quotes with a mock
+chain) and `pnpm --filter @varada/web test` (hooks and `ConnectedTradePanel`).
+
+Fork tests (`packages/sdk/test/swap.fork.test.ts`, skipped unless `FORK_RPC_URL` is set) run against a
+mainnet fork with real v4 pools, the real V4Quoter and Universal Router, and the Varada contracts
+deployed on the fork:
+
+```sh
+# archive state is needed (the public ethereum.reth.rs node serves it); pin a block so reads are cached on disk
+anvil --fork-url https://ethereum.reth.rs/rpc --fork-block-number <recent block> --chain-id 1 --port 8546 --code-size-limit 100000
+# deploy the system with live mode, allowlist WETH and AMZNon, launch a weekly/WETH, a weekly/AMZNon and a live/WETH token
+cd contracts && SWAP_FORK_FIXTURE=1 PLATFORM_TREASURY=<any address> forge script script/SwapForkFixture.s.sol \
+  --sig "fixture()" --rpc-url http://127.0.0.1:8546 --broadcast --private-key <anvil account 0 key>
+FORK_RPC_URL=http://127.0.0.1:8546 pnpm --filter @varada/sdk exec vitest run test/swap.fork.test.ts \
+  --testTimeout 900000 --hookTimeout 900000
+```
+
+The first run is slow (cold storage reads over the network); later runs read the cached state.
+`evm_snapshot` stalls a fork with this much cached state, so the tests do not use snapshots: each one
+measures balance deltas and the time-travel test runs last.
