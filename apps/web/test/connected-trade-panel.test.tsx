@@ -115,6 +115,8 @@ describe("ConnectedTradePanel", () => {
     expect(screen.getByText(/Route: ETH > WETH > TKN \(best of 2\)/)).toBeInTheDocument();
     expect(screen.getAllByText(/3\.00%/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/396/).length).toBeGreaterThan(0); // min received
+    // the ticket adds the symbol itself: it must not be printed twice
+    expect(screen.getByText("Minimum received").parentElement).toHaveTextContent(/^Minimum received\s*396 TKN$/);
     expect(screen.getAllByText(/2\.00%/).length).toBeGreaterThan(0); // sniper
     // 90 / 10 of a 3% fee on $2,500: $67.50 and $7.50
     expect(screen.getAllByText("$67.50").length).toBeGreaterThan(0);
