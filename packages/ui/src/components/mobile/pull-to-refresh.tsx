@@ -28,6 +28,11 @@ export interface PullToRefreshProps extends Omit<ComponentProps<"div">, "childre
   scrollClassName?: string;
   /** Receives the scroll area, e.g. for a BottomTabBar's `scrollContainer`. */
   scrollRef?: (el: HTMLDivElement | null) => void;
+  /**
+   * The page itself scrolls, not this area: a pull starts only when the window is at the top. Use it
+   * when the content is a whole page and `scrollClassName` gives no height.
+   */
+  pageScroll?: boolean;
 }
 
 /** Past the threshold the pull gets heavier, so the edge feels elastic. */
@@ -53,6 +58,7 @@ export function PullToRefresh({
   className,
   scrollClassName,
   scrollRef: onScrollRef,
+  pageScroll = false,
   ...props
 }: PullToRefreshProps) {
   const reduced = usePrefersReducedMotion();
@@ -64,6 +70,7 @@ export function PullToRefresh({
     onScrollRefRef.current?.(el);
   }, []);
   const start = useRef<number | null>(null);
+  const scrolled = () => (pageScroll ? window.scrollY : (scrollRef.current?.scrollTop ?? 0)) > 0;
   const pullRef = useRef(0);
   const [pull, setPull] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -117,13 +124,13 @@ export function PullToRefresh({
     const el = scrollRef.current;
     if (!el || disabled) return;
     const onStart = (e: TouchEvent) => {
-      if (busy.current || el.scrollTop > 0 || e.touches.length !== 1) return;
+      if (busy.current || scrolled() || e.touches.length !== 1) return;
       start.current = e.touches[0]!.clientY;
     };
     const onMove = (e: TouchEvent) => {
       if (start.current === null) return;
       const d = e.touches[0]!.clientY - start.current;
-      if (d <= 0 || el.scrollTop > 0) {
+      if (d <= 0 || scrolled()) {
         start.current = d <= 0 ? start.current : null;
         update(0);
         return;
@@ -144,7 +151,7 @@ export function PullToRefresh({
       el.removeEventListener("touchcancel", onEnd);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [disabled, threshold]);
+  }, [disabled, threshold, pageScroll]);
 
   const offset = reduced ? 0 : refreshing ? threshold * 0.7 : pull;
   const stripHeight = reduced ? (pull > 0 || refreshing ? 40 : 0) : Math.max(pull, refreshing ? threshold * 0.7 : 0);
@@ -185,7 +192,7 @@ export function PullToRefresh({
         <div
           ref={setScrollEl}
           onPointerDown={(e) => {
-            if (e.pointerType !== "mouse" || e.button !== 0 || disabled || busy.current || (scrollRef.current?.scrollTop ?? 0) > 0) return;
+            if (e.pointerType !== "mouse" || e.button !== 0 || disabled || busy.current || scrolled()) return;
             start.current = e.clientY;
           }}
           onPointerMove={(e) => {
