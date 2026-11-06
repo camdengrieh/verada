@@ -110,6 +110,7 @@ export const feeTotal = onchainTable(
   }),
 );
 
+/** One `FeesCollected`: a single deposit into the vault, with its platform and cause totals. */
 export const feeCollection = onchainTable(
   "fee_collection",
   (t) => ({
@@ -119,11 +120,59 @@ export const feeCollection = onchainTable(
     currency: t.hex().notNull(),
     platformAmount: t.bigint().notNull(),
     causeAmount: t.bigint().notNull(),
+    /** 1-based deposit number of the token (`fee_total.collections` after this deposit). */
+    depositSeq: t.integer().notNull(),
     timestamp: t.bigint().notNull(),
     txHash: t.hex().notNull(),
   }),
   (table) => ({
     tokenIdx: index().on(table.token),
+  }),
+);
+
+/**
+ * One `FeesAttributed`: part of a deposit's cause share credited to the pool of `epoch`, earned in
+ * `accrualEpoch` (the same epoch, or an earlier one whose pool was already settled). The vault
+ * emits the parts of a deposit just before its `FeesCollected`; they share its `depositSeq` and
+ * sum to its `causeAmount`.
+ */
+export const feeAttribution = onchainTable(
+  "fee_attribution",
+  (t) => ({
+    id: t.text().primaryKey(),
+    token: t.hex().notNull(),
+    epoch: t.bigint().notNull(),
+    accrualEpoch: t.bigint().notNull(),
+    causeAmount: t.bigint().notNull(),
+    depositSeq: t.integer().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    tokenEpochIdx: index().on(table.token, table.epoch),
+    tokenDepositIdx: index().on(table.token, table.depositSeq),
+  }),
+);
+
+/**
+ * Cause pool of `(token, epoch)` by accrual epoch: the running sum of `FeesAttributed` parts
+ * credited to the pool of `epoch` from fees earned in `accrualEpoch`. The rows of one epoch sum to
+ * `epoch.causeAttributed`.
+ */
+export const causePoolAttribution = onchainTable(
+  "cause_pool_attribution",
+  (t) => ({
+    token: t.hex().notNull(),
+    epoch: t.bigint().notNull(),
+    accrualEpoch: t.bigint().notNull(),
+    causeAmount: t.bigint().notNull(),
+    parts: t.integer().notNull(),
+    firstAttributedAt: t.bigint().notNull(),
+    lastAttributedAt: t.bigint().notNull(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.token, table.epoch, table.accrualEpoch] }),
+    accrualIdx: index().on(table.token, table.accrualEpoch),
   }),
 );
 
@@ -248,6 +297,16 @@ export const epoch = onchainTable(
     catalogVersion: t.integer(),
     poolSize: t.bigint(),
     pinnedCount: t.integer(),
+    /**
+     * `LaunchSnapshotSet`: the token was registered in this epoch without supply at the regular
+     * snapshot, so its weights for this epoch are read here (`snapshotFor(token, epoch)`).
+     */
+    launchSnapshot: t.bigint(),
+    /** Cause share credited to this epoch's pool by `FeesAttributed` (all accrual epochs). */
+    causeAttributed: t.bigint().notNull().default(0n),
+    /** `Settled`: the pool paid to the distributor (null until settled). */
+    settledAmount: t.bigint(),
+    settledAt: t.bigint(),
   }),
   (table) => ({
     pk: primaryKey({ columns: [table.token, table.epoch] }),
@@ -336,6 +395,102 @@ export const catalogVersion = onchainTable("catalog_version", (t) => ({
   entries: t.bigint().notNull(),
   setAt: t.bigint().notNull(),
   txHash: t.hex().notNull(),
+}));
+
+/** A curator agent (`CuratorRegistry`), one per cause category. */
+export const agent = onchainTable("agent", (t) => ({
+  categoryBit: t.integer().primaryKey(),
+  agentId: t.bigint().notNull(),
+  /** ENS label under `agent.<parent>`. */
+  label: t.text().notNull(),
+  signer: t.hex().notNull(),
+  vault: t.hex().notNull(),
+  active: t.boolean().notNull(),
+  description: t.text().notNull(),
+  agentURI: t.text(),
+  walletLinked: t.boolean().notNull().default(false),
+  registeredAt: t.bigint().notNull(),
+}));
+
+/** Vault address -> category, so vault events find their agent. */
+export const agentVault = onchainTable("agent_vault", (t) => ({
+  vault: t.hex().primaryKey(),
+  categoryBit: t.integer().notNull(),
+}));
+
+/** One region's picks root and weight for one epoch (`CurationSet`); the latest write wins. */
+export const curation = onchainTable(
+  "curation",
+  (t) => ({
+    bucket: t.integer().notNull(),
+    epoch: t.bigint().notNull(),
+    categoryBit: t.integer().notNull(),
+    regionBit: t.integer().notNull(),
+    picksRoot: t.hex().notNull(),
+    count: t.integer().notNull(),
+    weight: t.integer().notNull(),
+    catalogVersion: t.integer().notNull(),
+    submittedAt: t.bigint().notNull(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.bucket, table.epoch] }),
+    categoryIdx: index().on(table.categoryBit, table.epoch),
+  }),
+);
+
+/** An agent's weekly submission (`CurationsSubmitted`): the Swarm reference of the full report. */
+export const curationReport = onchainTable(
+  "curation_report",
+  (t) => ({
+    categoryBit: t.integer().notNull(),
+    epoch: t.bigint().notNull(),
+    catalogVersion: t.integer().notNull(),
+    reportRef: t.hex().notNull(),
+    submittedAt: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({ pk: primaryKey({ columns: [table.categoryBit, table.epoch] }) }),
+);
+
+/** `AgentVault.Donated`. `donor` is stored only when the donor opted in to credit. */
+export const vaultDonation = onchainTable(
+  "vault_donation",
+  (t) => ({
+    id: t.text().primaryKey(),
+    categoryBit: t.integer().notNull(),
+    donor: t.hex(),
+    amount: t.bigint().notNull(),
+    credit: t.boolean().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({ categoryIdx: index().on(table.categoryBit, table.timestamp) }),
+);
+
+/** `AgentVault.Given`: a gift to a catalogue org. */
+export const vaultGift = onchainTable(
+  "vault_gift",
+  (t) => ({
+    id: t.text().primaryKey(),
+    categoryBit: t.integer().notNull(),
+    epoch: t.bigint().notNull(),
+    regionBit: t.integer().notNull(),
+    orgId: t.hex().notNull(),
+    org: t.hex().notNull(),
+    amount: t.bigint().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({ categoryIdx: index().on(table.categoryBit, table.timestamp) }),
+);
+
+/** Running totals per agent (USDC, 6 decimals). Plain transfers to a vault are not counted here. */
+export const agentTotal = onchainTable("agent_total", (t) => ({
+  categoryBit: t.integer().primaryKey(),
+  donated: t.bigint().notNull(),
+  donations: t.integer().notNull(),
+  given: t.bigint().notNull(),
+  gifts: t.integer().notNull(),
 }));
 
 /** A token's cause focus, fixed at launch (`TokenProfileRegistry.FocusSet`). */

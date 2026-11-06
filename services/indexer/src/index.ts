@@ -1,6 +1,24 @@
 import { ponder } from "ponder:registry";
 import { onCauseAdded, onCauseDeactivated, onPayoutUpdated } from "./handlers/causes";
-import { onConsolidationFailed, onFeesCollected, onFeesConsolidated } from "./handlers/fees";
+import {
+  onConsolidationFailed,
+  onFeesAttributed,
+  onFeesCollected,
+  onFeesConsolidated,
+  onSettled,
+} from "./handlers/fees";
+import {
+  onActiveSet,
+  onAgentRegistered,
+  onAgentURISet,
+  onAgentWalletLinked,
+  onCurationSet,
+  onCurationsSubmitted,
+  onDescriptionSet,
+  onSignerSet,
+  onVaultDonated,
+  onVaultGiven,
+} from "./handlers/agents";
 import { onCatalogVersionSet, onFocusSet } from "./handlers/catalog";
 import {
   onBallotPrepared,
@@ -9,6 +27,7 @@ import {
   onEpochClosed,
   onEpochFinalized,
   onEpochOpened,
+  onLaunchSnapshotSet,
   onNoVoteFallbackApplied,
   onOrgDeployed,
   onShortlistScheduled,
@@ -43,7 +62,9 @@ import {
 import { onTokenCreated } from "./handlers/token";
 
 ponder.on("Factory:TokenCreated", onTokenCreated);
+ponder.on("FeeVault:FeesAttributed", onFeesAttributed);
 ponder.on("FeeVault:FeesCollected", onFeesCollected);
+ponder.on("FeeVault:Settled", onSettled);
 ponder.on("FeeConsolidator:FeesConsolidated", onFeesConsolidated);
 ponder.on("FeeConsolidator:ConsolidationFailed", onConsolidationFailed);
 ponder.on("QuoteRegistry:QuoteAssetAdded", onQuoteAssetAdded);
@@ -62,6 +83,7 @@ ponder.on("EpochGovernor:EpochFinalized", onEpochFinalized);
 ponder.on("EpochGovernor:ShortlistSet", onShortlistSet);
 ponder.on("EpochGovernor:ShortlistScheduled", onShortlistScheduled);
 ponder.on("EpochGovernor:BallotPrepared", onBallotPrepared);
+ponder.on("EpochGovernor:LaunchSnapshotSet", onLaunchSnapshotSet);
 ponder.on("CauseCatalog:CatalogVersionSet", onCatalogVersionSet);
 ponder.on("TokenProfileRegistry:FocusSet", onFocusSet);
 ponder.on("DonationDistributor:Donated", onDonated);
@@ -84,3 +106,13 @@ ponder.on("TakeoverGovernor:TakeoverTallied", onTakeoverTallied);
 ponder.on("TakeoverGovernor:TakeoverExecuted", onTakeoverExecuted);
 ponder.on("TakeoverGovernor:TakeoverCanceled", onTakeoverCanceled);
 ponder.on("TakeoverGovernor:TakeoverSuperseded", onTakeoverSuperseded);
+ponder.on("CuratorRegistry:AgentRegistered", onAgentRegistered);
+ponder.on("CuratorRegistry:SignerSet", onSignerSet);
+ponder.on("CuratorRegistry:ActiveSet", onActiveSet);
+ponder.on("CuratorRegistry:DescriptionSet", onDescriptionSet);
+ponder.on("CuratorRegistry:AgentURISet", onAgentURISet);
+ponder.on("CuratorRegistry:AgentWalletLinked", onAgentWalletLinked);
+ponder.on("CuratorRegistry:CurationSet", onCurationSet);
+ponder.on("CuratorRegistry:CurationsSubmitted", onCurationsSubmitted);
+ponder.on("AgentVault:Donated", onVaultDonated);
+ponder.on("AgentVault:Given", onVaultGiven);

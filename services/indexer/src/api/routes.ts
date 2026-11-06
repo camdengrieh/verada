@@ -6,7 +6,9 @@ import {
   REGIONS,
   categoryMaskOf,
   categorySlugs,
+  agentByLabel,
   isValidLabel,
+  regionBySlug,
   regionMaskOf,
   regionSlugs,
 } from "@verada/sdk";
@@ -16,6 +18,7 @@ import { z } from "zod";
 import { ActivityBus } from "./bus";
 import type { ApiConfig } from "./config";
 import { type Cursor, decodeCursor, decodeOffset, encodeCursor, encodeOffset } from "./cursor";
+import { pickProofs, verifyReport, type AgentsRepo, type ReportFetcher } from "./agents";
 import type { CatalogStore } from "./catalog";
 import type { CauseSearch } from "./search";
 import {
@@ -26,10 +29,14 @@ import {
 } from "./security";
 import { currentEpochAt, resolveSchedule } from "./shortlist";
 import { toProposal } from "./takeover";
+import type { FacilitatorClient } from "@x402/core/server";
+import { mountX402 } from "./x402";
 import {
   ACTIVITY_KINDS,
   type ActivityKind,
+  type CausePoolAttributionRow,
   type EpochClock,
+  type EpochRow,
   type Repo,
   type TokenRow,
   activityCursor,
@@ -41,8 +48,14 @@ export interface ApiDeps {
   config: ApiConfig;
   /** Published cause catalogue; `/api/catalog/*` answers 503 while it is not loaded. */
   catalog?: CatalogStore;
+  /** Curator agents; `/api/agents/*` answers 503 without it. */
+  agents?: AgentsRepo;
+  /** Weekly reports on Swarm. */
+  reports?: ReportFetcher;
   bus?: ActivityBus;
   limiter?: RateLimiter;
+  /** x402 facilitators; built from `config.x402` when omitted (tests inject fakes). */
+  x402Facilitators?: FacilitatorClient[];
   now?: () => number;
 }
 
@@ -233,11 +246,43 @@ function profileOf(t: TokenRow, textRecords: { key: string; value: string }[]) {
   };
 }
 
-/** Epoch timing from the governor clock: `end` is exclusive, `snapshot` is `start - 1`. */
-function epochTiming(clock: EpochClock | null, n: bigint) {
-  if (!clock) return { start: null, end: null, snapshot: null };
+/**
+ * Epoch timing from the governor clock: `end` is exclusive. `snapshot` is the token's weight
+ * snapshot for the epoch, `snapshotFor(token, epoch)`: the launch snapshot when the governor set
+ * one for this epoch, else `start - 1`.
+ */
+function epochTiming(clock: EpochClock | null, n: bigint, launchSnapshot: bigint | null) {
+  if (!clock) return { start: null, end: null, snapshot: launchSnapshot };
   const start = clock.epochZeroStart + n * clock.epochLength;
-  return { start, end: start + clock.epochLength, snapshot: start - 1n };
+  return { start, end: start + clock.epochLength, snapshot: launchSnapshot ?? start - 1n };
+}
+
+/**
+ * The epoch's cause pool: what was credited to it and from which accrual epochs, what is still
+ * held (`pending`, zero once settled) and where fees earned in this epoch went when its own pool
+ * was already settled (`carriedForward`).
+ */
+function causePoolOf(
+  row: EpochRow,
+  credited: CausePoolAttributionRow[],
+  accrued: CausePoolAttributionRow[],
+) {
+  const settled = row.settledAmount;
+  const left = settled === null ? row.causeAttributed : row.causeAttributed - settled;
+  return {
+    attributed: row.causeAttributed,
+    pending: left > 0n ? left : 0n,
+    settledAmount: settled,
+    settledAt: row.settledAt,
+    accruals: credited.map((a) => ({
+      accrualEpoch: a.accrualEpoch,
+      causeAmount: a.causeAmount,
+      parts: a.parts,
+    })),
+    carriedForward: accrued
+      .filter((a) => a.epoch !== a.accrualEpoch)
+      .map((a) => ({ epoch: a.epoch, causeAmount: a.causeAmount, parts: a.parts })),
+  };
 }
 
 export function createApi(deps: ApiDeps): Hono {
@@ -253,6 +298,7 @@ export function createApi(deps: ApiDeps): Hono {
   app.use("*", corsMiddleware(config.corsOrigins));
   app.use("*", rateLimitMiddleware(limiter, config.trustProxyHops, config.rateBurst));
   app.use("/api/*", readOnlyGate(config.maxUrlLength));
+  app.use("/x402/*", readOnlyGate(config.maxUrlLength));
 
   app.onError((err, c) => {
     c.header("Cache-Control", CACHE.none);
@@ -266,6 +312,143 @@ export function createApi(deps: ApiDeps): Hono {
   });
 
   app.get("/api/health", (c) => send(c, { status: "ok" }, CACHE.none));
+
+  // ---- paid data (x402); absent unless enabled
+  mountX402(app, {
+    config: config.x402,
+    facilitators: deps.x402Facilitators,
+    agents: deps.agents,
+    reports: deps.reports,
+    catalog: deps.catalog,
+    ensParentName: config.ensParentName,
+    serialize,
+  });
+
+  // ---- curator agents
+
+  const agentsUnavailable = (c: Context) => {
+    c.header("Cache-Control", CACHE.none);
+    return c.json({ error: "agents_unavailable" }, 503);
+  };
+  const agentLabel = (c: Context) => {
+    const label = c.req.param("label") ?? "";
+    return agentByLabel(label) ? label.toLowerCase() : null;
+  };
+  const agentSummary = (a: import("./agents").AgentRow) => {
+    const def = agentByLabel(a.label);
+    return {
+      categoryBit: a.categoryBit,
+      category: def?.slug ?? null,
+      name: def?.label ?? a.label,
+      label: a.label,
+      ensName: `${a.label}.agent.${config.ensParentName}`,
+      agentId: a.agentId,
+      signer: a.signer,
+      vault: a.vault,
+      active: a.active,
+      description: a.description,
+      walletLinked: a.walletLinked,
+    };
+  };
+
+  app.get("/api/agents", async (c) => {
+    if (!deps.agents) return agentsUnavailable(c);
+    const rows = await deps.agents.listAgents();
+    return send(
+      c,
+      {
+        items: rows.map((r) => ({
+          ...agentSummary(r.agent),
+          totals: r.totals,
+          latest: r.latest && { epoch: r.latest.epoch, reportRef: r.latest.reportRef, catalogVersion: r.latest.catalogVersion },
+        })),
+      },
+      CACHE.list,
+    );
+  });
+
+  app.get("/api/agents/:label", async (c) => {
+    if (!deps.agents) return agentsUnavailable(c);
+    const label = agentLabel(c);
+    if (!label) return bad(c, [{ path: "label", message: "unknown agent label" }]);
+    const a = await deps.agents.getAgentByLabel(label);
+    if (!a) return send(c, { error: "not_found" }, CACHE.none, 404);
+    const [totals, reports, donors, gifts] = await Promise.all([
+      deps.agents.totals(a.categoryBit),
+      deps.agents.reports(a.categoryBit, 52),
+      deps.agents.creditedDonations(a.categoryBit, 100),
+      deps.agents.gifts(a.categoryBit, 100),
+    ]);
+    const latest = reports[0];
+    const curations = latest ? await deps.agents.curations(a.categoryBit, latest.epoch) : [];
+    return send(
+      c,
+      {
+        ...agentSummary(a),
+        totals,
+        reports: reports.map((r) => ({ epoch: r.epoch, reportRef: r.reportRef, catalogVersion: r.catalogVersion, submittedAt: r.submittedAt })),
+        latestCurations: curations.map((x) => ({ regionBit: x.regionBit, count: x.count, weight: x.weight, picksRoot: x.picksRoot })),
+        donors: donors.map((d) => ({ donor: d.donor, amount: d.amount, timestamp: d.timestamp, txHash: d.txHash })),
+        gifts,
+      },
+      CACHE.detail,
+    );
+  });
+
+  const loadReport = async (c: Context) => {
+    if (!deps.agents || !deps.reports) return { res: agentsUnavailable(c) } as const;
+    const label = agentLabel(c);
+    if (!label) return { res: bad(c, [{ path: "label", message: "unknown agent label" }]) } as const;
+    const e = parse(c, EpochParam, c.req.param("epoch"));
+    if (!e.ok) return { res: e.res } as const;
+    const a = await deps.agents.getAgentByLabel(label);
+    if (!a) return { res: send(c, { error: "not_found" }, CACHE.none, 404) } as const;
+    const epoch = BigInt(e.data);
+    const reports = await deps.agents.reports(a.categoryBit, 520);
+    const row = reports.find((r) => r.epoch === epoch);
+    if (!row) return { res: send(c, { error: "not_found" }, CACHE.none, 404) } as const;
+    const stored = await deps.reports.get(row.reportRef);
+    if (!stored) return { res: send(c, { error: "report_unavailable" }, CACHE.none, 404) } as const;
+    return { agent: a, epoch, row, stored, curations: await deps.agents.curations(a.categoryBit, epoch) } as const;
+  };
+
+  app.get("/api/agents/:label/reports/:epoch", async (c) => {
+    const r = await loadReport(c);
+    if ("res" in r) return r.res;
+    const { report } = r.stored;
+    return send(
+      c,
+      {
+        agent: agentSummary(r.agent),
+        epoch: r.epoch,
+        reportRef: r.row.reportRef,
+        catalogVersion: r.row.catalogVersion,
+        title: report.title,
+        intro: report.intro,
+        generatedAt: report.generatedAt,
+        regions: verifyReport(r.stored, r.curations),
+      },
+      CACHE.catalog,
+    );
+  });
+
+  app.get("/api/agents/:label/picks/:epoch/:region", async (c) => {
+    let region: string;
+    try {
+      region = regionBySlug(c.req.param("region")).slug;
+    } catch {
+      return bad(c, [{ path: "region", message: "unknown region" }]);
+    }
+    const r = await loadReport(c);
+    if ("res" in r) return r.res;
+    const proofs = pickProofs(r.stored, region);
+    if (!proofs) return send(c, { error: "not_found" }, CACHE.none, 404);
+    const chain = r.curations.find((x) => x.regionBit === regionBySlug(region).bit);
+    if (!chain || chain.picksRoot.toLowerCase() !== proofs.picksRoot.toLowerCase()) {
+      return send(c, { error: "report_mismatch" }, CACHE.none, 404);
+    }
+    return send(c, proofs, CACHE.catalog);
+  });
 
   // ---- cause catalogue
 
@@ -548,7 +731,7 @@ export function createApi(deps: ApiDeps): Hono {
       c,
       {
         ...found.epoch,
-        ...epochTiming(found.clock, n),
+        ...epochTiming(found.clock, n, found.epoch.launchSnapshot),
         options: found.options,
         poll: p
           ? {
@@ -562,6 +745,7 @@ export function createApi(deps: ApiDeps): Hono {
             }
           : null,
         donations: found.donations,
+        causePool: causePoolOf(found.epoch, found.causePool, found.accrued),
       },
       CACHE.detail,
     );
