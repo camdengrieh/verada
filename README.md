@@ -1,4 +1,4 @@
-# Verada
+# Varada
 
 A memecoin launchpad on Ethereum Mainnet. Trading fees fund nonprofits: each week, holders vote
 (with hidden ballots) on which cause (sourced from Endaoment) receives the accumulated funds. The
@@ -21,7 +21,7 @@ See `docs/ARCHITECTURE.md` for how the pieces fit together.
 
 ## Uniswap v4 hooks
 
-Verada's pool logic is built from a library of generic Uniswap v4 hooks in
+Varada's pool logic is built from a library of generic Uniswap v4 hooks in
 [`contracts/src/hooks`](contracts/src/hooks), usable by any LP or protocol. Each hook does one
 thing, works on its own through a minimal deployable example, and combines with the others into
 a single hook by inheritance (a v4 pool has one hook address):
@@ -36,11 +36,11 @@ a single hook by inheritance (a v4 pool has one hook address):
 | `FeeConversionHook` | converts fee claims to one currency inside the swap, holds and retries on failure |
 | `BondingCurveHook` | reference custom-curve example (not used in production) |
 
-`VeradaHook` and `VeradaLiveHook` are compositions of these plus Verada glue. Docs, install
+`VaradaHook` and `VaradaLiveHook` are compositions of these plus Varada glue. Docs, install
 (`forge install` plus a remapping while the repository is public, or copy the folder; MIT), gas
 and trust assumptions: [`docs/hooks/README.md`](docs/hooks/README.md). Tutorial:
 [`docs/hooks/ComposeYourOwn.md`](docs/hooks/ComposeYourOwn.md). Case study:
-[`docs/hooks/Verada.md`](docs/hooks/Verada.md).
+[`docs/hooks/Varada.md`](docs/hooks/Varada.md).
 
 ## Getting started
 
@@ -51,7 +51,7 @@ Install it once per machine before cloning, or the art files arrive as small tex
 brew install git-lfs        # or your platform's package
 git lfs install             # once per machine
 git clone https://github.com/camdengrieh/verada.git
-cd verada && git lfs pull   # only needed if you cloned before installing LFS
+cd varada && git lfs pull   # only needed if you cloned before installing LFS
 pnpm install
 ```
 

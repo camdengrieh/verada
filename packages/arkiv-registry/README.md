@@ -1,7 +1,7 @@
-# @verada/arkiv-registry
+# @varada/arkiv-registry
 
-Mirrors Verada's public token and cause records onto [Arkiv](https://arkiv.network) so anyone can
-query them without the Verada indexer. Built on `@arkiv-network/sdk` 1.0.1 (viem clients extended
+Mirrors Varada's public token and cause records onto [Arkiv](https://arkiv.network) so anyone can
+query them without the Varada indexer. Built on `@arkiv-network/sdk` 1.0.1 (viem clients extended
 with Arkiv actions). **Arkiv is testnet only (Rabdi, chain id 7794095).** Treat the mirror as a
 convenience copy; Ethereum mainnet remains the source of truth.
 
@@ -9,7 +9,7 @@ convenience copy; Ethereum mainnet remains the source of truth.
 
 | Schema (`arkiv.schema` tag) | Column | Type | Indexed | Notes |
 |---|---|---|---|---|
-| `verada.token` (`TokenCore`) | `token` | addr | yes | token contract |
+| `varada.token` (`TokenCore`) | `token` | addr | yes | token contract |
 | | `chainId` | u64 | yes | `1` for mainnet |
 | | `poolId` | str | yes | Uniswap v4 pool id, lowercase hex |
 | | `creator` | addr | yes | launcher |
@@ -19,7 +19,7 @@ convenience copy; Ethereum mainnet remains the source of truth.
 | | `logoRef` | str | | launch logo, 64-hex Swarm reference |
 | | `causeCategory` | str | yes | reserved, empty |
 | | `version` | i32 | | `SCHEMA_VERSION` (1) |
-| `verada.token-profile` (`TokenProfile`) | `core` | key | yes | entity key of the token's `TokenCore` |
+| `varada.token-profile` (`TokenProfile`) | `core` | key | yes | entity key of the token's `TokenCore` |
 | | `token`, `chainId` | addr, u64 | yes | |
 | | `controller` | addr | yes | ENS subname controller (creator by default) |
 | | `editor` | addr | | delegated editor (zero address when none) |
@@ -28,7 +28,7 @@ convenience copy; Ethereum mainnet remains the source of truth.
 | | `logoRef` | str, optional | | current logo |
 | | `contenthash` | str, optional | | EIP-1577 hex |
 | | `updatedAtBlock` | u64 | | Ethereum block of the last profile change |
-| `verada.cause` (`Cause`) | `causeId` | str | yes | on-chain cause id (bytes32 hex) |
+| `varada.cause` (`Cause`) | `causeId` | str | yes | on-chain cause id (bytes32 hex) |
 | | `orgId` | str | yes | Endaoment org id (empty until the indexer serves it) |
 | | `ein` | str, optional | | |
 | | `orgAddress` | addr | yes | payout address |
@@ -43,7 +43,7 @@ left out rather than cut), `bytes` at most 128 KiB.
 ## Trust model
 
 - **Check `$creator`.** The `arkiv.schema` tag is just an attribute, and anyone can write an entity
-  with `arkiv.schema = "verada.token"`. Readers must filter on `$creator == <platform address>`
+  with `arkiv.schema = "varada.token"`. Readers must filter on `$creator == <platform address>`
   (`.createdBy(platform)`). `$creator` is set by the chain and cannot change. The registry only ever
   lists entities created by its own signer.
 - **Cores are immutable.** A `TokenCore` is created with the `readonly` flag, so its attributes can
@@ -67,7 +67,7 @@ expire within 30 days. `planReconcile` lists them in `plan.extends` too.
 ## API
 
 ```ts
-import { applyPlan, createArkivRegistry, planReconcile } from "@verada/arkiv-registry";
+import { applyPlan, createArkivRegistry, planReconcile } from "@varada/arkiv-registry";
 
 const registry = createArkivRegistry({ chain: "rabdi", accessKey, privateKey, dryRun: true });
 const plan = planReconcile({
@@ -90,4 +90,4 @@ await applyPlan(registry, plan);
   and sends nothing.
 - The access key travels in the RPC URL path, so `registry.redact()` strips it from error messages;
   `applyPlan` logs only redacted errors. The private key is never logged.
-- `@verada/arkiv-registry/testing` exports `FakeArkiv`, an in-memory stand-in for both clients.
+- `@varada/arkiv-registry/testing` exports `FakeArkiv`, an in-memory stand-in for both clients.

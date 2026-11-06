@@ -1,11 +1,11 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Countdown, countdownParts, countdownSentence, formatCountdown } from "@verada/ui/components/data/countdown";
-import { DataTable, dataTableColumns } from "@verada/ui/components/data/data-table";
-import { FileDropzone, validateFile } from "@verada/ui/components/data/file-dropzone";
-import { Sparkline } from "@verada/ui/components/data/sparkline";
-import { Stepper } from "@verada/ui/components/data/stepper";
-import { Delta } from "@verada/ui/components/data/stat-card";
+import { Countdown, countdownParts, countdownSentence, formatCountdown } from "@varada/ui/components/data/countdown";
+import { DataTable, dataTableColumns } from "@varada/ui/components/data/data-table";
+import { FileDropzone, validateFile } from "@varada/ui/components/data/file-dropzone";
+import { Sparkline } from "@varada/ui/components/data/sparkline";
+import { Stepper } from "@varada/ui/components/data/stepper";
+import { Delta } from "@varada/ui/components/data/stat-card";
 
 type Coin = { id: string; name: string; price: number };
 const coins: Coin[] = [

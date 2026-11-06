@@ -1,6 +1,6 @@
 // Written for Varada
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface PriceChangeProps extends Omit<ComponentProps<"span">, "children"> {
   /** Change in percent (18.4 means +18.4%). */

@@ -27,7 +27,7 @@ import {
 ///      computes the weight shifted into its slot once and then, per word, adds it under an
 ///      encrypted equality test on the word index: three operations per word instead of three per
 ///      option, which is what makes 32-option ballots affordable. A counter must never exceed
-///      `2^40 - 1` (1.1e12 whole tokens); Verada tokens have a fixed supply of 1e11 whole tokens,
+///      `2^40 - 1` (1.1e12 whole tokens); Varada tokens have a fixed supply of 1e11 whole tokens,
 ///      so the sum of all weights in a poll cannot reach it.
 ///      Polls are keyed by `(governor, token, scope)`. Only allowlisted governors may open polls
 ///      and request tallies or outcomes. The voter calls `castBallot` directly so that the input

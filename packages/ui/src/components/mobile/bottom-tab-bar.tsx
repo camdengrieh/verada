@@ -7,8 +7,8 @@
 import { ChartLine, CircleUserRound, Compass, Plus, Vote, type LucideIcon } from "lucide-react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useRef, useState, type ComponentProps, type ComponentType } from "react";
-import { DefaultLink, type LinkComponent } from "@verada/ui/components/varada/shared";
-import { cn } from "@verada/ui/lib/utils";
+import { DefaultLink, type LinkComponent } from "@varada/ui/components/varada/shared";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface BottomTab {
   href: string;

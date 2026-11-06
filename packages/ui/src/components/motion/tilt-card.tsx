@@ -5,8 +5,8 @@
 // lifted off the desk, touch skips it, and reduced motion leaves a flat card.
 import { motion, useMotionTemplate, useMotionValue, useSpring, useTransform } from "motion/react";
 import type { ComponentProps, PointerEvent } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface TiltCardProps extends Omit<ComponentProps<"div">, "onDrag" | "onDragStart" | "onDragEnd" | "onAnimationStart"> {
   /** Largest tilt in degrees. */

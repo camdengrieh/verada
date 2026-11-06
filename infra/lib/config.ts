@@ -2,7 +2,7 @@ import { Node } from "constructs";
 
 export type DbMode = "rds" | "aurora";
 
-export interface VeradaConfig {
+export interface VaradaConfig {
   readonly account: string;
   readonly region: string;
   readonly envName: string;
@@ -130,7 +130,7 @@ export interface IndexerX402Config {
   readonly enabled: boolean;
   /** Validated X402_* variables (non-secret), only when enabled. */
   readonly environment: Readonly<Record<string, string>>;
-  /** Secrets Manager JSON secret (verada/<env>/indexer) holding the CDP keys and the facilitator token. */
+  /** Secrets Manager JSON secret (varada/<env>/indexer) holding the CDP keys and the facilitator token. */
   readonly secretName: string;
   /** Task variable -> field of secretName, only the ones this configuration needs. */
   readonly secretFields: Readonly<Record<string, string>>;
@@ -151,7 +151,7 @@ export const PUBLISHER_CHAIN_ENV = [
   "CURATOR_REGISTRY_ADDRESS",
 ] as const;
 
-/** Publisher task environment variable -> field of the verada/<env>/publisher JSON secret. */
+/** Publisher task environment variable -> field of the varada/<env>/publisher JSON secret. */
 export const PUBLISHER_SECRET_FIELDS = {
   BEE_GATEWAY_AUTH_SECRET: "beeGatewayAuthSecret",
   SWARM_BATCH_ID: "swarmBatchId",
@@ -174,7 +174,7 @@ export const PUBLISHER_FACILITATOR_SECRET_FIELDS = {
 } as const;
 
 /**
- * Indexer task environment variable -> field of the verada/<env>/indexer JSON secret. Referenced only
+ * Indexer task environment variable -> field of the varada/<env>/indexer JSON secret. Referenced only
  * with x402Enabled=true: the CDP keys when Base payments settle through CDP (x402BasePayTo without
  * x402BaseFacilitatorUrl), the token when mainnet payments are on (x402MainnetPayTo). The token must be
  * the publisher secret's x402FacilitatorToken.
@@ -194,7 +194,7 @@ export const INDEXER_X402_PRICE_KEYS = {
   x402MainnetMinPrice: "X402_MAINNET_MIN_PRICE",
 } as const;
 
-/** Bee/gateway task environment variable -> field of the verada/<env>/bee JSON secret. */
+/** Bee/gateway task environment variable -> field of the varada/<env>/bee JSON secret. */
 export const BEE_SECRET_FIELDS = {
   BEE_PASSWORD: "password",
   BEE_BLOCKCHAIN_RPC_ENDPOINT: "gnosisRpcUrl",
@@ -491,7 +491,7 @@ function loadIndexerApi(node: Node, envName: string, isProd: boolean, publisher:
     x402: {
       enabled,
       environment,
-      secretName: str(node, "indexerSecretName") ?? `verada/${envName}/indexer`,
+      secretName: str(node, "indexerSecretName") ?? `varada/${envName}/indexer`,
       secretFields,
     },
   };
@@ -517,7 +517,7 @@ function loadSwarm(node: Node, envName: string, isProd: boolean, allowInsecureHt
   if (postageDepth < 17 || postageDepth > 255) throw new Error('context "swarmPostageDepth" must be between 17 and 255');
   return {
     ...tls,
-    secretName: str(node, "beeSecretName") ?? `verada/${envName}/bee`,
+    secretName: str(node, "beeSecretName") ?? `varada/${envName}/bee`,
     beeImage: image(node, "beeImage", "ethersphere/bee:2.8.3"),
     gatewayImage: image(node, "swarmGatewayImage", "ethersphere/swarm-gateway:0.4.0"),
     beeUid: num(node, "beeUid", 999),
@@ -564,7 +564,7 @@ function loadPublisher(
   }
   return {
     ...tls,
-    secretName: str(node, "publisherSecretName") ?? `verada/${envName}/publisher`,
+    secretName: str(node, "publisherSecretName") ?? `varada/${envName}/publisher`,
     imageTag: str(node, "publisherImageTag") ?? "initial",
     desiredCount: publisherDesiredCount,
     gatewayUrl,
@@ -589,7 +589,7 @@ function loadPublisher(
  * Read deployment configuration from CDK context (-c key=value or cdk.context.json).
  * account and region have no defaults on purpose: nothing is hardcoded in source.
  */
-export function loadConfig(node: Node): VeradaConfig {
+export function loadConfig(node: Node): VaradaConfig {
   const account = str(node, "account") ?? process.env.CDK_DEFAULT_ACCOUNT;
   const region = str(node, "region") ?? process.env.CDK_DEFAULT_REGION;
   if (!account || !/^\d{12}$/.test(account)) {
@@ -654,7 +654,7 @@ export function loadConfig(node: Node): VeradaConfig {
     httpsEnabled: indexerTls.httpsEnabled,
     indexerCorsOrigins,
     indexerCatalogSource: loadCatalogSource(node),
-    rpcSecretName: str(node, "rpcSecretName") ?? `verada/${envName}/eth-rpc-url`,
+    rpcSecretName: str(node, "rpcSecretName") ?? `varada/${envName}/eth-rpc-url`,
     alarmEmail: str(node, "alarmEmail"),
     indexerImageTag: str(node, "indexerImageTag") ?? "initial",
     indexerDesiredCount,

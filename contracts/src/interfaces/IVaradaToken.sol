@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-/// @title IVeradaToken
+/// @title IVaradaToken
 /// @notice Fixed-supply ERC20 (with permit and burn) minted to the factory at creation.
-interface IVeradaToken {
+interface IVaradaToken {
     /// @notice Account that launched the token. Immutable.
     function creator() external view returns (address);
 

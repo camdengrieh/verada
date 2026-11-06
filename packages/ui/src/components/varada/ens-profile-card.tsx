@@ -6,9 +6,9 @@
 import { BadgeCheck, ExternalLink, Hexagon, Star } from "lucide-react";
 import { motion, useReducedMotion, type Variants } from "motion/react";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { CopyButton } from "@verada/ui/components/data/copy-button";
-import { buttonVariants } from "@verada/ui/components/ui/button";
-import { cn } from "@verada/ui/lib/utils";
+import { CopyButton } from "@varada/ui/components/data/copy-button";
+import { buttonVariants } from "@varada/ui/components/ui/button";
+import { cn } from "@varada/ui/lib/utils";
 import { shortenAddress, splitEnsName, textRecordMeta, TEXT_RECORD_ORDER } from "./ens-shared";
 import { HIT_AREA, WASH_FILL, WASH_PIGMENT, type WashTone } from "./shared";
 import { Wash } from "./watercolour";

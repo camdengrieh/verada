@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@verada/ui/components/ui/accordion";
-import { Avatar, AvatarFallback, AvatarGroup } from "@verada/ui/components/ui/avatar";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button } from "@verada/ui/components/ui/button";
-import { Checkbox } from "@verada/ui/components/ui/checkbox";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@varada/ui/components/ui/accordion";
+import { Avatar, AvatarFallback, AvatarGroup } from "@varada/ui/components/ui/avatar";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button } from "@varada/ui/components/ui/button";
+import { Checkbox } from "@varada/ui/components/ui/checkbox";
 import {
   Command,
   CommandDialog,
@@ -16,8 +16,8 @@ import {
   CommandList,
   CommandSeparator,
   useCommandShortcut,
-} from "@verada/ui/components/ui/command";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@verada/ui/components/ui/dialog";
+} from "@varada/ui/components/ui/command";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@varada/ui/components/ui/dialog";
 import {
   Drawer,
   DrawerBody,
@@ -28,7 +28,7 @@ import {
   DrawerHeader,
   DrawerTitle,
   DrawerTrigger,
-} from "@verada/ui/components/ui/drawer";
+} from "@varada/ui/components/ui/drawer";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -43,9 +43,9 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
-} from "@verada/ui/components/ui/dropdown-menu";
-import { Field, FieldControl, FieldError, FieldHint, FieldLabel, FieldLegend, FieldSet } from "@verada/ui/components/ui/field";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@verada/ui/components/ui/hover-card";
+} from "@varada/ui/components/ui/dropdown-menu";
+import { Field, FieldControl, FieldError, FieldHint, FieldLabel, FieldLegend, FieldSet } from "@varada/ui/components/ui/field";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@varada/ui/components/ui/hover-card";
 import {
   ArrowUpRight,
   Check,
@@ -65,26 +65,26 @@ import {
   User,
   Vote,
   Wallet,
-} from "@verada/ui/components/ui/icons";
-import { Input, InputAddon, InputGroup } from "@verada/ui/components/ui/input";
-import { Kbd, KbdGroup } from "@verada/ui/components/ui/kbd";
-import { Label } from "@verada/ui/components/ui/label";
-import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@verada/ui/components/ui/popover";
-import { Progress } from "@verada/ui/components/ui/progress";
-import { RadioCard, RadioGroup, RadioGroupItem } from "@verada/ui/components/ui/radio-group";
-import { ScrollArea } from "@verada/ui/components/ui/scroll-area";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@verada/ui/components/ui/select";
-import { Separator } from "@verada/ui/components/ui/separator";
-import { Sheet, SheetBody, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@verada/ui/components/ui/sheet";
-import { Skeleton } from "@verada/ui/components/ui/skeleton";
-import { Slider } from "@verada/ui/components/ui/slider";
-import { Switch } from "@verada/ui/components/ui/switch";
-import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@verada/ui/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@verada/ui/components/ui/tabs";
-import { Textarea } from "@verada/ui/components/ui/textarea";
-import { Toaster, toast } from "@verada/ui/components/ui/toaster";
-import { ToggleGroup, ToggleGroupItem } from "@verada/ui/components/ui/toggle-group";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@verada/ui/components/ui/tooltip";
+} from "@varada/ui/components/ui/icons";
+import { Input, InputAddon, InputGroup } from "@varada/ui/components/ui/input";
+import { Kbd, KbdGroup } from "@varada/ui/components/ui/kbd";
+import { Label } from "@varada/ui/components/ui/label";
+import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from "@varada/ui/components/ui/popover";
+import { Progress } from "@varada/ui/components/ui/progress";
+import { RadioCard, RadioGroup, RadioGroupItem } from "@varada/ui/components/ui/radio-group";
+import { ScrollArea } from "@varada/ui/components/ui/scroll-area";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@varada/ui/components/ui/select";
+import { Separator } from "@varada/ui/components/ui/separator";
+import { Sheet, SheetBody, SheetClose, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle, SheetTrigger } from "@varada/ui/components/ui/sheet";
+import { Skeleton } from "@varada/ui/components/ui/skeleton";
+import { Slider } from "@varada/ui/components/ui/slider";
+import { Switch } from "@varada/ui/components/ui/switch";
+import { Table, TableBody, TableCaption, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@varada/ui/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@varada/ui/components/ui/tabs";
+import { Textarea } from "@varada/ui/components/ui/textarea";
+import { Toaster, toast } from "@varada/ui/components/ui/toaster";
+import { ToggleGroup, ToggleGroupItem } from "@varada/ui/components/ui/toggle-group";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@varada/ui/components/ui/tooltip";
 import { GallerySection, Specimen } from "../section";
 
 /* Sample values only. */

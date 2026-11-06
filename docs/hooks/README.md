@@ -38,7 +38,7 @@ not depend on the order of the features. Every feature also ships as a minimal d
 example, so a single feature can be used as is.
 
 For a production protocol rebuilt on these features, see the case study in
-[Verada.md](Verada.md).
+[Varada.md](Varada.md).
 
 ## The hooks
 
@@ -132,7 +132,7 @@ besides v4 core (and OpenZeppelin for the examples).
 ### Option A: forge install
 
 ```sh
-forge install camdengrieh/verada@<commit-or-tag>   # pin the ref you reviewed
+forge install camdengrieh/varada@<commit-or-tag>   # pin the ref you reviewed
 ```
 
 The hooks live in a subfolder of this monorepo, so add remappings yourself (in `foundry.toml` or
@@ -140,9 +140,9 @@ The hooks live in a subfolder of this monorepo, so add remappings yourself (in `
 
 ```toml
 remappings = [
-  "v4-hooks/=lib/verada/contracts/src/hooks/",
-  "v4-hooks-script/=lib/verada/contracts/script/",            # HookMiner
-  "v4-core/=lib/v4-core/src/",                                  # or lib/verada/contracts/lib/v4-core/src/
+  "v4-hooks/=lib/varada/contracts/src/hooks/",
+  "v4-hooks-script/=lib/varada/contracts/script/",            # HookMiner
+  "v4-core/=lib/v4-core/src/",                                  # or lib/varada/contracts/lib/v4-core/src/
   "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/", # examples only
 ]
 ```
@@ -154,8 +154,8 @@ import {HookMiner} from "v4-hooks-script/HookMiner.sol";
 ```
 
 If you do not have v4 core yet, the nested copy works: `forge install` fetches this repo's
-submodules, so `lib/verada/contracts/lib/v4-core/src/` and
-`lib/verada/contracts/lib/openzeppelin-contracts/contracts/` exist after the install. This exact
+submodules, so `lib/varada/contracts/lib/v4-core/src/` and
+`lib/varada/contracts/lib/openzeppelin-contracts/contracts/` exist after the install. This exact
 remapping set is what the compose tutorial was compiled and tested with.
 
 Compiler settings: `solc 0.8.26` (sources use `^0.8.26`), `evm_version = "cancun"` (transient
@@ -166,8 +166,8 @@ storage for the lock). `via_ir` is not required.
 Works with a private repository, a download of the sources or a review copy:
 
 ```sh
-cp -R verada/contracts/src/hooks        my-project/src/hooks
-cp    verada/contracts/script/HookMiner.sol my-project/script/   # optional, the address miner
+cp -R varada/contracts/src/hooks        my-project/src/hooks
+cp    varada/contracts/script/HookMiner.sol my-project/script/   # optional, the address miner
 cd my-project
 forge install uniswap/v4-core@bea7f6d1c11cd5dc4f0d5151ffa37a1c239feee6   # the tested commit
 forge install OpenZeppelin/openzeppelin-contracts                          # examples only
@@ -258,5 +258,5 @@ unaudited code that holds value.
 - [Composition.md](Composition.md): composition reference on `LaunchpadHook`, protocol glue,
   deployment checklist
 - [BondingCurveHook.md](BondingCurveHook.md): the custom curve reference and a numeric walkthrough
-- [Verada.md](Verada.md): case study, a production launchpad's two hooks rebuilt on the library
+- [Varada.md](Varada.md): case study, a production launchpad's two hooks rebuilt on the library
 - [DESIGN.md](DESIGN.md): the design spec: composition rules and every module's API

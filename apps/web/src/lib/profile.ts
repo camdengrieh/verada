@@ -1,4 +1,4 @@
-import { inFocus, isSwarmReference, MAX_BALLOT_OPTIONS, MIN_BALLOT_OPTIONS, PINNED_MAX, swarmContenthash } from "@verada/sdk";
+import { inFocus, isSwarmReference, MAX_BALLOT_OPTIONS, MIN_BALLOT_OPTIONS, PINNED_MAX, swarmContenthash } from "@varada/sdk";
 import { isHex, type Hex } from "viem";
 
 /**

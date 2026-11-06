@@ -11,9 +11,9 @@ import {
   type KeyboardEvent,
   type ReactNode,
 } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { StepTransition, type StepDirection } from "@verada/ui/components/motion/step-transition";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { StepTransition, type StepDirection } from "@varada/ui/components/motion/step-transition";
+import { cn } from "@varada/ui/lib/utils";
 
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 

@@ -6,13 +6,13 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {ERC20TimestampVotes} from "../src/ERC20TimestampVotes.sol";
-import {VeradaToken} from "../src/VeradaToken.sol";
+import {VaradaToken} from "../src/VaradaToken.sol";
 
-contract VeradaTokenTest is Test {
+contract VaradaTokenTest is Test {
     uint256 internal constant SUPPLY = 100_000_000_000e18;
     uint256 internal constant T0 = 1_750_000_000;
 
-    VeradaToken internal token;
+    VaradaToken internal token;
     address internal creator = makeAddr("creator");
     address internal factory = makeAddr("factory");
     address internal alice = makeAddr("alice");
@@ -20,7 +20,7 @@ contract VeradaTokenTest is Test {
 
     function setUp() public {
         vm.warp(T0);
-        token = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", creator, factory);
+        token = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
     }
 
     function _give(address to, uint256 amount) internal {
@@ -31,7 +31,7 @@ contract VeradaTokenTest is Test {
     // ---- ERC20 / metadata
 
     function test_metadataAndSupply() public view {
-        assertEq(token.name(), "Verada Test");
+        assertEq(token.name(), "Varada Test");
         assertEq(token.symbol(), "VTEST");
         assertEq(token.decimals(), 18);
         assertEq(token.creator(), creator);
@@ -319,7 +319,7 @@ contract VeradaTokenTest is Test {
         bytes32 digest = _permitDigest(owner, address(1), 1, 0, deadline);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
         vm.expectRevert(
-            abi.encodeWithSelector(VeradaToken.ERC2612ExpiredSignature.selector, deadline)
+            abi.encodeWithSelector(VaradaToken.ERC2612ExpiredSignature.selector, deadline)
         );
         token.permit(owner, address(1), 1, deadline, v, r, s);
     }
@@ -331,7 +331,7 @@ contract VeradaTokenTest is Test {
         bytes32 digest = _permitDigest(owner, address(1), 1, 0, deadline);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, digest);
         vm.expectRevert(
-            abi.encodeWithSelector(VeradaToken.ERC2612InvalidSigner.selector, other, owner)
+            abi.encodeWithSelector(VaradaToken.ERC2612InvalidSigner.selector, other, owner)
         );
         token.permit(owner, address(1), 1, deadline, v, r, s);
     }

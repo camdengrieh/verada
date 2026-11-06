@@ -15,7 +15,7 @@ export const BURN_OWNER: Address = "0x000000000000000000000000000000000000dEaD";
  * Immutable launch facts of one token. Written once, `readonly` + `permissionlessExtension`,
  * then owned by {@link BURN_OWNER}. Anyone may extend its lifetime; nobody may edit it.
  */
-export const TokenCore = defineSchema("verada.token", {
+export const TokenCore = defineSchema("varada.token", {
   token: addr().indexed(),
   chainId: u64().indexed(),
   poolId: str().indexed(),
@@ -40,7 +40,7 @@ export const TokenCore = defineSchema("verada.token", {
  * Mutable profile of one token (links, description, logo, site). Owned by the platform account,
  * which patches it as the on-chain records change. `core` points at the token's {@link TokenCore}.
  */
-export const TokenProfile = defineSchema("verada.token-profile", {
+export const TokenProfile = defineSchema("varada.token-profile", {
   core: key().indexed(),
   token: addr().indexed(),
   chainId: u64().indexed(),
@@ -58,7 +58,7 @@ export const TokenProfile = defineSchema("verada.token-profile", {
 });
 
 /** One allowlisted cause, mirrored from the on-chain cause registry. Owned by the platform. */
-export const Cause = defineSchema("verada.cause", {
+export const Cause = defineSchema("varada.cause", {
   causeId: str().indexed(),
   orgId: str().indexed(),
   ein: str().optional(),

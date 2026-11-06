@@ -1,6 +1,6 @@
 // shadcn/ui new-york, Direction A styling
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Plain table parts. The wrapper scrolls sideways on narrow screens. Use `className="num text-right"` on numeric cells.

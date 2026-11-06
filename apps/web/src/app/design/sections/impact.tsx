@@ -1,15 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { CauseLeaderboard, causeEntry, type LeaderboardEntry } from "@verada/ui/components/varada/cause-leaderboard";
-import type { CauseName } from "@verada/ui/components/varada/cause-icon";
-import { DonationGoal } from "@verada/ui/components/varada/donation-goal";
-import { DonationTimeline, type Donation } from "@verada/ui/components/varada/donation-timeline";
-import { ImpactBreakdown, type ImpactItem } from "@verada/ui/components/varada/impact-breakdown";
-import { PaintedImage } from "@verada/ui/components/varada/painted-image";
-import { PoolMeter } from "@verada/ui/components/varada/pool-meter";
-import { RaisedCounter } from "@verada/ui/components/varada/raised-counter";
+import { Button } from "@varada/ui/components/ui/button";
+import { CauseLeaderboard, causeEntry, type LeaderboardEntry } from "@varada/ui/components/varada/cause-leaderboard";
+import type { CauseName } from "@varada/ui/components/varada/cause-icon";
+import { DonationGoal } from "@varada/ui/components/varada/donation-goal";
+import { DonationTimeline, type Donation } from "@varada/ui/components/varada/donation-timeline";
+import { ImpactBreakdown, type ImpactItem } from "@varada/ui/components/varada/impact-breakdown";
+import { PaintedImage } from "@varada/ui/components/varada/painted-image";
+import { PoolMeter } from "@varada/ui/components/varada/pool-meter";
+import { RaisedCounter } from "@varada/ui/components/varada/raised-counter";
 import { ASSETS } from "@/lib/assets.generated";
 import { GallerySection, Specimen } from "../section";
 

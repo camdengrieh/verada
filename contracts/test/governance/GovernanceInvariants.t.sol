@@ -7,7 +7,7 @@ import {Test} from "forge-std/Test.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
 import {TakeoverGovernor} from "../../src/TakeoverGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ITakeoverGovernor} from "../../src/interfaces/ITakeoverGovernor.sol";
@@ -17,10 +17,10 @@ import {MockEndaomentRegistry, MockOrgFactory, MockUSDC} from "../mocks/Endaomen
 import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
 import {CatalogFixture} from "../utils/CatalogFixture.sol";
 
-/// @dev Drives holders of a real VeradaToken through transfers, epoch ballots, takeover proposals
+/// @dev Drives holders of a real VaradaToken through transfers, epoch ballots, takeover proposals
 ///      and the close/tally/finalize/execute steps, recording what the governors authorized.
 contract GovernanceHandler is BallotLog {
-    VeradaToken public token;
+    VaradaToken public token;
     MockVotingScheme public scheme;
     MockProfileRegistryLite public profiles;
     EpochGovernor public epochGov;
@@ -50,7 +50,7 @@ contract GovernanceHandler is BallotLog {
     uint256 public lastExecutedId;
 
     constructor(
-        VeradaToken token_,
+        VaradaToken token_,
         MockVotingScheme scheme_,
         MockProfileRegistryLite profiles_,
         EpochGovernor epochGov_,
@@ -196,7 +196,7 @@ contract GovernanceInvariants is Test {
     uint256 internal constant WEEK = 7 days;
     uint256 internal constant T0 = 1_750_000_123;
 
-    VeradaToken internal token;
+    VaradaToken internal token;
     MockVotingScheme internal scheme;
     MockProfileRegistryLite internal profiles;
     CauseRegistry internal registry;
@@ -211,7 +211,7 @@ contract GovernanceInvariants is Test {
 
     function setUp() public {
         vm.warp(T0);
-        token = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", makeAddr("creator"), factory);
+        token = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", makeAddr("creator"), factory);
         // Six holders with 1% .. 6% of the supply each; the factory keeps the rest.
         for (uint256 i; i < 6; ++i) {
             address v = makeAddr(string(abi.encodePacked("voter", i)));

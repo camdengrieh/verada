@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import type { Address, Hex } from "viem";
-import { epochGovernorAbi } from "@verada/sdk/abis";
+import { epochGovernorAbi } from "@varada/sdk/abis";
 import { CatalogBrowser } from "@/components/catalog-browser";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { sameAddress, TxStatus, useTx } from "@/components/use-tx";

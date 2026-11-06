@@ -10,10 +10,10 @@ import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import * as servicediscovery from "aws-cdk-lib/aws-servicediscovery";
 import { Construct } from "constructs";
 import { resolveTls } from "./alb-tls";
-import { BEE_SECRET_FIELDS, VeradaConfig } from "./config";
+import { BEE_SECRET_FIELDS, VaradaConfig } from "./config";
 
 export interface SwarmStackProps extends cdk.StackProps {
-  readonly config: VeradaConfig;
+  readonly config: VaradaConfig;
   readonly vpc: ec2.IVpc;
 }
 
@@ -25,11 +25,11 @@ export const BEE_DATA_DIR = "/home/bee/.bee";
 export const BEE_SERVICE_NAME = "bee";
 
 /** Private DNS namespace (a Route53 private zone on the VPC) the Swarm task registers in. */
-export const beeNamespaceName = (envName: string): string => `verada-${envName}.local`;
+export const beeNamespaceName = (envName: string): string => `varada-${envName}.local`;
 
 /** Bee API as reachable from inside the VPC: a stable private DNS name and the task security group. */
 export interface BeeApiEndpoint {
-  /** e.g. bee.verada-dev.local */
+  /** e.g. bee.varada-dev.local */
   readonly hostname: string;
   readonly port: number;
   /** http://<hostname>:<port> (plain HTTP inside the VPC; Bee has no TLS listener). */
@@ -42,7 +42,7 @@ export interface BeeApiEndpoint {
  * One Bee light node plus the Swarm gateway (ethersphere/swarm-gateway) in a single Fargate task.
  * The gateway is the only thing behind the public ALB. Bee's API binds every task interface: the
  * gateway reaches it over loopback (containers in an awsvpc task share one network namespace), and
- * the publisher reaches it at bee.verada-<env>.local:1633 (Cloud Map A record) for postage batch
+ * the publisher reaches it at bee.varada-<env>.local:1633 (Cloud Map A record) for postage batch
  * status, which the gateway does not proxy. The task security group admits 1633 from the publisher's
  * security group only (that rule lives in the Publisher stack); nothing public reaches it.
  * Bee's data directory (node key, chequebook state, local store) lives on EFS, so there is exactly
@@ -196,7 +196,7 @@ export class SwarmStack extends cdk.Stack {
     this.namespace = new servicediscovery.PrivateDnsNamespace(this, "Namespace", {
       name: beeNamespaceName(config.envName),
       vpc,
-      description: `Verada ${config.envName} internal service names`,
+      description: `Varada ${config.envName} internal service names`,
     });
 
     const https = sw.httpsEnabled;

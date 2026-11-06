@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { AGENT_CATEGORIES, REGIONS } from "@verada/sdk";
+import { AGENT_CATEGORIES, REGIONS } from "@varada/sdk";
 
 // The pages only pick params and hand them to the client component; keep it out of this test.
 vi.mock("@/components/agent-detail", () => ({ AgentDetail: () => null }));

@@ -1,6 +1,6 @@
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
-import type { BuiltCatalog } from "@verada/cause-catalog";
-import { PICK_LEAF_TYPES, agentBySlug, bucketId, regionBySlug } from "@verada/sdk";
+import type { BuiltCatalog } from "@varada/cause-catalog";
+import { PICK_LEAF_TYPES, agentBySlug, bucketId, regionBySlug } from "@varada/sdk";
 import { keccak256, toHex, type Hex } from "viem";
 import type { Report } from "./report.js";
 

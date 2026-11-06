@@ -7,9 +7,9 @@
 import { X } from "lucide-react";
 import type { ComponentProps } from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { PaperGrain, Wash } from "@verada/ui/components/varada/watercolour";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { PaperGrain, Wash } from "@varada/ui/components/varada/watercolour";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Mobile-first bottom sheet: drag the handle (or swipe) down to dismiss; Escape also closes it.

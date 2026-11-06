@@ -5,8 +5,8 @@
 // full sentence is always in the accessibility tree as plain text.
 import { motion, useInView, type Variants } from "motion/react";
 import { createElement, Fragment, useRef, type ElementType } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface TextRevealProps {
   text: string;

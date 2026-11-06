@@ -2,17 +2,17 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MotionGlobalConfig } from "motion/react";
 import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { BottomTabBar, varadaTabs } from "@verada/ui/components/mobile/bottom-tab-bar";
-import { FilterButton, FilterSheet, countFilters, type FilterGroup, type FilterValue } from "@verada/ui/components/mobile/filter-sheet";
-import { MobileHeader } from "@verada/ui/components/mobile/mobile-header";
-import { MobilePairPicker } from "@verada/ui/components/mobile/mobile-pair-picker";
-import { MobileTradeSheet, type MobileTradeSheetProps } from "@verada/ui/components/mobile/mobile-trade-sheet";
-import { MobileVoteSheet } from "@verada/ui/components/mobile/mobile-vote-sheet";
-import { PullToRefresh, resistPull } from "@verada/ui/components/mobile/pull-to-refresh";
-import { StickyActionBar } from "@verada/ui/components/mobile/sticky-action-bar";
-import { TokenSwipeRow } from "@verada/ui/components/mobile/swipe-row";
-import { TokenCarousel } from "@verada/ui/components/mobile/token-carousel";
-import { defaultBuyPresets, isStablecoin } from "@verada/ui/components/varada/trade-panel";
+import { BottomTabBar, varadaTabs } from "@varada/ui/components/mobile/bottom-tab-bar";
+import { FilterButton, FilterSheet, countFilters, type FilterGroup, type FilterValue } from "@varada/ui/components/mobile/filter-sheet";
+import { MobileHeader } from "@varada/ui/components/mobile/mobile-header";
+import { MobilePairPicker } from "@varada/ui/components/mobile/mobile-pair-picker";
+import { MobileTradeSheet, type MobileTradeSheetProps } from "@varada/ui/components/mobile/mobile-trade-sheet";
+import { MobileVoteSheet } from "@varada/ui/components/mobile/mobile-vote-sheet";
+import { PullToRefresh, resistPull } from "@varada/ui/components/mobile/pull-to-refresh";
+import { StickyActionBar } from "@varada/ui/components/mobile/sticky-action-bar";
+import { TokenSwipeRow } from "@varada/ui/components/mobile/swipe-row";
+import { TokenCarousel } from "@varada/ui/components/mobile/token-carousel";
+import { defaultBuyPresets, isStablecoin } from "@varada/ui/components/varada/trade-panel";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {

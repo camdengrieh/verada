@@ -1,11 +1,11 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MotionGlobalConfig } from "motion/react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { BuySellPressure, buyShare, pressureVerdict } from "@verada/ui/components/varada/buy-sell-pressure";
-import { HolderDistribution, holderSegments } from "@verada/ui/components/varada/holder-distribution";
-import { KpiTile } from "@verada/ui/components/varada/kpi-tile";
-import { TradingMetricsBar, priceFormat, tradingMetrics } from "@verada/ui/components/varada/trading-metrics-bar";
-import { VolumeBars, peakIndex } from "@verada/ui/components/varada/volume-bars";
+import { BuySellPressure, buyShare, pressureVerdict } from "@varada/ui/components/varada/buy-sell-pressure";
+import { HolderDistribution, holderSegments } from "@varada/ui/components/varada/holder-distribution";
+import { KpiTile } from "@varada/ui/components/varada/kpi-tile";
+import { TradingMetricsBar, priceFormat, tradingMetrics } from "@varada/ui/components/varada/trading-metrics-bar";
+import { VolumeBars, peakIndex } from "@varada/ui/components/varada/volume-bars";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {

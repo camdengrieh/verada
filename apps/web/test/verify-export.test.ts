@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { AGENT_CATEGORIES, REGIONS } from "@verada/sdk";
+import { AGENT_CATEGORIES, REGIONS } from "@varada/sdk";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 // @ts-expect-error plain ESM script without types
 import { expandRoute, expectedAgents, routes, verify } from "../scripts/verify-export.mjs";

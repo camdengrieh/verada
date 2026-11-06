@@ -5,7 +5,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { Progress as ProgressPrimitive } from "radix-ui";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface ProgressProps extends Omit<ComponentProps<typeof ProgressPrimitive.Root>, "value" | "children"> {
   /** Current value, or `null` while the amount of work is unknown. */

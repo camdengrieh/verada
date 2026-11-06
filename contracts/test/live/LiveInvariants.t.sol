@@ -15,12 +15,12 @@ import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaLiveHook} from "../../src/VaradaLiveHook.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockEndaomentRegistry} from "../mocks/EndaomentMocks.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
@@ -33,7 +33,7 @@ struct LiveWorld {
     IPoolManager manager;
     PoolSwapTest swapRouter;
     SyncingRouter syncRouter;
-    VeradaLiveHook hook;
+    VaradaLiveHook hook;
     LiveDonationVault vault;
     RotationGovernor gov;
     MockVotingScheme scheme;
@@ -55,7 +55,7 @@ contract LiveHandler is Test {
     using PoolIdLibrary for PoolKey;
 
     LiveWorld internal w;
-    VeradaToken[] internal tokens;
+    VaradaToken[] internal tokens;
     PoolKey[] internal keys;
     address[] internal quotes;
     bytes32[] internal causeIds;
@@ -80,7 +80,7 @@ contract LiveHandler is Test {
 
     constructor(
         LiveWorld memory world,
-        VeradaToken[] memory tokens_,
+        VaradaToken[] memory tokens_,
         PoolKey[] memory keys_,
         address[] memory quotes_,
         bytes32[] memory causes_,
@@ -125,7 +125,7 @@ contract LiveHandler is Test {
             Vm.Log memory l = logs[i];
             if (l.topics.length == 0) continue;
             bytes32 t0 = l.topics[0];
-            if (l.emitter == address(w.hook) && t0 == IVeradaLiveHook.FeeTaken.selector) {
+            if (l.emitter == address(w.hook) && t0 == IVaradaLiveHook.FeeTaken.selector) {
                 (, uint256 f,, bool converted,) =
                     abi.decode(l.data, (address, uint256, uint256, bool, bytes4));
                 feeTaken[token] += f;
@@ -297,9 +297,9 @@ contract LiveInvariantsTest is LiveBase {
 
     function setUp() public {
         _liveSetUp();
-        (VeradaToken tq, PoolKey memory kq) =
+        (VaradaToken tq, PoolKey memory kq) =
             _launch(address(quote), 0, RotationPeriod.OneHour, 0, 0);
-        (VeradaToken tw, PoolKey memory kw) =
+        (VaradaToken tw, PoolKey memory kw) =
             _launch(address(weth), 5e6, RotationPeriod.OneHour, 2000, 600);
         _fundTrader(trader, tq);
         tw.transfer(trader, 1e27);
@@ -315,7 +315,7 @@ contract LiveInvariantsTest is LiveBase {
         vm.stopPrank();
         AdversarialOrg org = _makeAdversarial(orgA);
 
-        VeradaToken[] memory ts = new VeradaToken[](2);
+        VaradaToken[] memory ts = new VaradaToken[](2);
         ts[0] = tq;
         ts[1] = tw;
         PoolKey[] memory ks = new PoolKey[](2);

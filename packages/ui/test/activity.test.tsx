@@ -1,10 +1,10 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MotionGlobalConfig } from "motion/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { MobileTradesSheet } from "@verada/ui/components/mobile/mobile-trades-sheet";
-import { bucketTakeaway, HolderInsights, holderVerdict } from "@verada/ui/components/varada/holder-insights";
-import { HoldersTable, rankHolders, type HolderItem } from "@verada/ui/components/varada/holders-table";
-import { filterTrades, formatAgo, formatTokenAmount, formatUsd, TradeFeed, TradeTicker, tradeSummary, type TradeItem } from "@verada/ui/components/varada/trade-feed";
+import { MobileTradesSheet } from "@varada/ui/components/mobile/mobile-trades-sheet";
+import { bucketTakeaway, HolderInsights, holderVerdict } from "@varada/ui/components/varada/holder-insights";
+import { HoldersTable, rankHolders, type HolderItem } from "@varada/ui/components/varada/holders-table";
+import { filterTrades, formatAgo, formatTokenAmount, formatUsd, TradeFeed, TradeTicker, tradeSummary, type TradeItem } from "@varada/ui/components/varada/trade-feed";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {

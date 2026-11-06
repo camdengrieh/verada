@@ -4,7 +4,7 @@ import {
   getMainnetDeployment,
   toOrgId,
   type OrgSearchListing,
-} from "@verada/endaoment-client";
+} from "@varada/endaoment-client";
 
 /** Bounded TTL cache (insertion-ordered eviction) for upstream responses. */
 export class BoundedTtlCache implements Cache {

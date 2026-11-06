@@ -1,14 +1,14 @@
 "use client";
 
-import { Coins, HandHeart, User } from "@verada/ui/components/ui/icons";
+import { Coins, HandHeart, User } from "@varada/ui/components/ui/icons";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { BuySellPressure, type PressureWindow } from "@verada/ui/components/varada/buy-sell-pressure";
-import { HolderDistribution, holderSegments } from "@verada/ui/components/varada/holder-distribution";
-import { KpiTile, type KpiPeriod } from "@verada/ui/components/varada/kpi-tile";
-import { PairChip } from "@verada/ui/components/varada/pair-chip";
-import { TradingMetricsBar, tradingMetrics, type TradingMetricsInput } from "@verada/ui/components/varada/trading-metrics-bar";
-import { VolumeBars, type VolumeBar } from "@verada/ui/components/varada/volume-bars";
+import { Button } from "@varada/ui/components/ui/button";
+import { BuySellPressure, type PressureWindow } from "@varada/ui/components/varada/buy-sell-pressure";
+import { HolderDistribution, holderSegments } from "@varada/ui/components/varada/holder-distribution";
+import { KpiTile, type KpiPeriod } from "@varada/ui/components/varada/kpi-tile";
+import { PairChip } from "@varada/ui/components/varada/pair-chip";
+import { TradingMetricsBar, tradingMetrics, type TradingMetricsInput } from "@varada/ui/components/varada/trading-metrics-bar";
+import { VolumeBars, type VolumeBar } from "@varada/ui/components/varada/volume-bars";
 import { siteBase } from "@/lib/base";
 import { GallerySection } from "../section";
 import { Demo, Frame, useQuoteLogo } from "./markets";

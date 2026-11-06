@@ -34,7 +34,7 @@ export function oneClawSigner(o: OneClawOptions, client = createClient({ baseUrl
   return {
     async address() {
       if (from) return from;
-      const r = unwrap(await client.agents.sign(o.agentId, { intent_type: "personal_sign", chain, message: "verada-curator address probe" }), "sign");
+      const r = unwrap(await client.agents.sign(o.agentId, { intent_type: "personal_sign", chain, message: "varada-curator address probe" }), "sign");
       from = r.from as Address;
       return from;
     },

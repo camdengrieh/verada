@@ -20,7 +20,7 @@ import {FeeConversionHook} from "./hooks/conversion/FeeConversionHook.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
 import {ILiveDonationVault} from "./interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor} from "./interfaces/IRotationGovernor.sol";
-import {IVeradaLiveHook} from "./interfaces/IVeradaLiveHook.sol";
+import {IVaradaLiveHook} from "./interfaces/IVaradaLiveHook.sol";
 import {FeeScheduleLib} from "./libraries/FeeScheduleLib.sol";
 
 /// @dev Registry getter of the fee consolidator (not part of `IFeeConsolidator`).
@@ -28,11 +28,11 @@ interface IConsolidatorRoutes {
     function quoteRegistry() external view returns (IConsolidatorRegistry);
 }
 
-/// @title VeradaLiveHook
+/// @title VaradaLiveHook
 /// @notice Uniswap v4 hook of live-donation tokens: every swap pays a fee in the quote currency,
 ///         which is converted to USDC inside the same swap and credited to the cause active at
 ///         that moment. Nothing about the conversion or the donation can revert a trader's swap.
-/// @dev Composition. This hook is the generic hooks of `src/hooks` plus Verada glue:
+/// @dev Composition. This hook is the generic hooks of `src/hooks` plus Varada glue:
 ///
 ///       | Feature                                   | Generic hook                          |
 ///       | ----------------------------------------- | ------------------------------------- |
@@ -47,7 +47,7 @@ interface IConsolidatorRoutes {
 ///      and on the gross quote flow: when the quote is the specified currency it is taken in
 ///      `beforeSwap`, and an exact-output fee is grossed up (`feeGrossUp`). `SwapFeeHook` charges
 ///      the unspecified currency on the net amount. The external ABI is the one of
-///      `IVeradaLiveHook` (unchanged); the generic hooks add their own entry points and views
+///      `IVaradaLiveHook` (unchanged); the generic hooks add their own entry points and views
 ///      (`totalHeld` is `FeeConversionHook.totalHeld`, same selector).
 ///
 ///      Fee model. The pool's LP fee is overridden to 0 (the locked position earns nothing). The
@@ -103,7 +103,7 @@ interface IConsolidatorRoutes {
 ///
 ///      The hook has no owner. Its address must encode the permission flags (see
 ///      `getHookPermissions`); mine a salt with the HookMiner library before deploying.
-contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
+contract VaradaLiveHook is PoolInitGateHook, FeeConversionHook {
     using SafeCast for uint256;
     using TransientStateLibrary for IPoolManager;
 
@@ -131,7 +131,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         PRE_TRY_GAS + (INLINE_GAS_BUDGET * 64) / 63 + FALLBACK_RESERVE;
 
     /// @dev Transient conversion context: slot = token | rotation << 160, slot + 1 = cause.
-    bytes32 internal constant CTX_SLOT = bytes32(uint256(keccak256("verada.live.hook.ctx")) - 1);
+    bytes32 internal constant CTX_SLOT = bytes32(uint256(keccak256("varada.live.hook.ctx")) - 1);
 
     /// @notice The factory, the only account allowed to configure tokens and create pools.
     address public immutable factory;
@@ -166,7 +166,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
     }
 
     /// @param poolManager_ Uniswap v4 pool manager.
-    /// @param factory_ The Verada factory.
+    /// @param factory_ The Varada factory.
     /// @param consolidator_ Fee consolidator (routes and price guards); must list this hook as a
     ///        source before conversions succeed.
     /// @param rotationGovernor_ Rotation governor (active cause).
@@ -184,7 +184,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
             ))
     {
         IConsolidatorRegistry registry = IConsolidatorRoutes(address(consolidator_)).quoteRegistry();
-        if (address(registry) == address(0)) revert IVeradaLiveHook.ZeroAddress();
+        if (address(registry) == address(0)) revert IVaradaLiveHook.ZeroAddress();
 
         factory = factory_;
         consolidator = consolidator_;
@@ -199,10 +199,10 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
     // ------------------------------------------------------------------ configuration
 
     /// @notice Registers the fee configuration of `token`. Factory only, once.
-    function configureToken(address token, IVeradaLiveHook.LiveFeeConfig calldata cfg) external {
-        if (msg.sender != factory) revert IVeradaLiveHook.NotFactory();
+    function configureToken(address token, IVaradaLiveHook.LiveFeeConfig calldata cfg) external {
+        if (msg.sender != factory) revert IVaradaLiveHook.NotFactory();
         TokenState storage t = _tokens[token];
-        if (t.configured) revert IVeradaLiveHook.AlreadyConfigured(token);
+        if (t.configured) revert IVaradaLiveHook.AlreadyConfigured(token);
         FeeScheduleLib.validate(cfg.baseFeeBps, cfg.launchSurchargeBps, cfg.surchargeDecaySeconds);
         // forge-lint: disable-next-line(unsafe-typecast)
         uint40 launch = cfg.launchTimestamp == 0 ? uint40(block.timestamp) : cfg.launchTimestamp;
@@ -211,7 +211,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         t.surchargeDecaySeconds = cfg.surchargeDecaySeconds;
         t.launchTimestamp = launch;
         t.configured = true;
-        emit IVeradaLiveHook.TokenConfigured(
+        emit IVaradaLiveHook.TokenConfigured(
             token, cfg.baseFeeBps, cfg.launchSurchargeBps, cfg.surchargeDecaySeconds, launch
         );
     }
@@ -245,7 +245,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
 
     /// @dev Only the factory creates live pools. Every rejected pool reverts `InvalidPool`.
     function _isAllowedInitializer(address sender) internal view override returns (bool) {
-        if (sender != factory) revert IVeradaLiveHook.InvalidPool();
+        if (sender != factory) revert IVaradaLiveHook.InvalidPool();
         return true;
     }
 
@@ -257,13 +257,13 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         if (
             address(key.hooks) != address(this) || !LPFeeLibrary.isDynamicFee(key.fee)
                 || _tokens[token].initialized
-        ) revert IVeradaLiveHook.InvalidPool();
+        ) revert IVaradaLiveHook.InvalidPool();
         address quote = _quoteOf(key, token);
         if (
             quote == usdc || !quoteRegistry.isAllowed(quote)
                 || quoteRegistry.routeOf(quote).length == 0
-        ) revert IVeradaLiveHook.QuoteNotRoutable(quote);
-        if (!_vault.isRegistered(token)) revert IVeradaLiveHook.TokenNotRegistered(token);
+        ) revert IVaradaLiveHook.QuoteNotRoutable(quote);
+        if (!_vault.isRegistered(token)) revert IVaradaLiveHook.TokenNotRegistered(token);
     }
 
     /// @dev Records the pool after the gate accepted it.
@@ -278,7 +278,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         TokenState storage t = _tokens[token];
         t.initialized = true;
         t.quote = quote;
-        emit IVeradaLiveHook.PoolRegistered(token, quote, PoolId.unwrap(key.toId()));
+        emit IVaradaLiveHook.PoolRegistered(token, quote, PoolId.unwrap(key.toId()));
     }
 
     // ------------------------------------------------------------------ swap
@@ -290,7 +290,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         bytes calldata hookData
     ) internal override returns (bytes4 selector, BeforeSwapDelta delta, uint24 lpFee) {
         address token = _tokenOf(key);
-        if (_hookLockState() != LOCK_IDLE) revert IVeradaLiveHook.SwapReentered();
+        if (_hookLockState() != LOCK_IDLE) revert IVaradaLiveHook.SwapReentered();
         _setHookLockState(LOCK_SWAP);
         (selector, delta, lpFee) = super._beforeSwap(sender, key, params, hookData);
 
@@ -325,12 +325,12 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
             if (sc.exactIn) {
                 // The pool must have consumed the whole input net of the fee.
                 if (got >= 0 || uint256(uint128(-got)) != a - f) {
-                    revert IVeradaLiveHook.PartialFillNotSupported(
+                    revert IVaradaLiveHook.PartialFillNotSupported(
                         got >= 0 ? 0 : uint256(uint128(-got)), a - f
                     );
                 }
             } else if (got <= 0 || uint256(uint128(got)) != a + f) {
-                revert IVeradaLiveHook.PartialFillNotSupported(
+                revert IVaradaLiveHook.PartialFillNotSupported(
                     got <= 0 ? 0 : uint256(uint128(got)), a + f
                 );
             }
@@ -362,7 +362,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         override
         returns (bytes4)
     {
-        revert IVeradaLiveHook.DonateNotAllowed();
+        revert IVaradaLiveHook.DonateNotAllowed();
     }
 
     // ------------------------------------------------------------------ conversion glue
@@ -379,7 +379,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
             _convertOrHold(_bucketOf(token, causeId), Currency.wrap(quote), f);
         // A held fee was reported by `_onFeeHeld`.
         if (converted) {
-            emit IVeradaLiveHook.FeeTaken(token, causeId, rotation, quote, f, out, true, bytes4(0));
+            emit IVaradaLiveHook.FeeTaken(token, causeId, rotation, quote, f, out, true, bytes4(0));
         }
         _clearCtx();
     }
@@ -428,7 +428,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         override
     {
         (address token, bytes32 causeId, uint64 rotation) = _ctx();
-        emit IVeradaLiveHook.FeeTaken(
+        emit IVaradaLiveHook.FeeTaken(
             token, causeId, rotation, Currency.unwrap(currency), amount, 0, false, reason
         );
     }
@@ -478,16 +478,16 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         external
         returns (uint256 usdcOut)
     {
-        if (_hookLockState() != LOCK_IDLE) revert IVeradaLiveHook.Busy();
+        if (_hookLockState() != LOCK_IDLE) revert IVaradaLiveHook.Busy();
         if (poolManager.isUnlocked()) revert PoolManagerBusy();
-        if (amount == 0) revert IVeradaLiveHook.NothingHeld();
+        if (amount == 0) revert IVaradaLiveHook.NothingHeld();
 
         _setHookLockState(LOCK_CALL);
         _setCtx(token, causeId, RETRY_ROTATION);
         usdcOut = _retryHeld(_bucketOf(token, causeId), Currency.wrap(_tokens[token].quote), amount);
         _clearCtx();
         _setHookLockState(LOCK_IDLE);
-        emit IVeradaLiveHook.HeldRetried(token, causeId, msg.sender, amount, usdcOut);
+        emit IVaradaLiveHook.HeldRetried(token, causeId, msg.sender, amount, usdcOut);
     }
 
     /// @notice Pool manager callback of `retryHeld(token, causeId, amount)` only.
@@ -505,9 +505,9 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
     // ------------------------------------------------------------------ views
 
     /// @notice Fee configuration of `token`.
-    function feeConfig(address token) external view returns (IVeradaLiveHook.LiveFeeConfig memory) {
+    function feeConfig(address token) external view returns (IVaradaLiveHook.LiveFeeConfig memory) {
         TokenState storage t = _tokens[token];
-        return IVeradaLiveHook.LiveFeeConfig(
+        return IVaradaLiveHook.LiveFeeConfig(
             t.baseFeeBps, t.launchSurchargeBps, t.surchargeDecaySeconds, t.launchTimestamp
         );
     }
@@ -515,7 +515,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
     /// @notice Current fee of `token` in basis points (base plus launch surcharge).
     function currentFeeBps(address token) external view returns (uint24) {
         TokenState storage t = _tokens[token];
-        if (!t.configured) revert IVeradaLiveHook.TokenNotConfigured(token);
+        if (!t.configured) revert IVaradaLiveHook.TokenNotConfigured(token);
         // At most 8500, so the cast cannot truncate.
         // forge-lint: disable-next-line(unsafe-typecast)
         return uint24(_feeBps(t));
@@ -608,7 +608,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
             address(poolManager_) == address(0) || factory_ == address(0)
                 || address(consolidator_) == address(0) || address(rotationGovernor_) == address(0)
                 || address(vault_) == address(0)
-        ) revert IVeradaLiveHook.ZeroAddress();
+        ) revert IVaradaLiveHook.ZeroAddress();
         return poolManager_;
     }
 
@@ -624,7 +624,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         _nonZero(poolManager_, factory_, consolidator_, rotationGovernor_, vault_);
         settlement = consolidator_.settlementAsset();
         if (settlement == address(0) || vault_.usdc() != settlement) {
-            revert IVeradaLiveHook.SettlementMismatch();
+            revert IVaradaLiveHook.SettlementMismatch();
         }
     }
 
@@ -636,7 +636,7 @@ contract VeradaLiveHook is PoolInitGateHook, FeeConversionHook {
         bool k1 = _tokens[c1].configured;
         if (k0 && !k1) return c0;
         if (k1 && !k0) return c1;
-        revert IVeradaLiveHook.InvalidPool();
+        revert IVaradaLiveHook.InvalidPool();
     }
 
     function _quoteOf(PoolKey calldata key, address token) internal pure returns (address) {

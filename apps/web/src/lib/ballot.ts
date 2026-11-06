@@ -14,7 +14,7 @@
  *    the scheme address and the voter address (both also public in the transaction moments later),
  *    never the choice. `zamaRelayerUrl` can point at an operator proxy instead.
  */
-import { assertOption, encodeFheBallot } from "@verada/sdk";
+import { assertOption, encodeFheBallot } from "@varada/sdk";
 import type { Address, EIP1193Provider, Hex, PublicClient } from "viem";
 
 export interface EncryptChoiceParams {
@@ -42,7 +42,7 @@ export interface ZamaEncryptorOptions {
   relayerUrl?: string;
 }
 
-/** Verada runs on Ethereum mainnet only; the Zama mainnet preset is the one supported chain. */
+/** Varada runs on Ethereum mainnet only; the Zama mainnet preset is the one supported chain. */
 export const ZAMA_CHAIN_IDS = [1, 11155111] as const;
 
 /** Builds the ballot bytes for an encrypted choice. */

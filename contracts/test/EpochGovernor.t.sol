@@ -7,7 +7,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {CauseRegistry} from "../src/CauseRegistry.sol";
 import {EpochGovernor} from "../src/EpochGovernor.sol";
-import {VeradaToken} from "../src/VeradaToken.sol";
+import {VaradaToken} from "../src/VaradaToken.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../src/interfaces/IEpochGovernor.sol";
@@ -39,7 +39,7 @@ contract EpochGovernorTest is BallotLog {
     MockProfileRegistryLite internal profiles;
     CatalogFixture internal cat;
     EpochGovernor internal gov;
-    VeradaToken internal tokenContract;
+    VaradaToken internal tokenContract;
     address internal token;
 
     address internal owner = makeAddr("owner");
@@ -72,7 +72,7 @@ contract EpochGovernorTest is BallotLog {
     function setUp() public {
         _recordBallots();
         vm.warp(T0);
-        tokenContract = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", creator, factory);
+        tokenContract = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(tokenContract);
         _give(v1, 100e18);
         _give(v2, 250e18);

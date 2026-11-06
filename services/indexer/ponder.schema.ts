@@ -932,10 +932,10 @@ export const donationRelations = relations(donation, ({ one }) => ({
   causeRef: one(cause, { fields: [donation.causeId], references: [cause.causeId] }),
 }));
 
-// ---- Market data: holders and trades, from each Verada token's own `Transfer` events.
+// ---- Market data: holders and trades, from each Varada token's own `Transfer` events.
 
 /**
- * Running balance of every account that has held a Verada token. Rows that fall to zero are kept
+ * Running balance of every account that has held a Varada token. Rows that fall to zero are kept
  * (so `firstSeenAt` survives a sell-out and re-buy); `holder_stat.holders` counts nonzero rows.
  * Mints and burns (the zero address) only move `holder_stat.supply`.
  */
@@ -978,7 +978,7 @@ export const holderDay = onchainTable(
 );
 
 /**
- * Pool side of a token, resolved on its first trade: the quote asset (`VeradaFactory.quoteAssetOf`)
+ * Pool side of a token, resolved on its first trade: the quote asset (`VaradaFactory.quoteAssetOf`)
  * and whether the token sorts as currency0 of the v4 pool.
  */
 export const tokenMarket = onchainTable("token_market", (t) => ({
@@ -989,7 +989,7 @@ export const tokenMarket = onchainTable("token_market", (t) => ({
 }));
 
 /**
- * One PoolManager `Swap` on a Verada pool, found in the receipt of a transaction that moved the
+ * One PoolManager `Swap` on a Varada pool, found in the receipt of a transaction that moved the
  * token in or out of the PoolManager. Amounts are unsigned and before hook fees taken as deltas.
  * `trader` is the transaction sender (for a smart account that is the bundler); `sender` is the
  * contract that called `swap` (router, fee consolidator…).

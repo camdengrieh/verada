@@ -112,7 +112,7 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
     }
 
     /// @param initialOwner Owner (only power: set the hook once).
-    /// @param factory_ The Verada factory (registrar).
+    /// @param factory_ The Varada factory (registrar).
     /// @param platformTreasury_ Receiver of the platform share.
     /// @param causeRegistry_ Cause registry (org id and address of a cause).
     /// @param endaomentFactory_ Endaoment OrgFundFactory; its base token is the USDC.

@@ -3,7 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { getAddress, isAddress, type Address } from "viem";
-import { CATEGORIES, isValidLabel, REGIONS } from "@verada/sdk";
+import { CATEGORIES, isValidLabel, REGIONS } from "@varada/sdk";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { categoryLabel, regionLabel } from "@/components/catalog-browser";
 import { BallotSizeEditor } from "@/components/ballot-size-editor";

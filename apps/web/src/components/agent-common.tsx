@@ -1,4 +1,4 @@
-import { CATEGORIES, REGIONS } from "@verada/sdk";
+import { CATEGORIES, REGIONS } from "@varada/sdk";
 import { agentPath, formatUsdc } from "@/lib/agents";
 import { safeHttpUrl, SafeLink } from "@/lib/markdown";
 

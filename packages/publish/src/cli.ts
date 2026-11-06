@@ -15,7 +15,7 @@ import { SITE_FEED_TOPIC, feedIdentity } from "./feed.js";
 import { sizeReport, validateExport, validatePack } from "./validate.js";
 import { estimateStamp } from "./stamp.js";
 
-const HELP = `verada-publish <command> [options]
+const HELP = `varada-publish <command> [options]
 
   build            run the web static export and validate out/
   validate         validate an existing export directory
@@ -29,17 +29,17 @@ const HELP = `verada-publish <command> [options]
   verify           check an ENS name's contenthash equals a swarm reference
 
 Common: --dir <out dir> (default apps/web/out)
-build:    --cmd "<command>" (default "pnpm --filter @verada/web build")
+build:    --cmd "<command>" (default "pnpm --filter @varada/web build")
 upload:   --execute  --pin  --index-document index.html  --error-document 404.html
           --ttl-days 30  --price-per-block 24000  --block-time 5
           env: BEE_URL (default http://localhost:1633), BEE_POSTAGE_BATCH_ID (required with --execute)
 upload-pack: --dir apps/web/packs/<name> (required)  --execute  --pin  --ttl-days 30
           env: BEE_URL, BEE_POSTAGE_BATCH_ID (required with --execute)
-feed-update: --ref <site reference> [--topic verada-site] --execute
+feed-update: --ref <site reference> [--topic varada-site] --execute
           env: BEE_URL, BEE_POSTAGE_BATCH_ID (immutable batch), SITE_FEED_PRIVATE_KEY (signs feed updates only)
-feed-read: --owner <0x address> [--topic verada-site]   env: BEE_URL
+feed-read: --owner <0x address> [--topic varada-site]   env: BEE_URL
 ens-contenthash: --ref <hex|bzz://hex> --name <ens name> [--rpc <url>|env ETH_RPC_URL] [--resolver <addr>]
-          [--registry <TokenProfileRegistry>] prints setDefaultContenthash calldata for the Verada resolver
+          [--registry <TokenProfileRegistry>] prints setDefaultContenthash calldata for the Varada resolver
 verify:   --name <ens name> --ref <hex> --rpc <url>|env ETH_RPC_URL [--gateway <https://...>]
 `;
 
@@ -47,7 +47,7 @@ const { positionals, values: v } = parseArgs({
   allowPositionals: true,
   options: {
     dir: { type: "string", default: "apps/web/out" },
-    cmd: { type: "string", default: "pnpm --filter @verada/web build" },
+    cmd: { type: "string", default: "pnpm --filter @varada/web build" },
     execute: { type: "boolean", default: false },
     "dry-run": { type: "boolean", default: false },
     pin: { type: "boolean", default: false },
@@ -141,7 +141,7 @@ async function main() {
       });
       console.log(`swarm reference: ${ref}`);
       console.log(`bzz://${ref}`);
-      console.log(`next: verada-publish feed-update --ref ${ref} --execute   (or ens-contenthash --ref ${ref} --name <your.eth>)`);
+      console.log(`next: varada-publish feed-update --ref ${ref} --execute   (or ens-contenthash --ref ${ref} --name <your.eth>)`);
       return;
     }
     case "upload-pack": {
@@ -235,7 +235,7 @@ async function main() {
       else console.log(`resolver:    ${resolver}  (to)`);
       console.log(`calldata:    ${c.data}`);
       console.log("setContenthash(bytes32 node, bytes hash). NOT signed or sent: submit it yourself from the name's controller.");
-      console.log("Names served by the Verada resolver: pass --registry <TokenProfileRegistry> instead.");
+      console.log("Names served by the Varada resolver: pass --registry <TokenProfileRegistry> instead.");
       return;
     }
     case "verify": {

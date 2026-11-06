@@ -8,7 +8,7 @@ import {Test} from "forge-std/Test.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {DonationDistributor} from "../../src/DonationDistributor.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IDonationDistributor} from "../../src/interfaces/IDonationDistributor.sol";
@@ -63,8 +63,8 @@ contract EndaomentDonationForkTest is BallotLog {
 
         // Launch the token and fund a holder a week before the governor exists, so the holder has
         // weight at epoch 0's snapshot.
-        VeradaToken tokenContract = new VeradaToken(
-            "Verada Test", "VTEST", "ipfs://meta", makeAddr("creator"), launchFactory
+        VaradaToken tokenContract = new VaradaToken(
+            "Varada Test", "VTEST", "ipfs://meta", makeAddr("creator"), launchFactory
         );
         token = address(tokenContract);
         vm.prank(launchFactory);

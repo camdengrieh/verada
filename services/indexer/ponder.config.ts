@@ -14,10 +14,10 @@ import {
   RotationGovernorAbi,
   TakeoverGovernorAbi,
   TokenProfileRegistryAbi,
-  VeradaFactoryAbi,
-  VeradaLiveHookAbi,
+  VaradaFactoryAbi,
+  VaradaLiveHookAbi,
   ZamaVotingSchemeAbi,
-  VeradaTokenAbi,
+  VaradaTokenAbi,
 } from "./src/abis";
 import { POOL_MANAGER } from "./src/pool-manager";
 import { MAINNET_CHAIN_ID, readEnv } from "./src/env";
@@ -30,30 +30,30 @@ export default createConfig({
   },
   contracts: {
     Factory: {
-      abi: VeradaFactoryAbi,
+      abi: VaradaFactoryAbi,
       chain: "mainnet",
       address: env.factory,
       startBlock: env.startBlock,
     },
-    // Every Verada token (child of the factory's `TokenCreated`): all transfers, for holder balances.
-    VeradaToken: {
-      abi: VeradaTokenAbi,
+    // Every Varada token (child of the factory's `TokenCreated`): all transfers, for holder balances.
+    VaradaToken: {
+      abi: VaradaTokenAbi,
       chain: "mainnet",
       address: factory({
         address: env.factory,
-        event: getAbiItem({ abi: VeradaFactoryAbi, name: "TokenCreated" }),
+        event: getAbiItem({ abi: VaradaFactoryAbi, name: "TokenCreated" }),
         parameter: "token",
       }),
       startBlock: env.startBlock,
     },
     // The same tokens, only transfers into or out of the PoolManager. The handler reads those
     // transactions' receipts; their PoolManager `Swap` logs are the trades.
-    VeradaTokenPool: {
-      abi: VeradaTokenAbi,
+    VaradaTokenPool: {
+      abi: VaradaTokenAbi,
       chain: "mainnet",
       address: factory({
         address: env.factory,
-        event: getAbiItem({ abi: VeradaFactoryAbi, name: "TokenCreated" }),
+        event: getAbiItem({ abi: VaradaFactoryAbi, name: "TokenCreated" }),
         parameter: "token",
       }),
       filter: [
@@ -142,12 +142,12 @@ export default createConfig({
     },
     // Live-donation mode: the hook and vault are found through the factory's one-time
     // `LiveModeConfigured`, so nothing is indexed for them until live mode is enabled.
-    VeradaLiveHook: {
-      abi: VeradaLiveHookAbi,
+    VaradaLiveHook: {
+      abi: VaradaLiveHookAbi,
       chain: "mainnet",
       address: factory({
         address: env.factory,
-        event: getAbiItem({ abi: VeradaFactoryAbi, name: "LiveModeConfigured" }),
+        event: getAbiItem({ abi: VaradaFactoryAbi, name: "LiveModeConfigured" }),
         parameter: "liveHook",
       }),
       startBlock: env.startBlock,
@@ -157,7 +157,7 @@ export default createConfig({
       chain: "mainnet",
       address: factory({
         address: env.factory,
-        event: getAbiItem({ abi: VeradaFactoryAbi, name: "LiveModeConfigured" }),
+        event: getAbiItem({ abi: VaradaFactoryAbi, name: "LiveModeConfigured" }),
         parameter: "liveVault",
       }),
       startBlock: env.startBlock,

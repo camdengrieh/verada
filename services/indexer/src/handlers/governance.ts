@@ -1,5 +1,5 @@
 import type { Context, Event } from "ponder:registry";
-import { EPOCH_LENGTH, MAX_BALLOT_OPTIONS, alignToThursday, causeIdOfOrg, effectiveBallotSize } from "@verada/sdk";
+import { EPOCH_LENGTH, MAX_BALLOT_OPTIONS, alignToThursday, causeIdOfOrg, effectiveBallotSize } from "@varada/sdk";
 import {
   ballotSizeCap,
   donation,

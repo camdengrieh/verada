@@ -3,8 +3,8 @@
 
 import { BadgeCheck, ExternalLink, Star } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { CopyButton } from "@verada/ui/components/data/copy-button";
-import { cn } from "@verada/ui/lib/utils";
+import { CopyButton } from "@varada/ui/components/data/copy-button";
+import { cn } from "@varada/ui/lib/utils";
 import { splitEnsName } from "./ens-shared";
 import { HIT_AREA } from "./shared";
 

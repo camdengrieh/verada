@@ -5,13 +5,13 @@
  * address (opt-in); otherwise the donation is anonymous and the app never shows its address.
  */
 import { erc20Abi, type Address } from "viem";
-import { CHAIN_ID, SETTLEMENT_ASSET, USDC_DECIMALS } from "@verada/sdk";
-import { agentVaultAbi } from "@verada/sdk/abis";
+import { CHAIN_ID, SETTLEMENT_ASSET, USDC_DECIMALS } from "@varada/sdk";
+import { agentVaultAbi } from "@varada/sdk/abis";
 
 /** Local anvil fork of mainnet: same USDC address. */
 export const MAINNET_FORK_CHAIN_ID = 31337;
 
-/** USDC on `chainId` (mainnet, or a local mainnet fork), or null where Verada has no deployment. */
+/** USDC on `chainId` (mainnet, or a local mainnet fork), or null where Varada has no deployment. */
 export function usdcAddress(chainId: number): Address | null {
   return chainId === CHAIN_ID || chainId === MAINNET_FORK_CHAIN_ID ? SETTLEMENT_ASSET : null;
 }

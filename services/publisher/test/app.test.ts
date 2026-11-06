@@ -44,7 +44,7 @@ describe("POST /uploads/logo", () => {
     expect(await r.json()).toEqual({
       reference: REF,
       bzz: `bzz://${REF}`,
-      url: `https://gw.verada.xyz/bzz/${REF}/`,
+      url: `https://gw.varada.xyz/bzz/${REF}/`,
     });
     expect(calls).toHaveLength(1);
     const call = calls[0]!;
@@ -132,7 +132,7 @@ describe("POST /uploads/metadata", () => {
     const { app, calls } = setup();
     const r = await post(app, meta);
     expect(r.status).toBe(201);
-    expect(await r.json()).toEqual({ reference: REF, uri: `bzz://${REF}`, url: `https://gw.verada.xyz/bzz/${REF}/` });
+    expect(await r.json()).toEqual({ reference: REF, uri: `bzz://${REF}`, url: `https://gw.varada.xyz/bzz/${REF}/` });
     const call = calls[0]!;
     expect(call.url).toBe("http://gateway.internal:3000/bzz?name=metadata.json");
     expect(headersOf(call)["Content-Type"]).toBe("application/json");
@@ -199,7 +199,7 @@ describe("GET /site", () => {
     const body = await r.json();
     expect(calls[0]!.url).toBe(`http://bee.internal:1633/stamps/${BATCH}`);
     expect(body).toMatchObject({
-      gateway: "https://gw.verada.xyz",
+      gateway: "https://gw.varada.xyz",
       batchId: BATCH,
       feedOwner: "0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045",
       feedManifest: "ef".repeat(32),

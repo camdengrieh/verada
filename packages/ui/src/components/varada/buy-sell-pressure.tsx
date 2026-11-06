@@ -4,8 +4,8 @@
 "use client";
 
 import { useId, useState } from "react";
-import { ToggleGroup, ToggleGroupItem } from "@verada/ui/components/ui/toggle-group";
-import { cn } from "@verada/ui/lib/utils";
+import { ToggleGroup, ToggleGroupItem } from "@varada/ui/components/ui/toggle-group";
+import { cn } from "@varada/ui/lib/utils";
 import { formatUsdCompact } from "./liquidity-meter";
 
 export interface PressureWindow {

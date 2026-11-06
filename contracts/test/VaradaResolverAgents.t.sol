@@ -7,7 +7,7 @@ import {Test} from "forge-std/Test.sol";
 import {CauseRegistry} from "../src/CauseRegistry.sol";
 import {CuratorRegistry} from "../src/CuratorRegistry.sol";
 import {TokenProfileRegistry} from "../src/TokenProfileRegistry.sol";
-import {VeradaResolver} from "../src/VeradaResolver.sol";
+import {VaradaResolver} from "../src/VaradaResolver.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
 import {ICuratorRegistry} from "../src/interfaces/ICuratorRegistry.sol";
@@ -28,14 +28,14 @@ import {IdentityRegistryMock} from "./mocks/IdentityRegistryMock.sol";
 import {CatalogFixture} from "./utils/CatalogFixture.sol";
 
 /// @notice `<label>.agent.varada.eth` and `agent.varada.eth` through the resolver.
-contract VeradaResolverAgentsTest is Test {
+contract VaradaResolverAgentsTest is Test {
     bytes internal constant PARENT_DNS = hex"0676617261646103657468" hex"00";
     bytes32 internal constant PARENT_NODE =
         0x7d4d6e6569fdd1888104213a462800d63bbc25e3e300f7cf64c5cebeb6da0aa3;
 
     TokenProfileRegistry internal profiles;
     CuratorRegistry internal curators;
-    VeradaResolver internal resolver;
+    VaradaResolver internal resolver;
     IdentityRegistryMock internal identity;
     address internal vault;
     uint256 internal agentId;
@@ -69,7 +69,7 @@ contract VeradaResolverAgentsTest is Test {
         identity.register("", new IERC8004IdentityRegistry.MetadataEntry[](0));
         (agentId, vault) =
             curators.registerAgent(1, "homeless", makeAddr("signer"), "", "Homelessness curator");
-        resolver = new VeradaResolver(
+        resolver = new VaradaResolver(
             profiles, PARENT_DNS, ICuratorRegistry(address(curators)), "varada.eth"
         );
     }
@@ -108,7 +108,7 @@ contract VeradaResolverAgentsTest is Test {
         assertEq(ch, siteHash, "the dApp serves the agent page");
         assertEq(_text(name, "url"), "https://homeless.agent.varada.eth.limo");
         assertEq(_text(name, "description"), "Homelessness curator");
-        assertEq(_text(name, "verada.category"), "1");
+        assertEq(_text(name, "varada.category"), "1");
         assertEq(
             _text(name, "agent-registration"),
             string.concat("eip155:31337:", vm.toLowercase(vm.toString(address(identity))), ":1")
@@ -155,8 +155,8 @@ contract VeradaResolverAgentsTest is Test {
     }
 
     function test_withoutCurators_agentNamesAreNotSpecial() public {
-        VeradaResolver plain =
-            new VeradaResolver(profiles, PARENT_DNS, ICuratorRegistry(address(0)), "varada.eth");
+        VaradaResolver plain =
+            new VaradaResolver(profiles, PARENT_DNS, ICuratorRegistry(address(0)), "varada.eth");
         bytes32 node = DnsNameLib.namehash(DnsNameLib.encode("homeless.agent.varada.eth"), 0);
         bytes memory r = plain.resolve(
             DnsNameLib.encode("homeless.agent.varada.eth"),

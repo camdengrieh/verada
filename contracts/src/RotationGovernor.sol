@@ -23,7 +23,7 @@ import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
 import {PollScopeLib} from "./libraries/PollScopeLib.sol";
 import {RotationScheduleLib} from "./libraries/RotationScheduleLib.sol";
 
-/// @dev Vote checkpoint accessors of `ERC20TimestampVotes` (live tokens are `VeradaToken`s).
+/// @dev Vote checkpoint accessors of `ERC20TimestampVotes` (live tokens are `VaradaToken`s).
 interface ICheckpointVotes {
     function numCheckpoints(address account) external view returns (uint32);
     function checkpoints(address account, uint32 pos)

@@ -3,7 +3,7 @@
 // Direction A tokens and a 44px hit area.
 import { RadioGroup as RadioGroupPrimitive } from "radix-ui";
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Arrow keys move between options; name the group with `aria-label` or `aria-labelledby`. */
 export function RadioGroup({ className, ...props }: ComponentProps<typeof RadioGroupPrimitive.Root>) {

@@ -1,16 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Verada curator report (verada.curation/v1)",
+  "title": "Varada curator report (varada.curation/v1)",
   "$comment": "Generated from packages/curator/src/report.ts by packages/curator/scripts/report-schema.ts; do not edit by hand. Unknown object keys are accepted and dropped by the parser, so they never reach the published report.",
   "description": "A curator agent's weekly report for one cause: per region, the week's events, up to 32 ranked catalogue picks and an urgency weight, plus the newsletter. Published whole to Swarm; CuratorRegistry stores each region's picks root.",
   "type": "object",
   "properties": {
     "schema": {
       "description": "Report format identifier.",
-      "const": "verada.curation/v1"
+      "const": "varada.curation/v1"
     },
     "category": {
-      "description": "Cause category slug of the agent (CATEGORIES in @verada/sdk; only categories with a curator agent).",
+      "description": "Cause category slug of the agent (CATEGORIES in @varada/sdk; only categories with a curator agent).",
       "type": "string",
       "enum": [
         "disaster-relief",
@@ -210,7 +210,7 @@
       "type": "object",
       "properties": {
         "region": {
-          "description": "Region slug (REGIONS in @verada/sdk).",
+          "description": "Region slug (REGIONS in @varada/sdk).",
           "type": "string",
           "enum": [
             "africa",
@@ -320,12 +320,12 @@
       "type": "object",
       "properties": {
         "orgId": {
-          "description": "The org's 32-byte catalogue id (from `verada-curator pool`).",
+          "description": "The org's 32-byte catalogue id (from `varada-curator pool`).",
           "type": "string",
           "pattern": "^0x[0-9a-fA-F]{64}$"
         },
         "catalogIndex": {
-          "description": "Index of the org's entry in this region's catalogue bucket (from `verada-curator pool`).",
+          "description": "Index of the org's entry in this region's catalogue bucket (from `varada-curator pool`).",
           "type": "integer",
           "minimum": 0
         },

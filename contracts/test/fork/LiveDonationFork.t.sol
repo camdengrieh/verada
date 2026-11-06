@@ -25,8 +25,8 @@ import {FeeVault} from "../../src/FeeVault.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaLiveHook} from "../../src/VaradaLiveHook.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
@@ -36,7 +36,7 @@ import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
@@ -79,7 +79,7 @@ contract LiveDonationForkTest is Test {
     MockVotingScheme internal scheme;
     RotationGovernor internal gov;
     LiveDonationVault internal vault;
-    VeradaLiveHook internal hook;
+    VaradaLiveHook internal hook;
     PoolModifyLiquidityTest internal liquidityRouter;
     PoolSwapTest internal swapRouter;
 
@@ -153,8 +153,8 @@ contract LiveDonationForkTest is Test {
         gov.setVault(address(vault));
         bytes memory args = abi.encode(PM, address(this), cons, gov, vault);
         (, bytes32 salt) =
-            HookMiner.find(address(this), LIVE_FLAGS, type(VeradaLiveHook).creationCode, args);
-        hook = new VeradaLiveHook{salt: salt}(
+            HookMiner.find(address(this), LIVE_FLAGS, type(VaradaLiveHook).creationCode, args);
+        hook = new VaradaLiveHook{salt: salt}(
             PM,
             address(this),
             IFeeConsolidator(address(cons)),
@@ -191,10 +191,10 @@ contract LiveDonationForkTest is Test {
 
     function _launch(uint96 threshold, bytes32 cause, RotationPeriod period)
         internal
-        returns (VeradaToken token, PoolKey memory key)
+        returns (VaradaToken token, PoolKey memory key)
     {
-        token = new VeradaToken("Live", "LIVE", "ipfs://live", makeAddr("creator"), address(this));
-        hook.configureToken(address(token), IVeradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
+        token = new VaradaToken("Live", "LIVE", "ipfs://live", makeAddr("creator"), address(this));
+        hook.configureToken(address(token), IVaradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
         vault.registerToken(address(token), threshold, cause, period);
         (address a, address b) =
             address(token) < WETH ? (address(token), WETH) : (WETH, address(token));
@@ -241,7 +241,7 @@ contract LiveDonationForkTest is Test {
     }
 
     function test_fork_thresholdZero_deployedOrgReceivesInSameTx() public {
-        (VeradaToken t, PoolKey memory k) = _launch(0, causeDeployed, RotationPeriod.OneDay);
+        (VaradaToken t, PoolKey memory k) = _launch(0, causeDeployed, RotationPeriod.OneDay);
         uint256 before = IERC20(USDC).balanceOf(ORG_DEPLOYED_ADDR);
         vm.recordLogs();
         uint256 gas = _buy(k, address(t), 1 ether);
@@ -258,7 +258,7 @@ contract LiveDonationForkTest is Test {
     }
 
     function test_fork_thresholdAccruesThenCrossingPushes() public {
-        (VeradaToken t, PoolKey memory k) = _launch(100e6, causeDeployed, RotationPeriod.OneDay);
+        (VaradaToken t, PoolKey memory k) = _launch(100e6, causeDeployed, RotationPeriod.OneDay);
         emit log_named_uint("fork: live WETH buy, below threshold", _buy(k, address(t), 1 ether));
         (uint256 p1,) = vault.pendingOf(address(t), causeDeployed);
         assertGt(p1, 0);
@@ -274,7 +274,7 @@ contract LiveDonationForkTest is Test {
     }
 
     function test_fork_undeployedOrgDeferredThenFlushDeploys() public {
-        (VeradaToken t, PoolKey memory k) = _launch(0, causeFresh, RotationPeriod.OneDay);
+        (VaradaToken t, PoolKey memory k) = _launch(0, causeFresh, RotationPeriod.OneDay);
         address org = eFactory.computeOrgAddress(ORG_FRESH);
         _buy(k, address(t), 1 ether);
         (uint256 pending, uint40 retryAt) = vault.pendingOf(address(t), causeFresh);
@@ -287,7 +287,7 @@ contract LiveDonationForkTest is Test {
     }
 
     function test_fork_rotationWithLateTally() public {
-        (VeradaToken t, PoolKey memory k) =
+        (VaradaToken t, PoolKey memory k) =
             _launch(1_000_000e6, causeDeployed, RotationPeriod.OneHour);
         address voter = makeAddr("voter");
         t.transfer(voter, 1e24);
@@ -331,9 +331,9 @@ contract LiveDonationForkTest is Test {
         registry.addQuoteAssetWithRoute(AMZN_ON, IQuoteRegistry.Kind.Ondo, route);
         cons.seedReferences(route);
 
-        VeradaToken token =
-            new VeradaToken("Live", "LIVE", "ipfs://live", makeAddr("creator"), address(this));
-        hook.configureToken(address(token), IVeradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
+        VaradaToken token =
+            new VaradaToken("Live", "LIVE", "ipfs://live", makeAddr("creator"), address(this));
+        hook.configureToken(address(token), IVaradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
         vault.registerToken(address(token), 0, causeDeployed, RotationPeriod.OneDay);
         (address a, address b) =
             address(token) < AMZN_ON ? (address(token), AMZN_ON) : (AMZN_ON, address(token));

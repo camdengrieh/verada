@@ -1,5 +1,5 @@
-import { encodePlainBallot, assertOption } from "@verada/sdk";
-import { zamaVotingSchemeAbi } from "@verada/sdk/abis";
+import { encodePlainBallot, assertOption } from "@varada/sdk";
+import { zamaVotingSchemeAbi } from "@varada/sdk/abis";
 import { isHex, keccak256, toHex, type Address, type Hex } from "viem";
 import { buildFheBallot, type Encryptor } from "./ballot";
 

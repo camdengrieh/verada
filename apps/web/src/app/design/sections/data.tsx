@@ -1,19 +1,19 @@
 "use client";
 
-import { ActivityChip, ActivityList, type ActivityItem } from "@verada/ui/components/data/activity-list";
-import { CopyButton } from "@verada/ui/components/data/copy-button";
-import { Countdown } from "@verada/ui/components/data/countdown";
-import { DataTable, dataTableColumns } from "@verada/ui/components/data/data-table";
-import { EmptyState } from "@verada/ui/components/data/empty-state";
-import { FileDropzone } from "@verada/ui/components/data/file-dropzone";
-import { ChartTimeframes, PriceChart, type PriceCandle } from "@verada/ui/components/data/price-chart";
-import { Sparkline } from "@verada/ui/components/data/sparkline";
-import { Delta, StatCard } from "@verada/ui/components/data/stat-card";
-import { Stepper, type StepperStep } from "@verada/ui/components/data/stepper";
-import { Marquee } from "@verada/ui/components/motion/marquee";
-import { NumberTicker } from "@verada/ui/components/motion/number-ticker";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button } from "@verada/ui/components/ui/button";
+import { ActivityChip, ActivityList, type ActivityItem } from "@varada/ui/components/data/activity-list";
+import { CopyButton } from "@varada/ui/components/data/copy-button";
+import { Countdown } from "@varada/ui/components/data/countdown";
+import { DataTable, dataTableColumns } from "@varada/ui/components/data/data-table";
+import { EmptyState } from "@varada/ui/components/data/empty-state";
+import { FileDropzone } from "@varada/ui/components/data/file-dropzone";
+import { ChartTimeframes, PriceChart, type PriceCandle } from "@varada/ui/components/data/price-chart";
+import { Sparkline } from "@varada/ui/components/data/sparkline";
+import { Delta, StatCard } from "@varada/ui/components/data/stat-card";
+import { Stepper, type StepperStep } from "@varada/ui/components/data/stepper";
+import { Marquee } from "@varada/ui/components/motion/marquee";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button } from "@varada/ui/components/ui/button";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { GallerySection, Specimen } from "../section";
 

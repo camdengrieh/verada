@@ -1,7 +1,7 @@
 // Written for Varada
 import { CircleAlert, LoaderCircle, LockKeyhole, LockKeyholeOpen } from "lucide-react";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Where reads are going: `connecting` to the Nym mixnet, `private` (on), `failed` (the mixnet

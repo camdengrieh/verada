@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /// @title IERC8004IdentityRegistry
-/// @notice The parts of the ERC-8004 (Trustless Agents, Draft) Identity Registry Verada uses, as
+/// @notice The parts of the ERC-8004 (Trustless Agents, Draft) Identity Registry Varada uses, as
 ///         deployed on Ethereum mainnet at `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432` (an
 ///         upgradeable proxy of `IdentityRegistryUpgradeable`, ERC-721 "AgentIdentity").
 /// @dev `register` mints with `_safeMint`, so a contract owner must accept ERC-721 transfers.

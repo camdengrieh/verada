@@ -16,4 +16,4 @@ export {
   type PickWithProof,
   type RoundPreparer,
   type RoundReader,
-} from "@verada/sdk";
+} from "@varada/sdk";

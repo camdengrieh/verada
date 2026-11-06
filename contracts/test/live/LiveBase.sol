@@ -24,8 +24,8 @@ import {FeeVault} from "../../src/FeeVault.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaLiveHook} from "../../src/VaradaLiveHook.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
@@ -35,7 +35,7 @@ import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {
@@ -51,7 +51,7 @@ import {AdversarialOrg, LiveProfiles, LiveUSDC} from "./LiveMocks.sol";
 
 /// @dev Live-donation fixture: real PoolManager and routers, real QuoteRegistry and
 ///      FeeConsolidator with seeded references, real CauseRegistry, RotationGovernor,
-///      LiveDonationVault and a mined VeradaLiveHook. Tokens are real VeradaTokens; this test
+///      LiveDonationVault and a mined VaradaLiveHook. Tokens are real VaradaTokens; this test
 ///      contract plays the factory (configure, register, initialize). Endaoment is mocked
 ///      (cause A: deployed org, cause B: undeployed org, cause C: deployed org). The catalogue's
 ///      launch focus (hunger x Africa) holds exactly orgs A, B and C, so every rotation ballot is
@@ -94,7 +94,7 @@ abstract contract LiveBase is Deployers {
     CatalogFixture internal cat;
     RotationGovernor internal rgov;
     LiveDonationVault internal vault;
-    VeradaLiveHook internal hook;
+    VaradaLiveHook internal hook;
 
     PoolKey internal quoteUsdcKey;
     PoolKey internal ethUsdcKey;
@@ -235,11 +235,11 @@ abstract contract LiveBase is Deployers {
         if (st == IRotationGovernor.RoundStatus.None) _prepareRound(token, target);
     }
 
-    function _deployHook(address factory_) internal returns (VeradaLiveHook h) {
+    function _deployHook(address factory_) internal returns (VaradaLiveHook h) {
         bytes memory args = abi.encode(manager, factory_, cons, rgov, vault);
         (, bytes32 salt) =
-            HookMiner.find(address(this), LIVE_FLAGS, type(VeradaLiveHook).creationCode, args);
-        h = new VeradaLiveHook{salt: salt}(
+            HookMiner.find(address(this), LIVE_FLAGS, type(VaradaLiveHook).creationCode, args);
+        h = new VaradaLiveHook{salt: salt}(
             manager,
             factory_,
             IFeeConsolidator(address(cons)),
@@ -306,7 +306,7 @@ abstract contract LiveBase is Deployers {
         RotationPeriod period,
         uint24 surchargeStart,
         uint32 surchargeDecay
-    ) internal returns (VeradaToken token, PoolKey memory key) {
+    ) internal returns (VaradaToken token, PoolKey memory key) {
         return _launchFull(quoteAsset, threshold, period, surchargeStart, surchargeDecay, CAUSE_A);
     }
 
@@ -317,11 +317,11 @@ abstract contract LiveBase is Deployers {
         uint24 surchargeStart,
         uint32 surchargeDecay,
         bytes32 initialCause
-    ) internal returns (VeradaToken token, PoolKey memory key) {
-        token = new VeradaToken("Live", "LIVE", "ipfs://live", creator, address(this));
+    ) internal returns (VaradaToken token, PoolKey memory key) {
+        token = new VaradaToken("Live", "LIVE", "ipfs://live", creator, address(this));
         hook.configureToken(
             address(token),
-            IVeradaLiveHook.LiveFeeConfig(BASE_BPS, surchargeStart, surchargeDecay, 0)
+            IVaradaLiveHook.LiveFeeConfig(BASE_BPS, surchargeStart, surchargeDecay, 0)
         );
         vault.registerToken(address(token), threshold, initialCause, period);
         (Currency c0, Currency c1) = _sorted(address(token), quoteAsset);
@@ -335,12 +335,12 @@ abstract contract LiveBase is Deployers {
 
     function _launchDefault(address quoteAsset, uint96 threshold)
         internal
-        returns (VeradaToken token, PoolKey memory key)
+        returns (VaradaToken token, PoolKey memory key)
     {
         return _launch(quoteAsset, threshold, RotationPeriod.OneHour, 0, 0);
     }
 
-    function _fundTrader(address who, VeradaToken token) internal {
+    function _fundTrader(address who, VaradaToken token) internal {
         quote.mint(who, 1e27);
         ondoB.mint(who, 1e27);
         vm.deal(who, 1e24);
@@ -463,7 +463,7 @@ abstract contract LiveBase is Deployers {
             bytes4 failure
         )
     {
-        bytes32 topic0 = IVeradaLiveHook.FeeTaken.selector;
+        bytes32 topic0 = IVaradaLiveHook.FeeTaken.selector;
         for (uint256 i = logs.length; i > 0; --i) {
             Vm.Log memory l = logs[i - 1];
             if (l.topics.length != 0 && l.topics[0] == topic0) {

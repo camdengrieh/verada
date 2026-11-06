@@ -1,10 +1,10 @@
 "use client";
 
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button } from "@verada/ui/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@verada/ui/components/ui/card";
-import { PaintedImage } from "@verada/ui/components/varada/painted-image";
-import { BrushUnderline, PaperGrain, Wash } from "@verada/ui/components/varada/watercolour";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button } from "@varada/ui/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@varada/ui/components/ui/card";
+import { PaintedImage } from "@varada/ui/components/varada/painted-image";
+import { BrushUnderline, PaperGrain, Wash } from "@varada/ui/components/varada/watercolour";
 import { ASSETS } from "@/lib/assets.generated";
 import { GallerySection, Specimen } from "../section";
 

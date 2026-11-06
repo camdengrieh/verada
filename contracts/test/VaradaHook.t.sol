@@ -15,14 +15,14 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {HookMiner} from "../script/HookMiner.sol";
-import {VeradaHook} from "../src/VeradaHook.sol";
+import {VaradaHook} from "../src/VaradaHook.sol";
 import {BaseHook} from "../src/hooks/base/BaseHook.sol";
 import {PoolAdminHook} from "../src/hooks/base/PoolAdminHook.sol";
-import {IVeradaHook} from "../src/interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "../src/interfaces/IVaradaHook.sol";
 import {MockConsolidator} from "./utils/MockConsolidator.sol";
 
 /// @dev Runs the hook against the real v4 PoolManager. Currency1 plays WETH, currency0 the token.
-contract VeradaHookTest is Deployers {
+contract VaradaHookTest is Deployers {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
@@ -30,7 +30,7 @@ contract VeradaHookTest is Deployers {
         | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
 
     MockConsolidator internal vault;
-    VeradaHook internal hook;
+    VaradaHook internal hook;
     address internal token;
     address internal weth;
 
@@ -51,20 +51,20 @@ contract VeradaHookTest is Deployers {
 
     // ------------------------------------------------------------------ helpers
 
-    function _deployHook(MockConsolidator c) internal returns (VeradaHook h) {
+    function _deployHook(MockConsolidator c) internal returns (VaradaHook h) {
         bytes memory args = abi.encode(manager, address(this), address(c));
         (address predicted, bytes32 salt) =
-            HookMiner.find(address(this), FLAGS, type(VeradaHook).creationCode, args);
-        h = new VeradaHook{salt: salt}(manager, address(this), address(c));
+            HookMiner.find(address(this), FLAGS, type(VaradaHook).creationCode, args);
+        h = new VaradaHook{salt: salt}(manager, address(this), address(c));
         assertEq(address(h), predicted);
     }
 
     function _cfg(uint24 base, uint24 sniper, uint32 decay)
         internal
         view
-        returns (IVeradaHook.FeeConfig memory)
+        returns (IVaradaHook.FeeConfig memory)
     {
-        return IVeradaHook.FeeConfig({
+        return IVaradaHook.FeeConfig({
             baseFeeBps: base,
             sniperFeeStartBps: sniper,
             sniperDecaySeconds: decay,
@@ -118,16 +118,16 @@ contract VeradaHookTest is Deployers {
     function test_unminedAddressReverts() public {
         // A plain deployment lands on an address without the required flags (overwhelmingly likely).
         vm.expectRevert();
-        new VeradaHook{salt: bytes32(uint256(0))}(manager, address(this), address(vault));
+        new VaradaHook{salt: bytes32(uint256(0))}(manager, address(this), address(vault));
     }
 
     function test_minerFindsDistinctValidAddresses() public view {
         bytes memory args = abi.encode(manager, address(this), address(vault));
         (address a, bytes32 s) =
-            HookMiner.find(address(this), FLAGS, type(VeradaHook).creationCode, args);
+            HookMiner.find(address(this), FLAGS, type(VaradaHook).creationCode, args);
         assertTrue(HookMiner.hasExactFlags(a, FLAGS));
         (address b, bytes32 s2) = HookMiner.find(
-            address(this), FLAGS, type(VeradaHook).creationCode, args, uint256(s) + 1, 400_000
+            address(this), FLAGS, type(VaradaHook).creationCode, args, uint256(s) + 1, 400_000
         );
         assertTrue(HookMiner.hasExactFlags(b, FLAGS));
         assertTrue(a != b && s != s2);
@@ -140,28 +140,28 @@ contract VeradaHookTest is Deployers {
     }
 
     function mineExternal(bytes memory args) external view {
-        HookMiner.find(address(this), FLAGS, type(VeradaHook).creationCode, args, 0, 1);
+        HookMiner.find(address(this), FLAGS, type(VaradaHook).creationCode, args, 0, 1);
     }
 
     function test_constructorRejectsZero() public {
-        vm.expectRevert(VeradaHook.ZeroAddress.selector);
-        new VeradaHook(manager, address(0), address(vault));
+        vm.expectRevert(VaradaHook.ZeroAddress.selector);
+        new VaradaHook(manager, address(0), address(vault));
     }
 
     // ------------------------------------------------------------------ configuration
 
     function test_configure_onlyFactory() public {
-        IVeradaHook.FeeConfig memory c = _cfg(300, 0, 0);
+        IVaradaHook.FeeConfig memory c = _cfg(300, 0, 0);
         vm.prank(address(0xBEEF));
-        vm.expectRevert(IVeradaHook.NotFactory.selector);
+        vm.expectRevert(IVaradaHook.NotFactory.selector);
         hook.configureToken(token, c);
     }
 
     function test_configure_storesAndDefaultsLaunchTimestamp() public {
-        IVeradaHook.FeeConfig memory c = _cfg(300, 5000, 60);
+        IVaradaHook.FeeConfig memory c = _cfg(300, 5000, 60);
         c.launchTimestamp = 0;
         hook.configureToken(token, c);
-        IVeradaHook.FeeConfig memory s = hook.feeConfig(token);
+        IVaradaHook.FeeConfig memory s = hook.feeConfig(token);
         assertEq(s.baseFeeBps, 300);
         assertEq(s.sniperFeeStartBps, 5000);
         assertEq(s.sniperDecaySeconds, 60);
@@ -171,39 +171,39 @@ contract VeradaHookTest is Deployers {
 
     function test_configure_twiceReverts() public {
         hook.configureToken(token, _cfg(300, 0, 0));
-        IVeradaHook.FeeConfig memory c = _cfg(200, 0, 0);
-        vm.expectRevert(abi.encodeWithSelector(IVeradaHook.AlreadyConfigured.selector, token));
+        IVaradaHook.FeeConfig memory c = _cfg(200, 0, 0);
+        vm.expectRevert(abi.encodeWithSelector(IVaradaHook.AlreadyConfigured.selector, token));
         hook.configureToken(token, c);
     }
 
     function test_configure_feeBounds() public {
-        IVeradaHook.FeeConfig memory c = _cfg(99, 0, 0);
-        vm.expectRevert(abi.encodeWithSelector(VeradaHook.InvalidFee.selector, 99));
+        IVaradaHook.FeeConfig memory c = _cfg(99, 0, 0);
+        vm.expectRevert(abi.encodeWithSelector(VaradaHook.InvalidFee.selector, 99));
         hook.configureToken(token, c);
         c = _cfg(501, 0, 0);
-        vm.expectRevert(abi.encodeWithSelector(VeradaHook.InvalidFee.selector, 501));
+        vm.expectRevert(abi.encodeWithSelector(VaradaHook.InvalidFee.selector, 501));
         hook.configureToken(token, c);
         hook.configureToken(address(1), _cfg(100, 0, 0));
         hook.configureToken(address(2), _cfg(500, 0, 0));
     }
 
     function test_configure_sniperBounds() public {
-        IVeradaHook.FeeConfig memory c = _cfg(300, 8001, 60);
-        vm.expectRevert(abi.encodeWithSelector(VeradaHook.InvalidSniperFee.selector, 8001, 60));
+        IVaradaHook.FeeConfig memory c = _cfg(300, 8001, 60);
+        vm.expectRevert(abi.encodeWithSelector(VaradaHook.InvalidSniperFee.selector, 8001, 60));
         hook.configureToken(token, c);
         c = _cfg(300, 100, 0);
-        vm.expectRevert(abi.encodeWithSelector(VeradaHook.InvalidSniperFee.selector, 100, 0));
+        vm.expectRevert(abi.encodeWithSelector(VaradaHook.InvalidSniperFee.selector, 100, 0));
         hook.configureToken(token, c);
         c = _cfg(300, 100, 1 days + 1);
         vm.expectRevert(
-            abi.encodeWithSelector(VeradaHook.InvalidSniperFee.selector, 100, 1 days + 1)
+            abi.encodeWithSelector(VaradaHook.InvalidSniperFee.selector, 100, 1 days + 1)
         );
         hook.configureToken(token, c);
         hook.configureToken(address(1), _cfg(300, 8000, 1 days));
     }
 
     function test_currentFee_unconfiguredReverts() public {
-        vm.expectRevert(abi.encodeWithSelector(IVeradaHook.TokenNotConfigured.selector, token));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaHook.TokenNotConfigured.selector, token));
         hook.currentFeeBps(token);
     }
 
@@ -233,7 +233,7 @@ contract VeradaHookTest is Deployers {
     }
 
     function test_decay_futureLaunchUsesStart() public {
-        IVeradaHook.FeeConfig memory c = _cfg(200, 3000, 100);
+        IVaradaHook.FeeConfig memory c = _cfg(200, 3000, 100);
         c.launchTimestamp = uint40(block.timestamp + 1000);
         hook.configureToken(token, c);
         assertEq(hook.sniperFeeBps(token), 3000);
@@ -304,7 +304,7 @@ contract VeradaHookTest is Deployers {
     function test_launchedTokenAsCurrency1() public {
         // Second hook instance treating currency1 as the launched token and currency0 as quote.
         MockConsolidator vault2 = new MockConsolidator();
-        VeradaHook h2 = _deployHook(vault2);
+        VaradaHook h2 = _deployHook(vault2);
         vault2.setHook(address(h2));
         vault = vault2;
         h2.configureToken(weth, _cfg(250, 4000, 100));
@@ -612,7 +612,7 @@ contract VeradaHookTest is Deployers {
     }
 
     function testFuzz_configureValidation(uint24 base, uint24 start, uint32 decay) public {
-        IVeradaHook.FeeConfig memory c = _cfg(base, start, decay);
+        IVaradaHook.FeeConfig memory c = _cfg(base, start, decay);
         bool ok = base >= 100 && base <= 500 && start <= 8000
             && (start == 0 || (decay > 0 && decay <= 1 days));
         if (ok) {

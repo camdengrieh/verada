@@ -2,7 +2,7 @@ import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { EndaomentClient } from "@verada/endaoment-client";
+import { EndaomentClient } from "@varada/endaoment-client";
 import { harvest, loadHarvest } from "../src/harvest.js";
 
 function listing(i: number) {

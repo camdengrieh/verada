@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState, type FormEvent } from "react";
-import { CATEGORIES, REGIONS } from "@verada/sdk";
+import { CATEGORIES, REGIONS } from "@varada/sdk";
 import { useDeps } from "@/components/providers";
 import { errorText } from "@/components/use-tx";
 import type { CatalogOrg } from "@/lib/indexer";

@@ -7,9 +7,9 @@
 import { CircleAlert, Check, ExternalLink, HandHeart, X } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { toast } from "sonner";
-import { fireConfetti, type ConfettiPreset } from "@verada/ui/components/motion/confetti";
-import { Wash, type WashBlob } from "@verada/ui/components/varada/watercolour";
-import { cn } from "@verada/ui/lib/utils";
+import { fireConfetti, type ConfettiPreset } from "@varada/ui/components/motion/confetti";
+import { Wash, type WashBlob } from "@varada/ui/components/varada/watercolour";
+import { cn } from "@varada/ui/lib/utils";
 
 export type TxKind = "swap" | "launch" | "vote" | "donation" | "transaction";
 export type TxState = "pending" | "success" | "error";

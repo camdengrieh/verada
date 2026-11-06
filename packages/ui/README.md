@@ -1,4 +1,4 @@
-# @verada/ui
+# @varada/ui
 
 Varada's component library, styled for **Direction A · Paper & Pigment**: cotton-paper ground, terracotta
 actions, sage for giving and voting, Fraunces / Instrument Sans / JetBrains Mono, painted art. Built on
@@ -9,17 +9,17 @@ shadcn/ui conventions with components adapted from 21st.dev. Every component and
 
 ```css
 /* the app's stylesheet */
-@import "@verada/ui/styles.css";
+@import "@varada/ui/styles.css";
 @source "<relative path to>/packages/ui/src";
 ```
 
 ```tsx
-import { Button } from "@verada/ui/components/ui/button";
-import { TradePanel } from "@verada/ui/components/varada/trade-panel";
-import { AssetProvider } from "@verada/ui/lib/assets";
+import { Button } from "@varada/ui/components/ui/button";
+import { TradePanel } from "@varada/ui/components/varada/trade-panel";
+import { AssetProvider } from "@varada/ui/lib/assets";
 ```
 
-- Add `transpilePackages: ["@verada/ui"]` in Next config (the package ships TypeScript source).
+- Add `transpilePackages: ["@varada/ui"]` in Next config (the package ships TypeScript source).
 - Wrap pages in `AssetProvider` with a resolver for site-relative paths (`assets/...`). The site is served
   under `/bzz/<ref>/`, bzz subdomains and ENS gateways, so components never build absolute URLs
   themselves. In apps/web the resolver is `useRel()`.
@@ -46,8 +46,8 @@ Each component file starts with a comment naming its source (`Adapted from 21st.
 
 1. Look on 21st.dev first (the team has paid access; the `21st` MCP server can search and retrieve
    components). shadcn's CLI and 21st.dev's install command both work from this folder, because
-   `components.json` points their aliases at `@verada/ui/...`.
-2. Adapt it: imports from `@verada/ui/...`, Radix via the unified `radix-ui` package, animation via
+   `components.json` points their aliases at `@varada/ui/...`.
+2. Adapt it: imports from `@varada/ui/...`, Radix via the unified `radix-ui` package, animation via
    `motion/react`, icons from `lucide-react`. Replace any colour with tokens; remove external URLs, fonts
    and images. Keep 44px touch targets, labels, visible focus, ≥4.5:1 text contrast and reduced-motion
    handling. No emoji as icons.
@@ -71,6 +71,6 @@ Each component file starts with a comment naming its source (`Adapted from 21st.
 ## Checks
 
 ```sh
-pnpm --filter @verada/ui typecheck
-pnpm --filter @verada/ui test
+pnpm --filter @varada/ui typecheck
+pnpm --filter @varada/ui test
 ```

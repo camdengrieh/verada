@@ -20,9 +20,9 @@ describe("readConfig", () => {
   it("reads exactly the variables infra sets", () => {
     const c = readConfig({
       PORT: "42070",
-      BEE_GATEWAY_URL: "https://swarm.verada.xyz/",
-      PUBLIC_GATEWAY_URL: "https://swarm.verada.xyz",
-      INDEXER_URL: "https://api.verada.xyz",
+      BEE_GATEWAY_URL: "https://swarm.varada.xyz/",
+      PUBLIC_GATEWAY_URL: "https://swarm.varada.xyz",
+      INDEXER_URL: "https://api.varada.xyz",
       ARKIV_CHAIN: "rabdi",
       ARKIV_ENABLED: "true",
       CORS_ALLOWED_ORIGINS: "https://varada.eth.limo, https://*.eth.limo",
@@ -36,11 +36,11 @@ describe("readConfig", () => {
       NODE_ENV: "production",
     });
     expect(c.swarm).toEqual({
-      gatewayUrl: "https://swarm.verada.xyz",
+      gatewayUrl: "https://swarm.varada.xyz",
       authSecret: "s3cret",
-      stampsUrl: "https://swarm.verada.xyz",
+      stampsUrl: "https://swarm.varada.xyz",
       batchId: "ab".repeat(32),
-      publicGatewayUrl: "https://swarm.verada.xyz",
+      publicGatewayUrl: "https://swarm.varada.xyz",
     });
     expect(c.arkiv.enabled).toBe(true);
     expect(c.corsOrigins).toEqual(["https://varada.eth.limo", "https://*.eth.limo"]);

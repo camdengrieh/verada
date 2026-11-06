@@ -151,10 +151,10 @@ ponder.on("AgentVault:Given", onVaultGiven);
 // Live-donation mode.
 ponder.on("Factory:LiveModeConfigured", onLiveModeConfigured);
 ponder.on("FeeConsolidator:ClaimsConverted", onClaimsConverted);
-ponder.on("VeradaLiveHook:TokenConfigured", onLiveTokenConfigured);
-ponder.on("VeradaLiveHook:PoolRegistered", onLivePoolRegistered);
-ponder.on("VeradaLiveHook:FeeTaken", onFeeTaken);
-ponder.on("VeradaLiveHook:HeldRetried", onHeldRetried);
+ponder.on("VaradaLiveHook:TokenConfigured", onLiveTokenConfigured);
+ponder.on("VaradaLiveHook:PoolRegistered", onLivePoolRegistered);
+ponder.on("VaradaLiveHook:FeeTaken", onFeeTaken);
+ponder.on("VaradaLiveHook:HeldRetried", onHeldRetried);
 ponder.on("LiveDonationVault:LiveTokenRegistered", onLiveTokenRegistered);
 ponder.on("LiveDonationVault:Credited", onCredited);
 ponder.on("LiveDonationVault:Donated", onLiveDonated);
@@ -169,5 +169,5 @@ ponder.on("RotationGovernor:PeriodChangeScheduled", onPeriodChangeScheduled);
 ponder.on("RotationGovernor:CuratedPicksUsed", onRotationCuratedPicksUsed);
 ponder.on("RotationGovernor:BallotPrepared", onRotationBallotPrepared);
 // Market data: holder balances from every transfer; trades from PoolManager transfers' receipts.
-ponder.on("VeradaToken:Transfer", onTokenTransfer);
-ponder.on("VeradaTokenPool:Transfer", onPoolTransfer);
+ponder.on("VaradaToken:Transfer", onTokenTransfer);
+ponder.on("VaradaTokenPool:Transfer", onPoolTransfer);

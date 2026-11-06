@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AssetProvider } from "@verada/ui/lib/assets";
+import { AssetProvider } from "@varada/ui/lib/assets";
 import { siteBase } from "@/lib/base";
 
 /**

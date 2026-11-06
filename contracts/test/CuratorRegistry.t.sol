@@ -109,8 +109,8 @@ contract CuratorRegistryTest is CuratorBase {
         assertTrue(curators.isRegistered(HUNGER));
         assertEq(identity.ownerOf(agentId), address(curators));
         assertEq(identity.tokenURI(agentId), "data:application/json,{}");
-        assertEq(identity.getMetadata(agentId, "verada.category"), abi.encodePacked(HUNGER));
-        assertEq(identity.getMetadata(agentId, "verada.vault"), abi.encodePacked(vault));
+        assertEq(identity.getMetadata(agentId, "varada.category"), abi.encodePacked(HUNGER));
+        assertEq(identity.getMetadata(agentId, "varada.vault"), abi.encodePacked(vault));
         assertEq(AgentVault(vault).categoryBit(), HUNGER);
         assertEq(address(AgentVault(vault).curators()), address(curators));
         (bool found, uint8 c) = curators.categoryOfLabelhash(keccak256("hunger"));

@@ -6,8 +6,8 @@
 import { CircleCheck, TriangleAlert } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useId } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@verada/ui/components/ui/tooltip";
-import { cn } from "@verada/ui/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@varada/ui/components/ui/tooltip";
+import { cn } from "@varada/ui/lib/utils";
 
 export type HolderTone = "pool" | "top10" | "creator" | "others" | "muted";
 

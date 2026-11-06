@@ -19,7 +19,7 @@ export const baseEnv = {
   BEE_GATEWAY_URL: "http://gateway.internal:3000",
   BEE_GATEWAY_AUTH_SECRET: "gateway-secret",
   SWARM_BATCH_ID: BATCH,
-  PUBLIC_GATEWAY_URL: "https://gw.verada.xyz",
+  PUBLIC_GATEWAY_URL: "https://gw.varada.xyz",
   RATE_LIMIT_RPS: "100",
   RATE_LIMIT_BURST: "100",
   MAX_LOGO_BYTES: "4096",

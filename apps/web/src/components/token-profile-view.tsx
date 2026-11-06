@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { Fragment } from "react";
-import { getTokenTextRecord, swarmGatewayUrl, TOKEN_TEXT_KEYS } from "@verada/sdk";
+import { getTokenTextRecord, swarmGatewayUrl, TOKEN_TEXT_KEYS } from "@varada/sdk";
 import type { Address } from "viem";
 import { useAppConfig, useDeps } from "@/components/providers";
 import type { Source } from "@/lib/data";

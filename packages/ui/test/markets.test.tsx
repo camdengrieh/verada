@@ -2,13 +2,13 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MotionGlobalConfig } from "motion/react";
 import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { LiquidityMeter, liquidityFraction, liquidityTier } from "@verada/ui/components/varada/liquidity-meter";
-import { MarketStatus, formatTimeUntil, newYorkParts, usMarketSession } from "@verada/ui/components/varada/market-status";
-import { PriceImpactLadder, ladderSeverity } from "@verada/ui/components/varada/price-impact-ladder";
-import { StockMarketCard, launchability, type OndoAsset } from "@verada/ui/components/varada/stock-market-card";
-import { StockMarketList, filterStockAssets, stockKindCounts } from "@verada/ui/components/varada/stock-market-list";
-import { AssetKindBadge } from "@verada/ui/components/varada/asset-kind-badge";
-import { PairPicker } from "@verada/ui/components/varada/pair-picker";
+import { LiquidityMeter, liquidityFraction, liquidityTier } from "@varada/ui/components/varada/liquidity-meter";
+import { MarketStatus, formatTimeUntil, newYorkParts, usMarketSession } from "@varada/ui/components/varada/market-status";
+import { PriceImpactLadder, ladderSeverity } from "@varada/ui/components/varada/price-impact-ladder";
+import { StockMarketCard, launchability, type OndoAsset } from "@varada/ui/components/varada/stock-market-card";
+import { StockMarketList, filterStockAssets, stockKindCounts } from "@varada/ui/components/varada/stock-market-list";
+import { AssetKindBadge } from "@varada/ui/components/varada/asset-kind-badge";
+import { PairPicker } from "@varada/ui/components/varada/pair-picker";
 import {
   QuoteAssetIdentity,
   feeRouteHops,
@@ -17,9 +17,9 @@ import {
   isDirectUsdc,
   quoteMetaLine,
   type QuoteAsset,
-} from "@verada/ui/components/varada/quote-asset";
-import { QuoteAssetCard } from "@verada/ui/components/varada/quote-asset-card";
-import { QuoteAssetList, filterQuoteAssets, quoteKindCounts } from "@verada/ui/components/varada/quote-asset-list";
+} from "@varada/ui/components/varada/quote-asset";
+import { QuoteAssetCard } from "@varada/ui/components/varada/quote-asset-card";
+import { QuoteAssetList, filterQuoteAssets, quoteKindCounts } from "@varada/ui/components/varada/quote-asset-list";
 import {
   TradePanel,
   defaultBuyPresets,
@@ -27,7 +27,7 @@ import {
   usdToTokenAmount,
   type TradePanelProps,
   type TradeSide,
-} from "@verada/ui/components/varada/trade-panel";
+} from "@varada/ui/components/varada/trade-panel";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {

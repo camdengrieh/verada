@@ -1,6 +1,6 @@
 // Local mock of the browser-facing API: the real route layer (CORS, rate limits, cursors, SSE)
 // over the in-memory fixture repository. Used for browser integration checks; never deployed.
-//   pnpm --filter @verada/indexer exec tsx scripts/serve-fixtures.ts [port]
+//   pnpm --filter @varada/indexer exec tsx scripts/serve-fixtures.ts [port]
 import { createServer } from "node:http";
 import { Readable } from "node:stream";
 import { ActivityBus } from "../src/api/bus";

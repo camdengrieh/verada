@@ -1,5 +1,5 @@
 {
-  "name": "@verada/indexer",
+  "name": "@varada/indexer",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -14,9 +14,9 @@
   "dependencies": {
     "@coinbase/x402": "2.1.0",
     "@openzeppelin/merkle-tree": "^1.0.8",
-    "@verada/cause-catalog": "workspace:*",
-    "@verada/endaoment-client": "workspace:*",
-    "@verada/sdk": "workspace:*",
+    "@varada/cause-catalog": "workspace:*",
+    "@varada/endaoment-client": "workspace:*",
+    "@varada/sdk": "workspace:*",
     "@x402/core": "2.30.0",
     "@x402/evm": "2.30.0",
     "@x402/hono": "2.30.0",

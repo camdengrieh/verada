@@ -5,11 +5,11 @@
 
 import { LockKeyhole } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@verada/ui/components/ui/drawer";
-import { BallotList, type BallotGroup } from "@verada/ui/components/varada/ballot-list";
-import type { BallotOptionData } from "@verada/ui/components/varada/ballot-option";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@varada/ui/components/ui/drawer";
+import { BallotList, type BallotGroup } from "@varada/ui/components/varada/ballot-list";
+import type { BallotOptionData } from "@varada/ui/components/varada/ballot-option";
+import { cn } from "@varada/ui/lib/utils";
 import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
 
 export interface MobileVoteSheetProps extends MobileSheetBaseProps {

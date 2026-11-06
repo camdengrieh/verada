@@ -10,7 +10,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
 
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
 import {ConsolidatorBase} from "./ConsolidatorBase.sol";
 
 /// @dev WETH as the quote asset, routed through a native ETH / USDC pool (the deepest venue).
@@ -46,7 +46,7 @@ contract FeeConsolidatorWethTest is ConsolidatorBase {
 
         hook.configureToken(
             address(meme),
-            IVeradaHook.FeeConfig({
+            IVaradaHook.FeeConfig({
                 baseFeeBps: BASE_BPS,
                 sniperFeeStartBps: 0,
                 sniperDecaySeconds: 0,

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
-import { HoldersTable } from "@verada/ui/components/varada/holders-table";
-import { TradeFeed, TradeTicker, type TradeItem } from "@verada/ui/components/varada/trade-feed";
+import { HoldersTable } from "@varada/ui/components/varada/holders-table";
+import { TradeFeed, TradeTicker, type TradeItem } from "@varada/ui/components/varada/trade-feed";
 
 // Its own file: motion reads prefers-reduced-motion once per module instance.
 beforeAll(() => {

@@ -1,10 +1,10 @@
 {
-  "name": "@verada/cause-catalog",
+  "name": "@varada/cause-catalog",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "bin": {
-    "verada-catalog": "./bin/verada-catalog.mjs"
+    "varada-catalog": "./bin/varada-catalog.mjs"
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@openzeppelin/merkle-tree": "^1.0.8",
-    "@verada/endaoment-client": "workspace:*",
-    "@verada/sdk": "workspace:*",
+    "@varada/endaoment-client": "workspace:*",
+    "@varada/sdk": "workspace:*",
     "viem": "^2.21.0",
     "zod": "^3.23.8"
   },

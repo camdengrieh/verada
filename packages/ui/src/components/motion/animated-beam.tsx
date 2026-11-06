@@ -6,8 +6,8 @@
 // is simply inked in with no travel. Use it to show money flowing coin → cause pool → charity.
 import { motion } from "motion/react";
 import { useEffect, useId, useState, type ComponentProps, type ReactNode, type RefObject } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface AnimatedBeamProps {
   containerRef: RefObject<HTMLElement | null>;

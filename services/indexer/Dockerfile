@@ -9,10 +9,10 @@ COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/endaoment-client/package.json packages/endaoment-client/package.json
 COPY packages/cause-catalog/package.json packages/cause-catalog/package.json
 COPY services/indexer/package.json services/indexer/package.json
-RUN pnpm install --prod --frozen-lockfile --filter @verada/indexer...
+RUN pnpm install --prod --frozen-lockfile --filter @varada/indexer...
 
 FROM node:22-slim AS runtime
-ENV NODE_ENV=production PONDER_TELEMETRY_DISABLED=true PORT=42069 DATABASE_SCHEMA=verada
+ENV NODE_ENV=production PONDER_TELEMETRY_DISABLED=true PORT=42069 DATABASE_SCHEMA=varada
 WORKDIR /app
 RUN chown node:node /app
 COPY --from=deps --chown=node:node /app/node_modules ./node_modules

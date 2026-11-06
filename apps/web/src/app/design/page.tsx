@@ -31,7 +31,7 @@ const TOC = [
 ];
 
 /**
- * Living gallery of the @verada/ui library (Direction A). Every component and state appears here;
+ * Living gallery of the @varada/ui library (Direction A). Every component and state appears here;
  * pages move onto the library one by one.
  */
 export default function DesignPage() {
@@ -42,7 +42,7 @@ export default function DesignPage() {
           <span className="kicker">Varada · Direction A · Paper &amp; Pigment</span>
           <h1 className="text-5xl font-extrabold tracking-tight">Design system</h1>
           <p className="max-w-3xl text-lg text-ink-soft">
-            The @verada/ui component library: shadcn primitives and 21st.dev components themed for Varada, plus the
+            The @varada/ui component library: shadcn primitives and 21st.dev components themed for Varada, plus the
             pieces only Varada needs. Sample values only.
           </p>
         </div>

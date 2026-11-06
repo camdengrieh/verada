@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { AGENT_CATEGORIES, agentName } from "@verada/sdk";
+import { AGENT_CATEGORIES, agentName } from "@varada/sdk";
 import { agentHref, causeName, usdcText } from "@/components/agent-common";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText } from "@/components/use-tx";

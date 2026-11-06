@@ -1,7 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { entryProof, loadCatalog } from "@verada/cause-catalog";
-import { AGENT_CATEGORIES, REGIONS, agentByLabel, agentBySlug, bucketId, regionBySlug } from "@verada/sdk";
+import { entryProof, loadCatalog } from "@varada/cause-catalog";
+import { AGENT_CATEGORIES, REGIONS, agentByLabel, agentBySlug, bucketId, regionBySlug } from "@varada/sdk";
 import { getAddress, keccak256, toHex, type Address, type Hex } from "viem";
 import { buildReport, canonicalJson, type BuiltReport } from "./build.js";
 import { giveCalldata, submitCurationsCalldata } from "./calldata.js";
@@ -9,7 +9,7 @@ import { parseReport } from "./report.js";
 import { oneClawSigner, type CuratorSigner } from "./signer.js";
 import { curatorStatus, rpcReader, toJson, vaultOf } from "./status.js";
 
-const HELP = `verada-curator <command> [options]
+const HELP = `varada-curator <command> [options]
 
   status    read the next epoch, deadlines, catalogue version and the agent's vault from chain (--category)
   pool      list a bucket's catalogue entries (--category <slug|label> --region <slug>)
@@ -104,7 +104,7 @@ async function main() {
     case "template": {
       const agent = agentOf(need(v.category, "--category"));
       return out({
-        schema: "verada.curation/v1",
+        schema: "varada.curation/v1",
         category: agent.slug,
         epoch: Number(need(v.epoch, "--epoch")),
         catalogVersion: Number(need(v["catalog-version"], "--catalog-version")),

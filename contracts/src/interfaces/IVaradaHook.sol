@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-/// @title IVeradaHook
+/// @title IVaradaHook
 /// @notice Uniswap v4 hook: dynamic LP fee with anti-sniper decay, and fee capture after swaps.
 ///         Raw fees are forwarded to the fee consolidator, which swaps them to the settlement asset.
-interface IVeradaHook {
+interface IVaradaHook {
     /// @notice Per-token fee configuration.
     struct FeeConfig {
         uint24 baseFeeBps;

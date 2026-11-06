@@ -22,10 +22,10 @@ import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
 import {TokenProfileRegistry} from "../../src/TokenProfileRegistry.sol";
-import {VeradaFactory} from "../../src/VeradaFactory.sol";
-import {VeradaHook} from "../../src/VeradaHook.sol";
-import {VeradaLpLocker} from "../../src/VeradaLpLocker.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaFactory} from "../../src/VaradaFactory.sol";
+import {VaradaHook} from "../../src/VaradaHook.sol";
+import {VaradaLpLocker} from "../../src/VaradaLpLocker.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
@@ -35,8 +35,8 @@ import {ILpLocker} from "../../src/interfaces/ILpLocker.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
-import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
+import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
 import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
@@ -47,27 +47,27 @@ import {LiveBase} from "./LiveBase.sol";
 import {LiveUSDC} from "./LiveMocks.sol";
 
 /// @dev Integration fixture: the whole system as the deploy script wires it, with tokens launched
-///      through the real VeradaFactory. Real PoolManager, PositionManager and Permit2, real
-///      QuoteRegistry, FeeConsolidator, FeeVault, EpochGovernor, mined VeradaHook, VeradaLpLocker
+///      through the real VaradaFactory. Real PoolManager, PositionManager and Permit2, real
+///      QuoteRegistry, FeeConsolidator, FeeVault, EpochGovernor, mined VaradaHook, VaradaLpLocker
 ///      and TokenProfileRegistry (weekly mode), plus the real RotationGovernor, LiveDonationVault
-///      and mined VeradaLiveHook enabled through `configureLiveMode` (live mode). Endaoment and
+///      and mined VaradaLiveHook enabled through `configureLiveMode` (live mode). Endaoment and
 ///      the voting scheme are mocked (plaintext tallies). Route pools and swap helpers come from
 ///      LiveBase: quote/USDC, native ETH/USDC (WETH unwraps into it), quote/WETH and ondoB/quote.
 abstract contract LiveFactoryBase is LiveBase {
     uint160 internal constant WEEKLY_FLAGS = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
         | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
-    /// @dev namehash("verada.eth")
+    /// @dev namehash("varada.eth")
     bytes32 internal constant PARENT_NODE =
-        0x57d91e5a92cd91e5d7f0bc0b6bbcab514531e262e06e38ae9e2d95ef97080e65;
+        0x7d4d6e6569fdd1888104213a462800d63bbc25e3e300f7cf64c5cebeb6da0aa3;
     /// @dev 1.0001^-69000: about 0.001 whole quote per whole token, for an 18-decimal quote.
     int24 internal constant START_TICK = -69_000;
 
     IPositionManager internal posm;
     TokenProfileRegistry internal profileRegistry;
     EpochGovernor internal epochGov;
-    VeradaHook internal weeklyHook;
-    VeradaLpLocker internal locker;
-    VeradaFactory internal factory;
+    VaradaHook internal weeklyHook;
+    VaradaLpLocker internal locker;
+    VaradaFactory internal factory;
     uint256 internal launches;
 
     address internal alice = makeAddr("alice");
@@ -144,14 +144,14 @@ abstract contract LiveFactoryBase is LiveBase {
         );
         bytes memory weeklyArgs = abi.encode(manager, factoryAddr, address(cons));
         (, bytes32 weeklySalt) =
-            HookMiner.find(address(this), WEEKLY_FLAGS, type(VeradaHook).creationCode, weeklyArgs);
-        weeklyHook = new VeradaHook{salt: weeklySalt}(manager, factoryAddr, address(cons));
-        locker = new VeradaLpLocker(address(posm), IFeeConsolidator(address(cons)), factoryAddr);
-        factory = new VeradaFactory(
+            HookMiner.find(address(this), WEEKLY_FLAGS, type(VaradaHook).creationCode, weeklyArgs);
+        weeklyHook = new VaradaHook{salt: weeklySalt}(manager, factoryAddr, address(cons));
+        locker = new VaradaLpLocker(address(posm), IFeeConsolidator(address(cons)), factoryAddr);
+        factory = new VaradaFactory(
             manager,
             posm,
             IQuoteRegistry(address(registry)),
-            IVeradaHook(address(weeklyHook)),
+            IVaradaHook(address(weeklyHook)),
             ILpLocker(address(locker)),
             IFeeVault(address(feeVault)),
             IEpochGovernor(address(epochGov)),
@@ -208,9 +208,9 @@ abstract contract LiveFactoryBase is LiveBase {
     function _deployParams(bytes32 salt, address quoteAsset, uint24 surcharge, uint32 decay)
         internal
         pure
-        returns (IVeradaFactory.DeployParams memory)
+        returns (IVaradaFactory.DeployParams memory)
     {
-        return IVeradaFactory.DeployParams(
+        return IVaradaFactory.DeployParams(
             "Live Frog",
             "LFROG",
             "ipfs://live-frog",
@@ -247,19 +247,19 @@ abstract contract LiveFactoryBase is LiveBase {
         uint96 threshold,
         RotationPeriod period,
         bytes32 initialCause
-    ) internal returns (VeradaToken token, PoolKey memory key) {
+    ) internal returns (VaradaToken token, PoolKey memory key) {
         bytes32 salt = bytes32(++launches);
         vm.prank(creator);
         (address t,) = factory.deployLiveToken(
             _deployParams(salt, quoteAsset, 0, 0),
-            IVeradaFactory.LiveParams(initialCause, period, threshold)
+            IVaradaFactory.LiveParams(initialCause, period, threshold)
         );
-        token = VeradaToken(t);
+        token = VaradaToken(t);
         key = _liveKey(t, quoteAsset);
     }
 
     /// @dev Gives `who` quote assets (and WETH) and router approvals, including for `token`.
-    function _fund(address who, VeradaToken token) internal {
+    function _fund(address who, VaradaToken token) internal {
         quote.mint(who, 1e27);
         ondoB.mint(who, 1e27);
         vm.deal(who, 1e24);

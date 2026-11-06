@@ -3,7 +3,7 @@
 
 import { useInView, useMotionValue, useReducedMotion, useSpring } from "motion/react";
 import { useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 // useLayoutEffect warns during server rendering; static export pre-renders this file.
 const useIsoLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;

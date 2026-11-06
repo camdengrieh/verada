@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
@@ -19,7 +19,7 @@ import {MockEndaomentRegistry, MockOrgFactory, MockUSDC} from "../mocks/Endaomen
 import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
 import {CatalogPublish, CatalogTree} from "../utils/CatalogFixture.sol";
 
-/// @dev Shared governor fixture: a real VeradaToken whose supply is split between the pool
+/// @dev Shared governor fixture: a real VaradaToken whose supply is split between the pool
 ///      manager stand-in (70%) and three holders, twelve active catalogue causes and the
 ///      plaintext scheme. The token's focus (hunger x Africa) holds causes 0..2 only, a pool no
 ///      larger than the ballot, so every round's ballot is those three in order.
@@ -29,7 +29,7 @@ abstract contract RotationGovernorBase is Test {
     CauseRegistry internal causes;
     CauseCatalog internal catalog;
     RotationGovernor internal gov;
-    VeradaToken internal token;
+    VaradaToken internal token;
 
     address internal pm = makeAddr("poolManager");
     address internal alice = makeAddr("alice"); // 20%
@@ -120,8 +120,8 @@ abstract contract RotationGovernorBase is Test {
         }
     }
 
-    function _newToken() internal returns (VeradaToken t) {
-        t = new VeradaToken("T", "T", "", address(this), address(this));
+    function _newToken() internal returns (VaradaToken t) {
+        t = new VaradaToken("T", "T", "", address(this), address(this));
         uint256 unit = 1e9 * 1e18;
         t.transfer(pm, 70 * unit);
         t.transfer(alice, 20 * unit);
@@ -241,7 +241,7 @@ contract RotationGovernorTest is RotationGovernorBase {
         uint256[5] memory lengths = [uint256(3600), 43_200, 86_400, 259_200, 604_800];
         uint256[5] memory buffers = [uint256(900), 10_800, 21_600, 21_600, 21_600];
         for (uint8 i; i < 5; ++i) {
-            VeradaToken t = _newToken();
+            VaradaToken t = _newToken();
             _register(address(t), RotationPeriod(i));
             uint256 s0 = gov.rotationStart(address(t), 0);
             assertEq(gov.rotationStart(address(t), 1) - s0, lengths[i]);
@@ -316,7 +316,7 @@ contract RotationGovernorTest is RotationGovernorBase {
     function test_rotationOne_hasNoWeight() public {
         // For a token registered as it is created (as the factory does), the round for
         // rotation 1 snapshots before launch, so nobody can vote in it.
-        VeradaToken fresh = _newToken();
+        VaradaToken fresh = _newToken();
         _register(address(fresh), RotationPeriod.OneDay);
         vm.warp(block.timestamp + 10);
         _prep(address(fresh), 1);
@@ -642,7 +642,7 @@ contract RotationGovernorTest is RotationGovernorBase {
     }
 
     function test_register_poolTooSmall() public {
-        VeradaToken t = _newToken();
+        VaradaToken t = _newToken();
         vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.PoolTooSmall.selector, address(t), 0));
         gov.registerToken(address(t), causeIds[0], RotationPeriod.OneDay);
     }
@@ -651,7 +651,7 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_propose_rotationZero_noCirculatingSupply() public {
         // A token registered as it is created (as the factory does) has no supply at start(0) - 1.
-        VeradaToken fresh = _newToken();
+        VaradaToken fresh = _newToken();
         _register(address(fresh), RotationPeriod.OneDay);
         vm.warp(block.timestamp + 1);
         vm.prank(alice);

@@ -72,19 +72,19 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Publish tool tests
-        run: pnpm --filter @verada/publish test
+        run: pnpm --filter @varada/publish test
       - name: Publish tool typecheck
-        run: pnpm --filter @verada/publish typecheck
+        run: pnpm --filter @varada/publish typecheck
       - name: Web tests
-        run: pnpm --filter @verada/web test
+        run: pnpm --filter @varada/web test
       - name: Build static export
-        run: pnpm --filter @verada/web build
+        run: pnpm --filter @varada/web build
       - name: Validate export (no binaries, relative paths, every route has index.html)
-        run: pnpm --filter @verada/web verify:export
+        run: pnpm --filter @varada/web verify:export
       - name: Validate export with the publish tool
-        run: node packages/publish/bin/verada-publish.mjs validate --dir apps/web/out
+        run: node packages/publish/bin/varada-publish.mjs validate --dir apps/web/out
       - name: Dry-run upload (size and stamp estimate only, nothing is sent)
-        run: node packages/publish/bin/verada-publish.mjs upload --dir apps/web/out --ttl-days 90
+        run: node packages/publish/bin/varada-publish.mjs upload --dir apps/web/out --ttl-days 90
 
   infra:
     name: Infra (typecheck, jest, cdk synth)
@@ -99,9 +99,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Typecheck
-        run: pnpm --filter @verada/infra typecheck
+        run: pnpm --filter @varada/infra typecheck
       - name: Test
-        run: pnpm --filter @verada/infra test
+        run: pnpm --filter @varada/infra test
       - name: Synthesize (dummy context, no AWS credentials)
         working-directory: infra
         run: >-
@@ -132,7 +132,7 @@ jobs:
       - name: Binary assets only in the web asset folders
         run: |
           # Art is tracked: originals in apps/web/assets-src/ (never published) and the optimised
-          # copies from `pnpm --filter @verada/web assets` in apps/web/public/assets/ (published).
+          # copies from `pnpm --filter @varada/web assets` in apps/web/public/assets/ (published).
           # Sizes in the built site are checked by the web export validation.
           pattern='\.(png|jpe?g|gif|webp|avif|bmp|tiff?|ico|icns|svg|woff2?|ttf|otf|eot|mp3|wav|ogg|flac|mp4|webm|mov|avi|mkv)$'
           published='\.(webp|avif|svg|woff2|png)$'

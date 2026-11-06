@@ -1,7 +1,7 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildCatalog, verifyEntryProof, writeCatalog, type HarvestedOrg } from "@verada/cause-catalog";
+import { buildCatalog, verifyEntryProof, writeCatalog, type HarvestedOrg } from "@varada/cause-catalog";
 import { describe, expect, it } from "vitest";
 import { ActivityBus } from "../src/api/bus";
 import { catalogStoreOf, createCatalogStore } from "../src/api/catalog";

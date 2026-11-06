@@ -15,7 +15,7 @@ be reused by another LP or protocol, and none of it can be used without the rest
 This library splits those behaviours into **generic hooks**, each named for what it does, each
 usable on its own and combinable with the others into one concrete hook. The protocol-specific
 parts (a token factory, where fees go, governance) stay as thin glue on top, written against the
-features' `internal virtual` extension points. [Verada.md](Verada.md) is a case study of a
+features' `internal virtual` extension points. [Varada.md](Varada.md) is a case study of a
 production launchpad rebuilt this way.
 
 ## Layout
@@ -35,7 +35,7 @@ contracts/test/hooks/
   base/ fee/ oracle/ access/ conversion/ examples/ integration/
 docs/hooks/
   README.md (catalogue, install, gas, trust), DESIGN.md (this file), one <Module>.md per module,
-  BaseHook.md, ComposeYourOwn.md (tutorial), Composition.md (reference), Verada.md (case study)
+  BaseHook.md, ComposeYourOwn.md (tutorial), Composition.md (reference), Varada.md (case study)
 ```
 
 Build and test only the hooks (no `via_ir`, separate `out-hooks/` and `cache-hooks/`, a few

@@ -1,5 +1,5 @@
-import { ballotCommitment, periodPollScope, rotationPollScope } from "@verada/sdk";
-import { epochGovernorAbi, rotationGovernorAbi, zamaVotingSchemeAbi } from "@verada/sdk/abis";
+import { ballotCommitment, periodPollScope, rotationPollScope } from "@varada/sdk";
+import { epochGovernorAbi, rotationGovernorAbi, zamaVotingSchemeAbi } from "@varada/sdk/abis";
 import {
   custom,
   decodeFunctionData,

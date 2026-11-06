@@ -1,5 +1,5 @@
 {
-  "name": "@verada/arkiv-registry",
+  "name": "@varada/arkiv-registry",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@arkiv-network/sdk": "1.0.1",
-    "@verada/sdk": "workspace:*",
+    "@varada/sdk": "workspace:*",
     "viem": "^2.57.16",
     "zod": "^3.23.8"
   },

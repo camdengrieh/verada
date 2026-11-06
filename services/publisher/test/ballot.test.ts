@@ -1,5 +1,5 @@
-import { buildReport, pickProof, type BuiltRegion } from "@verada/curator";
-import { BUCKET_COUNT, bucketId, categoryMaskOf, causeIdOfOrg, curatedQuotas, drawIndex, planBallot, planRotation, regionMaskOf } from "@verada/sdk";
+import { buildReport, pickProof, type BuiltRegion } from "@varada/curator";
+import { BUCKET_COUNT, bucketId, categoryMaskOf, causeIdOfOrg, curatedQuotas, drawIndex, planBallot, planRotation, regionMaskOf } from "@varada/sdk";
 import type { Address, Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { Backoff } from "../src/keeper/backoff.js";
@@ -189,7 +189,7 @@ describe("curated ballots", () => {
   const as = [pick(orgAt(HUNGER_AS, 99), 99), pick(orgAt(HUNGER_AS, 2), 2), pick(orgAt(HUNGER_AS, 4), 4)];
   const built = buildReport(
     {
-      schema: "verada.curation/v1",
+      schema: "varada.curation/v1",
       category: "hunger",
       epoch: 10,
       catalogVersion: 1,

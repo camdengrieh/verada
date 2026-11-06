@@ -7,9 +7,9 @@
     "declaration": false,
     "types": ["vitest/globals"],
     "paths": {
-      "@verada/ui/components/*": ["./src/components/*"],
-      "@verada/ui/lib/*": ["./src/lib/*"],
-      "@verada/ui/hooks/*": ["./src/hooks/*"]
+      "@varada/ui/components/*": ["./src/components/*"],
+      "@varada/ui/lib/*": ["./src/lib/*"],
+      "@varada/ui/hooks/*": ["./src/hooks/*"]
     }
   },
   "include": ["src", "test"]

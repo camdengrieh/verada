@@ -1,4 +1,4 @@
-import { epochGovernorAbi, rotationGovernorAbi, takeoverGovernorAbi, veradaFactoryAbi, veradaLpLockerAbi, zamaVotingSchemeAbi } from "@verada/sdk/abis";
+import { epochGovernorAbi, rotationGovernorAbi, takeoverGovernorAbi, varadaFactoryAbi, varadaLpLockerAbi, zamaVotingSchemeAbi } from "@varada/sdk/abis";
 import {
   BaseError,
   ContractFunctionRevertedError,
@@ -25,7 +25,7 @@ import {
   PERIOD_PROPOSAL_STATES,
   ROUND_STATUSES,
   roundCall,
-} from "@verada/sdk";
+} from "@varada/sdk";
 import type { BallotReader, RoundReader } from "./ballot.js";
 import {
   KeeperRevert,
@@ -217,12 +217,12 @@ export function createViemChain(opts: ViemChainOptions): {
     const lf = opts.lockerFactory;
     let locker: Promise<Address> | undefined;
     reader.uncollectedFees = async (token) => {
-      const address = await (locker ??= read<Address>(lf, veradaFactoryAbi, "locker").catch((err: unknown) => {
+      const address = await (locker ??= read<Address>(lf, varadaFactoryAbi, "locker").catch((err: unknown) => {
         locker = undefined;
         throw err;
       }));
       // collectFees is permissionless and returns what it would take: an eth_call costs nothing.
-      const { result } = await publicClient.simulateContract({ address, abi: veradaLpLockerAbi, functionName: "collectFees", args: [token] } as never);
+      const { result } = await publicClient.simulateContract({ address, abi: varadaLpLockerAbi, functionName: "collectFees", args: [token] } as never);
       const [a0, a1] = result as readonly [bigint, bigint];
       return a0 + a1;
     };
@@ -321,7 +321,7 @@ export function createViemChain(opts: ViemChainOptions): {
   let factoryLogs: FactoryLogReader | undefined;
   if (opts.factory) {
     const factory = opts.factory;
-    const event = veradaFactoryAbi.find((x) => x.type === "event" && x.name === "TokenCreated");
+    const event = varadaFactoryAbi.find((x) => x.type === "event" && x.name === "TokenCreated");
     if (!event || event.type !== "event") throw new Error("TokenCreated missing from the factory ABI");
     factoryLogs = {
       async tokensCreated(fromBlock) {

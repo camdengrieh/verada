@@ -1,15 +1,15 @@
 import type { Context, Event } from "ponder:registry";
 import { holder, holderDay, holderStat, token, tokenMarket, trade, tradeHour, tradeStat } from "ponder:schema";
 import { type Hex, decodeEventLog, zeroAddress } from "viem";
-import { VeradaFactoryAbi } from "../abis";
+import { VaradaFactoryAbi } from "../abis";
 import { POOL_MANAGER, PoolManagerSwapAbi, SWAP_TOPIC } from "../pool-manager";
 
 const HOUR = 3_600n;
 const DAY = 86_400n;
 const lc = (a: string) => a.toLowerCase();
 
-type TransferEvent = Event<"VeradaToken:Transfer">;
-type TransferContext = Context<"VeradaToken:Transfer">;
+type TransferEvent = Event<"VaradaToken:Transfer">;
+type TransferContext = Context<"VaradaToken:Transfer">;
 
 /**
  * Moves `value` between two balances. Returns +1 when `account` went from zero to nonzero, -1 for
@@ -37,7 +37,7 @@ async function moveBalance(
   return 0;
 }
 
-/** `VeradaToken:Transfer` — holder balances, holder count, supply and the daily holder series. */
+/** `VaradaToken:Transfer` — holder balances, holder count, supply and the daily holder series. */
 export async function onTokenTransfer({ event, context }: { event: TransferEvent; context: TransferContext }) {
   const tokenAddr = event.log.address as Hex;
   const { from, to, value } = event.args;
@@ -71,8 +71,8 @@ export async function onTokenTransfer({ event, context }: { event: TransferEvent
   else await context.db.insert(holderDay).values({ ...dayKey, holders });
 }
 
-type PoolEvent = Event<"VeradaTokenPool:Transfer">;
-type PoolContext = Context<"VeradaTokenPool:Transfer">;
+type PoolEvent = Event<"VaradaTokenPool:Transfer">;
+type PoolContext = Context<"VaradaTokenPool:Transfer">;
 
 /** Quote asset and sort order of a token's pool, read once from the factory and cached. */
 async function resolveMarket(context: PoolContext, tokenAddr: Hex, pool: Hex) {
@@ -81,7 +81,7 @@ async function resolveMarket(context: PoolContext, tokenAddr: Hex, pool: Hex) {
   let quote: Hex;
   try {
     quote = (await context.client.readContract({
-      abi: VeradaFactoryAbi,
+      abi: VaradaFactoryAbi,
       address: context.contracts.Factory.address as Hex,
       functionName: "quoteAssetOf",
       args: [tokenAddr],
@@ -196,7 +196,7 @@ async function bumpStat(context: PoolContext, tokenAddr: Hex, ts: bigint, s: Dec
 }
 
 /**
- * `VeradaTokenPool:Transfer` — a transfer into or out of the PoolManager. The transaction receipt
+ * `VaradaTokenPool:Transfer` — a transfer into or out of the PoolManager. The transaction receipt
  * (read through the cached client) holds the PoolManager `Swap` logs; each one on this token's pool becomes a trade. A swap moves
  * the token more than once (PoolManager, router, recipient), so trades are keyed by their Swap log
  * and recorded once. Liquidity moves and fee collection have no Swap log and add nothing.

@@ -1,8 +1,8 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
 import type { ComponentProps } from "react";
-import { EffectButton, type ButtonEffect } from "@verada/ui/components/motion/ink-button";
-import { cn } from "@verada/ui/lib/utils";
+import { EffectButton, type ButtonEffect } from "@varada/ui/components/motion/ink-button";
+import { cn } from "@varada/ui/lib/utils";
 
 export type { ButtonEffect };
 

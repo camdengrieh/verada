@@ -13,7 +13,7 @@ import {
   regionBySlug,
   regionMaskOf,
   regionSlugs,
-} from "@verada/sdk";
+} from "@varada/sdk";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import type { Hex } from "viem";

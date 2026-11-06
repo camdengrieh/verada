@@ -5,8 +5,8 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import { NumberTicker } from "@verada/ui/components/motion/number-ticker";
-import { cn } from "@verada/ui/lib/utils";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { cn } from "@varada/ui/lib/utils";
 import { InkFill, clamp01, formatUsd, usdFormatOptions, useThrottledAnnouncement } from "./impact-shared";
 import { PaperGrain } from "./watercolour";
 

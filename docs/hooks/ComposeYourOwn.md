@@ -21,7 +21,7 @@ The reference version of the same rules, worked on the five-feature `LaunchpadHo
 ## 1. Install
 
 ```sh
-forge install camdengrieh/verada@<commit-or-tag>
+forge install camdengrieh/varada@<commit-or-tag>
 ```
 
 `forge install` needs the repository to be public and the ref to contain `contracts/src/hooks`.
@@ -34,12 +34,12 @@ point the `v4-hooks/` remappings below at your copy.
 solc_version = "0.8.26"
 evm_version = "cancun"
 remappings = [
-  "v4-hooks/=lib/verada/contracts/src/hooks/",
-  "v4-hooks-script/=lib/verada/contracts/script/",
-  "v4-hooks-test/=lib/verada/contracts/test/hooks/",
-  "v4-core/=lib/verada/contracts/lib/v4-core/src/",
-  "@uniswap/v4-core/=lib/verada/contracts/lib/v4-core/",
-  "solmate/=lib/verada/contracts/lib/v4-core/lib/solmate/",
+  "v4-hooks/=lib/varada/contracts/src/hooks/",
+  "v4-hooks-script/=lib/varada/contracts/script/",
+  "v4-hooks-test/=lib/varada/contracts/test/hooks/",
+  "v4-core/=lib/varada/contracts/lib/v4-core/src/",
+  "@uniswap/v4-core/=lib/varada/contracts/lib/v4-core/",
+  "solmate/=lib/varada/contracts/lib/v4-core/lib/solmate/",
   "forge-std/=lib/forge-std/src/",
 ]
 ```

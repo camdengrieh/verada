@@ -1,6 +1,6 @@
 // Written for Varada
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { CAUSE_SHORT_LABELS, CauseIcon, type CauseName } from "./cause-icon";
 
 export interface CauseChipProps extends ComponentProps<"span"> {

@@ -19,13 +19,13 @@ importers:
       '@tanstack/react-query':
         specifier: ^5
         version: 5.106.1(@types/react@19.3.0)(react@19.3.1)
-      '@verada/endaoment-client':
+      '@varada/endaoment-client':
         specifier: workspace:*
         version: link:../../packages/endaoment-client
-      '@verada/sdk':
+      '@varada/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
-      '@verada/ui':
+      '@varada/ui':
         specifier: workspace:^
         version: link:../../packages/ui
       '@zama-fhe/sdk':
@@ -144,7 +144,7 @@ importers:
       '@arkiv-network/sdk':
         specifier: 1.0.1
         version: 1.0.1(typescript@5.9.3)(viem@2.57.16(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@5.0.10)(zod@3.25.76))
-      '@verada/sdk':
+      '@varada/sdk':
         specifier: workspace:*
         version: link:../sdk
       viem:
@@ -169,10 +169,10 @@ importers:
       '@openzeppelin/merkle-tree':
         specifier: ^1.0.8
         version: 1.0.8
-      '@verada/endaoment-client':
+      '@varada/endaoment-client':
         specifier: workspace:*
         version: link:../endaoment-client
-      '@verada/sdk':
+      '@varada/sdk':
         specifier: workspace:*
         version: link:../sdk
       viem:
@@ -206,10 +206,10 @@ importers:
       '@openzeppelin/merkle-tree':
         specifier: ^1.0.8
         version: 1.0.8
-      '@verada/cause-catalog':
+      '@varada/cause-catalog':
         specifier: workspace:*
         version: link:../cause-catalog
-      '@verada/sdk':
+      '@varada/sdk':
         specifier: workspace:*
         version: link:../sdk
       viem:
@@ -379,13 +379,13 @@ importers:
       '@openzeppelin/merkle-tree':
         specifier: ^1.0.8
         version: 1.0.8
-      '@verada/cause-catalog':
+      '@varada/cause-catalog':
         specifier: workspace:*
         version: link:../../packages/cause-catalog
-      '@verada/endaoment-client':
+      '@varada/endaoment-client':
         specifier: workspace:*
         version: link:../../packages/endaoment-client
-      '@verada/sdk':
+      '@varada/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       '@x402/core':
@@ -425,13 +425,13 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.5
         version: 1.19.5(hono@4.13.16)
-      '@verada/arkiv-registry':
+      '@varada/arkiv-registry':
         specifier: workspace:*
         version: link:../../packages/arkiv-registry
-      '@verada/curator':
+      '@varada/curator':
         specifier: workspace:*
         version: link:../../packages/curator
-      '@verada/sdk':
+      '@varada/sdk':
         specifier: workspace:*
         version: link:../../packages/sdk
       '@x402/core':

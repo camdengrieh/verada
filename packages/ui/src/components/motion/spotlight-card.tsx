@@ -6,7 +6,7 @@
 // the bloom at the centre. Touch skips it; under reduced motion it stays where it first appears.
 import { Slot } from "radix-ui";
 import { useEffect, useRef, type ComponentProps, type CSSProperties } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 const RING_MASK = "linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0)";
 

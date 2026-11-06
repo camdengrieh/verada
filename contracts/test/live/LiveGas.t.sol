@@ -7,7 +7,7 @@ import {Currency} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ConsolidatorBase} from "../consolidator/ConsolidatorBase.sol";
@@ -66,7 +66,7 @@ contract LiveGasTest is LiveBase {
 
     function _token(address quoteAsset, uint96 threshold, bytes32 cause)
         internal
-        returns (VeradaToken t, PoolKey memory k)
+        returns (VaradaToken t, PoolKey memory k)
     {
         (t, k) = _launchFull(quoteAsset, threshold, RotationPeriod.OneHour, 0, 0, cause);
         _fundTrader(trader, t);
@@ -75,7 +75,7 @@ contract LiveGasTest is LiveBase {
     // ------------------------------------------------------------------ swap path
 
     function test_gas_swapPath() public {
-        (VeradaToken t, PoolKey memory k) = _token(address(quote), NO_PUSH, CAUSE_A);
+        (VaradaToken t, PoolKey memory k) = _token(address(quote), NO_PUSH, CAUSE_A);
 
         emit log_named_uint("live no fee (dust)", _buyGas(k, address(t), 1));
         uint256 firstBucket = _buyGas(k, address(t), 1e18);
@@ -83,17 +83,17 @@ contract LiveGasTest is LiveBase {
         uint256 below = _buyGas(k, address(t), 1e18);
         emit log_named_uint("live threshold>0 below, 1 hop, steady", below);
 
-        (VeradaToken t2, PoolKey memory k2) = _token(address(quote), 5e6, CAUSE_A);
+        (VaradaToken t2, PoolKey memory k2) = _token(address(quote), 5e6, CAUSE_A);
         _buyGas(k2, address(t2), 1e18);
         uint256 crossing = _buyGas(k2, address(t2), 1e18);
         emit log_named_uint("live threshold>0 crossing swap (push)", crossing);
 
-        (VeradaToken t3, PoolKey memory k3) = _token(address(quote), 0, CAUSE_A);
+        (VaradaToken t3, PoolKey memory k3) = _token(address(quote), 0, CAUSE_A);
         _buyGas(k3, address(t3), 1e18);
         uint256 push = _buyGas(k3, address(t3), 1e18);
         emit log_named_uint("live threshold 0 (push every swap), 1 hop", push);
 
-        (VeradaToken t4, PoolKey memory k4) = _token(address(quote), 0, CAUSE_B);
+        (VaradaToken t4, PoolKey memory k4) = _token(address(quote), 0, CAUSE_B);
         _buyGas(k4, address(t4), 1e18);
         uint256 deferred = _buyGas(k4, address(t4), 1e18);
         emit log_named_uint("live threshold 0, undeployed org (deferred, backoff)", deferred);
@@ -111,23 +111,23 @@ contract LiveGasTest is LiveBase {
     }
 
     function test_gas_routes() public {
-        (VeradaToken tw, PoolKey memory kw) = _token(address(weth), NO_PUSH, CAUSE_A);
+        (VaradaToken tw, PoolKey memory kw) = _token(address(weth), NO_PUSH, CAUSE_A);
         _buyGas(kw, address(tw), 1e17);
         emit log_named_uint("live WETH quote (unwrap hop), below", _buyGas(kw, address(tw), 1e17));
 
-        (VeradaToken tb, PoolKey memory kb) = _token(address(ondoB), NO_PUSH, CAUSE_A);
+        (VaradaToken tb, PoolKey memory kb) = _token(address(ondoB), NO_PUSH, CAUSE_A);
         _buyGas(kb, address(tb), 1e18);
         uint256 three = _buyGas(kb, address(tb), 1e18);
         emit log_named_uint("live 3-hop route (ondoB, unwrap), below", three);
 
-        (VeradaToken tb0, PoolKey memory kb0) = _token(address(ondoB), 0, CAUSE_A);
+        (VaradaToken tb0, PoolKey memory kb0) = _token(address(ondoB), 0, CAUSE_A);
         _buyGas(kb0, address(tb0), 1e18);
         uint256 threePush = _buyGas(kb0, address(tb0), 1e18);
         emit log_named_uint("live 3-hop route, threshold 0 (push)", threePush);
     }
 
     function test_gas_syncedSkip() public {
-        (VeradaToken t, PoolKey memory k) = _token(address(quote), NO_PUSH, CAUSE_A);
+        (VaradaToken t, PoolKey memory k) = _token(address(quote), NO_PUSH, CAUSE_A);
         SyncingRouter router = new SyncingRouter(manager);
         vm.prank(trader);
         quote.approve(address(router), type(uint256).max);
@@ -201,7 +201,7 @@ contract LiveGasTest is LiveBase {
     /// @dev At the smallest gas limit that passes, a push that burns its whole cap still leaves
     ///      the swap enough gas to finish (the trader never pays for a hostile org with a revert).
     function test_gas_minimumLimit_survivesHostileOrg() public {
-        (VeradaToken t, PoolKey memory k) = _token(address(ondoB), 0, CAUSE_A);
+        (VaradaToken t, PoolKey memory k) = _token(address(ondoB), 0, CAUSE_A);
         _buyGas(k, address(t), 1e18);
         bool zeroForOne = _quoteIs0(k, address(t));
         bytes memory call = abi.encodeCall(
@@ -237,7 +237,7 @@ contract LiveGasTest is LiveBase {
     }
 }
 
-/// @dev Weekly-mode baseline: the same kind of swap through the weekly VeradaHook.
+/// @dev Weekly-mode baseline: the same kind of swap through the weekly VaradaHook.
 contract WeeklyGasBaselineTest is ConsolidatorBase {
     function setUp() public {
         _baseSetUp();
@@ -262,6 +262,6 @@ contract WeeklyGasBaselineTest is ConsolidatorBase {
         vm.cool(address(swapRouter));
         uint256 g = gasleft();
         swapRouter.swap(tokenKey, p, ts, ZERO_BYTES);
-        emit log_named_uint("weekly VeradaHook swap (no surcharge)", g - gasleft());
+        emit log_named_uint("weekly VaradaHook swap (no surcharge)", g - gasleft());
     }
 }

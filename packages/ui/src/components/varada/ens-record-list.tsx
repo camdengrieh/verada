@@ -4,10 +4,10 @@
 import { Check, CircleAlert, LoaderCircle, PencilLine, RotateCcw } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useId, type ComponentProps } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { Input } from "@verada/ui/components/ui/input";
-import { Textarea } from "@verada/ui/components/ui/textarea";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { Input } from "@varada/ui/components/ui/input";
+import { Textarea } from "@varada/ui/components/ui/textarea";
+import { cn } from "@varada/ui/lib/utils";
 import { textRecordMeta } from "./ens-shared";
 import { HIT_AREA } from "./shared";
 

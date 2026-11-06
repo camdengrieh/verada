@@ -1,4 +1,4 @@
-import { agentVaultAbi, curatorRegistryAbi } from "@verada/sdk/abis";
+import { agentVaultAbi, curatorRegistryAbi } from "@varada/sdk/abis";
 import { encodeFunctionData, type Hex } from "viem";
 import type { BuiltReport } from "./build.js";
 

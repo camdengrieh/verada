@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ZamaVotingScheme} from "../../src/governance/ZamaVotingScheme.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
@@ -55,7 +55,7 @@ contract WeeklyPlatformGasTest is BallotLog {
     EpochGovernor internal gov;
     CauseRegistry internal registry;
     CatalogFixture internal cat;
-    VeradaToken internal tokenContract;
+    VaradaToken internal tokenContract;
     address internal token;
     address internal owner = makeAddr("owner");
     address internal factory = makeAddr("factory");
@@ -70,7 +70,7 @@ contract WeeklyPlatformGasTest is BallotLog {
 
         vm.warp(1_750_000_123);
         tokenContract =
-            new VeradaToken("Verada Test", "VTEST", "ipfs://meta", makeAddr("c"), factory);
+            new VaradaToken("Varada Test", "VTEST", "ipfs://meta", makeAddr("c"), factory);
         token = address(tokenContract);
         for (uint256 i; i < voters.length; ++i) {
             voters[i] = address(uint160(0x5000 + i));

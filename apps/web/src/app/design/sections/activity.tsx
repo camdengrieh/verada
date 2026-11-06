@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button } from "@verada/ui/components/ui/button";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { HolderDistribution, holderSegments } from "@verada/ui/components/varada/holder-distribution";
-import { HolderInsights, type HolderBucket, type HolderInsightsProps } from "@verada/ui/components/varada/holder-insights";
-import { HoldersTable, type HolderItem } from "@verada/ui/components/varada/holders-table";
-import { TradeFeed, TradeTicker, type TradeItem } from "@verada/ui/components/varada/trade-feed";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button } from "@varada/ui/components/ui/button";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { HolderDistribution, holderSegments } from "@varada/ui/components/varada/holder-distribution";
+import { HolderInsights, type HolderBucket, type HolderInsightsProps } from "@varada/ui/components/varada/holder-insights";
+import { HoldersTable, type HolderItem } from "@varada/ui/components/varada/holders-table";
+import { TradeFeed, TradeTicker, type TradeItem } from "@varada/ui/components/varada/trade-feed";
 import { GallerySection } from "../section";
 import { Demo, Frame } from "./markets";
 

@@ -8,7 +8,7 @@ import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
 import {LabelLib} from "./libraries/LabelLib.sol";
 
 /// @title TokenProfileRegistry
-/// @notice Per-token ENS profile under the Verada parent name. The factory registers a label at
+/// @notice Per-token ENS profile under the Varada parent name. The factory registers a label at
 ///         launch; the controller (initially the creator) edits records and may delegate editing
 ///         to an editor; the takeover governor can replace the controller. The owner curates
 ///         parent-level records, label reservations and suppression.

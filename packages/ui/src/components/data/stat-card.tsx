@@ -2,10 +2,10 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Card } from "@verada/ui/components/ui/card";
-import { NumberTicker } from "@verada/ui/components/motion/number-ticker";
-import { Sparkline, type SparklineTone } from "@verada/ui/components/data/sparkline";
-import { cn } from "@verada/ui/lib/utils";
+import { Card } from "@varada/ui/components/ui/card";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { Sparkline, type SparklineTone } from "@varada/ui/components/data/sparkline";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface DeltaProps {
   /** Signed change. Positive shows ▲ in the gain colour, negative ▼ in the loss colour. */

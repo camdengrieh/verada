@@ -6,7 +6,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useId, useMemo, useState, type KeyboardEvent, type PointerEvent } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { formatUsdCompact } from "./liquidity-meter";
 
 export interface VolumeBar {

@@ -2,14 +2,14 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MotionGlobalConfig } from "motion/react";
 import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { BallotList } from "@verada/ui/components/varada/ballot-list";
-import type { BallotOptionData } from "@verada/ui/components/varada/ballot-option";
-import { FeeSplitBar } from "@verada/ui/components/varada/fee-split-bar";
-import { PriceChange } from "@verada/ui/components/varada/price-change";
-import { SiteHeader } from "@verada/ui/components/varada/site-header";
-import { StockLogo, stockLogoLetters } from "@verada/ui/components/varada/stock-logo";
-import { TradePanel, impactSeverity, type TradePanelProps } from "@verada/ui/components/varada/trade-panel";
-import { VoteFlowDialog, type VoteFlowState } from "@verada/ui/components/varada/vote-flow-dialog";
+import { BallotList } from "@varada/ui/components/varada/ballot-list";
+import type { BallotOptionData } from "@varada/ui/components/varada/ballot-option";
+import { FeeSplitBar } from "@varada/ui/components/varada/fee-split-bar";
+import { PriceChange } from "@varada/ui/components/varada/price-change";
+import { SiteHeader } from "@varada/ui/components/varada/site-header";
+import { StockLogo, stockLogoLetters } from "@varada/ui/components/varada/stock-logo";
+import { TradePanel, impactSeverity, type TradePanelProps } from "@varada/ui/components/varada/trade-panel";
+import { VoteFlowDialog, type VoteFlowState } from "@varada/ui/components/varada/vote-flow-dialog";
 
 beforeAll(() => {
   // Radix radios measure themselves; jsdom has no ResizeObserver.

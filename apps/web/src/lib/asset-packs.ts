@@ -1,4 +1,4 @@
-import { swarmGatewayUrl } from "@verada/sdk";
+import { swarmGatewayUrl } from "@varada/sdk";
 import { ASSETS, PACKS, type AssetEntry, type PackName } from "./assets.generated";
 import type { AppConfig } from "./config";
 

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       env_name:
-        description: "Environment name (stack ids are Verada-<env_name>-<Stack>)"
+        description: "Environment name (stack ids are Varada-<env_name>-<Stack>)"
         required: true
         default: "dev"
         type: string
@@ -61,7 +61,7 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.AWS_DEPLOY_ROLE_NAME }}
           aws-region: ${{ vars.AWS_REGION }}
-          role-session-name: verada-deploy-${{ github.run_id }}
+          role-session-name: varada-deploy-${{ github.run_id }}
       - name: Deploy
         working-directory: infra
         env:
@@ -185,7 +185,7 @@ jobs:
           add x402FacilitatorNetwork "$X402_FACILITATOR_NETWORK"
           add x402FacilitatorUsdc "$X402_FACILITATOR_USDC"
           add oneClawBaseUrl "$ONECLAW_BASE_URL"
-          prefix="Verada-${ENV_NAME}"
+          prefix="Varada-${ENV_NAME}"
           case "$STACKS" in
             all) targets=("$prefix-Network" "$prefix-Data" "$prefix-Indexer" "$prefix-Swarm" "$prefix-Publisher" "$prefix-Observability") ;;
             network) targets=("$prefix-Network") ;;

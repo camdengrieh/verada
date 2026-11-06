@@ -12,10 +12,10 @@ import * as logs from "aws-cdk-lib/aws-logs";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { NagSuppressions } from "cdk-nag";
 import { Construct } from "constructs";
-import { VeradaConfig } from "./config";
+import { VaradaConfig } from "./config";
 
 export interface IndexerStackProps extends cdk.StackProps {
-  readonly config: VeradaConfig;
+  readonly config: VaradaConfig;
   readonly vpc: ec2.IVpc;
   readonly dbSecret: secretsmanager.ISecret;
   readonly dbSecurityGroup: ec2.ISecurityGroup;
@@ -25,7 +25,7 @@ export interface IndexerStackProps extends cdk.StackProps {
 export const INDEXER_PORT = 42069;
 export const INDEXER_HEALTH_PATH = "/health";
 /** Header CloudFront adds to every origin request; the ALB forwards only requests that carry it. */
-export const INDEXER_ORIGIN_HEADER = "X-Verada-Origin";
+export const INDEXER_ORIGIN_HEADER = "X-Varada-Origin";
 
 export class IndexerStack extends cdk.Stack {
   public readonly repository: ecr.Repository;
@@ -48,7 +48,7 @@ export class IndexerStack extends cdk.Stack {
     }
 
     this.repository = new ecr.Repository(this, "Repo", {
-      repositoryName: `verada-${config.envName}-indexer`,
+      repositoryName: `varada-${config.envName}-indexer`,
       imageScanOnPush: true,
       imageTagMutability: ecr.TagMutability.IMMUTABLE,
       encryption: ecr.RepositoryEncryption.AES_256,
@@ -147,7 +147,7 @@ export class IndexerStack extends cdk.Stack {
           NODE_ENV: "production",
           PORT: String(INDEXER_PORT),
           DATABASE_NAME: props.dbName,
-          DATABASE_SCHEMA: "verada",
+          DATABASE_SCHEMA: "varada",
           ...(config.indexerCorsOrigins ? { CORS_ALLOWED_ORIGINS: config.indexerCorsOrigins } : {}),
           ...(config.indexerCatalogSource ? { CATALOG_SOURCE: config.indexerCatalogSource } : {}),
           // Curator reports are read from the same Swarm gateway the publisher uploads through.
@@ -171,7 +171,7 @@ export class IndexerStack extends cdk.Stack {
       },
     });
     // No ALB access logs, by design: they would store every client IP and request path.
-    // Verada must not be able to tie users to what they look at (docs/PRIVACY.md).
+    // Varada must not be able to tie users to what they look at (docs/PRIVACY.md).
     this.service.loadBalancer.setAttribute("routing.http.drop_invalid_header_fields.enabled", "true");
 
     this.service.targetGroup.configureHealthCheck({
@@ -267,7 +267,7 @@ export class IndexerStack extends cdk.Stack {
     ];
 
     const distribution = new cloudfront.Distribution(this, "Edge", {
-      comment: `Verada ${envName} indexer API`,
+      comment: `Varada ${envName} indexer API`,
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       defaultBehavior: {

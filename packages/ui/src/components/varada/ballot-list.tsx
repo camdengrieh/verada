@@ -4,8 +4,8 @@
 import { Search } from "lucide-react";
 import { RadioGroup, Tabs } from "radix-ui";
 import { useId, useMemo, useState, type ComponentProps, type ReactNode } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { BallotOption, SOURCE_LABELS, type BallotOptionData, type BallotSource } from "./ballot-option";
 import { CAUSE_LABELS, CAUSE_SHORT_LABELS } from "./cause-icon";
 

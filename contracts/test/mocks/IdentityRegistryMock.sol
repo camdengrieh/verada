@@ -6,7 +6,7 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import {IERC8004IdentityRegistry} from "../../src/interfaces/external/IERC8004IdentityRegistry.sol";
 
-/// @dev Minimal stand-in for the ERC-8004 `IdentityRegistryUpgradeable` with the behaviour Verada
+/// @dev Minimal stand-in for the ERC-8004 `IdentityRegistryUpgradeable` with the behaviour Varada
 ///      relies on: `register` mints like `_safeMint` (calls `onERC721Received` on contracts),
 ///      owner/approved checks, the reserved `agentWallet` key, and `setAgentWallet` verifying an
 ///      EIP-712 `AgentWalletSet(agentId,newWallet,owner,deadline)` signature in the domain

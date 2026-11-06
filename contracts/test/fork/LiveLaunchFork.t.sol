@@ -22,14 +22,14 @@ import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaFactory} from "../../src/VeradaFactory.sol";
-import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaFactory} from "../../src/VaradaFactory.sol";
+import {VaradaLiveHook} from "../../src/VaradaLiveHook.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ZamaVotingScheme} from "../../src/governance/ZamaVotingScheme.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
-import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
+import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
 import {IOutcomeVotingScheme, IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
@@ -144,7 +144,7 @@ contract LiveLaunchForkTest is Test, DeployLive {
         returns (address token, PoolKey memory key)
     {
         ++launches;
-        IVeradaFactory.DeployParams memory p = IVeradaFactory.DeployParams(
+        IVaradaFactory.DeployParams memory p = IVaradaFactory.DeployParams(
             "Live Fork",
             "LFORK",
             "ipfs://live-fork",
@@ -160,8 +160,8 @@ contract LiveLaunchForkTest is Test, DeployLive {
             CatalogPublish.REGIONS
         );
         vm.prank(creator);
-        (token,) = VeradaFactory(d.factory)
-            .deployLiveToken(p, IVeradaFactory.LiveParams(cause, period, threshold));
+        (token,) = VaradaFactory(d.factory)
+            .deployLiveToken(p, IVaradaFactory.LiveParams(cause, period, threshold));
         (address a, address b) = token < WETH ? (token, WETH) : (WETH, token);
         key = PoolKey(
             Currency.wrap(a),
@@ -224,10 +224,10 @@ contract LiveLaunchForkTest is Test, DeployLive {
     // ------------------------------------------------------------------ tests
 
     function test_fork_scriptWiresLiveMode() public view {
-        assertEq(VeradaFactory(d.factory).liveHook(), l.liveHook);
-        assertEq(VeradaFactory(d.factory).liveVault(), l.liveVault);
+        assertEq(VaradaFactory(d.factory).liveHook(), l.liveHook);
+        assertEq(VaradaFactory(d.factory).liveVault(), l.liveVault);
         assertEq(uint160(l.liveHook) & Hooks.ALL_HOOK_MASK, LIVE_HOOK_FLAGS);
-        assertEq(VeradaLiveHook(l.liveHook).usdc(), USDC);
+        assertEq(VaradaLiveHook(l.liveHook).usdc(), USDC);
         assertTrue(FeeConsolidator(payable(d.feeConsolidator)).isSource(l.liveHook));
         assertTrue(ZamaVotingScheme(d.votingScheme).isGovernor(l.rotationGovernor));
         assertEq(LiveDonationVault(l.liveVault).hook(), l.liveHook);
@@ -244,10 +244,10 @@ contract LiveLaunchForkTest is Test, DeployLive {
         assertEq(_pending(token, WIKI_CAUSE), 0);
 
         // Any fee held before the pool manager had WETH converts by retry.
-        uint256 held = VeradaLiveHook(l.liveHook).heldRaw(token, WIKI_CAUSE);
+        uint256 held = VaradaLiveHook(l.liveHook).heldRaw(token, WIKI_CAUSE);
         if (held != 0) {
             uint256 mid = IERC20(USDC).balanceOf(WIKI_ADDR);
-            VeradaLiveHook(l.liveHook).retryHeld(token, WIKI_CAUSE, held);
+            VaradaLiveHook(l.liveHook).retryHeld(token, WIKI_CAUSE, held);
             assertGt(IERC20(USDC).balanceOf(WIKI_ADDR), mid);
         }
     }

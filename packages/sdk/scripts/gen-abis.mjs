@@ -19,10 +19,10 @@ const only = value("--only")?.split(",").map((s) => s.trim()).filter(Boolean);
 // Contracts whose ABI the SDK exposes. Interfaces and implementations both qualify;
 // when both exist the implementation ABI (superset) wins under the plain name.
 const DEFAULT_CONTRACTS = [
-  "VeradaToken",
-  "VeradaFactory",
-  "VeradaHook",
-  "VeradaLpLocker",
+  "VaradaToken",
+  "VaradaFactory",
+  "VaradaHook",
+  "VaradaLpLocker",
   "FeeVault",
   "CauseRegistry",
   "CauseCatalog",
@@ -33,9 +33,9 @@ const DEFAULT_CONTRACTS = [
   "QuoteRegistry",
   "FeeConsolidator",
   "TokenProfileRegistry",
-  "VeradaResolver",
+  "VaradaResolver",
   "TakeoverGovernor",
-  "VeradaLiveHook",
+  "VaradaLiveHook",
   "LiveDonationVault",
   "RotationGovernor",
   "ZamaVotingScheme",

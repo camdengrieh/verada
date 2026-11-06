@@ -3,11 +3,11 @@ pragma solidity ^0.8.26;
 
 import {FullMath} from "v4-core/libraries/FullMath.sol";
 
-import {IVeradaLiveHook} from "../interfaces/IVeradaLiveHook.sol";
+import {IVaradaLiveHook} from "../interfaces/IVaradaLiveHook.sol";
 
 /// @title FeeScheduleLib
 /// @notice Fee bounds, the decaying launch surcharge and fee arithmetic of the live-donation hook.
-/// @dev The bounds and the surcharge formula are the same as the weekly `VeradaHook` (base fee in
+/// @dev The bounds and the surcharge formula are the same as the weekly `VaradaHook` (base fee in
 ///      [100, 500] bps, launch surcharge up to 8000 bps decaying linearly to zero over at most one
 ///      day, rounded up). They are copied rather than shared so the weekly hook's bytecode stays
 ///      unchanged; a differential fuzz test asserts both produce the same surcharge.
@@ -66,7 +66,7 @@ library FeeScheduleLib {
     }
 
     /// @notice Base fee plus the launch surcharge at `nowTs`, in basis points (at most 8500).
-    function totalBps(IVeradaLiveHook.LiveFeeConfig memory c, uint256 nowTs)
+    function totalBps(IVaradaLiveHook.LiveFeeConfig memory c, uint256 nowTs)
         internal
         pure
         returns (uint256)

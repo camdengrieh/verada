@@ -4,14 +4,14 @@
  *
  *   ETH_RPC_URL=... KEEPER_PRIVATE_KEY=0x... VOTING_SCHEME_ADDRESS=0x... \
  *   E2E_GOVERNOR=0x... E2E_TOKEN=0x... E2E_SCOPE=<epoch or proposal id> \
- *   pnpm --filter @verada/publisher e2e:zama
+ *   pnpm --filter @varada/publisher e2e:zama
  *
  * Optional: ZAMA_RELAYER_URL, ZAMA_RELAYER_API_KEY, E2E_DRY_RUN=true (decrypt and estimate only).
  * The poll must already be closed (`closeEpoch` / `closeProposal`) so its tallies are publicly
  * decryptable. Prints the decrypted per-option totals (public once submitted), the gas estimate
  * and the gas used. Never prints the key or the RPC URL.
  */
-import { zamaVotingSchemeAbi } from "@verada/sdk/abis";
+import { zamaVotingSchemeAbi } from "@varada/sdk/abis";
 import { getAddress, type Hex } from "viem";
 import { redact } from "../src/keeper/chain.js";
 import { checkDecryption, createZamaDecryptor, ZAMA_CHAIN_IDS } from "../src/keeper/decrypt.js";

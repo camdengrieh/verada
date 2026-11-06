@@ -2,7 +2,7 @@
 "use client";
 
 import type { ComponentProps, CSSProperties } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export type ActivityKind = "BUY" | "SELL" | "GIVE" | "VOTE" | "NEW";
 

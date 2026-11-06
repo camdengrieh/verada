@@ -1,6 +1,6 @@
 import type { Context, Event } from "ponder:registry";
 import { token, tokenFocus, tokenProfile } from "ponder:schema";
-import { VeradaTokenAbi } from "../abis";
+import { VaradaTokenAbi } from "../abis";
 
 /** Reads `name()` or `symbol()` at the launch block; empty on any failure. */
 async function readString(
@@ -9,7 +9,7 @@ async function readString(
   functionName: "name" | "symbol",
 ): Promise<string> {
   try {
-    const v = await context.client.readContract({ abi: VeradaTokenAbi, address, functionName });
+    const v = await context.client.readContract({ abi: VaradaTokenAbi, address, functionName });
     return typeof v === "string" ? v : "";
   } catch {
     return "";

@@ -2,7 +2,7 @@
 "use client";
 
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Dividers for Direction A. `line` is the hairline, `dashed` the ledger rule used between list rows,

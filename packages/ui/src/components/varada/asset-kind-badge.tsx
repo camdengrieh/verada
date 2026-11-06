@@ -1,6 +1,6 @@
 // Written for Varada
-import { Badge, type BadgeProps } from "@verada/ui/components/ui/badge";
-import { cn } from "@verada/ui/lib/utils";
+import { Badge, type BadgeProps } from "@varada/ui/components/ui/badge";
+import { cn } from "@varada/ui/lib/utils";
 import type { QuoteKind } from "./stock-logo";
 
 const KIND: Record<QuoteKind, { tone: NonNullable<BadgeProps["tone"]>; label: string; title: string; dot: string }> = {

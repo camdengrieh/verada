@@ -1,15 +1,15 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
-import { Button } from "@verada/ui/components/ui/button";
-import { Checkbox } from "@verada/ui/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@verada/ui/components/ui/dialog";
-import { Field, FieldControl, FieldError, FieldHint, FieldLabel } from "@verada/ui/components/ui/field";
-import { Input } from "@verada/ui/components/ui/input";
-import { Label } from "@verada/ui/components/ui/label";
-import { Slider } from "@verada/ui/components/ui/slider";
-import { Switch } from "@verada/ui/components/ui/switch";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@verada/ui/components/ui/tabs";
-import { Toaster, toast } from "@verada/ui/components/ui/toaster";
+import { Button } from "@varada/ui/components/ui/button";
+import { Checkbox } from "@varada/ui/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@varada/ui/components/ui/dialog";
+import { Field, FieldControl, FieldError, FieldHint, FieldLabel } from "@varada/ui/components/ui/field";
+import { Input } from "@varada/ui/components/ui/input";
+import { Label } from "@varada/ui/components/ui/label";
+import { Slider } from "@varada/ui/components/ui/slider";
+import { Switch } from "@varada/ui/components/ui/switch";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@varada/ui/components/ui/tabs";
+import { Toaster, toast } from "@varada/ui/components/ui/toaster";
 
 // jsdom lacks these browser APIs; Radix (sizing) and motion/sonner (media queries) read them.
 beforeAll(() => {

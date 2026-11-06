@@ -2,11 +2,11 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MotionGlobalConfig } from "motion/react";
 import { useState } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { EnsAddress } from "@verada/ui/components/varada/ens-address";
-import { EnsClaim, availabilityMessage, type EnsLookupResult } from "@verada/ui/components/varada/ens-claim";
-import { EnsName } from "@verada/ui/components/varada/ens-name";
-import { EnsProfileCard } from "@verada/ui/components/varada/ens-profile-card";
-import { EnsRecordList, recordState, type EditableRecord } from "@verada/ui/components/varada/ens-record-list";
+import { EnsAddress } from "@varada/ui/components/varada/ens-address";
+import { EnsClaim, availabilityMessage, type EnsLookupResult } from "@varada/ui/components/varada/ens-claim";
+import { EnsName } from "@varada/ui/components/varada/ens-name";
+import { EnsProfileCard } from "@varada/ui/components/varada/ens-profile-card";
+import { EnsRecordList, recordState, type EditableRecord } from "@varada/ui/components/varada/ens-record-list";
 import {
   ensLimoUrl,
   ensNameFor,
@@ -15,8 +15,8 @@ import {
   shortenAddress,
   splitEnsName,
   toneFor,
-} from "@verada/ui/components/varada/ens-shared";
-import { SubnameTree } from "@verada/ui/components/varada/subname-tree";
+} from "@varada/ui/components/varada/ens-shared";
+import { SubnameTree } from "@varada/ui/components/varada/subname-tree";
 
 const ADDRESS = "0x7f3a9c2b44e0d1f5a6b7c8d9e0f1a2b3c4d5c21e";
 

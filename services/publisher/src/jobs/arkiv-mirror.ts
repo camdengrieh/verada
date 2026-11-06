@@ -1,4 +1,4 @@
-import { applyPlan, planReconcile, type ArkivRegistry, type RegistryLogger } from "@verada/arkiv-registry";
+import { applyPlan, planReconcile, type ArkivRegistry, type RegistryLogger } from "@varada/arkiv-registry";
 import type { IndexerClient } from "../indexer-client.js";
 import { RENEW_BEFORE_BLOCKS, type Job, type Log } from "./types.js";
 

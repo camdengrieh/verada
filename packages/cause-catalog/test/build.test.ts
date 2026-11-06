@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { describe, expect, it } from "vitest";
-import { BUCKET_COUNT, bucketId, categoryBySlug, regionBySlug } from "@verada/sdk";
+import { BUCKET_COUNT, bucketId, categoryBySlug, regionBySlug } from "@varada/sdk";
 import { buildCatalog, entryProof } from "../src/build.js";
 import { readCatalog, writeCatalog } from "../src/io.js";
 import { org } from "./fixtures.js";

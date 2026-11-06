@@ -1,6 +1,6 @@
 # Privacy and CROPS
 
-Verada aims to meet the Ethereum Foundation's CROPS properties: **C**ensorship resistance,
+Varada aims to meet the Ethereum Foundation's CROPS properties: **C**ensorship resistance,
 **O**pen source, **P**rivacy and **S**ecurity. This document covers how the web app keeps what a
 user looks at private, what it cannot protect, and where each CROPS property stands today.
 
@@ -16,8 +16,8 @@ When a user views data tied to their address, such as a portfolio, donations mad
 
 - **The RPC provider never sees the user's IP address.** Requests leave the mixnet from an exit
   node, so the provider sees the exit's address, not the user's.
-- **Verada never sees the request at all.** Account data is read from the chain in the browser,
-  never from the Verada indexer, and the web app never sends a user's address to Verada servers.
+- **Varada never sees the request at all.** Account data is read from the chain in the browser,
+  never from the Varada indexer, and the web app never sends a user's address to Varada servers.
 - **A user's accounts cannot be linked to each other through their queries.** Each address gets
   its own random isolation key, which asks the network to keep that address's traffic unlinkable
   from other addresses' traffic. Keys exist only in memory and change on every page load.
@@ -92,10 +92,10 @@ starts on the first chain read, or straight away once a wallet connects.
 - **Site delivery.** The ENS or Swarm gateway that serves the page sees the page load. Token
   logos and asset packs (such as stock logos) load from the configured Swarm read gateway, which
   sees which images a page shows, never a wallet address.
-- **Indexer traffic, unless routed.** Public pages read the Verada indexer directly by default.
+- **Indexer traffic, unless routed.** Public pages read the Varada indexer directly by default.
   The indexer sees the IP and which token pages were viewed while serving the request, but never
   a wallet address, and it keeps no access logs. Users can
-  turn on "Also route Verada API requests" to hide their IP from Verada as well.
+  turn on "Also route Varada API requests" to hide their IP from Varada as well.
 
 ## Trades and holders
 
@@ -113,8 +113,8 @@ starts on the first chain read, or straight away once a wallet connects.
 - **Public on chain regardless.** A donation is a transaction from the donor's wallet.
   `AgentVault.Donated(from, amount, credit)` carries `from` whatever `credit` says, and USDC's
   `Transfer` event names the sender too. Opting out of credit does not hide a donor from anyone
-  reading the chain; it only decides whether Verada names them.
-- **What Verada stores and shows.** The indexer stores the donor address only when `credit` is
+  reading the chain; it only decides whether Varada names them.
+- **What Varada stores and shows.** The indexer stores the donor address only when `credit` is
   true; otherwise the row keeps the amount, time and transaction hash with no donor.
   `/api/agents/:label` lists credited donations only, and the agent pages show those donors and the
   totals, which include every donation. Plain USDC transfers to a vault emit no `Donated` event and
@@ -132,7 +132,7 @@ starts on the first chain read, or straight away once a wallet connects.
   `Cache-Control: private, no-store`.
 - **What is recorded: the settlement only.** The settlement is a public USDC transfer from the
   payer to the platform treasury on Base or Ethereum mainnet, which shows that the address paid
-  Verada at that time; the amount can hint at which route was bought. Base settlements are also
+  Varada at that time; the amount can hint at which route was bought. Base settlements are also
   recorded by Coinbase CDP under its own policies. Mainnet settlements are logged by the
   publisher's facilitator (outcome, transaction hash, error reason). The facilitators receive the
   payment from the indexer, never the buyer's IP. Buyers who do not want purchases tied to their
@@ -150,7 +150,7 @@ starts on the first chain read, or straight away once a wallet connects.
 
 ## Rules for new features
 
-1. Never send a user's address to the Verada indexer or any other server. Read account data
+1. Never send a user's address to the Varada indexer or any other server. Read account data
    with `createAccountClient(rpc, address)`, or fetch public data and filter it in the browser.
 2. Do not create viem clients with a plain `http()` transport. Use `rpc.transport(scope)`.
 3. Do not add analytics, third-party fonts, CDNs or tracking. The app makes no third-party
@@ -187,7 +187,7 @@ Status as of 2026-11-06. Gaps are listed with the change that would close each o
 | Item | Status |
 |---|---|
 | Dependencies are open source (anon-rpc is MIT) | Met |
-| Verada's own code has no license file | **Gap: add a LICENSE at the repo root (choice pending)** |
+| Varada's own code has no license file | **Gap: add a LICENSE at the repo root (choice pending)** |
 | Builds are reproducible against the published Swarm hash | Gap: document the build-to-hash check |
 
 ### Privacy

@@ -1,6 +1,6 @@
 // Written for Varada
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import type { ImageSource } from "./shared";
 import { StockLogo, type QuoteKind } from "./stock-logo";
 

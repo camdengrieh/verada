@@ -1,8 +1,8 @@
 // Written for Varada (ink cause-pool card from the A-Token board)
 import { useId, type ComponentProps } from "react";
-import { buttonVariants } from "@verada/ui/components/ui/button";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { buttonVariants } from "@varada/ui/components/ui/button";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { DefaultLink, type LinkComponent } from "./shared";
 
 export interface BallotMix {

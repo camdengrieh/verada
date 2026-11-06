@@ -5,10 +5,10 @@
 
 import { Search } from "lucide-react";
 import { useState, type ComponentProps, type ReactNode } from "react";
-import { LogoMark } from "@verada/ui/components/varada/logo-mark";
-import type { PrivacyState } from "@verada/ui/components/varada/privacy-pill";
-import { DefaultLink, type LinkComponent } from "@verada/ui/components/varada/shared";
-import { cn } from "@verada/ui/lib/utils";
+import { LogoMark } from "@varada/ui/components/varada/logo-mark";
+import type { PrivacyState } from "@varada/ui/components/varada/privacy-pill";
+import { DefaultLink, type LinkComponent } from "@varada/ui/components/varada/shared";
+import { cn } from "@varada/ui/lib/utils";
 import { MobileSearchSheet, type MobileSearchSheetProps } from "./mobile-search-sheet";
 
 const PRIVACY: Record<PrivacyState, { label: string; dot: string }> = {

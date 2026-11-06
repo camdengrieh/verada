@@ -6,7 +6,7 @@ import { cva, type VariantProps } from "class-variance-authority";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui";
 import { createContext, useContext, useId, useState, type ComponentProps, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 const groupVariants = cva("inline-flex w-fit items-center gap-1 rounded-full bg-sand p-1", {
   variants: { size: { sm: "", md: "" }, block: { true: "flex w-full", false: "" } },

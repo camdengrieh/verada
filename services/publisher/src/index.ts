@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
-import { createArkivRegistry } from "@verada/arkiv-registry";
-import { localKeySigner, oneClawSigner } from "@verada/curator";
+import { createArkivRegistry } from "@varada/arkiv-registry";
+import { localKeySigner, oneClawSigner } from "@varada/curator";
 import { createPublicClient, fallback, http } from "viem";
 import { mainnet } from "viem/chains";
 import { viemCuratorChain } from "./agents.js";

@@ -5,8 +5,8 @@
 // screen readers), the filter is removed once settled, and reduced motion skips straight to ink.
 import { useInView } from "motion/react";
 import { createElement, useEffect, useId, useRef, useState, type ElementType } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface InkTextProps {
   children: string;

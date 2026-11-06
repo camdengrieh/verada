@@ -3,8 +3,8 @@
 import { Slot } from "radix-ui";
 import { createContext, useContext, useEffect, useId, useMemo, useState, type ComponentProps } from "react";
 import { CircleAlert } from "lucide-react";
-import { Label } from "@verada/ui/components/ui/label";
-import { cn } from "@verada/ui/lib/utils";
+import { Label } from "@varada/ui/components/ui/label";
+import { cn } from "@varada/ui/lib/utils";
 
 interface FieldContextValue {
   controlId: string;

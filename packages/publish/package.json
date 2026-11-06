@@ -1,9 +1,9 @@
 {
-  "name": "@verada/publish",
+  "name": "@varada/publish",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "bin": { "verada-publish": "./bin/verada-publish.mjs" },
+  "bin": { "varada-publish": "./bin/varada-publish.mjs" },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": { ".": "./src/index.ts" },

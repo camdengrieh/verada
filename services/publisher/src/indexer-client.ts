@@ -9,7 +9,7 @@ import {
   parseItems,
   type IndexerCause,
   type IndexerToken,
-} from "@verada/arkiv-registry";
+} from "@varada/arkiv-registry";
 
 export interface IndexerClient {
   listTokens(): Promise<{ items: IndexerToken[]; rejected: number }>;

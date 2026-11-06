@@ -2,7 +2,7 @@
 // shadcn/ui new-york, Direction A styling
 import { Popover as PopoverPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Small interactive panel anchored to a trigger (slippage settings, share menus). */
 export function Popover(props: ComponentProps<typeof PopoverPrimitive.Root>) {

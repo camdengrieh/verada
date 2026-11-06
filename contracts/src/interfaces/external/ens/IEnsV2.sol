@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /// @dev The slice of an ENSv2 permissioned registry (the `.eth` registry on mainnet is one)
-///      that Verada needs. `anyId` is the label id, `uint256(keccak256(bytes(label)))`.
+///      that Varada needs. `anyId` is the label id, `uint256(keccak256(bytes(label)))`.
 interface IEnsV2Registry {
     /// @notice Points `anyId` at `resolver`. Caller needs the set-resolver role for the name.
     function setResolver(uint256 anyId, address resolver) external;

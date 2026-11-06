@@ -5,9 +5,9 @@
 
 import { HandHeart } from "lucide-react";
 import type { ReactNode } from "react";
-import { Delta } from "@verada/ui/components/data/stat-card";
-import { NumberTicker } from "@verada/ui/components/motion/number-ticker";
-import { cn } from "@verada/ui/lib/utils";
+import { Delta } from "@varada/ui/components/data/stat-card";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface TradingMetric {
   key: string;

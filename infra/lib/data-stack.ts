@@ -4,10 +4,10 @@ import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as rds from "aws-cdk-lib/aws-rds";
 import * as secretsmanager from "aws-cdk-lib/aws-secretsmanager";
 import { Construct } from "constructs";
-import { VeradaConfig } from "./config";
+import { VaradaConfig } from "./config";
 
 export interface DataStackProps extends cdk.StackProps {
-  readonly config: VeradaConfig;
+  readonly config: VaradaConfig;
   readonly vpc: ec2.IVpc;
 }
 
@@ -36,7 +36,7 @@ export class DataStack extends cdk.Stack {
   public readonly secret: secretsmanager.ISecret;
   public readonly securityGroup: ec2.SecurityGroup;
   public readonly metrics: DatabaseMetrics;
-  public readonly databaseName = "verada";
+  public readonly databaseName = "varada";
   /** Rotation runs in the VPC and needs the Secrets Manager endpoint, so it exists only with privateEgress. */
   public readonly rotationEnabled: boolean;
 
@@ -51,8 +51,8 @@ export class DataStack extends cdk.Stack {
       allowAllOutbound: false,
     });
 
-    const credentials = rds.Credentials.fromGeneratedSecret("verada", {
-      secretName: `verada/${config.envName}/db-credentials`,
+    const credentials = rds.Credentials.fromGeneratedSecret("varada", {
+      secretName: `varada/${config.envName}/db-credentials`,
     });
     const isolated = { subnetType: ec2.SubnetType.PRIVATE_ISOLATED };
 

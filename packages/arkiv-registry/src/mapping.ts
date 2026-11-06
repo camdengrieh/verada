@@ -7,7 +7,7 @@ import {
   normalizeSwarmReference,
   regionSlugs,
   TOKEN_TEXT_KEYS,
-} from "@verada/sdk";
+} from "@varada/sdk";
 import { zeroAddress, type Address, type Hex } from "viem";
 import type { IndexerCause, IndexerToken } from "./indexer.js";
 import { BURN_OWNER, SCHEMA_VERSION } from "./schemas.js";

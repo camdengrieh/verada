@@ -113,9 +113,9 @@ contract CuratorRegistry is ICuratorRegistry, Ownable2Step, IERC721Receiver {
         IERC8004IdentityRegistry.MetadataEntry[] memory meta =
             new IERC8004IdentityRegistry.MetadataEntry[](2);
         meta[0] = IERC8004IdentityRegistry.MetadataEntry(
-            "verada.category", abi.encodePacked(categoryBit)
+            "varada.category", abi.encodePacked(categoryBit)
         );
-        meta[1] = IERC8004IdentityRegistry.MetadataEntry("verada.vault", abi.encodePacked(vault));
+        meta[1] = IERC8004IdentityRegistry.MetadataEntry("varada.vault", abi.encodePacked(vault));
         agentId = identityRegistry.register(agentURI, meta);
 
         a.agentId = agentId;

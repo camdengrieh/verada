@@ -4,8 +4,8 @@
 import { ArrowLeftRight, ArrowRight, LoaderCircle } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import type { ComponentProps } from "react";
-import { CopyButton } from "@verada/ui/components/data/copy-button";
-import { cn } from "@verada/ui/lib/utils";
+import { CopyButton } from "@varada/ui/components/data/copy-button";
+import { cn } from "@varada/ui/lib/utils";
 import { shortenAddress, splitEnsName, toneFor } from "./ens-shared";
 import { HIT_AREA, WASH_FILL, WASH_PIGMENT, type ImageSource } from "./shared";
 

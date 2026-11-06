@@ -1,4 +1,4 @@
-import { periodPollScope, rotationPollScope, type RoundStatus } from "@verada/sdk";
+import { periodPollScope, rotationPollScope, type RoundStatus } from "@varada/sdk";
 import { zeroAddress, type Address } from "viem";
 import {
   sameAddress,

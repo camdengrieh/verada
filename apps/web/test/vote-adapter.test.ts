@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { decodeAbiParameters, keccak256, toHex } from "viem";
-import { decodeFheBallot, encodePlainBallot } from "@verada/sdk";
+import { decodeFheBallot, encodePlainBallot } from "@varada/sdk";
 import type { Encryptor } from "@/lib/ballot";
 import { parseChoice, plainVoteAdapter, selectVoteAdapter, toCauseId, zamaVoteAdapter, type BallotRequest } from "@/lib/vote-adapter";
 

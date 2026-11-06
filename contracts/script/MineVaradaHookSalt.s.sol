@@ -5,14 +5,14 @@ import {Script, console} from "forge-std/Script.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 
-import {VeradaHook} from "../src/VeradaHook.sol";
+import {VaradaHook} from "../src/VaradaHook.sol";
 import {HookMiner} from "./HookMiner.sol";
 
-/// @notice Prints the CREATE2 salt and address for VeradaHook. Read-only; broadcasts nothing.
+/// @notice Prints the CREATE2 salt and address for VaradaHook. Read-only; broadcasts nothing.
 /// @dev Env: POOL_MANAGER, FACTORY, FEE_CONSOLIDATOR (the hook's constructor arguments).
 ///      `CREATE2_DEPLOYER` defaults to the deterministic deployer used by forge for
 ///      `new X{salt: ...}` in scripts.
-contract MineVeradaHookSalt is Script {
+contract MineVaradaHookSalt is Script {
     address internal constant DEFAULT_CREATE2_DEPLOYER = 0x4e59b44847b379578588920cA78FbF26c0B4956C;
 
     function run() external view returns (address hookAddress, bytes32 salt) {
@@ -24,7 +24,7 @@ contract MineVeradaHookSalt is Script {
         );
         uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.BEFORE_SWAP_FLAG
             | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
-        (hookAddress, salt) = HookMiner.find(deployer, flags, type(VeradaHook).creationCode, args);
+        (hookAddress, salt) = HookMiner.find(deployer, flags, type(VaradaHook).creationCode, args);
         console.log("hook", hookAddress);
         console.logBytes32(salt);
     }

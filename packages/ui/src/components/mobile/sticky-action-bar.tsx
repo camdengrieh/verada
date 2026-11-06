@@ -2,9 +2,9 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
-import { Button, buttonVariants, type ButtonProps } from "@verada/ui/components/ui/button";
-import { DefaultLink, type LinkComponent } from "@verada/ui/components/varada/shared";
-import { cn } from "@verada/ui/lib/utils";
+import { Button, buttonVariants, type ButtonProps } from "@varada/ui/components/ui/button";
+import { DefaultLink, type LinkComponent } from "@varada/ui/components/varada/shared";
+import { cn } from "@varada/ui/lib/utils";
 import { BOTTOM_TAB_BAR_HEIGHT } from "./bottom-tab-bar";
 
 export interface StickyAction {

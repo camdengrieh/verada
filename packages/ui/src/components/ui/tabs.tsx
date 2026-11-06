@@ -21,7 +21,7 @@ import {
   type ComponentProps,
   type ReactNode,
 } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * - `underline` (default): page sections, hairline under the row.

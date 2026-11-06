@@ -5,7 +5,7 @@
 
 import { motion } from "motion/react";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { CauseChip } from "./cause-chip";
 import type { CauseName } from "./cause-icon";
 import { EnsName } from "./ens-name";

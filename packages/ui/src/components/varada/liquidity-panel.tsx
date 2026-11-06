@@ -1,8 +1,8 @@
 // Written for Varada (pair and liquidity panel from the A-Token board)
 import { CircleAlert } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { AssetKindBadge } from "./asset-kind-badge";
 import type { ImageSource } from "./shared";
 import { StockLogo, type QuoteKind } from "./stock-logo";

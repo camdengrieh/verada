@@ -6,7 +6,7 @@ import {
   OTHER_CATEGORY_BIT,
   categoryMaskOf,
   regionMaskOf,
-} from "@verada/sdk";
+} from "@varada/sdk";
 
 /** The fields of a harvested org that classification reads. */
 export interface ClassifiableOrg {

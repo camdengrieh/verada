@@ -4,7 +4,7 @@ import { Nav } from "@/components/nav";
 import { PrivacyStatus } from "@/components/privacy-status";
 import { Providers } from "@/components/providers";
 
-export const metadata = { title: "Verada" };
+export const metadata = { title: "Varada" };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (

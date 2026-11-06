@@ -8,7 +8,7 @@ import {Test} from "forge-std/Test.sol";
 import {CauseRegistry} from "../src/CauseRegistry.sol";
 import {CuratorRegistry} from "../src/CuratorRegistry.sol";
 import {EpochGovernor} from "../src/EpochGovernor.sol";
-import {VeradaToken} from "../src/VeradaToken.sol";
+import {VaradaToken} from "../src/VaradaToken.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
 import {ICuratorRegistry} from "../src/interfaces/ICuratorRegistry.sol";
@@ -65,7 +65,7 @@ contract EpochGovernorCuratedTest is BallotLog {
     function setUp() public {
         _recordBallots();
         vm.warp(1_750_000_123);
-        VeradaToken t = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", creator, factory);
+        VaradaToken t = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(t);
 
         MockUSDC usdc = new MockUSDC();

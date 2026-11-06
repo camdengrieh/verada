@@ -8,9 +8,9 @@
 import { CircleCheck, CircleDot, TriangleAlert } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useId, type ComponentProps } from "react";
-import { Sparkline } from "@verada/ui/components/data/sparkline";
-import { InfoTip } from "@verada/ui/components/ui/info-tip";
-import { cn } from "@verada/ui/lib/utils";
+import { Sparkline } from "@varada/ui/components/data/sparkline";
+import { InfoTip } from "@varada/ui/components/ui/info-tip";
+import { cn } from "@varada/ui/lib/utils";
 import { CONCENTRATION } from "./holder-distribution";
 
 export interface HolderBucket {

@@ -7,7 +7,7 @@
 import { ExternalLink } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useId, useState, type ComponentProps, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { CAUSE_SHORT_LABELS, CauseIcon, type CauseName } from "./cause-icon";
 import { formatUsd } from "./impact-shared";
 

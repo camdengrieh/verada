@@ -1,4 +1,4 @@
-import { ENS_PARENT_NAME, agentByLabel, isValidLabel, parseGatewayHostname } from "@verada/sdk";
+import { ENS_PARENT_NAME, agentByLabel, isValidLabel, parseGatewayHostname } from "@varada/sdk";
 
 /**
  * Token label for the current page, if it is a token page served on its own ENS name:

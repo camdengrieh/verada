@@ -1,8 +1,8 @@
 /** Per-viewer privacy preferences. Stored only in this browser; every read and write tolerates blocked storage. */
-const KEY = "verada:privacy";
+const KEY = "varada:privacy";
 
 export interface PrivacyPrefs {
-  /** Also send indexer (Verada API) requests through the anon network, so Verada never sees your IP. */
+  /** Also send indexer (Varada API) requests through the anon network, so Varada never sees your IP. */
   routeIndexer: boolean;
 }
 

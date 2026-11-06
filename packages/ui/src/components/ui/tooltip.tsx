@@ -8,8 +8,8 @@
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
 import { Tooltip as TooltipPrimitive } from "radix-ui";
 import { createContext, useCallback, useContext, useRef, useState, type ComponentProps } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export function TooltipProvider({ delayDuration = 200, ...props }: ComponentProps<typeof TooltipPrimitive.Provider>) {
   return <TooltipPrimitive.Provider data-slot="tooltip-provider" delayDuration={delayDuration} {...props} />;

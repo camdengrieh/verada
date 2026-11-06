@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {VeradaLpLocker} from "../../src/VeradaLpLocker.sol";
+import {VaradaLpLocker} from "../../src/VaradaLpLocker.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {ILpLocker} from "../../src/interfaces/ILpLocker.sol";
 import {MockFeeConsolidator, MockPositionManager, VaultTestToken} from "./VaultMocks.sol";
 import {Test} from "forge-std/Test.sol";
 
-contract VeradaLpLockerTest is Test {
+contract VaradaLpLockerTest is Test {
     MockFeeConsolidator cons;
-    VeradaLpLocker locker;
+    VaradaLpLocker locker;
     MockPositionManager pm;
     VaultTestToken weth;
     VaultTestToken meme;
@@ -21,7 +21,7 @@ contract VeradaLpLockerTest is Test {
         meme = new VaultTestToken("MEME");
         pm = new MockPositionManager(address(weth), address(meme));
         cons = new MockFeeConsolidator();
-        locker = new VeradaLpLocker(address(pm), IFeeConsolidator(address(cons)), factory);
+        locker = new VaradaLpLocker(address(pm), IFeeConsolidator(address(cons)), factory);
     }
 
     function _lock(uint256 liq) internal returns (uint256 id) {
@@ -45,7 +45,7 @@ contract VeradaLpLockerTest is Test {
     function test_lockRequiresCustody() public {
         uint256 id = pm.mintTo(address(this), 1);
         vm.prank(factory);
-        vm.expectRevert(abi.encodeWithSelector(VeradaLpLocker.NotPositionOwner.selector, id));
+        vm.expectRevert(abi.encodeWithSelector(VaradaLpLocker.NotPositionOwner.selector, id));
         locker.lock(address(meme), id);
     }
 
@@ -101,7 +101,7 @@ contract VeradaLpLockerTest is Test {
     }
 
     function test_rejectsForeignNftReceipt() public {
-        vm.expectRevert(VeradaLpLocker.UnexpectedNft.selector);
+        vm.expectRevert(VaradaLpLocker.UnexpectedNft.selector);
         locker.onERC721Received(address(0), address(0), 1, "");
     }
 
@@ -145,7 +145,7 @@ contract VeradaLpLockerTest is Test {
     }
 
     function test_constructorRejectsZero() public {
-        vm.expectRevert(VeradaLpLocker.ZeroAddress.selector);
-        new VeradaLpLocker(address(pm), IFeeConsolidator(address(0)), factory);
+        vm.expectRevert(VaradaLpLocker.ZeroAddress.selector);
+        new VaradaLpLocker(address(pm), IFeeConsolidator(address(0)), factory);
     }
 }

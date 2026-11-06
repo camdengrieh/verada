@@ -3,9 +3,9 @@ pragma solidity ^0.8.26;
 
 import {RotationPeriod} from "./IRotationGovernor.sol";
 
-/// @title IVeradaFactory
+/// @title IVaradaFactory
 /// @notice Deploys tokens, initializes their Uniswap v4 pool and locks single-sided liquidity.
-interface IVeradaFactory {
+interface IVaradaFactory {
     /// @notice Parameters for launching a token.
     /// @param name ERC20 name.
     /// @param symbol ERC20 symbol.
@@ -17,12 +17,12 @@ interface IVeradaFactory {
     /// @param startTick Initial pool tick at which single-sided liquidity begins.
     /// @param quoteAsset Asset the token is paired against; must be allowed by the QuoteRegistry
     ///        (WETH or an Ondo token).
-    /// @param label ENS label registered for the token under the Verada parent name
+    /// @param label ENS label registered for the token under the Varada parent name
     ///        (`<label>.varada.eth`): 3 to 63 bytes of `[a-z0-9-]`, no leading or trailing
     ///        hyphen, no `--` at positions 3 and 4; must not be taken or reserved for another
     ///        creator. The launch reverts on an invalid or taken label.
     /// @param logoRef Reference to the token logo (a Swarm reference), or zero for none. Served
-    ///        as the `verada.logo` text record of the token's ENS name.
+    ///        as the `varada.logo` text record of the token's ENS name.
     /// @param categoryMask Cause categories the token's ballots draw from (catalogue category
     ///        bits; all bits for any). Fixed forever.
     /// @param regionMask Regions the token's ballots draw from (catalogue region bits; all bits
@@ -137,5 +137,5 @@ interface IVeradaFactory {
     function tokenCount() external view returns (uint256);
 
     /// @notice Whether `token` was launched by this factory.
-    function isVeradaToken(address token) external view returns (bool);
+    function isVaradaToken(address token) external view returns (bool);
 }

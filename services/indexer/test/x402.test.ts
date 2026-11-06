@@ -1,4 +1,4 @@
-import { buildCatalog, type HarvestedOrg } from "@verada/cause-catalog";
+import { buildCatalog, type HarvestedOrg } from "@varada/cause-catalog";
 import { x402Client } from "@x402/core/client";
 import {
   decodePaymentRequiredHeader,

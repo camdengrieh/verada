@@ -28,7 +28,7 @@ export interface DataDeps {
 
 /**
  * `routeIndexer()` is read on every request, so toggling the preference applies immediately.
- * When it is on, indexer requests go through the anon network and Verada never sees the user's IP.
+ * When it is on, indexer requests go through the anon network and Varada never sees the user's IP.
  */
 export function createDeps(cfg: AppConfig, rpc: PrivateRpc, routeIndexer: () => boolean = () => false): DataDeps {
   let client: PublicClient | undefined;

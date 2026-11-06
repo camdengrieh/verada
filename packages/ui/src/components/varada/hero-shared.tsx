@@ -6,10 +6,10 @@
 
 import { motion, useMotionValue, useReducedMotion, useSpring, useTransform, type MotionValue } from "motion/react";
 import { createContext, useContext, useEffect, useRef, type ComponentProps, type ReactNode, type RefObject } from "react";
-import { NumberTicker } from "@verada/ui/components/motion/number-ticker";
-import { Button, buttonVariants, type ButtonEffect } from "@verada/ui/components/ui/button";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { Button, buttonVariants, type ButtonEffect } from "@varada/ui/components/ui/button";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { DefaultLink, type LinkComponent } from "./shared";
 import { BrushUnderline, Wash, type WashBlob } from "./watercolour";
 

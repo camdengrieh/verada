@@ -23,13 +23,13 @@ import {FeeVault} from "../../src/FeeVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {TakeoverGovernor} from "../../src/TakeoverGovernor.sol";
 import {TokenProfileRegistry} from "../../src/TokenProfileRegistry.sol";
-import {VeradaFactory} from "../../src/VeradaFactory.sol";
-import {VeradaLpLocker} from "../../src/VeradaLpLocker.sol";
-import {VeradaResolver} from "../../src/VeradaResolver.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaFactory} from "../../src/VaradaFactory.sol";
+import {VaradaLpLocker} from "../../src/VaradaLpLocker.sol";
+import {VaradaResolver} from "../../src/VaradaResolver.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ZamaVotingScheme} from "../../src/governance/ZamaVotingScheme.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
-import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
+import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
 import {IVotingScheme} from "../../src/interfaces/IVotingScheme.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
@@ -68,7 +68,7 @@ contract LaunchForkTest is BallotLog, Deploy {
 
     Deployment internal d;
     PoolSwapTest internal swapRouter;
-    VeradaToken internal token;
+    VaradaToken internal token;
     /// @dev Plaintext scheme used for the vote: the Zama scheme needs the relayer to produce
     ///      ballots, which a fork cannot do. The governor is scheme-agnostic.
     MockVotingScheme internal mockScheme;
@@ -155,9 +155,9 @@ contract LaunchForkTest is BallotLog, Deploy {
         assertEq(address(FeeVault(d.feeVault).lpLocker()), d.lpLocker);
         assertEq(cons.settlementAsset(), USDC);
         assertEq(FeeVault(d.feeVault).PLATFORM_SHARE_BPS(), 1000);
-        assertEq(address(VeradaFactory(d.factory).hook()), d.hook);
-        assertEq(address(VeradaFactory(d.factory).locker()), d.lpLocker);
-        assertEq(VeradaFactory(d.factory).profileRegistry(), d.profileRegistry);
+        assertEq(address(VaradaFactory(d.factory).hook()), d.hook);
+        assertEq(address(VaradaFactory(d.factory).locker()), d.lpLocker);
+        assertEq(VaradaFactory(d.factory).profileRegistry(), d.profileRegistry);
 
         TokenProfileRegistry profiles = TokenProfileRegistry(d.profileRegistry);
         assertEq(profiles.factory(), d.factory);
@@ -165,8 +165,8 @@ contract LaunchForkTest is BallotLog, Deploy {
         assertEq(profiles.platformAddress(), treasury);
         assertEq(profiles.owner(), owner);
         assertEq(profiles.defaultContenthash(), abi.encodePacked(hex"e40101fa011b20", SITE_REF));
-        assertEq(VeradaResolver(d.resolver).parentNode(), profiles.parentNode());
-        assertEq(address(VeradaResolver(d.resolver).registry()), d.profileRegistry);
+        assertEq(VaradaResolver(d.resolver).parentNode(), profiles.parentNode());
+        assertEq(address(VaradaResolver(d.resolver).registry()), d.profileRegistry);
         ZamaVotingScheme zama = ZamaVotingScheme(d.votingScheme);
         assertTrue(zama.isGovernor(d.epochGovernor));
         assertTrue(zama.isGovernor(d.takeoverGovernor));
@@ -213,7 +213,7 @@ contract LaunchForkTest is BallotLog, Deploy {
         address expectedOrg
     ) internal {
         // ---- launch
-        IVeradaFactory.DeployParams memory p = IVeradaFactory.DeployParams({
+        IVaradaFactory.DeployParams memory p = IVaradaFactory.DeployParams({
             name: "Fork Coin",
             symbol: "FORK",
             metadataURI: "bzz://1111111111111111111111111111111111111111111111111111111111111111",
@@ -229,9 +229,9 @@ contract LaunchForkTest is BallotLog, Deploy {
             regionMask: CatalogPublish.REGIONS
         });
         vm.prank(creator);
-        (address tokenAddr, uint256 lpTokenId) = VeradaFactory(d.factory).deployToken(p);
-        token = VeradaToken(tokenAddr);
-        assertEq(VeradaLpLocker(d.lpLocker).lpTokenIdOf(tokenAddr), lpTokenId);
+        (address tokenAddr, uint256 lpTokenId) = VaradaFactory(d.factory).deployToken(p);
+        token = VaradaToken(tokenAddr);
+        assertEq(VaradaLpLocker(d.lpLocker).lpTokenIdOf(tokenAddr), lpTokenId);
         assertEq(token.creator(), creator);
         assertEq(token.balanceOf(d.factory), 0, "factory holds no tokens");
 
@@ -258,7 +258,7 @@ contract LaunchForkTest is BallotLog, Deploy {
         //      earned so far to e0 and keeps it out of the vote epoch's pool.
         uint256 epoch = governor.currentEpoch() + 1;
         vm.warp(governor.epochStart(epoch));
-        VeradaLpLocker(d.lpLocker).collectFees(tokenAddr);
+        VaradaLpLocker(d.lpLocker).collectFees(tokenAddr);
         FeeVault vault = FeeVault(d.feeVault);
         uint256 earlierPool = vault.causePool(tokenAddr);
         uint256 earlierPlatform = vault.platformAccrued();
@@ -271,7 +271,7 @@ contract LaunchForkTest is BallotLog, Deploy {
         // ---- fees: collected a day later, so the whole accrual interval lies inside e1; raw
         //      quote fees are swapped to USDC, then split 10% / 90%
         vm.warp(block.timestamp + 1 days);
-        (uint256 a0, uint256 a1) = VeradaLpLocker(d.lpLocker).collectFees(tokenAddr);
+        (uint256 a0, uint256 a1) = VaradaLpLocker(d.lpLocker).collectFees(tokenAddr);
         uint256 collected = quoteIsCurrency0 ? a0 : a1;
         assertApproxEqAbs(collected, (spend * 300) / 10_000, spend / 1e6, "3% of the input");
         assertEq(

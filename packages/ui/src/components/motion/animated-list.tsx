@@ -6,8 +6,8 @@
 // drop off past `max`, it is a polite log for screen readers, and reduced motion just swaps rows.
 import { AnimatePresence, motion } from "motion/react";
 import { useRef, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface AnimatedListItem {
   id: string;

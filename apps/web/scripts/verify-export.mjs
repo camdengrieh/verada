@@ -210,7 +210,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.ar
   }
   const out = join(root, "out");
   if (!existsSync(out)) {
-    console.error("out/ not found. Run `pnpm --filter @verada/web build` first (or pass --build).");
+    console.error("out/ not found. Run `pnpm --filter @varada/web build` first (or pass --build).");
     process.exit(1);
   }
   const catalogSource = readFileSync(join(root, "..", "..", "packages", "sdk", "src", "catalog.ts"), "utf8");

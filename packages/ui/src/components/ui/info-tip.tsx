@@ -3,8 +3,8 @@
 // copy is Varada's own.
 import { CircleHelp } from "lucide-react";
 import type { ReactNode } from "react";
-import { Tooltip, TooltipContent, TooltipTrigger, type TooltipContentProps } from "@verada/ui/components/ui/tooltip";
-import { cn } from "@verada/ui/lib/utils";
+import { Tooltip, TooltipContent, TooltipTrigger, type TooltipContentProps } from "@varada/ui/components/ui/tooltip";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Plain-language definitions for the terms traders trip over. */
 export const GLOSSARY = {

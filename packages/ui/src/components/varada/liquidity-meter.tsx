@@ -1,7 +1,7 @@
 // Adapted from 21st.dev @vijayksingh/meter (id 37294): a row of lit segments for a level in a range.
 // Rebuilt on a log scale with liquidity tiers that carry a text label as well as a colour.
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * How deep a market is, in USD. Liquidity spans five orders of magnitude across Ondo tokens (most

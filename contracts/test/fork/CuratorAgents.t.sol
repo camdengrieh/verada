@@ -93,7 +93,7 @@ contract CuratorAgentsForkTest is Test, Deploy {
     function test_fork_identityIsOwnedByTheRegistry_andVaultLinksAsAgentWallet() public {
         assertEq(identity.ownerOf(agentId), address(curators));
         assertEq(identity.tokenURI(agentId), "data:application/json;base64,e30=");
-        assertEq(identity.getMetadata(agentId, "verada.vault"), abi.encodePacked(vault));
+        assertEq(identity.getMetadata(agentId, "varada.vault"), abi.encodePacked(vault));
 
         uint256 deadline = block.timestamp + 120;
         bytes32 structHash = keccak256(

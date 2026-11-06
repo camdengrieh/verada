@@ -1,6 +1,6 @@
 ---
 name: curator
-description: Weekly playbook for ONE Verada curator agent (<ensLabel>.agent.varada.eth). Researches the cause's news in each of the 8 regions, ranks catalogue orgs, writes the newsletter, then builds, publishes and submits the signed curation for the next epoch, with optional vault gifts. Use when asked to "run the curator skill for <ensLabel>".
+description: Weekly playbook for ONE Varada curator agent (<ensLabel>.agent.varada.eth). Researches the cause's news in each of the 8 regions, ranks catalogue orgs, writes the newsletter, then builds, publishes and submits the signed curation for the next epoch, with optional vault gifts. Use when asked to "run the curator skill for <ensLabel>".
 ---
 
 # Curator: weekly curation for one cause
@@ -9,7 +9,7 @@ You are the curator agent for one cause. The routine prompt names it: "run the c
 
 Valid labels: `disaster homeless hunger children disease cancer wildlife animals environment water health mental-health research education refugees human-rights women poverty veterans justice` (the source of truth is `AGENT_CATEGORIES` in `packages/sdk/src/agents.ts`; the CLI accepts the label or the category slug). Regions: `africa asia europe middle-east north-america latin-america oceania global`.
 
-Run every command from the repository root unless a step says otherwise. In the commands below, `<label>`, `<epoch>`, `<region>` and so on are placeholders. Substitute the literal values; shell variables do not persist between commands. `CLI` means `node packages/curator/bin/verada-curator.mjs`. Write it out in full each time. Working files go in `/tmp/curation-<label>-<epoch>/`, and audit files in `agents/curations/<label>/<epoch>/`.
+Run every command from the repository root unless a step says otherwise. In the commands below, `<label>`, `<epoch>`, `<region>` and so on are placeholders. Substitute the literal values; shell variables do not persist between commands. `CLI` means `node packages/curator/bin/varada-curator.mjs`. Write it out in full each time. Working files go in `/tmp/curation-<label>-<epoch>/`, and audit files in `agents/curations/<label>/<epoch>/`.
 
 ## Inputs and environment
 
@@ -24,7 +24,7 @@ Run every command from the repository root unless a step says otherwise. In the 
 | `INDEXER_URL` | verification | Indexer base URL. Its `/api/agents/...` and `/api/catalog/*` routes are free. |
 | `ETH_RPC_URL` | `status`, `give` | A mainnet RPC URL (or several, comma-separated) for read-only chain state: epochs, deadlines, the catalogue version and the vault. `give` reads the vault from `CuratorRegistry.agentOf` when `--vault` is omitted. |
 
-Setup: if `node_modules` is missing, run `pnpm install --frozen-lockfile`. Check the CLI with `node packages/curator/bin/verada-curator.mjs --help`.
+Setup: if `node_modules` is missing, run `pnpm install --frozen-lockfile`. Check the CLI with `node packages/curator/bin/varada-curator.mjs --help`.
 
 ## Safety rules (always)
 
@@ -40,7 +40,7 @@ Setup: if `node_modules` is missing, run `pnpm install --frozen-lockfile`. Check
 Read the chain state with the CLI (read-only; needs `ETH_RPC_URL` and `CURATOR_REGISTRY_ADDRESS`). It writes JSON to `/tmp/curation-<label>-status.json`; re-running it overwrites the file.
 
 ```bash
-node packages/curator/bin/verada-curator.mjs status --category <label> > /tmp/curation-<label>-status.json && cat /tmp/curation-<label>-status.json
+node packages/curator/bin/varada-curator.mjs status --category <label> > /tmp/curation-<label>-status.json && cat /tmp/curation-<label>-status.json
 ```
 
 The output is `{ label, category, categoryBit, contracts: { registry, governor, catalog }, currentEpoch, nextEpoch, nextEpochStart, secondsUntilNextEpoch, curationGraceEnds, catalogVersion, catalogRoot, agent: { agentId, signer, vault, active, registered }, vault: { address, paused, usdc, usdcBalance, maxGivePerEpoch, givenThisEpoch, capRemaining, giveRemaining } }`, with integers as decimal strings. The governor and catalogue are the registry's own `governor()` and `catalog()`. `vault` is `null` when the agent is not registered.
@@ -58,7 +58,7 @@ Cross-check the indexer: `curl -s <INDEXER_URL>/api/agents/<label>` should show 
 For each of the 8 regions:
 
 ```bash
-mkdir -p /tmp/curation-<label>-<epoch> && node packages/curator/bin/verada-curator.mjs pool --category <label> --region <region> > /tmp/curation-<label>-<epoch>/pool-<region>.json
+mkdir -p /tmp/curation-<label>-<epoch> && node packages/curator/bin/varada-curator.mjs pool --category <label> --region <region> > /tmp/curation-<label>-<epoch>/pool-<region>.json
 ```
 
 Each file has `{ catalogRoot, bucket, count, entries: [{ catalogIndex, orgId, name, ein, country, nteeCode, categories }] }`. **Every pool's `catalogRoot` must equal the status `catalogRoot`.** If it does not, `CATALOG_SOURCE` is stale for this catalogue version: stop and report. Do not build against it. A region with `count: 0` gets no picks and weight 0, but still gets events and a newsletter if there is news.
@@ -86,17 +86,17 @@ When all eight are done, spot-check each file. Pick `orgId`s must appear in that
 ## 4. Assemble, build, publish, submit
 
 1. **Template:**
-   `node packages/curator/bin/verada-curator.mjs template --category <label> --epoch <epoch> --catalog-version <catalogVersion> > /tmp/curation-<label>-<epoch>/template.json`
+   `node packages/curator/bin/varada-curator.mjs template --category <label> --epoch <epoch> --catalog-version <catalogVersion> > /tmp/curation-<label>-<epoch>/template.json`
 2. **Assemble** `agents/curations/<label>/<epoch>/report.json` (create the directory). Start from the template, replace each entry of `regions` with that region's `region-<region>.json`, and write `intro`, the newsletter introduction in markdown (≤ 20000 chars) covering the week across regions. Keep `schema`, `category`, `epoch`, `catalogVersion`, `generatedAt` and `title` as the template set them. The format is `agents/report.schema.json`.
 3. **Build:**
-   `node packages/curator/bin/verada-curator.mjs build --report agents/curations/<label>/<epoch>/report.json --out agents/curations/<label>/<epoch>/built.json`
+   `node packages/curator/bin/varada-curator.mjs build --report agents/curations/<label>/<epoch>/report.json --out agents/curations/<label>/<epoch>/built.json`
    Build parses the report (limits, enums, duplicate regions and picks, weight 0 without picks) and checks every pick against the catalogue. On an error, fix the field it names and build again. For "entry N of bucket B is X, not Y", re-copy `orgId`/`catalogIndex` from the region's pool file, or drop the pick and re-rank. **Never fabricate or adjust a `catalogIndex`/`orgId` to make the build pass.** The output prints each region's `count`, `weight` and `picksRoot`, and the `reportHash`.
 4. **Re-check timing.** Re-run the status command. If `nextEpoch` is no longer `<epoch>` (the epoch has started), stop: the registry will reject the submission (see Failure handling). If `catalogVersion` changed, go back to step 2 with the new version.
 5. **Publish:**
-   `node packages/curator/bin/verada-curator.mjs publish --built agents/curations/<label>/<epoch>/built.json > agents/curations/<label>/<epoch>/published.json`
+   `node packages/curator/bin/varada-curator.mjs publish --built agents/curations/<label>/<epoch>/built.json > agents/curations/<label>/<epoch>/published.json`
    The CLI signs the report hash with the 1Claw key and uploads it to Swarm through the publisher, which re-derives the trees and checks the signature against `CuratorRegistry`. The response is `{ reference, reportRef, reportHash, url, regions }`. Check that `reportHash` and every region's `picksRoot` equal `built.json`.
 6. **Submit** (one transaction for all regions), using `reportRef` from `published.json`:
-   `node packages/curator/bin/verada-curator.mjs submit --built agents/curations/<label>/<epoch>/built.json --report-ref <reportRef>`
+   `node packages/curator/bin/varada-curator.mjs submit --built agents/curations/<label>/<epoch>/built.json --report-ref <reportRef>`
    You can run it once with `--dry-run` first, which prints the calldata and sends nothing. The real run prints `{ what: "submitCurations", tx }`. Record the tx hash in `agents/curations/<label>/<epoch>/run.json`.
 7. **Verify** (poll for up to about 15 minutes, every minute or so): `curl -s <INDEXER_URL>/api/agents/<label>` should list `epoch: <epoch>` with your `reportRef` in `reports`. Then `curl -s <INDEXER_URL>/api/agents/<label>/picks/<epoch>/<region>` for each region with picks should return the same `picksRoot`. The keeper reads picks from these routes to prepare curated ballots. If they are not served by the time verification ends, say so prominently in the final report.
 
@@ -107,7 +107,7 @@ Only after a successful submit, and only if the status shows `vault.paused: fals
 - Recipients: only orgs in **this report's top picks** (rank 0-2 of a region with weight > 0). Make at most 3 gifts per run, because the 1Claw daily transaction limit is small and the submit has priority.
 - Amounts are in USDC base units (6 decimals: 25 USDC = `25000000`). The total of this run's gifts must be ≤ `giveRemaining`. Split by score × region weight, rounded down to whole USDC.
 - Preview with `--dry-run`, then send:
-  `node packages/curator/bin/verada-curator.mjs give --category <label> --region <region> --org <orgId> --amount <units>`
+  `node packages/curator/bin/varada-curator.mjs give --category <label> --region <region> --org <orgId> --amount <units>`
   The CLI reads the vault from `CuratorRegistry.agentOf` (needs `ETH_RPC_URL`). Check that the dry run's `to` equals the status `vault.address`; if it does not, stop and report. Pass `--vault <vault.address>` only when no RPC is available.
 - The vault accepts only an unblocked org in this cause's bucket for the region under the latest catalogue version, within the cap. A revert (`NotInBucket`, `OrgBlocked`, `EpochCapExceeded`, `Paused`) means: skip that gift, do not retry it, and note it.
 - Gifts above the 1Claw USD threshold wait for human approval. The CLI then fails with `1Claw transaction not broadcast (status ...)`. Record the gift as **pending approval** and **never resend it**, because a resend could double the gift once approved.

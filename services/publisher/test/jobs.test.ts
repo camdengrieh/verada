@@ -1,5 +1,5 @@
-import { BURN_OWNER, createArkivRegistry } from "@verada/arkiv-registry";
-import { FakeArkiv } from "@verada/arkiv-registry/testing";
+import { BURN_OWNER, createArkivRegistry } from "@varada/arkiv-registry";
+import { FakeArkiv } from "@varada/arkiv-registry/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createIndexerClient } from "../src/indexer-client.js";
 import { createArkivExtendJob } from "../src/jobs/arkiv-extend.js";
@@ -67,7 +67,7 @@ describe("arkiv-mirror job", () => {
     const fake = new FakeArkiv();
     const registry = createArkivRegistry({ chain: "rabdi", clients: fake, logger: { info: () => {}, warn: () => {}, error: () => {} } });
     const job = createArkivMirrorJob({
-      indexer: createIndexerClient("https://api.verada.test", { fetch: fetchMock as typeof fetch }),
+      indexer: createIndexerClient("https://api.varada.test", { fetch: fetchMock as typeof fetch }),
       registry,
       chainId: 1,
       intervalMs: 60_000,
@@ -76,11 +76,11 @@ describe("arkiv-mirror job", () => {
 
     await job.run();
     expect(fetchMock.mock.calls.map((c) => new URL(String(c[0])).search)).toContain("?limit=100&cursor=2");
-    const cores = fake.ofSchema("verada.token");
+    const cores = fake.ofSchema("varada.token");
     expect(cores).toHaveLength(3); // the unlabelled token is deferred
     expect(cores.every((c) => c.owner === BURN_OWNER && c.readonly)).toBe(true);
-    expect(fake.ofSchema("verada.token-profile")).toHaveLength(3);
-    expect(fake.ofSchema("verada.cause")).toHaveLength(1);
+    expect(fake.ofSchema("varada.token-profile")).toHaveLength(3);
+    expect(fake.ofSchema("varada.cause")).toHaveLength(1);
     expect(logs.at(-1)).toMatchObject({ msg: "arkiv mirror run", data: { created: 3, causesCreated: 1, deferred: 1, failures: 0 } });
 
     // Nothing changed: the second run writes nothing.
@@ -93,7 +93,7 @@ describe("arkiv-mirror job", () => {
     state.tokens[0] = tokenRow(1, { textRecords: { url: "https://changed.example" } });
     await job.run();
     expect(writes()).toBe(before + 1);
-    const patched = fake.ofSchema("verada.token-profile").find((p) => p.attrs.website?.value === "https://changed.example");
+    const patched = fake.ofSchema("varada.token-profile").find((p) => p.attrs.website?.value === "https://changed.example");
     expect(patched).toBeDefined();
   });
 
@@ -101,7 +101,7 @@ describe("arkiv-mirror job", () => {
     const fake = new FakeArkiv();
     const registry = createArkivRegistry({ chain: "rabdi", clients: fake, dryRun: true, logger: { info: () => {}, warn: () => {}, error: () => {} } });
     const job = createArkivMirrorJob({
-      indexer: createIndexerClient("https://api.verada.test", { fetch: fakeIndexer({ tokens: [tokenRow(1)], causes: [] }) as typeof fetch }),
+      indexer: createIndexerClient("https://api.varada.test", { fetch: fakeIndexer({ tokens: [tokenRow(1)], causes: [] }) as typeof fetch }),
       registry,
       chainId: 1,
       intervalMs: 60_000,
@@ -117,7 +117,7 @@ describe("arkiv-extend job", () => {
   it("extends only entities expiring within 30 days", async () => {
     const fake = new FakeArkiv({ currentBlock: 100n });
     const seed = (expiresAt: bigint) =>
-      fake.seed({ schema: "verada.cause", owner: fake.account, creator: fake.account, expiresAt, readonly: false, permissionlessExtension: true, attrs: {
+      fake.seed({ schema: "varada.cause", owner: fake.account, creator: fake.account, expiresAt, readonly: false, permissionlessExtension: true, attrs: {
         causeId: { type: "str", value: `c${expiresAt}` }, orgId: { type: "str", value: "" }, orgAddress: { type: "addr", value: fake.account }, name: { type: "str", value: "n" }, active: { type: "bool", value: true },
       } });
     const soon = seed(100n + 1_000_000n);
@@ -221,7 +221,7 @@ describe("tally-keeper job", () => {
     const job = createTallyKeeperJob({
       keeper: readConfig({ ...keeperEnv, KEEPER_ENABLED: "true", KEEPER_MAX_TX_PER_RUN: "5" }).keeper,
       chainId: 1,
-      indexer: createIndexerClient("https://api.verada.test", { fetch: fetchMock as unknown as typeof fetch }),
+      indexer: createIndexerClient("https://api.varada.test", { fetch: fetchMock as unknown as typeof fetch }),
       chain: { reader: chain.reader(), writer: chain.writer() },
       decryptor: chain.decryptor(),
       log,
@@ -249,7 +249,7 @@ describe("tally-keeper job", () => {
     const job = createTallyKeeperJob({
       keeper: readConfig({ ...keeperEnv, KEEPER_ENABLED: "true", KEEPER_LOOKBACK_EPOCHS: "1" }).keeper,
       chainId: 1,
-      indexer: createIndexerClient("https://api.verada.test", { fetch: fetchMock as unknown as typeof fetch }),
+      indexer: createIndexerClient("https://api.varada.test", { fetch: fetchMock as unknown as typeof fetch }),
       chain: { reader: chain.reader(), writer: chain.writer(), ballots },
       decryptor: chain.decryptor(),
       log,
@@ -271,7 +271,7 @@ describe("tally-keeper job", () => {
       const job = createTallyKeeperJob({
         keeper: readConfig({ ...keeperEnv, KEEPER_ENABLED: "true", ...env }).keeper,
         chainId: 1,
-        indexer: createIndexerClient("https://api.verada.test", { fetch: fetchMock as unknown as typeof fetch }),
+        indexer: createIndexerClient("https://api.varada.test", { fetch: fetchMock as unknown as typeof fetch }),
         chain: { reader: chain.reader(), writer: chain.writer(), rotation: rot.reader() },
         decryptor: chain.decryptor(),
         log,

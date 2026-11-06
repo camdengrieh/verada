@@ -6,7 +6,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useRef, useState, type ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Money for the impact components: cents under $1,000, whole dollars above, compact on request. */
 export function formatUsd(value: number, { compact = false }: { compact?: boolean } = {}): string {

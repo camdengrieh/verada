@@ -8,8 +8,8 @@
 
 import { Slot } from "radix-ui";
 import { useId, type ComponentProps, type PointerEvent, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * - `wash`: the hover pigment soaks in from where the pointer entered (or the centre, on keyboard

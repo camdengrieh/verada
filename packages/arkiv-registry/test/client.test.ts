@@ -43,9 +43,9 @@ describe("schemas", () => {
     for (const s of [TokenCore, TokenProfile, Cause]) {
       expect(Object.keys(s.columns).length + 1).toBeLessThanOrEqual(MAX_ATTRIBUTES);
     }
-    expect(TokenCore.name).toBe("verada.token");
-    expect(TokenProfile.name).toBe("verada.token-profile");
-    expect(Cause.name).toBe("verada.cause");
+    expect(TokenCore.name).toBe("varada.token");
+    expect(TokenProfile.name).toBe("varada.token-profile");
+    expect(Cause.name).toBe("varada.cause");
   });
 });
 
@@ -55,8 +55,8 @@ describe("createTokenRecords", () => {
     const t = token();
     const r = await registry.createTokenRecords(toTokenCore(t, 1), toProfileDraft(t, 1));
     expect(r.txHashes).toHaveLength(2);
-    const [core] = fake.ofSchema("verada.token");
-    const [profile] = fake.ofSchema("verada.token-profile");
+    const [core] = fake.ofSchema("varada.token");
+    const [profile] = fake.ofSchema("varada.token-profile");
     expect(core).toMatchObject({ key: r.coreKey, owner: BURN_OWNER, readonly: true, permissionlessExtension: true });
     expect(profile).toMatchObject({ key: r.profileKey, owner: fake.account, readonly: false, permissionlessExtension: true });
     expect(profile!.attrs.core).toEqual({ type: "key", value: r.coreKey });
@@ -88,7 +88,7 @@ describe("listing", () => {
     }
     // A spoofed entity carrying our schema tag, written by someone else.
     fake.seed({
-      schema: "verada.token",
+      schema: "varada.token",
       owner: "0x9999999999999999999999999999999999999999",
       creator: "0x9999999999999999999999999999999999999999",
       expiresAt: 10_000_000n,
@@ -99,7 +99,7 @@ describe("listing", () => {
     const cores = await registry.listCores();
     expect(cores).toHaveLength(5);
     expect(new Set(cores.map((c) => c.key)).size).toBe(5);
-    const queries = fake.calls.filter((c) => c.method === "query" && (c.args as { schema: string }).schema === "verada.token");
+    const queries = fake.calls.filter((c) => c.method === "query" && (c.args as { schema: string }).schema === "varada.token");
     expect(queries).toHaveLength(3); // 2 + 2 + 1
     expect((queries[1]!.args as { after: string }).after).toBe([...cores].map((c) => c.key).sort()[1]);
     for (const q of queries) expect((q.args as { creator: string }).creator).toBe(fake.account.toLowerCase());
@@ -165,13 +165,13 @@ describe("applyPlan", () => {
     const flaky = { ...real, account: real.account, executeBatch: (async (d: never) => (++n === 2 ? Promise.reject(new Error("rpc down")) : real.executeBatch(d))) as typeof real.executeBatch };
     const reg2 = createArkivRegistry({ chain: "rabdi", clients: { publicClient: fake.publicClient, walletClient: flaky }, logger: silent() });
     await expect(reg2.createTokenRecords(toTokenCore(t, 1), toProfileDraft(t, 1))).rejects.toThrow("rpc down");
-    expect(fake.ofSchema("verada.token")[0]!.owner).toBe(fake.account);
+    expect(fake.ofSchema("varada.token")[0]!.owner).toBe(fake.account);
 
     const plan = planReconcile({ chainId: 1, indexerTokens: [t], existingCores: await registry.listCores(), existingProfiles: await registry.listProfiles(), currentBlock: 1n, renewBeforeBlocks: 1n });
     expect(plan.burns).toHaveLength(1);
     expect(plan.creates).toHaveLength(0);
     await applyPlan(registry, plan);
-    expect(fake.ofSchema("verada.token")[0]!.owner).toBe(BURN_OWNER);
+    expect(fake.ofSchema("varada.token")[0]!.owner).toBe(BURN_OWNER);
   });
 
   it("continues past failures and redacts the access key", async () => {
@@ -197,7 +197,7 @@ describe("applyPlan", () => {
   it("extends in chunks", async () => {
     const { fake, registry } = setup();
     const keys = Array.from({ length: 70 }, (_, i) =>
-      fake.seed({ schema: "verada.cause", owner: fake.account, creator: fake.account, expiresAt: 10n ** 9n, readonly: false, permissionlessExtension: false, attrs: {}, key: `0x${(i + 1).toString(16).padStart(64, "0")}` }),
+      fake.seed({ schema: "varada.cause", owner: fake.account, creator: fake.account, expiresAt: 10n ** 9n, readonly: false, permissionlessExtension: false, attrs: {}, key: `0x${(i + 1).toString(16).padStart(64, "0")}` }),
     );
     const r = await registry.extendExpiring(keys);
     expect(r.txHashes).toHaveLength(3);

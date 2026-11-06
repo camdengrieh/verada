@@ -1,4 +1,4 @@
-import { buildReport, pickProof, type BuiltRegion } from "@verada/curator";
+import { buildReport, pickProof, type BuiltRegion } from "@varada/curator";
 import {
   BUCKET_COUNT,
   bucketId,
@@ -9,7 +9,7 @@ import {
   planRotation,
   regionMaskOf,
   rotationPollScope,
-} from "@verada/sdk";
+} from "@varada/sdk";
 import { decodeAbiParameters, type Hex } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { Backoff } from "../src/keeper/backoff.js";
@@ -41,7 +41,7 @@ const af = [3, 7, 11, 0].map((i) => pick(orgAt(HUNGER_AF, i), i));
 const as = [2, 4].map((i) => pick(orgAt(HUNGER_AS, i), i));
 const built = buildReport(
   {
-    schema: "verada.curation/v1",
+    schema: "varada.curation/v1",
     category: "hunger",
     epoch: Number(CURATION_EPOCH),
     catalogVersion: 1,

@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
@@ -30,7 +30,7 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
     MockProfileRegistryLite internal profiles;
     CatalogFixture internal cat;
     EpochGovernor internal gov;
-    VeradaToken internal tokenContract;
+    VaradaToken internal tokenContract;
     address internal token;
 
     address internal owner = makeAddr("owner");
@@ -54,7 +54,7 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
         _recordBallots();
         // The token predates the governor by a week, so epoch 0 has a regular snapshot.
         vm.warp(T0);
-        tokenContract = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", creator, factory);
+        tokenContract = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(tokenContract);
         _give(tokenContract, v1, 100e18);
         _give(tokenContract, v2, 250e18);
@@ -117,7 +117,7 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
         p[1] = b;
     }
 
-    function _give(VeradaToken t, address to, uint256 amount) internal {
+    function _give(VaradaToken t, address to, uint256 amount) internal {
         vm.prank(factory);
         assertTrue(t.transfer(to, amount));
     }
@@ -136,8 +136,8 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
 
     /// @dev Launches a fresh token now: created, given its focus and registered in the same
     ///      block, like the factory does.
-    function _launch() internal returns (VeradaToken t) {
-        t = new VeradaToken("Launch", "LNCH", "ipfs://l", creator, factory);
+    function _launch() internal returns (VaradaToken t) {
+        t = new VaradaToken("Launch", "LNCH", "ipfs://l", creator, factory);
         profiles.register(address(t), creator);
         profiles.setFocus(address(t), HUNGER, AFRICA);
         vm.prank(factory);
@@ -156,7 +156,7 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
     function test_launchEpoch_holdersCanVote() public {
         vm.warp(gov.epochStart(1) + 2 days);
         uint256 launchedAt = block.timestamp;
-        VeradaToken t = _launch();
+        VaradaToken t = _launch();
         address ta = address(t);
         _prepare(ta, 1);
         bytes32[] memory opts = _options(address(gov), ta, 1);
@@ -195,7 +195,7 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
 
     function test_launchSnapshot_dayAfterRegistration_emitted() public {
         vm.warp(gov.epochStart(1) + 1 days);
-        VeradaToken t = new VeradaToken("Launch", "LNCH", "ipfs://l", creator, factory);
+        VaradaToken t = new VaradaToken("Launch", "LNCH", "ipfs://l", creator, factory);
         profiles.register(address(t), creator);
         profiles.setFocus(address(t), HUNGER, AFRICA);
         vm.expectEmit(true, true, false, true);
@@ -215,7 +215,7 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
     /// stays inside the launch epoch.
     function test_launchSnapshot_halfwayWhenEpochEndsSoon() public {
         vm.warp(gov.epochStart(2) - 10 hours);
-        VeradaToken t = _launch();
+        VaradaToken t = _launch();
         assertEq(gov.launchSnapshotOf(address(t)), block.timestamp + 5 hours);
         assertEq(gov.snapshotFor(address(t), 1), block.timestamp + 5 hours);
         assertEq(gov.snapshotFor(address(t), 2), gov.snapshotOf(2));

@@ -23,11 +23,11 @@ interface ILockerPositionManager {
         returns (PoolKey memory poolKey, uint256 info);
 }
 
-/// @title VeradaLpLocker
+/// @title VaradaLpLocker
 /// @notice Holds liquidity position NFTs forever. The only liquidity operation it can perform is
 ///         a zero-liquidity decrease, which settles accrued fees without touching principal.
 ///         There is no function that transfers an NFT or removes liquidity.
-contract VeradaLpLocker is ILpLocker, IERC721Receiver, ReentrancyGuard {
+contract VaradaLpLocker is ILpLocker, IERC721Receiver, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     error ZeroAddress();

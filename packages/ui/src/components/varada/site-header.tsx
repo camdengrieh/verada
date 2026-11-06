@@ -4,8 +4,8 @@
 import { Menu, Search, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useEffect, useId, useRef, useState, type ComponentProps, type FormEvent, type ReactNode, type Ref } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { LogoMark } from "./logo-mark";
 import { DefaultLink, type LinkComponent } from "./shared";
 

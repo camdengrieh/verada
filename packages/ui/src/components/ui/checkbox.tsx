@@ -4,7 +4,7 @@
 // controlled and uncontrolled use (and stops under reduced motion); adds the indeterminate dash.
 import { Checkbox as CheckboxPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * 20px box with a 44px hit area. `tone="cause"` checks in sage (giving, voting); the default is

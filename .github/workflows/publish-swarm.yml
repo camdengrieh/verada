@@ -35,33 +35,33 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Publish tool tests
-        run: pnpm --filter @verada/publish test
+        run: pnpm --filter @varada/publish test
       - name: Build static export
         env:
           INDEXER_URLS: ${{ inputs.indexer_urls }}
         run: |
           if [ -n "$INDEXER_URLS" ]; then export NEXT_PUBLIC_INDEXER_URLS="$INDEXER_URLS"; fi
-          pnpm --filter @verada/web build
+          pnpm --filter @varada/web build
       - name: Validate export
-        run: pnpm --filter @verada/web verify:export
+        run: pnpm --filter @varada/web verify:export
       - name: Dry-run upload report
         env:
           TTL_DAYS: ${{ inputs.ttl_days }}
-        run: node packages/publish/bin/verada-publish.mjs upload --dir apps/web/out --ttl-days "$TTL_DAYS" | tee upload-dry-run.txt
+        run: node packages/publish/bin/varada-publish.mjs upload --dir apps/web/out --ttl-days "$TTL_DAYS" | tee upload-dry-run.txt
       - name: Dry-run feed update (throwaway key, nothing written)
         env:
           # A fixed, publicly known test key: the dry run only derives the feed owner and prints
           # the plan. Real releases use the operator's key outside CI.
           SITE_FEED_PRIVATE_KEY: "0x1111111111111111111111111111111111111111111111111111111111111111"
-        run: node packages/publish/bin/verada-publish.mjs feed-update --ref 0000000000000000000000000000000000000000000000000000000000000000 | tee -a upload-dry-run.txt
+        run: node packages/publish/bin/varada-publish.mjs feed-update --ref 0000000000000000000000000000000000000000000000000000000000000000 | tee -a upload-dry-run.txt
       - name: Archive export
-        run: tar -czf verada-web-export.tar.gz -C apps/web/out .
+        run: tar -czf varada-web-export.tar.gz -C apps/web/out .
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
-          name: verada-web-export
+          name: varada-web-export
           path: |
-            verada-web-export.tar.gz
+            varada-web-export.tar.gz
             upload-dry-run.txt
           if-no-files-found: error
           retention-days: 30

@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Divider } from "@verada/ui/components/ui/divider";
+import { Divider } from "@varada/ui/components/ui/divider";
 
 describe("Divider", () => {
   it("is decorative by default and a separator when asked", () => {

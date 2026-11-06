@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { AssetProvider } from "@verada/ui/lib/assets";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button } from "@verada/ui/components/ui/button";
-import { PaintedImage } from "@verada/ui/components/varada/painted-image";
+import { AssetProvider } from "@varada/ui/lib/assets";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button } from "@varada/ui/components/ui/button";
+import { PaintedImage } from "@varada/ui/components/varada/painted-image";
 
 describe("Button", () => {
   it("defaults to type=button and the primary variant", () => {

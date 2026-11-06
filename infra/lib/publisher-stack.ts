@@ -14,14 +14,14 @@ import {
   PUBLISHER_FACILITATOR_SECRET_FIELDS,
   PUBLISHER_KEEPER_SECRET_FIELDS,
   PUBLISHER_SECRET_FIELDS,
-  VeradaConfig,
+  VaradaConfig,
   ZERO_ADDRESS,
 } from "./config";
 import type { LogAlarmSpec } from "./observability-stack";
 import type { BeeApiEndpoint } from "./swarm-stack";
 
 export interface PublisherStackProps extends cdk.StackProps {
-  readonly config: VeradaConfig;
+  readonly config: VaradaConfig;
   readonly vpc: ec2.IVpc;
   /** Bee API inside the VPC (SwarmStack.beeApi): BEE_STAMPS_URL and the 1633 ingress rule. */
   readonly bee?: BeeApiEndpoint;
@@ -80,7 +80,7 @@ export class PublisherStack extends cdk.Stack {
     }
 
     this.repository = new ecr.Repository(this, "Repo", {
-      repositoryName: `verada-${config.envName}-publisher`,
+      repositoryName: `varada-${config.envName}-publisher`,
       imageScanOnPush: true,
       imageTagMutability: ecr.TagMutability.IMMUTABLE,
       encryption: ecr.RepositoryEncryption.AES_256,

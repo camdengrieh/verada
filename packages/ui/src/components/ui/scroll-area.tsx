@@ -2,7 +2,7 @@
 // shadcn/ui new-york, Direction A styling
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Scrollable region with a slim sand scrollbar. Give it a height (or max-height). */
 export function ScrollArea({ className, children, ...props }: ComponentProps<typeof ScrollAreaPrimitive.Root>) {

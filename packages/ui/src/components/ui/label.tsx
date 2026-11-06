@@ -2,7 +2,7 @@
 // shadcn/ui new-york, Direction A styling
 import { Label as LabelPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Form label. Dims itself when its peer control or enclosing group is disabled. */
 export function Label({ className, ...props }: ComponentProps<typeof LabelPrimitive.Root>) {

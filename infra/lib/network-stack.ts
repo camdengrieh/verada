@@ -2,12 +2,12 @@ import * as cdk from "aws-cdk-lib";
 import * as ec2 from "aws-cdk-lib/aws-ec2";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
-import { VeradaConfig } from "./config";
+import { VaradaConfig } from "./config";
 
 const VPC_CIDR = "10.40.0.0/16";
 
 export interface NetworkStackProps extends cdk.StackProps {
-  readonly config: VeradaConfig;
+  readonly config: VaradaConfig;
 }
 
 export class NetworkStack extends cdk.Stack {

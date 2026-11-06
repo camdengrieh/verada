@@ -3,7 +3,7 @@ pragma solidity ^0.8.26;
 
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ZamaVotingScheme} from "../../src/governance/ZamaVotingScheme.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
@@ -53,8 +53,8 @@ contract IdleEpochsGasTest is BallotLog {
         vm.etch(ZamaLocal.KMS_VERIFIER, type(MockKmsVerifier).runtimeCode);
 
         vm.warp(1_750_000_123);
-        VeradaToken t =
-            new VeradaToken("Verada Test", "VTEST", "ipfs://meta", makeAddr("c"), factory);
+        VaradaToken t =
+            new VaradaToken("Varada Test", "VTEST", "ipfs://meta", makeAddr("c"), factory);
         token = address(t);
         for (uint256 i; i < voters.length; ++i) {
             voters[i] = address(uint160(0x5000 + i));

@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 import { getAddress, isAddress, zeroAddress, type Address } from "viem";
-import { agentVaultAbi, curatorRegistryAbi } from "@verada/sdk/abis";
+import { agentVaultAbi, curatorRegistryAbi } from "@varada/sdk/abis";
 import { usdcText } from "@/components/agent-common";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
 import { errorText, sameAddress, TxStatus, useTx } from "@/components/use-tx";

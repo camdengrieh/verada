@@ -22,11 +22,11 @@ import {HookMiner} from "../../script/HookMiner.sol";
 import {FeeConsolidator, IConsolidatorRegistry} from "../../src/FeeConsolidator.sol";
 import {FeeVault} from "../../src/FeeVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
-import {VeradaHook} from "../../src/VeradaHook.sol";
+import {VaradaHook} from "../../src/VaradaHook.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "../../src/interfaces/IFeeVault.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
 import {MockDistributor, MockERC20, MockGovernor} from "../consolidator/ConsolidatorMocks.sol";
 
 interface ITokenPauseManager {
@@ -76,7 +76,7 @@ contract ConsolidatorForkTest is Test {
     QuoteRegistry internal registry;
     FeeVault internal vault;
     FeeConsolidator internal cons;
-    VeradaHook internal hook;
+    VaradaHook internal hook;
     PoolModifyLiquidityTest internal liquidityRouter;
     PoolSwapTest internal swapRouter;
 
@@ -116,8 +116,8 @@ contract ConsolidatorForkTest is Test {
         vault.setConsolidator(address(cons));
 
         bytes memory args = abi.encode(PM, address(this), address(cons));
-        (, bytes32 salt) = HookMiner.find(address(this), FLAGS, type(VeradaHook).creationCode, args);
-        hook = new VeradaHook{salt: salt}(PM, address(this), address(cons));
+        (, bytes32 salt) = HookMiner.find(address(this), FLAGS, type(VaradaHook).creationCode, args);
+        hook = new VaradaHook{salt: salt}(PM, address(this), address(cons));
         cons.setHook(address(hook));
         cons.setSource(locker, true);
         vault.registerToken(address(meme));
@@ -319,7 +319,7 @@ contract ConsolidatorForkTest is Test {
     {
         hook.configureToken(
             address(meme),
-            IVeradaHook.FeeConfig({
+            IVaradaHook.FeeConfig({
                 baseFeeBps: 300,
                 sniperFeeStartBps: sniperStart,
                 sniperDecaySeconds: sniperDecay,
@@ -426,7 +426,7 @@ contract ConsolidatorForkTest is Test {
 
         hook.configureToken(
             address(meme),
-            IVeradaHook.FeeConfig({
+            IVaradaHook.FeeConfig({
                 baseFeeBps: 300,
                 sniperFeeStartBps: 0,
                 sniperDecaySeconds: 0,

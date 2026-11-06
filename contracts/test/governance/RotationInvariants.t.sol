@@ -6,7 +6,7 @@ import {Test} from "forge-std/Test.sol";
 import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
@@ -25,7 +25,7 @@ import {CatalogPublish} from "../utils/CatalogFixture.sol";
 contract RotationHandler is Test {
     RotationGovernor public gov;
     MockVotingScheme public scheme;
-    VeradaToken public token;
+    VaradaToken public token;
     address[] public voters;
 
     // Poll bookkeeping (rotation polls and proposals share the scope space).
@@ -55,7 +55,7 @@ contract RotationHandler is Test {
     constructor(
         RotationGovernor gov_,
         MockVotingScheme scheme_,
-        VeradaToken token_,
+        VaradaToken token_,
         address[] memory voters_,
         bytes32 initialCause,
         bytes32[] memory poolOrgs_,
@@ -242,7 +242,7 @@ contract RotationInvariantsTest is Test {
     RotationHandler internal handler;
     RotationGovernor internal gov;
     MockVotingScheme internal scheme;
-    VeradaToken internal token;
+    VaradaToken internal token;
     address[] internal voters;
 
     function setUp() public {
@@ -282,7 +282,7 @@ contract RotationInvariantsTest is Test {
         causes.setMaterializer(address(gov), true);
         gov.setVault(address(this));
 
-        token = new VeradaToken("T", "T", "", address(this), address(this));
+        token = new VaradaToken("T", "T", "", address(this), address(this));
         voters.push(makeAddr("v0"));
         voters.push(makeAddr("v1"));
         voters.push(makeAddr("v2"));

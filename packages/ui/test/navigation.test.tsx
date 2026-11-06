@@ -1,10 +1,10 @@
 import { act, createEvent, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeAll, describe, expect, it } from "vitest";
-import { AvatarTooltipGroup } from "@verada/ui/components/ui/avatar-tooltip-group";
-import { InfoTip, InfoTerm } from "@verada/ui/components/ui/info-tip";
-import { FeeTooltip } from "@verada/ui/components/ui/rich-tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger, type TabsVariant } from "@verada/ui/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@verada/ui/components/ui/tooltip";
+import { AvatarTooltipGroup } from "@varada/ui/components/ui/avatar-tooltip-group";
+import { InfoTip, InfoTerm } from "@varada/ui/components/ui/info-tip";
+import { FeeTooltip } from "@varada/ui/components/ui/rich-tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger, type TabsVariant } from "@varada/ui/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@varada/ui/components/ui/tooltip";
 
 beforeAll(() => {
   globalThis.ResizeObserver ??= class {

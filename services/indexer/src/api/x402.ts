@@ -3,7 +3,7 @@ import { HTTPFacilitatorClient } from "@x402/core/server";
 import type { FacilitatorClient, RoutesConfig } from "@x402/core/server";
 import { ExactEvmScheme } from "@x402/evm/exact/server";
 import { paymentMiddleware, x402ResourceServer } from "@x402/hono";
-import { agentByLabel, categoryMaskOf, regionBySlug, regionMaskOf } from "@verada/sdk";
+import { agentByLabel, categoryMaskOf, regionBySlug, regionMaskOf } from "@varada/sdk";
 import type { Context, Hono } from "hono";
 import { z } from "zod";
 import { verifyReport, type AgentRow, type AgentsRepo, type ReportFetcher, type StoredReport } from "./agents";
@@ -89,7 +89,7 @@ export function routesConfig(config: X402Config): RoutesConfig {
       accepts: paymentOptions(config, key),
       description: r.description,
       mimeType: "application/json",
-      serviceName: "Verada cause data",
+      serviceName: "Varada cause data",
     };
   }
   return routes;

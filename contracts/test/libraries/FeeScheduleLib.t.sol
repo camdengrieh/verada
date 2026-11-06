@@ -4,8 +4,8 @@ pragma solidity 0.8.26;
 import {Test} from "forge-std/Test.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {FeeScheduleLib} from "../../src/libraries/FeeScheduleLib.sol";
 
 /// @dev External wrapper so library reverts can be asserted.
@@ -63,7 +63,7 @@ contract FeeScheduleLibTest is Test {
     }
 
     function test_totalBps_atMost8500() public pure {
-        IVeradaLiveHook.LiveFeeConfig memory c = IVeradaLiveHook.LiveFeeConfig(500, 8000, 60, 100);
+        IVaradaLiveHook.LiveFeeConfig memory c = IVaradaLiveHook.LiveFeeConfig(500, 8000, 60, 100);
         assertEq(FeeScheduleLib.totalBps(c, 100), 8500);
         assertEq(FeeScheduleLib.totalBps(c, 160), 500);
     }
@@ -111,22 +111,22 @@ contract FeeScheduleLibTest is Test {
 
         address weekly = address(uint160(0x4444 << 144) | WEEKLY_FLAGS);
         deployCodeTo(
-            "VeradaHook.sol:VeradaHook",
+            "VaradaHook.sol:VaradaHook",
             abi.encode(address(0xA11CE), address(this), address(0xC0)),
             weekly
         );
         address token = address(0x7070);
-        IVeradaHook(weekly).configureToken(token, IVeradaHook.FeeConfig(base, start, decay, launch));
+        IVaradaHook(weekly).configureToken(token, IVaradaHook.FeeConfig(base, start, decay, launch));
 
         vm.warp(uint256(launch) + elapsed);
-        uint256 weeklySurcharge = IVeradaHook(weekly).currentFeeBps(token) - base;
+        uint256 weeklySurcharge = IVaradaHook(weekly).currentFeeBps(token) - base;
         assertEq(
             FeeScheduleLib.surchargeBps(start, decay, launch, block.timestamp), weeklySurcharge
         );
-        IVeradaLiveHook.LiveFeeConfig memory c =
-            IVeradaLiveHook.LiveFeeConfig(base, start, decay, launch);
+        IVaradaLiveHook.LiveFeeConfig memory c =
+            IVaradaLiveHook.LiveFeeConfig(base, start, decay, launch);
         assertEq(
-            FeeScheduleLib.totalBps(c, block.timestamp), IVeradaHook(weekly).currentFeeBps(token)
+            FeeScheduleLib.totalBps(c, block.timestamp), IVaradaHook(weekly).currentFeeBps(token)
         );
     }
 }

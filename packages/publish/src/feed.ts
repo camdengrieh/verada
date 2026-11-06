@@ -2,7 +2,7 @@ import { Bee, PrivateKey, Topic } from "@ethersphere/bee-js";
 import { swarmReferenceToContenthash, normalizeReference } from "./contenthash.js";
 
 /** Topic of the feed that points at the current site release. */
-export const SITE_FEED_TOPIC = "verada-site";
+export const SITE_FEED_TOPIC = "varada-site";
 
 export interface FeedIdentity {
   /** Feed owner (address of the signing key), `0x`-prefixed. */

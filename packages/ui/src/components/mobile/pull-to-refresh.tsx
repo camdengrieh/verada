@@ -7,8 +7,8 @@
 
 import { LoaderCircle, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface PullToRefreshProps extends Omit<ComponentProps<"div">, "children"> {
   /** The scrolling content. */

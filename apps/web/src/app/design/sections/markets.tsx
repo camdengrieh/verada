@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { AssetKindBadge } from "@verada/ui/components/varada/asset-kind-badge";
-import { LiquidityMeter } from "@verada/ui/components/varada/liquidity-meter";
-import { MarketStatus } from "@verada/ui/components/varada/market-status";
-import { PairPicker } from "@verada/ui/components/varada/pair-picker";
-import { PriceImpactLadder, type ImpactStep } from "@verada/ui/components/varada/price-impact-ladder";
-import { AlwaysOpen, QuoteAssetIdentity, QuoteKindMark, type QuoteAsset } from "@verada/ui/components/varada/quote-asset";
-import { QuoteAssetCard } from "@verada/ui/components/varada/quote-asset-card";
-import { QuoteAssetList } from "@verada/ui/components/varada/quote-asset-list";
-import type { ImageSource } from "@verada/ui/components/varada/shared";
+import { Button } from "@varada/ui/components/ui/button";
+import { AssetKindBadge } from "@varada/ui/components/varada/asset-kind-badge";
+import { LiquidityMeter } from "@varada/ui/components/varada/liquidity-meter";
+import { MarketStatus } from "@varada/ui/components/varada/market-status";
+import { PairPicker } from "@varada/ui/components/varada/pair-picker";
+import { PriceImpactLadder, type ImpactStep } from "@varada/ui/components/varada/price-impact-ladder";
+import { AlwaysOpen, QuoteAssetIdentity, QuoteKindMark, type QuoteAsset } from "@varada/ui/components/varada/quote-asset";
+import { QuoteAssetCard } from "@varada/ui/components/varada/quote-asset-card";
+import { QuoteAssetList } from "@varada/ui/components/varada/quote-asset-list";
+import type { ImageSource } from "@varada/ui/components/varada/shared";
 import { quoteAssetLogo } from "@/lib/asset-packs";
 import { siteBase } from "@/lib/base";
 import { GallerySection } from "../section";

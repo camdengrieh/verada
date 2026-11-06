@@ -4,8 +4,8 @@
 // blocks, and container queries so the stat grid widens with the card rather than the viewport.
 import { ArrowRight, CircleAlert, CircleCheck, CircleX } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { LiquidityMeter, formatUsdCompact, type LiquidityThresholds } from "./liquidity-meter";
 import { MarketStatus, formatNewYorkTime, isPriceStale, usMarketSession, type MarketSessionInfo } from "./market-status";
 import { PriceChange } from "./price-change";

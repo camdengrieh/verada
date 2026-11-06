@@ -6,10 +6,10 @@
 
 import { Check, SlidersHorizontal } from "lucide-react";
 import { useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@verada/ui/components/ui/drawer";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@varada/ui/components/ui/drawer";
+import { cn } from "@varada/ui/lib/utils";
 import { CONTAINED_SHEET, type MobileSheetBaseProps } from "./sheet-shared";
 
 export interface FilterOption {

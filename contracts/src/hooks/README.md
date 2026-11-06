@@ -32,8 +32,8 @@ contract MyPoolHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook {
 }
 ```
 
-with the remapping `v4-hooks/=lib/verada/contracts/src/hooks/` after
-`forge install camdengrieh/verada@<ref>` (needs the repository to be public), or copy this folder
+with the remapping `v4-hooks/=lib/varada/contracts/src/hooks/` after
+`forge install camdengrieh/varada@<ref>` (needs the repository to be public), or copy this folder
 into your project: it imports only itself (relative paths) and `v4-core/` (plus
 `@openzeppelin/contracts/` in the examples). Mine the address with
 `contracts/script/HookMiner.sol`. Install details:

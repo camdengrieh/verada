@@ -1,4 +1,4 @@
-# @verada/web
+# @varada/web
 
 Static-export Next.js app (app router). There is no web server: the `out/` folder is published to
 Ethereum Swarm and resolved through an ENS name's contenthash. The only always-on backend is the
@@ -10,7 +10,7 @@ Images ship only as optimised copies under `assets/`, within a size budget (see 
 | Route | Purpose |
 |---|---|
 | `/` | Token list (`GET /api/tokens`, chain-log fallback), or a token's page when served on its ENS name (see Hostname routing) |
-| `/launch/` | Launch form: logo and metadata uploads, ENS label, `VeradaFactory.deployToken` |
+| `/launch/` | Launch form: logo and metadata uploads, ENS label, `VaradaFactory.deployToken` |
 | `/token/?address=0x...` | Single client-side token page; the address is read from the query (or `#0x...` hash), or resolved from `?label=` |
 | `/causes/` | Nonprofit search via the indexer's `GET /api/causes/search` (names and ids only) |
 | `/governance/` | Current epoch (chain read); ballots are cast from each token's page |
@@ -169,7 +169,7 @@ gateway hostname with `parseGatewayHostname(hostname, ensParentName)` (`pepe.var
 `.eth.link`, `pepe.varada.bzz.link`). With a label, `/` renders the token page and resolves the address
 through ENS (`getTokenAddressByLabel`, public-scope private RPC), then the registry, then the indexer's
 `/api/tokens/by-label/:label`. Without one it renders the token list. Try it locally with
-`/?label=<label>`. The plain-DNS form `verada.com/<label>` goes through `404.html`, which redirects to
+`/?label=<label>`. The plain-DNS form `varada.com/<label>` goes through `404.html`, which redirects to
 `token/?label=<label>`; the token route resolves the label the same way.
 
 ## Privacy notes for these features
@@ -197,7 +197,7 @@ blur placeholder (`ASSETS`), plus each pack's entries (`PACKS`).
 1. Make sure the originals are real files, not LFS pointers: `git lfs install` once, then `git lfs pull`.
 2. Put the original in the right `assets-src/` folder (PNG, JPEG or WebP; SVG for vector marks). Use
    lowercase kebab-case names; stock marks use the Ondo symbol, e.g. `NVDAon.png`.
-3. Run `pnpm --filter @verada/web assets`. It rewrites `public/assets/`, `packs/` and
+3. Run `pnpm --filter @varada/web assets`. It rewrites `public/assets/`, `packs/` and
    `src/lib/assets.generated.ts`.
 4. Commit the original, the new `public/assets/` files and `assets.generated.ts` together. The original
    goes to LFS automatically (`.gitattributes` covers `apps/web/assets-src/**`).
@@ -224,10 +224,10 @@ Binary files anywhere else in `out/` fail the export. Packs have only the per-fi
 Packs keep big or growing sets out of the site bundle and are not re-uploaded with each release.
 
 ```sh
-pnpm --filter @verada/web assets                                   # builds packs/stocks
-node packages/publish/bin/verada-publish.mjs upload-pack \
+pnpm --filter @varada/web assets                                   # builds packs/stocks
+node packages/publish/bin/varada-publish.mjs upload-pack \
   --dir apps/web/packs/stocks                                      # dry run: validates, estimates the stamp
-BEE_URL=… BEE_POSTAGE_BATCH_ID=… node packages/publish/bin/verada-publish.mjs upload-pack \
+BEE_URL=… BEE_POSTAGE_BATCH_ID=… node packages/publish/bin/varada-publish.mjs upload-pack \
   --dir apps/web/packs/stocks --execute                            # uploads, prints the reference
 ```
 
@@ -241,14 +241,14 @@ the UI shows a lettered badge instead.
 
 - Pushes upload LFS objects first. The local `.git/hooks/pre-push` runs the repository checks, then
   passes the refs to `git lfs pre-push`; keep both if you change that hook.
-- Without LFS installed, files in `assets-src/` are ~130-byte pointers and `pnpm --filter @verada/web assets`
+- Without LFS installed, files in `assets-src/` are ~130-byte pointers and `pnpm --filter @varada/web assets`
   fails on them. Builds, tests and CI don't read `assets-src/`, so they're unaffected.
 - Full-size originals committed before LFS was turned on remain in git history.
 - GitHub's free plan includes 1 GB of LFS storage and 1 GB of downloads a month.
 
 ## Scripts
 
-`pnpm --filter @verada/web typecheck | lint | test | build | verify:export | build:verify | assets`
+`pnpm --filter @varada/web typecheck | lint | test | build | verify:export | build:verify | assets`
 
 `verify:export` (or `node scripts/verify-export.mjs --build`) checks `out/`: binaries only as budgeted
 assets under `assets/` (see Size budget), `index.html` for every route, `404.html` and `config.json` present, no root-absolute `/_next/`

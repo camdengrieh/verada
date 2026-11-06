@@ -1,11 +1,11 @@
-import { entryProof, loadCatalog, type BuiltCatalog, type CatalogOrg } from "@verada/cause-catalog";
+import { entryProof, loadCatalog, type BuiltCatalog, type CatalogOrg } from "@varada/cause-catalog";
 import {
   CATEGORIES,
   REGIONS,
   bucketParts,
   focusBuckets,
   type CatalogEntry,
-} from "@verada/sdk";
+} from "@varada/sdk";
 import type { Hex } from "viem";
 
 /** The public shape of a catalogue org: no descriptions, no image URLs. */

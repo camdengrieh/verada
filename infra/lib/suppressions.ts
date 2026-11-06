@@ -1,13 +1,13 @@
 import * as ecsPatterns from "aws-cdk-lib/aws-ecs-patterns";
 import { NagSuppressions } from "cdk-nag";
-import { VeradaConfig } from "./config";
+import { VaradaConfig } from "./config";
 import { DataStack } from "./data-stack";
 import { IndexerStack } from "./indexer-stack";
 import { PublisherStack } from "./publisher-stack";
 import { SwarmStack } from "./swarm-stack";
 
 export interface SuppressionTargets {
-  readonly config: VeradaConfig;
+  readonly config: VaradaConfig;
   readonly data: DataStack;
   readonly indexer: IndexerStack;
   readonly swarm?: SwarmStack;
@@ -36,7 +36,7 @@ function suppressPublicService(
     {
       id: "AwsSolutions-ELB2",
       reason:
-        "Access logs are off on purpose: they record every client IP and request path, and Verada must not be able to link users to what they view (docs/PRIVACY.md). Health and errors are covered by target-group metrics and CloudWatch alarms.",
+        "Access logs are off on purpose: they record every client IP and request path, and Varada must not be able to link users to what they view (docs/PRIVACY.md). Health and errors are covered by target-group metrics and CloudWatch alarms.",
     },
   ]);
 }
@@ -107,7 +107,7 @@ export function applySuppressions({ config, data, indexer, swarm, publisher }: S
     {
       id: "AwsSolutions-ELB2",
       reason:
-        "Access logs are off on purpose: they record every client IP and request path, and Verada must not be able to link users to what they view (docs/PRIVACY.md). Health and errors are covered by target-group metrics and CloudWatch alarms.",
+        "Access logs are off on purpose: they record every client IP and request path, and Varada must not be able to link users to what they view (docs/PRIVACY.md). Health and errors are covered by target-group metrics and CloudWatch alarms.",
     },
   ]);
 

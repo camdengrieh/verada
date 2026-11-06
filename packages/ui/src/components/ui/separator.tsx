@@ -2,7 +2,7 @@
 // shadcn/ui new-york, Direction A styling
 import { Separator as SeparatorPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Hairline rule. Decorative by default; pass `decorative={false}` when it separates content semantically. */
 export function Separator({

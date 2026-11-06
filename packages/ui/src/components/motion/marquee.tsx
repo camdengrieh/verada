@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useSyncExternalStore, type ComponentProps, type CSSProperties } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 const REDUCED = "(prefers-reduced-motion: reduce)";
 

@@ -1,4 +1,4 @@
-# @verada/cause-catalog
+# @varada/cause-catalog
 
 Builds the cause catalogue that `CauseCatalog` commits to: every compliant Endaoment organization
 with a mainnet address, classified by cause and region and bucketed into a Merkle tree. See
@@ -8,17 +8,17 @@ with a mainnet address, classified by cause and region and bucketed into a Merkl
 
 ```sh
 # 1. Crawl the Endaoment search API into .catalog/harvest (resumable; rerun to continue).
-node packages/cause-catalog/bin/verada-catalog.mjs harvest
+node packages/cause-catalog/bin/varada-catalog.mjs harvest
 #    A partial crawl for reviewing the taxonomy:
-node packages/cause-catalog/bin/verada-catalog.mjs harvest --max-per-partition 250
+node packages/cause-catalog/bin/varada-catalog.mjs harvest --max-per-partition 250
 
 # 2. Classify, bucket and build the tree into .catalog/build.
-node packages/cause-catalog/bin/verada-catalog.mjs build
-node packages/cause-catalog/bin/verada-catalog.mjs stats     # per-category / region / bucket counts
+node packages/cause-catalog/bin/varada-catalog.mjs build
+node packages/cause-catalog/bin/varada-catalog.mjs stats     # per-category / region / bucket counts
 
 # 3. Upload the snapshot to Swarm (dry run without --execute) and print the owner's calldata.
-BEE_POSTAGE_BATCH_ID=... node packages/cause-catalog/bin/verada-catalog.mjs publish --execute
-node packages/cause-catalog/bin/verada-catalog.mjs calldata --swarm-ref <reference>
+BEE_POSTAGE_BATCH_ID=... node packages/cause-catalog/bin/varada-catalog.mjs publish --execute
+node packages/cause-catalog/bin/varada-catalog.mjs calldata --swarm-ref <reference>
 ```
 
 `.catalog/` is git-ignored. The crawl partitions by NTEE major group, writes one JSONL file per

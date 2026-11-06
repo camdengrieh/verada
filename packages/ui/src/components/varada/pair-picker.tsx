@@ -5,7 +5,7 @@
 
 import { ArrowRight, CircleCheck, CircleX } from "lucide-react";
 import { useState } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import type { LiquidityThresholds } from "./liquidity-meter";
 import { PairChip } from "./pair-chip";
 import { DEFAULT_MIN_ROUTE_DEPTH, DEFAULT_QUOTE_SYMBOL, coinTicker, feeRouteHops, launchability, type QuoteAsset } from "./quote-asset";

@@ -1,4 +1,4 @@
-import { normalizeSwarmReference } from "@verada/sdk";
+import { normalizeSwarmReference } from "@varada/sdk";
 import { z } from "zod";
 
 export interface StampStatus {

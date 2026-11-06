@@ -84,7 +84,7 @@ const HTTPS = {
   publisherDomainName: "publisher.example.com",
   publisherCertificateArn: CERT,
 };
-const PROD = { envName: "prod", ...HTTPS, indexerCorsOrigins: "https://verada.example.com" };
+const PROD = { envName: "prod", ...HTTPS, indexerCorsOrigins: "https://varada.example.com" };
 
 describe("https and cors configuration", () => {
   test("synth fails with a clear message without HTTPS (dev without the flag, and prod)", () => {
@@ -182,7 +182,7 @@ describe("indexer behind CloudFront (no custom domain)", () => {
     t.hasResourceProperties("AWS::CloudFront::Distribution", {
       DistributionConfig: Match.objectLike({
         DefaultCacheBehavior: Match.objectLike({ ViewerProtocolPolicy: "https-only" }),
-        Origins: [Match.objectLike({ OriginCustomHeaders: [Match.objectLike({ HeaderName: "X-Verada-Origin" })] })],
+        Origins: [Match.objectLike({ OriginCustomHeaders: [Match.objectLike({ HeaderName: "X-Varada-Origin" })] })],
       }),
     });
     t.hasResourceProperties("AWS::ElasticLoadBalancingV2::Listener", {
@@ -319,7 +319,7 @@ describe("curator agents and x402", () => {
     expect(Object.keys(env).filter((k) => k.startsWith("X402_") && k !== "X402_ENABLED")).toEqual([]);
     expect(env).not.toHaveProperty("ENS_PARENT_NAME");
     expect(Object.keys(secretsOf(ix)).sort()).toEqual(["DATABASE_HOST", "DATABASE_PASSWORD", "DATABASE_PORT", "DATABASE_USER", "ETH_RPC_URL"]);
-    expect(JSON.stringify(ix.toJSON())).not.toContain("verada/dev/indexer");
+    expect(JSON.stringify(ix.toJSON())).not.toContain("varada/dev/indexer");
     const pub = Template.fromStack(b.publisher);
     const penv = envOf(pub);
     expect(penv.X402_FACILITATOR_ENABLED).toBe("false");
@@ -337,13 +337,13 @@ describe("curator agents and x402", () => {
     expect(() => build({ ensParentName: "varada.com" })).toThrow(/ensParentName/);
   });
 
-  test("x402 on Base through CDP: pay-to, prices and the CDP keys from verada/<env>/indexer", () => {
+  test("x402 on Base through CDP: pay-to, prices and the CDP keys from varada/<env>/indexer", () => {
     const t = Template.fromStack(build({ x402Enabled: "true", x402BasePayTo: PAY_BASE, x402PriceRankings: "0.02", x402BaseNetwork: "eip155:84532" }).indexer);
     expect(envOf(t)).toMatchObject({ X402_ENABLED: "true", X402_BASE_PAY_TO: PAY_BASE, X402_BASE_NETWORK: "eip155:84532", X402_PRICE_RANKINGS: "0.02" });
     expect(envOf(t)).not.toHaveProperty("X402_MAINNET_PAY_TO");
     const sec = secretsOf(t);
-    expect(sec.CDP_API_KEY_ID).toContain("secret:verada/dev/indexer:cdpApiKeyId::");
-    expect(sec.CDP_API_KEY_SECRET).toContain("secret:verada/dev/indexer:cdpApiKeySecret::");
+    expect(sec.CDP_API_KEY_ID).toContain("secret:varada/dev/indexer:cdpApiKeyId::");
+    expect(sec.CDP_API_KEY_SECRET).toContain("secret:varada/dev/indexer:cdpApiKeySecret::");
     expect(sec).not.toHaveProperty("X402_MAINNET_FACILITATOR_TOKEN");
     expect(JSON.stringify(container(t).Environment)).not.toMatch(/CDP_API_KEY/);
     // A custom Base facilitator needs no CDP keys.
@@ -369,7 +369,7 @@ describe("curator agents and x402", () => {
       X402_MAINNET_FACILITATOR_URL: "https://publisher.example.com/x402",
       X402_MAINNET_MIN_PRICE: "0.75",
     });
-    expect(secretsOf(ix).X402_MAINNET_FACILITATOR_TOKEN).toContain("secret:verada/dev/indexer:x402FacilitatorToken::");
+    expect(secretsOf(ix).X402_MAINNET_FACILITATOR_TOKEN).toContain("secret:varada/dev/indexer:x402FacilitatorToken::");
     const pub = Template.fromStack(b.publisher);
     expect(envOf(pub)).toMatchObject({
       X402_FACILITATOR_ENABLED: "true",
@@ -378,9 +378,9 @@ describe("curator agents and x402", () => {
       ONECLAW_BASE_URL: "https://claw.example.org",
     });
     const ps = secretsOf(pub);
-    expect(ps.X402_FACILITATOR_TOKEN).toContain("secret:verada/dev/publisher:x402FacilitatorToken::");
-    expect(ps.X402_ONECLAW_AGENT_ID).toContain("secret:verada/dev/publisher:x402OneClawAgentId::");
-    expect(ps.X402_ONECLAW_API_KEY).toContain("secret:verada/dev/publisher:x402OneClawApiKey::");
+    expect(ps.X402_FACILITATOR_TOKEN).toContain("secret:varada/dev/publisher:x402FacilitatorToken::");
+    expect(ps.X402_ONECLAW_AGENT_ID).toContain("secret:varada/dev/publisher:x402OneClawAgentId::");
+    expect(ps.X402_ONECLAW_API_KEY).toContain("secret:varada/dev/publisher:x402OneClawApiKey::");
     expect(JSON.stringify(container(pub).Environment)).not.toMatch(/FACILITATOR_TOKEN|ONECLAW_API_KEY/);
   });
 
@@ -552,7 +552,7 @@ describe("swarm", () => {
     expect(c.gateway.DependsOn).toEqual([{ ContainerName: "bee", Condition: "HEALTHY" }]);
   });
 
-  test("bee: light node with SWAP on mainnet, API on the task interfaces, secrets from verada/<env>/bee", () => {
+  test("bee: light node with SWAP on mainnet, API on the task interfaces, secrets from varada/<env>/bee", () => {
     const bee = containers(t).bee;
     expect(envOf(bee)).toEqual({
       BEE_API_ADDR: ":1633",
@@ -563,8 +563,8 @@ describe("swarm", () => {
     });
     expect(envOf(bee)).not.toHaveProperty("BEE_CORS_ALLOWED_ORIGINS");
     const sec = secretsOf(bee);
-    expect(sec.BEE_PASSWORD).toContain("secret:verada/dev/bee:password::");
-    expect(sec.BEE_BLOCKCHAIN_RPC_ENDPOINT).toContain("secret:verada/dev/bee:gnosisRpcUrl::");
+    expect(sec.BEE_PASSWORD).toContain("secret:varada/dev/bee:password::");
+    expect(sec.BEE_BLOCKCHAIN_RPC_ENDPOINT).toContain("secret:varada/dev/bee:gnosisRpcUrl::");
     expect(bee.HealthCheck.Command.join(" ")).toContain("/dev/tcp/127.0.0.1/1633");
     expect(bee.HealthCheck.Command.join(" ")).toContain("GET /health");
     expect(bee.MountPoints).toEqual([{ ContainerPath: "/home/bee/.bee", ReadOnly: false, SourceVolume: "bee-data" }]);
@@ -582,7 +582,7 @@ describe("swarm", () => {
       PORT: "3000",
       HOSTNAME: "swarm.example.com",
     });
-    expect(secretsOf(gw).AUTH_SECRET).toContain("secret:verada/dev/bee:gatewayAuthSecret::");
+    expect(secretsOf(gw).AUTH_SECRET).toContain("secret:varada/dev/bee:gatewayAuthSecret::");
     expect(gw.PortMappings).toEqual([{ ContainerPort: 3000, Protocol: "tcp" }]);
   });
 
@@ -598,10 +598,10 @@ describe("swarm", () => {
     expect(() => build({ swarmDesiredCount: "2" })).toThrow(/swarmDesiredCount/);
   });
 
-  test("bee API 1633: mapped, registered as bee.verada-<env>.local, ALB still targets only the gateway", () => {
+  test("bee API 1633: mapped, registered as bee.varada-<env>.local, ALB still targets only the gateway", () => {
     const c = containers(t);
     expect(c.bee.PortMappings).toEqual([{ ContainerPort: 1633, Protocol: "tcp", Name: "bee-api" }]);
-    t.hasResourceProperties("AWS::ServiceDiscovery::PrivateDnsNamespace", { Name: "verada-dev.local" });
+    t.hasResourceProperties("AWS::ServiceDiscovery::PrivateDnsNamespace", { Name: "varada-dev.local" });
     t.hasResourceProperties("AWS::ServiceDiscovery::Service", {
       Name: "bee",
       DnsConfig: Match.objectLike({ DnsRecords: [{ TTL: 10, Type: "A" }] }),
@@ -610,7 +610,7 @@ describe("swarm", () => {
       ServiceRegistries: [Match.objectLike({ RegistryArn: Match.anyValue() })],
       LoadBalancers: [Match.objectLike({ ContainerName: "gateway", ContainerPort: 3000 })],
     });
-    t.hasOutput("BeeApiInternalUrl", { Value: "http://bee.verada-dev.local:1633" });
+    t.hasOutput("BeeApiInternalUrl", { Value: "http://bee.varada-dev.local:1633" });
     // The Swarm stack itself opens nothing on 1633; the only rule is the publisher's (below).
     for (const r of Object.values(t.findResources("AWS::EC2::SecurityGroupIngress")) as any[]) {
       expect([r.Properties.FromPort, r.Properties.ToPort]).not.toContain(1633);
@@ -703,12 +703,12 @@ describe("publisher", () => {
     const [td] = Object.values(t.findResources("AWS::ECS::TaskDefinition")) as any[];
     return td.Properties.ContainerDefinitions[0];
   };
-  const b = build({ ...HTTPS, indexerCorsOrigins: "https://verada.example", arkivEnabled: "true", publisherJobIntervalSeconds: "120" });
+  const b = build({ ...HTTPS, indexerCorsOrigins: "https://varada.example", arkivEnabled: "true", publisherJobIntervalSeconds: "120" });
   const t = Template.fromStack(b.publisher);
 
   test("ECR repo and a 0.5 vCPU / 1 GiB single task on port 42070", () => {
     t.hasResourceProperties("AWS::ECR::Repository", {
-      RepositoryName: "verada-dev-publisher",
+      RepositoryName: "varada-dev-publisher",
       ImageScanningConfiguration: { ScanOnPush: true },
       ImageTagMutability: "IMMUTABLE",
     });
@@ -732,9 +732,9 @@ describe("publisher", () => {
       INDEXER_URL: "https://api.example.com",
       ARKIV_CHAIN: "rabdi",
       ARKIV_ENABLED: "true",
-      CORS_ALLOWED_ORIGINS: "https://verada.example",
+      CORS_ALLOWED_ORIGINS: "https://varada.example",
       JOB_INTERVAL_SECONDS: "120",
-      BEE_STAMPS_URL: "http://bee.verada-dev.local:1633",
+      BEE_STAMPS_URL: "http://bee.varada-dev.local:1633",
       CHAIN_ID: "1",
       ARKIV_DRY_RUN: "true",
       KEEPER_ENABLED: "false",
@@ -779,7 +779,7 @@ describe("publisher", () => {
     });
     // With the keeper on, the relayer API key comes from the publisher secret.
     const secrets = Object.fromEntries(c.Secrets.map((x: any) => [x.Name, JSON.stringify(x.ValueFrom)]));
-    expect(secrets.ZAMA_RELAYER_API_KEY).toContain("secret:verada/dev/publisher:zamaRelayerApiKey::");
+    expect(secrets.ZAMA_RELAYER_API_KEY).toContain("secret:varada/dev/publisher:zamaRelayerApiKey::");
     // Defaults: no zero-address placeholders, no relayer URL, no site feed.
     const d = Object.fromEntries(container(t).Environment.map((e: any) => [e.Name, e.Value]));
     for (const k of ["VOTING_SCHEME_ADDRESS", "TAKEOVER_GOVERNOR_ADDRESS", "ROTATION_GOVERNOR_ADDRESS", "ZAMA_RELAYER_URL", "SITE_FEED_OWNER", "SITE_FEED_MANIFEST"]) {
@@ -817,7 +817,7 @@ describe("publisher", () => {
     expect(() => build({ indexerPublicUrl: "ftp://x" })).toThrow(/indexerPublicUrl/);
   });
 
-  test("every secret comes from the verada/<env>/publisher JSON fields", () => {
+  test("every secret comes from the varada/<env>/publisher JSON fields", () => {
     const secrets = Object.fromEntries(container(t).Secrets.map((x: any) => [x.Name, JSON.stringify(x.ValueFrom)]));
     const expected: Record<string, string> = {
       BEE_GATEWAY_AUTH_SECRET: "beeGatewayAuthSecret",
@@ -828,7 +828,7 @@ describe("publisher", () => {
       ETH_RPC_URL: "ethRpcUrl",
     };
     expect(Object.keys(secrets).sort()).toEqual(Object.keys(expected).sort());
-    for (const [name, field] of Object.entries(expected)) expect(secrets[name]).toContain(`secret:verada/dev/publisher:${field}::`);
+    for (const [name, field] of Object.entries(expected)) expect(secrets[name]).toContain(`secret:varada/dev/publisher:${field}::`);
     const env = JSON.stringify(container(t).Environment);
     expect(env).not.toMatch(/PRIVATE_KEY|AUTH_SECRET|BATCH_ID|ETH_RPC_URL/);
   });
@@ -865,7 +865,7 @@ describe("service alarms", () => {
     const topic = b.obs.getLogicalId(b.obs.alarmTopic.node.defaultChild as cdk.CfnElement);
     t.hasResourceProperties("AWS::Logs::MetricFilter", {
       FilterPattern: '{ ($.level = "warn") && ($.msg = "postage batch needs attention") }',
-      MetricTransformations: [Match.objectLike({ MetricName: "PostageBatchAttention", MetricValue: "1", MetricNamespace: "Verada/dev/Publisher" })],
+      MetricTransformations: [Match.objectLike({ MetricName: "PostageBatchAttention", MetricValue: "1", MetricNamespace: "Varada/dev/Publisher" })],
     });
     t.hasResourceProperties("AWS::Logs::MetricFilter", {
       FilterPattern: Match.stringLikeRegexp('^\\{ \\(\\$\\.level = "error"\\) && .*"keeper\\*".*"tally keeper\\*".*"job tally-keeper\\*"'),
@@ -881,7 +881,7 @@ describe("service alarms", () => {
     ] as const) {
       t.hasResourceProperties("AWS::CloudWatch::Alarm", {
         MetricName: metric,
-        Namespace: "Verada/dev/Publisher",
+        Namespace: "Varada/dev/Publisher",
         Statistic: "Sum",
         Period: period,
         Threshold: 1,

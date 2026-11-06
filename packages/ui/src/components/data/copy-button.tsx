@@ -5,8 +5,8 @@ import { type VariantProps } from "class-variance-authority";
 import { Check, Copy, X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import { buttonVariants } from "@verada/ui/components/ui/button";
-import { cn } from "@verada/ui/lib/utils";
+import { buttonVariants } from "@varada/ui/components/ui/button";
+import { cn } from "@varada/ui/lib/utils";
 
 export type CopyStatus = "idle" | "copied" | "error";
 

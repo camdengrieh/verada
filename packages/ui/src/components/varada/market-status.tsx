@@ -1,7 +1,7 @@
 // Adapted from 21st.dev @diceui/status (id 25395): pill with an indicator dot and a label, tones per
 // state. Session maths written for Varada (America/New_York through Intl, so DST is handled).
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * US equity session for Ondo tokenized stocks and ETFs. Ondo prices track the US market, so outside

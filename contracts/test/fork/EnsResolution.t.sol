@@ -10,10 +10,10 @@ import {Deploy} from "../../script/Deploy.s.sol";
 import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {TokenProfileRegistry} from "../../src/TokenProfileRegistry.sol";
-import {VeradaFactory} from "../../src/VeradaFactory.sol";
-import {VeradaResolver} from "../../src/VeradaResolver.sol";
+import {VaradaFactory} from "../../src/VaradaFactory.sol";
+import {VaradaResolver} from "../../src/VaradaResolver.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
-import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
+import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
 import {
     IAddrResolver,
     IAddressResolver,
@@ -26,7 +26,7 @@ import {DnsNameLib} from "../../src/libraries/DnsNameLib.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
 
 /// @notice Mainnet-fork test of ENS resolution end to end: deploy with the real script, point
-///         `varada.eth` (registered on ENSv2 by its real owner) at the Verada resolver, launch a
+///         `varada.eth` (registered on ENSv2 by its real owner) at the Varada resolver, launch a
 ///         token and resolve `<label>.varada.eth` through the ENS Universal Resolver.
 ///         Skipped when ETH_RPC_URL is unset.
 contract EnsResolutionForkTest is Test, Deploy {
@@ -78,7 +78,7 @@ contract EnsResolutionForkTest is Test, Deploy {
             .addQuoteAssetWithRoute(WETH, IQuoteRegistry.Kind.Native, route);
         vm.stopPrank();
 
-        // The real owner of varada.eth points the name at the Verada resolver (the one manual
+        // The real owner of varada.eth points the name at the Varada resolver (the one manual
         // step after deployment). On a fork we impersonate them.
         address nameOwner = ETH_REGISTRY.ownerOf(ETH_REGISTRY.getTokenId(PARENT_LABEL_ID));
         assertTrue(nameOwner != address(0), "varada.eth is registered");
@@ -88,7 +88,7 @@ contract EnsResolutionForkTest is Test, Deploy {
         assertEq(ETH_REGISTRY.getResolver("varada"), d.resolver);
 
         // Launch `pepe`.
-        IVeradaFactory.DeployParams memory p = IVeradaFactory.DeployParams({
+        IVaradaFactory.DeployParams memory p = IVaradaFactory.DeployParams({
             name: "Pepe",
             symbol: "PEPE",
             metadataURI: "bzz://4444444444444444444444444444444444444444444444444444444444444444",
@@ -104,7 +104,7 @@ contract EnsResolutionForkTest is Test, Deploy {
             regionMask: CatalogPublish.REGIONS
         });
         vm.prank(creator);
-        (tokenAddr,) = VeradaFactory(d.factory).deployToken(p);
+        (tokenAddr,) = VaradaFactory(d.factory).deployToken(p);
         tokenNode = TokenProfileRegistry(d.profileRegistry).nodeOf(tokenAddr);
     }
 
@@ -121,7 +121,7 @@ contract EnsResolutionForkTest is Test, Deploy {
     function _addr(string memory name) internal view returns (address) {
         (bytes memory res, address resolver) =
             _resolve(name, abi.encodeCall(IAddrResolver.addr, (bytes32(0))));
-        assertEq(resolver, d.resolver, "answered by the Verada resolver");
+        assertEq(resolver, d.resolver, "answered by the Varada resolver");
         return abi.decode(res, (address));
     }
 
@@ -165,7 +165,7 @@ contract EnsResolutionForkTest is Test, Deploy {
         TokenProfileRegistry(d.profileRegistry).setText(tokenAddr, "url", "https://pepe.example");
         assertEq(_text("pepe.varada.eth", "url"), "https://pepe.example");
         assertEq(
-            _text("pepe.varada.eth", "verada.logo"),
+            _text("pepe.varada.eth", "varada.logo"),
             "0x0000000000000000000000000000000000000000000000000000000000000abc"
         );
     }
@@ -178,7 +178,7 @@ contract EnsResolutionForkTest is Test, Deploy {
     }
 
     function test_directResolverCallsByNode() public view {
-        VeradaResolver resolver = VeradaResolver(d.resolver);
+        VaradaResolver resolver = VaradaResolver(d.resolver);
         assertEq(resolver.addr(tokenNode), tokenAddr);
         assertEq(resolver.contenthash(tokenNode), ContenthashLib.swarm(SITE_REF));
         assertEq(resolver.addr(resolver.parentNode()), treasury);

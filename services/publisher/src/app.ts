@@ -1,4 +1,4 @@
-import { bzzUri, swarmGatewayUrl } from "@verada/sdk";
+import { bzzUri, swarmGatewayUrl } from "@varada/sdk";
 import { mountAgentReports, type CuratorChain } from "./agents.js";
 import { mountFacilitator, type FacilitatorDeps } from "./facilitator.js";
 import { Hono, type Context } from "hono";

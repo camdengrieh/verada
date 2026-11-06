@@ -2,16 +2,16 @@
 // Written for Varada: gallery for tab variants, tooltips (spring, cursor-follow, info tips, fee
 // breakdown, avatar groups) and the Divider in realistic compositions.
 
-import { AvatarTooltipGroup, type AvatarPerson } from "@verada/ui/components/ui/avatar-tooltip-group";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button } from "@verada/ui/components/ui/button";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { HandHeart, Vote, Wallet } from "@verada/ui/components/ui/icons";
-import { InfoTerm, InfoTip } from "@verada/ui/components/ui/info-tip";
-import { FeeTooltip } from "@verada/ui/components/ui/rich-tooltip";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@verada/ui/components/ui/tabs";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@verada/ui/components/ui/tooltip";
-import { CAUSE_NAMES, CAUSE_SHORT_LABELS, CauseIcon } from "@verada/ui/components/varada/cause-icon";
+import { AvatarTooltipGroup, type AvatarPerson } from "@varada/ui/components/ui/avatar-tooltip-group";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button } from "@varada/ui/components/ui/button";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { HandHeart, Vote, Wallet } from "@varada/ui/components/ui/icons";
+import { InfoTerm, InfoTip } from "@varada/ui/components/ui/info-tip";
+import { FeeTooltip } from "@varada/ui/components/ui/rich-tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@varada/ui/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@varada/ui/components/ui/tooltip";
+import { CAUSE_NAMES, CAUSE_SHORT_LABELS, CauseIcon } from "@varada/ui/components/varada/cause-icon";
 import type { ReactNode } from "react";
 import { GallerySection, Specimen } from "../section";
 

@@ -1,5 +1,5 @@
 /** Client for the indexer HTTP API: JSON, cursor pagination, bigint values as decimal strings. */
-import { isBallotSize } from "@verada/sdk";
+import { isBallotSize } from "@varada/sdk";
 
 export interface Page<T> {
   items: T[];

@@ -6,8 +6,8 @@ import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode, type Ref } from "react";
-import { Kbd } from "@verada/ui/components/ui/kbd";
-import { cn } from "@verada/ui/lib/utils";
+import { Kbd } from "@varada/ui/components/ui/kbd";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Opens on ⌘K (Mac) or Ctrl+K. Returns [open, setOpen]. */
 export function useCommandShortcut(key = "k") {

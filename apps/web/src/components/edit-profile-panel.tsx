@@ -3,8 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 import { isAddress, zeroAddress, type Address } from "viem";
-import { swarmReferenceToBytes32, TOKEN_TEXT_KEYS } from "@verada/sdk";
-import { tokenProfileRegistryAbi } from "@verada/sdk/abis";
+import { swarmReferenceToBytes32, TOKEN_TEXT_KEYS } from "@varada/sdk";
+import { tokenProfileRegistryAbi } from "@varada/sdk/abis";
 import { LogoUploadField } from "@/components/logo-upload";
 import { useAppConfig } from "@/components/providers";
 import { sameAddress, TxStatus, useTx } from "@/components/use-tx";

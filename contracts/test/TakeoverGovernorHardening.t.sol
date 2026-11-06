@@ -4,7 +4,7 @@ pragma solidity ^0.8.26;
 import {Test} from "forge-std/Test.sol";
 
 import {TakeoverGovernor} from "../src/TakeoverGovernor.sol";
-import {VeradaToken} from "../src/VeradaToken.sol";
+import {VaradaToken} from "../src/VaradaToken.sol";
 import {ITakeoverGovernor} from "../src/interfaces/ITakeoverGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
 import {MockProfileRegistryLite, MockVotingScheme} from "./mocks/GovernanceMocks.sol";
@@ -20,7 +20,7 @@ contract TakeoverGovernorHardeningTest is Test {
     MockVotingScheme internal scheme;
     MockProfileRegistryLite internal profiles;
     TakeoverGovernor internal gov;
-    VeradaToken internal tokenContract;
+    VaradaToken internal tokenContract;
     address internal token;
 
     address internal owner = makeAddr("owner");
@@ -45,7 +45,7 @@ contract TakeoverGovernorHardeningTest is Test {
 
     function setUp() public {
         vm.warp(T0);
-        tokenContract = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", creator, factory);
+        tokenContract = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(tokenContract);
         scheme = new MockVotingScheme();
         profiles = new MockProfileRegistryLite();

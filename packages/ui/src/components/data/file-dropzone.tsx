@@ -3,8 +3,8 @@
 
 import { AlertCircle, ImageUp, RefreshCw, Trash2 } from "lucide-react";
 import { useEffect, useId, useRef, useState, type DragEvent } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { cn } from "@varada/ui/lib/utils";
 
 const TYPE_NAMES: Record<string, string> = {
   "image/png": "PNG",

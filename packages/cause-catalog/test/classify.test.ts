@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { categoryMaskOf, categorySlugs, regionMaskOf, regionSlugs } from "@verada/sdk";
+import { categoryMaskOf, categorySlugs, regionMaskOf, regionSlugs } from "@varada/sdk";
 import { classify, isCoarseNtee, nteeCategoryMask } from "../src/classify.js";
 
 const base = { id: "00000000-0000-0000-0000-000000000001", ein: null, description: null };

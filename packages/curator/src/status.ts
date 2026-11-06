@@ -1,4 +1,4 @@
-import { agentVaultAbi, causeCatalogAbi, curatorRegistryAbi, epochGovernorAbi } from "@verada/sdk/abis";
+import { agentVaultAbi, causeCatalogAbi, curatorRegistryAbi, epochGovernorAbi } from "@varada/sdk/abis";
 import { createPublicClient, erc20Abi, fallback, getAddress, http, zeroAddress, type Abi, type Address, type Hex } from "viem";
 import { mainnet } from "viem/chains";
 

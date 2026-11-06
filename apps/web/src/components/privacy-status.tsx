@@ -7,7 +7,7 @@ import { usePrivacyPrefs, usePrivateRpc } from "@/components/providers";
 /**
  * Shows how this page reaches the chain, and lets the user choose what goes
  * through the anon network. The anon worker (Nym's is ~18 MB) starts on the first
- * chain read; once a wallet is connected, or Verada API routing is on, this panel
+ * chain read; once a wallet is connected, or Varada API routing is on, this panel
  * starts it straight away so the network bootstraps before it is needed.
  */
 export function PrivacyStatus() {
@@ -67,7 +67,7 @@ export function PrivacyStatus() {
           checked={prefs.routeIndexer}
           onChange={(e) => setPrefs({ ...prefs, routeIndexer: e.target.checked })}
         />{" "}
-        Also route Verada API requests through {net} (slower; Verada never sees your IP)
+        Also route Varada API requests through {net} (slower; Varada never sees your IP)
       </label>
     </aside>
   );

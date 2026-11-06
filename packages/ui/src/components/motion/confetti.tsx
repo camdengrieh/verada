@@ -7,9 +7,9 @@
 import confetti, { type Options as ConfettiOptions, type Shape } from "canvas-confetti";
 import { Sparkles } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
-import { Button, type ButtonProps } from "@verada/ui/components/ui/button";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { Button, type ButtonProps } from "@varada/ui/components/ui/button";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export type ConfettiPreset = "launch" | "vote" | "donation";
 

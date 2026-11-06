@@ -9,7 +9,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {ModifyLiquidityParams} from "v4-core/types/PoolOperation.sol";
 
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {LiveBase} from "./LiveBase.sol";
 import {AdversarialOrg} from "./LiveMocks.sol";
@@ -20,7 +20,7 @@ import {AdversarialOrg} from "./LiveMocks.sol";
 contract LiveFailureModesTest is LiveBase {
     using PoolIdLibrary for PoolKey;
 
-    VeradaToken internal token;
+    VaradaToken internal token;
     PoolKey internal liveKey;
     AdversarialOrg internal org;
 

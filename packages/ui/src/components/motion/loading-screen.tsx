@@ -8,10 +8,10 @@
 import { Check } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { LogoMark } from "@verada/ui/components/varada/logo-mark";
-import { BrushUnderline, PaperGrain, Wash, type WashBlob } from "@verada/ui/components/varada/watercolour";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { LogoMark } from "@varada/ui/components/varada/logo-mark";
+import { BrushUnderline, PaperGrain, Wash, type WashBlob } from "@varada/ui/components/varada/watercolour";
+import { cn } from "@varada/ui/lib/utils";
 
 export const DEFAULT_LOADING_MESSAGES = ["Loading configuration", "Connecting privately through Nym…", "Reading the chain"];
 

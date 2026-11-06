@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { BUCKET_COUNT, bucketId, categoryMaskOf, CuratedPicksUnavailable, regionMaskOf } from "@verada/sdk";
+import { BUCKET_COUNT, bucketId, categoryMaskOf, CuratedPicksUnavailable, regionMaskOf } from "@varada/sdk";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
 import { IndexerClient, type TokenDetail } from "@/lib/indexer";

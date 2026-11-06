@@ -15,7 +15,7 @@ import {FeeConsolidator, IConsolidatorRegistry} from "../../src/FeeConsolidator.
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
 import {ConsolidatorBase} from "./ConsolidatorBase.sol";
 import {MockERC20, MockOndoToken} from "./ConsolidatorMocks.sol";
 import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
@@ -563,8 +563,8 @@ contract FeeConsolidatorTest is ConsolidatorBase {
         return x < 0 ? -x : x;
     }
 
-    function _cfgDefault() internal view returns (IVeradaHook.FeeConfig memory) {
-        return IVeradaHook.FeeConfig({
+    function _cfgDefault() internal view returns (IVaradaHook.FeeConfig memory) {
+        return IVaradaHook.FeeConfig({
             baseFeeBps: BASE_BPS,
             sniperFeeStartBps: 0,
             sniperDecaySeconds: 0,

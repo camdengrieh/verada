@@ -16,12 +16,12 @@ import {SwapParams} from "v4-core/types/PoolOperation.sol";
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaLiveHook} from "../../src/VaradaLiveHook.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockEndaomentRegistry} from "../mocks/EndaomentMocks.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
@@ -33,7 +33,7 @@ import {AdversarialOrg} from "./LiveMocks.sol";
 struct FactoryWorld {
     IPoolManager manager;
     PoolSwapTest swapRouter;
-    VeradaLiveHook hook;
+    VaradaLiveHook hook;
     LiveDonationVault vault;
     RotationGovernor gov;
     MockVotingScheme scheme;
@@ -166,7 +166,7 @@ contract LiveFactoryHandler is Test {
             bytes32 t0 = l.topics[0];
             address token =
                 address(uint160(uint256(l.topics.length > 1 ? l.topics[1] : bytes32(0))));
-            if (l.emitter == address(w.hook) && t0 == IVeradaLiveHook.FeeTaken.selector) {
+            if (l.emitter == address(w.hook) && t0 == IVaradaLiveHook.FeeTaken.selector) {
                 (, uint256 f, uint256 out, bool converted,) =
                     abi.decode(l.data, (address, uint256, uint256, bool, bytes4));
                 feeTaken[token] += f;
@@ -182,7 +182,7 @@ contract LiveFactoryHandler is Test {
                 ) {
                     ++wrongAttribution;
                 }
-            } else if (l.emitter == address(w.hook) && t0 == IVeradaLiveHook.HeldRetried.selector) {
+            } else if (l.emitter == address(w.hook) && t0 == IVaradaLiveHook.HeldRetried.selector) {
                 (uint256 quoteIn, uint256 out) = abi.decode(l.data, (uint256, uint256));
                 retriedIn[token] += quoteIn;
                 usdcConverted += out;
@@ -449,9 +449,9 @@ contract LiveFactoryInvariantsTest is LiveFactoryBase {
             })
         );
 
-        (VeradaToken tq, PoolKey memory kq) =
+        (VaradaToken tq, PoolKey memory kq) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
-        (VeradaToken tw, PoolKey memory kw) =
+        (VaradaToken tw, PoolKey memory kw) =
             _launchLive(address(weth), 5e6, RotationPeriod.OneHour, CAUSE_C);
 
         AdversarialOrg org = _makeAdversarial(orgA);

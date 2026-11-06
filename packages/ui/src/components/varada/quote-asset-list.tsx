@@ -8,12 +8,12 @@
 import { Search, SearchX } from "lucide-react";
 import { RadioGroup } from "radix-ui";
 import { useId, useMemo, useState, type ReactNode } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { Input, InputAddon, InputGroup, controlClasses } from "@verada/ui/components/ui/input";
-import { Switch } from "@verada/ui/components/ui/switch";
-import { ToggleGroup, ToggleGroupItem } from "@verada/ui/components/ui/toggle-group";
-import { EmptyState } from "@verada/ui/components/data/empty-state";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { Input, InputAddon, InputGroup, controlClasses } from "@varada/ui/components/ui/input";
+import { Switch } from "@varada/ui/components/ui/switch";
+import { ToggleGroup, ToggleGroupItem } from "@varada/ui/components/ui/toggle-group";
+import { EmptyState } from "@varada/ui/components/data/empty-state";
+import { cn } from "@varada/ui/lib/utils";
 import { LIQUIDITY_TIER_LABEL, LiquidityMeter, formatUsdCompact, liquidityTier, type LiquidityThresholds } from "./liquidity-meter";
 import { MARKET_SESSION_LABEL, MarketStatus, usMarketSession, type MarketSessionInfo } from "./market-status";
 import { PriceChange } from "./price-change";

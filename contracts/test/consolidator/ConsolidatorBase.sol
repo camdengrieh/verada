@@ -18,11 +18,11 @@ import {HookMiner} from "../../script/HookMiner.sol";
 import {FeeConsolidator, IConsolidatorRegistry} from "../../src/FeeConsolidator.sol";
 import {FeeVault} from "../../src/FeeVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
-import {VeradaHook} from "../../src/VeradaHook.sol";
+import {VaradaHook} from "../../src/VaradaHook.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "../../src/interfaces/IFeeVault.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
 import {
     MockDistributor,
     MockERC20,
@@ -34,7 +34,7 @@ import {
 /// @dev Shared fixture: real v4 PoolManager, real hook, registry, vault and consolidator.
 ///      The launched token is a plain ERC20, the quote asset an Ondo-like token (pausable,
 ///      compliance gated) and the settlement asset a 6-decimals USDC stand-in.
-///      Pools: token/quote with the Verada hook, quote/USDC with a static 0.3% fee.
+///      Pools: token/quote with the Varada hook, quote/USDC with a static 0.3% fee.
 abstract contract ConsolidatorBase is Deployers {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
@@ -52,7 +52,7 @@ abstract contract ConsolidatorBase is Deployers {
     QuoteRegistry internal registry;
     FeeVault internal vault;
     FeeConsolidator internal cons;
-    VeradaHook internal hook;
+    VaradaHook internal hook;
 
     PoolKey internal tokenKey; // meme / quote, hooked
     PoolKey internal quoteKey; // quote / usdc, static fee
@@ -97,8 +97,8 @@ abstract contract ConsolidatorBase is Deployers {
         vault.setConsolidator(address(cons));
 
         bytes memory args = abi.encode(manager, address(this), address(cons));
-        (, bytes32 salt) = HookMiner.find(address(this), FLAGS, type(VeradaHook).creationCode, args);
-        hook = new VeradaHook{salt: salt}(manager, address(this), address(cons));
+        (, bytes32 salt) = HookMiner.find(address(this), FLAGS, type(VaradaHook).creationCode, args);
+        hook = new VaradaHook{salt: salt}(manager, address(this), address(cons));
         cons.setHook(address(hook));
         cons.setSource(locker, true);
 
@@ -163,7 +163,7 @@ abstract contract ConsolidatorBase is Deployers {
 
         hook.configureToken(
             address(meme),
-            IVeradaHook.FeeConfig({
+            IVaradaHook.FeeConfig({
                 baseFeeBps: BASE_BPS,
                 sniperFeeStartBps: sniperStart,
                 sniperDecaySeconds: sniperDecay,

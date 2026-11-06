@@ -1,7 +1,7 @@
 {
-  "name": "@verada/contracts",
+  "name": "@varada/contracts",
   "private": true,
-  "description": "Verada Foundry project. npm packages here are Solidity-only dependencies resolved through foundry.toml remappings; install with --ignore-workspace so the root pnpm lockfile stays untouched.",
+  "description": "Varada Foundry project. npm packages here are Solidity-only dependencies resolved through foundry.toml remappings; install with --ignore-workspace so the root pnpm lockfile stays untouched.",
   "scripts": {
     "install:deps": "pnpm install --frozen-lockfile --ignore-workspace"
   },

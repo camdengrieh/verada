@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useRef, useState, type KeyboardEvent } from "react";
-import { REGIONS, agentByLabel, agentName } from "@verada/sdk";
+import { REGIONS, agentByLabel, agentName } from "@varada/sdk";
 import { agentHref, agentsIndexHref, causeName, regionName, usdcText } from "@/components/agent-common";
 import { AgentDonatePanel } from "@/components/agent-donate";
 import { AgentRegionView } from "@/components/agent-region";

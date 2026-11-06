@@ -62,14 +62,14 @@ export const DEPLOYMENT_KEYS = [
 
 export type DeploymentKey = (typeof DEPLOYMENT_KEYS)[number];
 
-export interface VeradaDeployment extends Record<DeploymentKey, Address> {
+export interface VaradaDeployment extends Record<DeploymentKey, Address> {
   chainId: typeof CHAIN_ID;
   /** Block at which the factory was deployed (0 until deployed). */
   deployBlock: bigint;
 }
 
-/** Placeholder deployment: all Verada contracts are the zero address until deploy. */
-export const PLACEHOLDER_DEPLOYMENT: VeradaDeployment = {
+/** Placeholder deployment: all Varada contracts are the zero address until deploy. */
+export const PLACEHOLDER_DEPLOYMENT: VaradaDeployment = {
   chainId: CHAIN_ID,
   deployBlock: 0n,
   factory: zeroAddress,
@@ -88,9 +88,9 @@ export const PLACEHOLDER_DEPLOYMENT: VeradaDeployment = {
   votingScheme: zeroAddress,
 };
 
-export const mainnetDeployment: VeradaDeployment = PLACEHOLDER_DEPLOYMENT;
+export const mainnetDeployment: VaradaDeployment = PLACEHOLDER_DEPLOYMENT;
 
-export function isDeployed(deployment: VeradaDeployment): boolean {
+export function isDeployed(deployment: VaradaDeployment): boolean {
   return DEPLOYMENT_KEYS.every((k) => deployment[k] !== zeroAddress);
 }
 
@@ -98,7 +98,7 @@ export function isDeployed(deployment: VeradaDeployment): boolean {
  * Validates and normalizes an untyped deployment record (e.g. parsed JSON).
  * Addresses are checksummed; missing or malformed fields throw.
  */
-export function loadDeployment(input: unknown): VeradaDeployment {
+export function loadDeployment(input: unknown): VaradaDeployment {
   if (typeof input !== "object" || input === null) {
     throw new TypeError("deployment must be an object");
   }

@@ -1,4 +1,4 @@
-// Curated lucide-react icons for apps that consume @verada/ui (lucide is a dependency of this
+// Curated lucide-react icons for apps that consume @varada/ui (lucide is a dependency of this
 // package only). Icons are decorative: pair them with text, or an aria-label on the control.
 export {
   ArrowDownUp,

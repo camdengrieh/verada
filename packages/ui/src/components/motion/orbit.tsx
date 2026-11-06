@@ -6,8 +6,8 @@
 // evenly and keeps them still. Typical use: cause icons circling the mudra mark.
 import { motion, useAnimationFrame, useInView, useMotionValue, useTransform, type MotionValue } from "motion/react";
 import { Children, createContext, useContext, useRef, useState, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 const OrbitContext = createContext<{ running: boolean }>({ running: false });
 

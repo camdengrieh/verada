@@ -3,7 +3,7 @@
 // component. Adds accessible names per thumb, a 44px thumb hit area and Direction A tokens.
 import { Slider as SliderPrimitive } from "radix-ui";
 import { useState, type ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface SliderProps extends ComponentProps<typeof SliderPrimitive.Root> {
   /** Accessible names for each thumb, e.g. ["Minimum market cap", "Maximum market cap"]. Falls back to `aria-label`. */

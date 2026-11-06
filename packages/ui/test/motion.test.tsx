@@ -12,12 +12,12 @@ const confettiMock = vi.hoisted(() => {
 });
 vi.mock("canvas-confetti", () => ({ default: confettiMock }));
 
-import { ConfettiButton, fireConfetti, readTokenColors } from "@verada/ui/components/motion/confetti";
-import { LoadingScreen, PageLoader } from "@verada/ui/components/motion/loading-screen";
-import { Button } from "@verada/ui/components/ui/button";
-import { Drawer, DrawerContent, DrawerScaleWrapper, DrawerTitle, DrawerTrigger } from "@verada/ui/components/ui/drawer";
-import { Toaster } from "@verada/ui/components/ui/toaster";
-import { txToast } from "@verada/ui/components/varada/tx-toast";
+import { ConfettiButton, fireConfetti, readTokenColors } from "@varada/ui/components/motion/confetti";
+import { LoadingScreen, PageLoader } from "@varada/ui/components/motion/loading-screen";
+import { Button } from "@varada/ui/components/ui/button";
+import { Drawer, DrawerContent, DrawerScaleWrapper, DrawerTitle, DrawerTrigger } from "@varada/ui/components/ui/drawer";
+import { Toaster } from "@varada/ui/components/ui/toaster";
+import { txToast } from "@varada/ui/components/varada/tx-toast";
 
 /* A controllable prefers-reduced-motion. */
 let reduced = false;

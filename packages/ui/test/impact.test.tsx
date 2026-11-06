@@ -13,17 +13,17 @@ const confettiMock = vi.hoisted(() => {
 });
 vi.mock("canvas-confetti", () => ({ default: confettiMock }));
 
-import { CauseLeaderboard, causeEntry, movementText } from "@verada/ui/components/varada/cause-leaderboard";
-import { DonationGoal, goalProgress, milestoneStates } from "@verada/ui/components/varada/donation-goal";
-import { DonationTimeline, relativeTime, type Donation } from "@verada/ui/components/varada/donation-timeline";
-import { ImpactBreakdown, breakdownShares } from "@verada/ui/components/varada/impact-breakdown";
-import { formatUsd, useThrottledAnnouncement } from "@verada/ui/components/varada/impact-shared";
-import { PoolMeter, epochElapsed } from "@verada/ui/components/varada/pool-meter";
-import { RaisedCounter } from "@verada/ui/components/varada/raised-counter";
-import { HeroCause } from "@verada/ui/components/varada/hero-cause";
-import { HeroHome } from "@verada/ui/components/varada/hero-home";
-import { HeroLaunch } from "@verada/ui/components/varada/hero-launch";
-import { HeroToken } from "@verada/ui/components/varada/hero-token";
+import { CauseLeaderboard, causeEntry, movementText } from "@varada/ui/components/varada/cause-leaderboard";
+import { DonationGoal, goalProgress, milestoneStates } from "@varada/ui/components/varada/donation-goal";
+import { DonationTimeline, relativeTime, type Donation } from "@varada/ui/components/varada/donation-timeline";
+import { ImpactBreakdown, breakdownShares } from "@varada/ui/components/varada/impact-breakdown";
+import { formatUsd, useThrottledAnnouncement } from "@varada/ui/components/varada/impact-shared";
+import { PoolMeter, epochElapsed } from "@varada/ui/components/varada/pool-meter";
+import { RaisedCounter } from "@varada/ui/components/varada/raised-counter";
+import { HeroCause } from "@varada/ui/components/varada/hero-cause";
+import { HeroHome } from "@varada/ui/components/varada/hero-home";
+import { HeroLaunch } from "@varada/ui/components/varada/hero-launch";
+import { HeroToken } from "@varada/ui/components/varada/hero-token";
 
 beforeAll(() => {
   MotionGlobalConfig.skipAnimations = true;

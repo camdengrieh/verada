@@ -2,7 +2,7 @@
 pragma solidity ^0.8.26;
 
 /// @title ITokenProfileRegistry
-/// @notice Per-token profile written at launch: the ENS label under the Verada parent name, the
+/// @notice Per-token profile written at launch: the ENS label under the Varada parent name, the
 ///         accounts allowed to edit records, ENS text records, the logo reference and an optional
 ///         contenthash override. The factory registers; the controller (initially the creator)
 ///         edits and may delegate to an editor; the takeover governor can replace the controller.

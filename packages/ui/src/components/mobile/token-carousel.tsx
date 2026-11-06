@@ -7,7 +7,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useReducedMotion } from "motion/react";
 import { Children, isValidElement, useCallback, useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface TokenCarouselProps extends Omit<ComponentProps<"section">, "children"> {
   /** Accessible name ("Trending coins"); also the visible heading unless `heading` is given. */

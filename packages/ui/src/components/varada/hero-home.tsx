@@ -6,8 +6,8 @@
 
 import { motion } from "motion/react";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { cn } from "@verada/ui/lib/utils";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { cn } from "@varada/ui/lib/utils";
 import { FeeSplitBar } from "./fee-split-bar";
 import {
   DriftingWash,

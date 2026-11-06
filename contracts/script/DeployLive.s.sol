@@ -10,8 +10,8 @@ import {CauseRegistry} from "../src/CauseRegistry.sol";
 import {FeeConsolidator} from "../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../src/LiveDonationVault.sol";
 import {RotationGovernor} from "../src/RotationGovernor.sol";
-import {VeradaFactory} from "../src/VeradaFactory.sol";
-import {VeradaLiveHook} from "../src/VeradaLiveHook.sol";
+import {VaradaFactory} from "../src/VaradaFactory.sol";
+import {VaradaLiveHook} from "../src/VaradaLiveHook.sol";
 import {ZamaVotingScheme} from "../src/governance/ZamaVotingScheme.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
@@ -24,7 +24,7 @@ import {IEndaomentOrgFundFactory} from "../src/interfaces/external/IEndaomentOrg
 import {Deploy} from "./Deploy.s.sol";
 
 /// @title DeployLive
-/// @notice Deploys the full Verada system (the `Deploy` script, unchanged) plus live-donation
+/// @notice Deploys the full Varada system (the `Deploy` script, unchanged) plus live-donation
 ///         mode: the rotation governor, the live-donation vault and the mined live hook, wires
 ///         them, enables live launches on the factory, then hands every admin contract to the
 ///         final owner. Writes `deployments/<chainid>.json` (as `Deploy`) and
@@ -155,7 +155,7 @@ contract DeployLive is Deploy {
 
         bytes memory hookArgs =
             abi.encode(POOL_MANAGER, d.factory, d.feeConsolidator, address(gov), address(vault));
-        bytes memory hookInit = abi.encodePacked(type(VeradaLiveHook).creationCode, hookArgs);
+        bytes memory hookInit = abi.encodePacked(type(VaradaLiveHook).creationCode, hookArgs);
         (address hookAddr, bytes32 hookSalt) = _mineLiveHook(hookInit);
         _deployHook(hookSalt, hookInit, hookAddr);
 
@@ -166,7 +166,7 @@ contract DeployLive is Deploy {
         vault.setHook(hookAddr);
         FeeConsolidator(payable(d.feeConsolidator)).setSource(hookAddr, true);
         ZamaVotingScheme(d.votingScheme).setGovernor(address(gov), true);
-        VeradaFactory(d.factory).configureLiveMode(hookAddr, address(vault));
+        VaradaFactory(d.factory).configureLiveMode(hookAddr, address(vault));
 
         l = LiveDeployment({
             rotationGovernor: address(gov), liveVault: address(vault), liveHook: hookAddr
@@ -201,7 +201,7 @@ contract DeployLive is Deploy {
     // ------------------------------------------------------------------ output
 
     function _writeLive(LiveDeployment memory l) internal {
-        string memory k = "verada-live";
+        string memory k = "varada-live";
         vm.serializeUint(k, "chainId", block.chainid);
         vm.serializeAddress(k, "rotationGovernor", l.rotationGovernor);
         vm.serializeAddress(k, "liveVault", l.liveVault);

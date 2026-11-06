@@ -7,9 +7,9 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useId, useState, type ComponentProps, type ReactNode } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { Switch } from "@verada/ui/components/ui/switch";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { Switch } from "@varada/ui/components/ui/switch";
+import { cn } from "@varada/ui/lib/utils";
 import { EnsAddress } from "./ens-address";
 import { formatTokenAmount, formatUsd } from "./trade-feed";
 

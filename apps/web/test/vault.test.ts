@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { encodeFunctionData, erc20Abi, type Address, type ContractFunctionParameters } from "viem";
-import { agentVaultAbi } from "@verada/sdk/abis";
+import { agentVaultAbi } from "@varada/sdk/abis";
 import { allowanceRequest, approveRequest, donateRequest, needsApproval, parseUsdcInput, usdcAddress } from "@/lib/vault";
 
 const VAULT = "0x00000000000000000000000000000000000000b1" as Address;

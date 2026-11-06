@@ -3,7 +3,7 @@
 
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
 import type { ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export type StepDirection = 1 | -1;
 

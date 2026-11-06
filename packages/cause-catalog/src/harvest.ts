@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { EndaomentClient, MAX_PAGE_SIZE, getMainnetDeployment, type OrgSearchListing } from "@verada/endaoment-client";
+import { EndaomentClient, MAX_PAGE_SIZE, getMainnetDeployment, type OrgSearchListing } from "@varada/endaoment-client";
 
 /** NTEE major groups. Every org with a code falls in exactly one, so they partition the crawl. */
 export const NTEE_MAJOR_CODES = "ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");

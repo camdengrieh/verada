@@ -1,6 +1,6 @@
 // Adapted from 21st.dev @cnippet-dev/cnippet-empty (id 19745): media, title, description and actions, stacked-tile icon.
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface EmptyStateProps extends Omit<ComponentProps<"div">, "title"> {
   /** A lucide icon; shown on the stacked paper tiles. */

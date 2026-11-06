@@ -6,10 +6,10 @@
   "tailwind": { "config": "", "css": "src/styles.css", "baseColor": "neutral", "cssVariables": true, "prefix": "" },
   "iconLibrary": "lucide",
   "aliases": {
-    "components": "@verada/ui/components",
-    "ui": "@verada/ui/components/ui",
-    "utils": "@verada/ui/lib/utils",
-    "lib": "@verada/ui/lib",
-    "hooks": "@verada/ui/hooks"
+    "components": "@varada/ui/components",
+    "ui": "@varada/ui/components/ui",
+    "utils": "@varada/ui/lib/utils",
+    "lib": "@varada/ui/lib",
+    "hooks": "@varada/ui/hooks"
   }
 }

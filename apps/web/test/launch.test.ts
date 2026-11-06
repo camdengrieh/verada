@@ -4,7 +4,7 @@ import { buildMetadataDocument, EMPTY_METADATA_FIELDS, parseLaunchInput, ZERO_LO
 const REF = "ab".repeat(32);
 
 const valid: LaunchInput = {
-  name: "Verada Test",
+  name: "Varada Test",
   symbol: "VT",
   metadataURI: "ipfs://x",
   salt: "",
@@ -13,7 +13,7 @@ const valid: LaunchInput = {
   sniperDecaySeconds: "60",
   startTick: "-100",
   quoteAsset: "",
-  label: "verada-test",
+  label: "varada-test",
   logoRef: "",
   categories: [],
   regions: [],
@@ -60,7 +60,7 @@ describe("parseLaunchInput", () => {
 describe("parseLaunchInput label and logo", () => {
   it("passes the label through and defaults the logo to the zero reference", () => {
     const r = parseLaunchInput(valid);
-    expect(r.ok && r.params.label).toBe("verada-test");
+    expect(r.ok && r.params.label).toBe("varada-test");
     expect(r.ok && r.params.logoRef).toBe(ZERO_LOGO_REF);
   });
 
@@ -82,11 +82,11 @@ describe("parseLaunchInput label and logo", () => {
 });
 
 describe("buildMetadataDocument", () => {
-  const token = { name: "Verada Test", symbol: "VT" };
+  const token = { name: "Varada Test", symbol: "VT" };
 
   it("builds the publisher document with only the fields that are set", () => {
-    const r = buildMetadataDocument(token, `0x${REF.toUpperCase()}`, { ...EMPTY_METADATA_FIELDS, website: "https://verada.example", twitter: "@verada" });
-    expect(r).toEqual({ ok: true, doc: { name: "Verada Test", symbol: "VT", logoRef: REF, website: "https://verada.example", twitter: "verada" } });
+    const r = buildMetadataDocument(token, `0x${REF.toUpperCase()}`, { ...EMPTY_METADATA_FIELDS, website: "https://varada.example", twitter: "@varada" });
+    expect(r).toEqual({ ok: true, doc: { name: "Varada Test", symbol: "VT", logoRef: REF, website: "https://varada.example", twitter: "varada" } });
   });
 
   it("never includes an address field", () => {

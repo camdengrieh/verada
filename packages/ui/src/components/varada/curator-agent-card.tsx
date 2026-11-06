@@ -1,9 +1,9 @@
 // Written for Varada (curator agent card from the A-Vote board)
 import { BadgeCheck, CircleAlert } from "lucide-react";
 import { useId, type ComponentProps } from "react";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { CAUSE_LABELS, CauseIcon, type CauseName } from "./cause-icon";
 import { DefaultLink, WASH_FILL, type LinkComponent, type WashTone } from "./shared";
 

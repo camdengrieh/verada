@@ -25,7 +25,7 @@ export function rawToken(over: Record<string, unknown> = {}) {
     textRecords: {
       url: "https://example.org",
       description: "A token for good causes",
-      "com.twitter": "verada",
+      "com.twitter": "varada",
     },
     ...over,
   };

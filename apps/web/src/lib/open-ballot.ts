@@ -5,7 +5,7 @@
  * and pick proofs are checked against the roots on chain, and the governor checks every proof
  * again, so a wrong indexer can only make the transaction fail.
  */
-import { ballotCall, createBallotReader, CuratedPicksUnavailable, planBallotOpening, type BallotStep } from "@verada/sdk";
+import { ballotCall, createBallotReader, CuratedPicksUnavailable, planBallotOpening, type BallotStep } from "@varada/sdk";
 import type { Abi, Address } from "viem";
 import type { DataDeps } from "./data";
 

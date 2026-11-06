@@ -76,7 +76,7 @@ function valid(s: Json, v: unknown, root: Json = s): boolean {
 const hex = (n: number) => `0x${n.toString(16).padStart(64, "0")}`;
 const pick = (i: number) => ({ orgId: hex(i + 1), catalogIndex: i, name: `Org ${i}`, score: 80, reasons: "Drought relief", sources: ["https://news.example/a"] });
 const good = () => ({
-  schema: "verada.curation/v1",
+  schema: "varada.curation/v1",
   category: "hunger",
   epoch: 12,
   catalogVersion: 1,
@@ -110,7 +110,7 @@ const SAMPLES: Record<string, unknown> = {
   "32 picks": edit((r) => (af(r).picks = Array.from({ length: 32 }, (_, i) => pick(i)))),
   "8 regions": edit((r) => (r.regions = ["africa", "asia", "europe", "middle-east", "north-america", "latin-america", "oceania", "global"].map((region) => ({ region, weight: 0, summary: "", events: [], picks: [], newsletter: "" })))),
   "no seconds in generatedAt": edit((r) => (r.generatedAt = "2026-11-09T08:00Z")),
-  "wrong schema": edit((r) => (r.schema = "verada.curation/v2")),
+  "wrong schema": edit((r) => (r.schema = "varada.curation/v2")),
   "category without agent": edit((r) => (r.category = "other")),
   "unknown category": edit((r) => (r.category = "space")),
   "negative epoch": edit((r) => (r.epoch = -1)),
@@ -143,7 +143,7 @@ const SAMPLES: Record<string, unknown> = {
 };
 
 describe("agents/report.schema.json", () => {
-  it("is what the generator produces from ReportSchema (run `pnpm --filter @verada/curator schema:report`)", () => {
+  it("is what the generator produces from ReportSchema (run `pnpm --filter @varada/curator schema:report`)", () => {
     expect(readFileSync(REPORT_SCHEMA_PATH, "utf8")).toBe(renderReportJsonSchema());
   });
 

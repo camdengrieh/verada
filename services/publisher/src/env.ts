@@ -62,7 +62,7 @@ const EnvSchema = z.object({
       .transform((s) => s.replace(/^0x/, "").toLowerCase())
       .optional(),
   ),
-  /** Gateway browsers read from (e.g. https://gw.verada.xyz); used to build returned URLs. */
+  /** Gateway browsers read from (e.g. https://gw.varada.xyz); used to build returned URLs. */
   PUBLIC_GATEWAY_URL: optionalUrl,
   /** Public indexer API base URL (the mirror job reads /api/tokens and /api/causes). */
   INDEXER_URL: optionalUrl,

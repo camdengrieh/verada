@@ -1,4 +1,4 @@
-import { ALL_CATEGORIES_MASK, ALL_REGIONS_MASK, categoryMaskOf, drawIndex, locate, poolSize, regionMaskOf } from "@verada/sdk";
+import { ALL_CATEGORIES_MASK, ALL_REGIONS_MASK, categoryMaskOf, drawIndex, locate, poolSize, regionMaskOf } from "@varada/sdk";
 import type { Address, Hex } from "viem";
 import { buildCatalog, entryProof } from "./build.js";
 import type { HarvestedOrg } from "./harvest.js";
@@ -6,7 +6,7 @@ import type { HarvestedOrg } from "./harvest.js";
 /**
  * Cross-language fixture: a small catalogue built by the real builder, with proofs and rotation
  * vectors, that `contracts/test/CatalogFixtureCompat.t.sol` verifies against `CauseCatalog` and
- * `EpochGovernor`. Regenerate with `pnpm --filter @verada/cause-catalog gen:fixture`.
+ * `EpochGovernor`. Regenerate with `pnpm --filter @varada/cause-catalog gen:fixture`.
  */
 export function contractFixture() {
   const orgs: HarvestedOrg[] = [

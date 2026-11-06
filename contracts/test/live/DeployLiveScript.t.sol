@@ -28,14 +28,14 @@ import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaFactory} from "../../src/VeradaFactory.sol";
-import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaFactory} from "../../src/VaradaFactory.sol";
+import {VaradaLiveHook} from "../../src/VaradaLiveHook.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ZamaVotingScheme} from "../../src/governance/ZamaVotingScheme.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
-import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
+import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
 import {MockWETH} from "../consolidator/ConsolidatorMocks.sol";
 import {MockEndaomentRegistry, MockOrgFactory} from "../mocks/EndaomentMocks.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
@@ -157,7 +157,7 @@ contract DeployLiveScriptTest is Test, DeployLive {
     }
 
     function test_script_wiresLiveMode() public view {
-        VeradaFactory factory = VeradaFactory(d.factory);
+        VaradaFactory factory = VaradaFactory(d.factory);
         assertEq(factory.liveHook(), l.liveHook);
         assertEq(factory.liveVault(), l.liveVault);
         assertEq(factory.deployer(), deployer);
@@ -165,7 +165,7 @@ contract DeployLiveScriptTest is Test, DeployLive {
 
         uint160 flags = uint160(l.liveHook) & Hooks.ALL_HOOK_MASK;
         assertEq(flags, LIVE_HOOK_FLAGS, "mined flags");
-        VeradaLiveHook hook = VeradaLiveHook(l.liveHook);
+        VaradaLiveHook hook = VaradaLiveHook(l.liveHook);
         assertEq(hook.factory(), d.factory);
         assertEq(address(hook.consolidator()), d.feeConsolidator);
         assertEq(address(hook.rotationGovernor()), l.rotationGovernor);
@@ -204,8 +204,8 @@ contract DeployLiveScriptTest is Test, DeployLive {
     }
 
     function test_script_liveAndWeeklyLaunches() public {
-        VeradaFactory factory = VeradaFactory(d.factory);
-        IVeradaFactory.DeployParams memory p = IVeradaFactory.DeployParams(
+        VaradaFactory factory = VaradaFactory(d.factory);
+        IVaradaFactory.DeployParams memory p = IVaradaFactory.DeployParams(
             "Live",
             "LIVE",
             "ipfs://live",
@@ -222,15 +222,15 @@ contract DeployLiveScriptTest is Test, DeployLive {
         );
         vm.prank(creator);
         (address token,) =
-            factory.deployLiveToken(p, IVeradaFactory.LiveParams(CAUSE, RotationPeriod.OneDay, 0));
+            factory.deployLiveToken(p, IVaradaFactory.LiveParams(CAUSE, RotationPeriod.OneDay, 0));
         PoolKey memory key = _key(token, l.liveHook);
 
-        VeradaLiveHook hook = VeradaLiveHook(l.liveHook);
+        VaradaLiveHook hook = VaradaLiveHook(l.liveHook);
 
         // This pool manager holds no WETH before the first buy settles, so the unwrap hop cannot
         // take the fee inside that swap: the fee is held (the trade goes through) ...
         _buy(key, token, 1e18);
-        assertGt(VeradaToken(token).balanceOf(trader), 0);
+        assertGt(VaradaToken(token).balanceOf(trader), 0);
         uint256 held = hook.heldRaw(token, CAUSE);
         assertEq(held, 3e16, "first fee held");
         assertEq(IERC20(USDC).balanceOf(org), 0);
@@ -255,7 +255,7 @@ contract DeployLiveScriptTest is Test, DeployLive {
         vm.prank(creator);
         (address weekly,) = factory.deployToken(p);
         _buy(_key(weekly, d.hook), weekly, 1e18);
-        assertGt(VeradaToken(weekly).balanceOf(trader), 0);
+        assertGt(VaradaToken(weekly).balanceOf(trader), 0);
     }
 
     function _emitted(Vm.Log[] memory logs, bytes32 topic0) internal pure returns (bool) {

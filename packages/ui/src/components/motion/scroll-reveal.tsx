@@ -7,8 +7,8 @@
 // written for Varada in the same vein.
 import { motion, useScroll, useTransform, type MotionValue } from "motion/react";
 import { createElement, Fragment, useRef, type ElementType, type ReactNode, type RefObject } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 const REST = 0.18;
 const SPAN = 0.8;

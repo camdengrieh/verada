@@ -2,9 +2,9 @@
 "use client";
 
 import { useId, type ComponentProps } from "react";
-import { Button, buttonVariants } from "@verada/ui/components/ui/button";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Button, buttonVariants } from "@varada/ui/components/ui/button";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import { CauseChip } from "./cause-chip";
 import type { CauseName } from "./cause-icon";
 import { ModeBadge, type GivingMode } from "./mode-badge";

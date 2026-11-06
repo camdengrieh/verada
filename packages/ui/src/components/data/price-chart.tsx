@@ -10,7 +10,7 @@ import type {
   UTCTimestamp,
 } from "lightweight-charts";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface PriceCandle {
   /** Seconds since the Unix epoch (UTC). */

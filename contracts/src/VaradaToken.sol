@@ -9,9 +9,9 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
 import {ERC20TimestampVotes} from "./ERC20TimestampVotes.sol";
-import {IVeradaToken} from "./interfaces/IVeradaToken.sol";
+import {IVaradaToken} from "./interfaces/IVaradaToken.sol";
 
-/// @title VeradaToken
+/// @title VaradaToken
 /// @notice Fixed-supply ERC20 with permit, burn and timestamp-based vote checkpoints. The whole
 ///         supply is minted once, at construction, to the account that deploys it (the factory).
 /// @dev Every account is delegated to itself the first time it receives a non-zero amount, so
@@ -19,18 +19,18 @@ import {IVeradaToken} from "./interfaces/IVeradaToken.sol";
 ///      delegation is always kept: delegating to a non-zero account is never overridden, and
 ///      delegating to `address(0)` is an opt-out (`optedOut`) that incoming transfers never undo.
 ///      Any later explicit delegation to a non-zero account clears the opt-out.
-contract VeradaToken is
+contract VaradaToken is
     ERC20,
     ERC20Burnable,
     ERC20TimestampVotes,
     IERC20Permit,
     Nonces,
-    IVeradaToken
+    IVaradaToken
 {
     /// @notice Total supply minted at creation (100 billion, 18 decimals).
     uint256 public constant INITIAL_SUPPLY = 100_000_000_000e18;
 
-    /// @inheritdoc IVeradaToken
+    /// @inheritdoc IVaradaToken
     address public immutable creator;
 
     bytes32 private constant _DOMAIN_TYPEHASH = keccak256(
@@ -74,20 +74,20 @@ contract VeradaToken is
         _mint(recipient, INITIAL_SUPPLY);
     }
 
-    /// @inheritdoc IVeradaToken
+    /// @inheritdoc IVaradaToken
     function metadataURI() external view returns (string memory) {
         return _metadataURI;
     }
 
-    /// @inheritdoc IVeradaToken
-    function burn(uint256 amount) public override(ERC20Burnable, IVeradaToken) {
+    /// @inheritdoc IVaradaToken
+    function burn(uint256 amount) public override(ERC20Burnable, IVaradaToken) {
         super.burn(amount);
     }
 
-    /// @inheritdoc IVeradaToken
+    /// @inheritdoc IVaradaToken
     function burnFrom(address account, uint256 amount)
         public
-        override(ERC20Burnable, IVeradaToken)
+        override(ERC20Burnable, IVaradaToken)
     {
         super.burnFrom(account, amount);
     }

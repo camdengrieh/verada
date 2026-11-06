@@ -13,7 +13,7 @@ import {IPositionManager} from "v4-periphery/interfaces/IPositionManager.sol";
 import {Actions} from "v4-periphery/libraries/Actions.sol";
 import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 
-import {VeradaToken} from "./VeradaToken.sol";
+import {VaradaToken} from "./VaradaToken.sol";
 import {ICauseCatalog} from "./interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
@@ -21,10 +21,10 @@ import {ILiveDonationVault} from "./interfaces/ILiveDonationVault.sol";
 import {ILpLocker} from "./interfaces/ILpLocker.sol";
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
 import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
-import {IVeradaFactory} from "./interfaces/IVeradaFactory.sol";
-import {IVeradaHook} from "./interfaces/IVeradaHook.sol";
-import {IVeradaLiveHook} from "./interfaces/IVeradaLiveHook.sol";
-import {IVeradaToken} from "./interfaces/IVeradaToken.sol";
+import {IVaradaFactory} from "./interfaces/IVaradaFactory.sol";
+import {IVaradaHook} from "./interfaces/IVaradaHook.sol";
+import {IVaradaLiveHook} from "./interfaces/IVaradaLiveHook.sol";
+import {IVaradaToken} from "./interfaces/IVaradaToken.sol";
 
 /// @dev Permit2 address as exposed by the v4 position manager.
 interface IPositionManagerPermit2 {
@@ -36,9 +36,9 @@ interface IPermit2Allowance {
     function approve(address token, address spender, uint160 amount, uint48 expiration) external;
 }
 
-/// @title VeradaFactory
+/// @title VaradaFactory
 /// @notice Launches a token: deploys it with CREATE2, initializes its Uniswap v4 pool against
-///         a registry-approved quote asset (WETH or an Ondo token) with the Verada hook, mints the whole supply as single-sided liquidity, sends
+///         a registry-approved quote asset (WETH or an Ondo token) with the Varada hook, mints the whole supply as single-sided liquidity, sends
 ///         the position NFT to the locker and registers the token with the fee vault, the
 ///         epoch governor and the profile registry (its `<label>.varada.eth` name). The factory
 ///         holds no tokens or positions after a launch. Once the deployer has configured live
@@ -54,7 +54,7 @@ interface IPermit2Allowance {
 ///      negation. Liquidity covers every price above the start price, so the pool opens holding
 ///      only the new token. Start prices so high that the supply would need more liquidity than
 ///      one tick can hold are rejected.
-contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
+contract VaradaFactory is IVaradaFactory, ReentrancyGuard {
     /// @notice Lowest allowed base fee in basis points.
     uint24 public constant MIN_FEE_BPS = 100;
     /// @notice Highest allowed base fee in basis points.
@@ -63,18 +63,18 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
     uint24 public constant MAX_SNIPER_FEE_START_BPS = 8000;
     /// @notice Longest allowed anti-sniper decay window.
     uint32 public constant MAX_SNIPER_DECAY_SECONDS = 1 days;
-    /// @notice Tick spacing of every Verada pool.
+    /// @notice Tick spacing of every Varada pool.
     int24 public constant TICK_SPACING = 200;
     /// @notice Ticks per factor of ten in price: round(ln(10) / ln(1.0001)).
     int256 public constant TICKS_PER_DECADE = 23_027;
-    /// @notice Decimals of every Verada token.
+    /// @notice Decimals of every Varada token.
     uint8 public constant TOKEN_DECIMALS = 18;
 
     IPoolManager public immutable poolManager;
     IPositionManager public immutable positionManager;
     address public immutable permit2;
     IQuoteRegistry internal immutable _quoteRegistry;
-    IVeradaHook public immutable hook;
+    IVaradaHook public immutable hook;
     ILpLocker public immutable locker;
     IFeeVault public immutable feeVault;
     IEpochGovernor public immutable governor;
@@ -83,11 +83,11 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
     address public immutable deployer;
 
     uint256 public tokenCount;
-    mapping(address token => bool) public isVeradaToken;
+    mapping(address token => bool) public isVaradaToken;
     mapping(address token => address) public quoteAssetOf;
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     address public liveHook;
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     address public liveVault;
 
     error ZeroAddress();
@@ -100,7 +100,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         IPoolManager poolManager_,
         IPositionManager positionManager_,
         IQuoteRegistry quoteRegistry_,
-        IVeradaHook hook_,
+        IVaradaHook hook_,
         ILpLocker locker_,
         IFeeVault feeVault_,
         IEpochGovernor governor_,
@@ -124,14 +124,14 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         deployer = msg.sender;
     }
 
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     /// @dev Deployer only, once. The live hook must differ from the weekly hook and report
     ///      `liveVault_` as its vault.
     function configureLiveMode(address liveHook_, address liveVault_) external {
         if (msg.sender != deployer) revert NotDeployer();
         if (liveHook != address(0)) revert LiveModeAlreadyConfigured();
         if (liveHook_ == address(0) || liveVault_ == address(0)) revert ZeroAddress();
-        if (liveHook_ == address(hook) || IVeradaLiveHook(liveHook_).vault() != liveVault_) {
+        if (liveHook_ == address(hook) || IVaradaLiveHook(liveHook_).vault() != liveVault_) {
             revert InvalidLiveMode(liveHook_, liveVault_);
         }
         liveHook = liveHook_;
@@ -139,17 +139,17 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         emit LiveModeConfigured(liveHook_, liveVault_);
     }
 
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     function quoteRegistry() external view returns (address) {
         return address(_quoteRegistry);
     }
 
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     function profileRegistry() external view returns (address) {
         return address(_profileRegistry);
     }
 
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     /// @dev Reverts if the pool was already initialized by someone else (pools can be created
     ///      for a predicted token address before launch); pick another salt in that case.
     function deployToken(DeployParams calldata params)
@@ -162,7 +162,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         return _deploy(params, hook, none);
     }
 
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     /// @dev Same launch as `deployToken` on the live hook. The token is registered with the live
     ///      vault (and through it the rotation governor) before the pool is initialized, and is
     ///      not registered with the weekly fee vault or epoch governor.
@@ -174,14 +174,14 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
     {
         address h = liveHook;
         if (h == address(0)) revert LiveModeNotConfigured();
-        return _deploy(params, IVeradaHook(h), live);
+        return _deploy(params, IVaradaHook(h), live);
     }
 
     /// @dev Shared launch body. `hook_` is the weekly hook or the live hook (both expose
     ///      `configureToken(address,(uint24,uint24,uint32,uint40))`); `live` is read only for the
     ///      live hook. The mode is derived from `hook_` rather than passed as a constant so the
     ///      compiler keeps one copy of this body.
-    function _deploy(DeployParams calldata params, IVeradaHook hook_, LiveParams memory live)
+    function _deploy(DeployParams calldata params, IVaradaHook hook_, LiveParams memory live)
         private
         returns (address token, uint256 lpTokenId)
     {
@@ -192,16 +192,16 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
             revert QuoteAssetNotAllowed(params.quoteAsset);
         }
         uint8 quoteDecimals = _quoteRegistry.getQuoteAsset(params.quoteAsset).decimals;
-        if (isVeradaToken[_predict(msg.sender, params)]) {
+        if (isVaradaToken[_predict(msg.sender, params)]) {
             revert TokenAlreadyDeployed(_predict(msg.sender, params));
         }
 
         token = address(
-            new VeradaToken{salt: _salt(msg.sender, params.salt)}(
+            new VaradaToken{salt: _salt(msg.sender, params.salt)}(
                 params.name, params.symbol, params.metadataURI, msg.sender, address(this)
             )
         );
-        isVeradaToken[token] = true;
+        isVaradaToken[token] = true;
         quoteAssetOf[token] = params.quoteAsset;
         unchecked {
             ++tokenCount;
@@ -217,7 +217,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
 
         hook_.configureToken(
             token,
-            IVeradaHook.FeeConfig({
+            IVaradaHook.FeeConfig({
                 baseFeeBps: params.baseFeeBps,
                 sniperFeeStartBps: params.sniperFeeStartBps,
                 sniperDecaySeconds: params.sniperDecaySeconds,
@@ -246,8 +246,8 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
 
         // Rounding in the liquidity math can leave a few wei of tokens behind; burn them so the
         // factory never holds a balance.
-        uint256 dust = VeradaToken(token).balanceOf(address(this));
-        if (dust != 0) IVeradaToken(token).burn(dust);
+        uint256 dust = VaradaToken(token).balanceOf(address(this));
+        if (dust != 0) IVaradaToken(token).burn(dust);
 
         emit TokenCreated(
             token,
@@ -260,7 +260,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         );
     }
 
-    /// @inheritdoc IVeradaFactory
+    /// @inheritdoc IVaradaFactory
     function predictTokenAddress(address creator, DeployParams calldata params)
         external
         view
@@ -306,7 +306,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
     {
         bytes32 initCodeHash = keccak256(
             abi.encodePacked(
-                type(VeradaToken).creationCode,
+                type(VaradaToken).creationCode,
                 abi.encode(params.name, params.symbol, params.metadataURI, creator, address(this))
             )
         );
@@ -367,7 +367,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         return tokenIsCurrency0 ? tick : -tick;
     }
 
-    function _poolKey(address token, address quote, IVeradaHook hooks_)
+    function _poolKey(address token, address quote, IVaradaHook hooks_)
         internal
         pure
         returns (PoolKey memory)
@@ -390,7 +390,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
         bool tokenIsCurrency0,
         int24 poolTick
     ) internal returns (uint256 lpTokenId) {
-        uint256 supply = VeradaToken(token).balanceOf(address(this));
+        uint256 supply = VaradaToken(token).balanceOf(address(this));
 
         int24 tickLower;
         int24 tickUpper;
@@ -422,7 +422,7 @@ contract VeradaFactory is IVeradaFactory, ReentrancyGuard {
             --liquidity;
         }
 
-        VeradaToken(token).approve(permit2, supply);
+        VaradaToken(token).approve(permit2, supply);
         IPermit2Allowance(permit2)
             .approve(token, address(positionManager), uint160(supply), uint48(block.timestamp));
 

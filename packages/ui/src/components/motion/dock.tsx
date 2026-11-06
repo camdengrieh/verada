@@ -6,8 +6,8 @@
 // role with arrow-key roving focus, 44px tiles at rest, and a plain CSS lift under reduced motion.
 import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
 import { useRef, useState, type KeyboardEvent, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface DockAction {
   id: string;

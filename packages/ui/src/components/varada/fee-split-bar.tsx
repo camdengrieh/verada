@@ -1,6 +1,6 @@
 // Written for Varada
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface FeeSplitBarProps extends Omit<ComponentProps<"div">, "children"> {
   /** Share of each trading fee that goes to charity, in percent. The rest is the platform's. */

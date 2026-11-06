@@ -9,7 +9,7 @@ import * as elbv2 from "aws-cdk-lib/aws-elasticloadbalancingv2";
 import * as ecsPatterns from "aws-cdk-lib/aws-ecs-patterns";
 import * as logs from "aws-cdk-lib/aws-logs";
 import { Construct } from "constructs";
-import { VeradaConfig } from "./config";
+import { VaradaConfig } from "./config";
 import { DatabaseMetrics } from "./data-stack";
 import { IndexerStack } from "./indexer-stack";
 
@@ -36,7 +36,7 @@ export interface MonitoredService {
 }
 
 export interface ObservabilityStackProps extends cdk.StackProps {
-  readonly config: VeradaConfig;
+  readonly config: VaradaConfig;
   readonly indexer: IndexerStack;
   readonly database: DatabaseMetrics;
   /** Further services (Swarm gateway, publisher) alarmed on the same topic. */
@@ -176,7 +176,7 @@ export class ObservabilityStack extends cdk.Stack {
         const filter = new logs.MetricFilter(this, `${m.id}${l.id}Filter`, {
           logGroup: l.logGroup,
           filterPattern: l.filterPattern,
-          metricNamespace: `Verada/${config.envName}/${m.id}`,
+          metricNamespace: `Varada/${config.envName}/${m.id}`,
           metricName: l.id,
           metricValue: "1",
         });
@@ -198,7 +198,7 @@ export class ObservabilityStack extends cdk.Stack {
       a.addOkAction(action);
     }
 
-    this.dashboard = new cw.Dashboard(this, "Dashboard", { dashboardName: `verada-${config.envName}` });
+    this.dashboard = new cw.Dashboard(this, "Dashboard", { dashboardName: `varada-${config.envName}` });
     this.dashboard.addWidgets(
       new cw.GraphWidget({
         title: "Indexer CPU / memory (%)",

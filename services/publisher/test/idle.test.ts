@@ -1,4 +1,4 @@
-import { createBallotPreparer } from "@verada/sdk";
+import { createBallotPreparer } from "@varada/sdk";
 import type { Hex } from "viem";
 import { describe, expect, it } from "vitest";
 import { Backoff } from "../src/keeper/backoff.js";

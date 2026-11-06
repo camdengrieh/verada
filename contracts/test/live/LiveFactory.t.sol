@@ -13,8 +13,8 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
-import {VeradaFactory} from "../../src/VeradaFactory.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaFactory} from "../../src/VaradaFactory.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "../../src/interfaces/IFeeVault.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
@@ -22,14 +22,14 @@ import {ILpLocker} from "../../src/interfaces/ILpLocker.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
-import {IVeradaFactory} from "../../src/interfaces/IVeradaFactory.sol";
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {EndaomentDonateLib} from "../../src/libraries/EndaomentDonateLib.sol";
 import {LiveFactoryBase} from "./LiveFactoryBase.sol";
 import {AdversarialOrg} from "./LiveMocks.sol";
 
-/// @dev Live-donation launches through the real VeradaFactory and swaps through the real
+/// @dev Live-donation launches through the real VaradaFactory and swaps through the real
 ///      PoolManager: launch mode selection and its guards, weekly mode unchanged, in-swap donation
 ///      at threshold 0 and above, rotations across boundaries, a period-change vote, no-vote and
 ///      late-tally outcomes, and failed conversions and donations that never revert the trade.
@@ -98,12 +98,12 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     /// @dev A second factory with the same wiring that never had live mode configured.
-    function _bareFactory() internal returns (VeradaFactory f) {
-        f = new VeradaFactory(
+    function _bareFactory() internal returns (VaradaFactory f) {
+        f = new VaradaFactory(
             manager,
             posm,
             IQuoteRegistry(address(registry)),
-            IVeradaHook(address(weeklyHook)),
+            IVaradaHook(address(weeklyHook)),
             ILpLocker(address(locker)),
             IFeeVault(address(feeVault)),
             IEpochGovernor(address(epochGov)),
@@ -114,7 +114,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     // ------------------------------------------------------------------ launch mode
 
     function test_deployLiveToken_registersEverything() public {
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(77)), address(quote), 2000, 600);
         address predicted = factory.predictTokenAddress(creator, p);
         PoolKey memory key = _liveKey(predicted, address(quote));
@@ -125,7 +125,7 @@ contract LiveFactoryTest is LiveFactoryBase {
             predicted, 25e6, CAUSE_B, RotationPeriod.TwelveHours
         );
         vm.expectEmit(true, true, false, true, address(factory));
-        emit IVeradaFactory.TokenCreated(
+        emit IVaradaFactory.TokenCreated(
             predicted,
             creator,
             PoolId.unwrap(key.toId()),
@@ -136,13 +136,13 @@ contract LiveFactoryTest is LiveFactoryBase {
         );
         vm.prank(creator);
         (address token, uint256 id) = factory.deployLiveToken(
-            p, IVeradaFactory.LiveParams(CAUSE_B, RotationPeriod.TwelveHours, 25e6)
+            p, IVaradaFactory.LiveParams(CAUSE_B, RotationPeriod.TwelveHours, 25e6)
         );
         assertEq(token, predicted, "predicted");
         assertEq(id, nextId, "position id");
 
         // Live hook: configured from the launch parameters, pool registered with the quote.
-        IVeradaLiveHook.LiveFeeConfig memory cfg = hook.feeConfig(token);
+        IVaradaLiveHook.LiveFeeConfig memory cfg = hook.feeConfig(token);
         assertEq(cfg.baseFeeBps, BASE_BPS);
         assertEq(cfg.launchSurchargeBps, 2000);
         assertEq(cfg.surchargeDecaySeconds, 600);
@@ -170,10 +170,10 @@ contract LiveFactoryTest is LiveFactoryBase {
         assertEq(weeklyHook.feeConfig(token).launchTimestamp, 0, "weekly hook");
 
         // Same launch invariants as weekly mode.
-        VeradaToken t = VeradaToken(token);
+        VaradaToken t = VaradaToken(token);
         assertEq(IERC721(address(posm)).ownerOf(id), address(locker));
         assertEq(locker.lpTokenIdOf(token), id);
-        assertTrue(factory.isVeradaToken(token));
+        assertTrue(factory.isVaradaToken(token));
         assertEq(factory.quoteAssetOf(token), address(quote));
         assertEq(factory.tokenCount(), 1);
         assertEq(t.balanceOf(address(factory)), 0, "factory keeps nothing");
@@ -195,7 +195,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     function test_deployLiveToken_wethBothOrders() public {
         bool[2] memory seen;
         for (uint256 i = 1; i < 64 && !(seen[0] && seen[1]); ++i) {
-            IVeradaFactory.DeployParams memory p =
+            IVaradaFactory.DeployParams memory p =
                 _deployParams(bytes32(i + 1000), address(weth), 0, 0);
             bool isC0 = factory.predictTokenAddress(creator, p) < address(weth);
             if (seen[isC0 ? 0 : 1]) continue;
@@ -203,10 +203,10 @@ contract LiveFactoryTest is LiveFactoryBase {
 
             vm.prank(creator);
             (address token,) = factory.deployLiveToken(
-                p, IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneDay, 0)
+                p, IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneDay, 0)
             );
             PoolKey memory key = _liveKey(token, address(weth));
-            _fund(trader, VeradaToken(token));
+            _fund(trader, VaradaToken(token));
             uint256 orgBefore = usdc.balanceOf(orgA);
             (bytes32 cause,, uint256 f, uint256 out, bool converted,) =
                 _buyLogged(trader, key, token, 1e18);
@@ -219,13 +219,13 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     function test_deployToken_weeklyModeUnchanged() public {
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(5)), address(quote), 0, 0);
         address predicted = factory.predictTokenAddress(creator, p);
         PoolKey memory key = _keyWith(predicted, address(quote), address(weeklyHook));
 
         vm.expectEmit(true, true, false, false, address(factory));
-        emit IVeradaFactory.TokenCreated(
+        emit IVaradaFactory.TokenCreated(
             predicted, creator, PoolId.unwrap(key.toId()), address(weeklyHook), 0, 0, ""
         );
         vm.prank(creator);
@@ -243,15 +243,15 @@ contract LiveFactoryTest is LiveFactoryBase {
         assertEq(sqrtLive, 0);
 
         // A weekly buy leaves the live ledger untouched.
-        _fund(trader, VeradaToken(token));
+        _fund(trader, VaradaToken(token));
         _buyExactIn(key, token, 1e18);
-        assertGt(VeradaToken(token).balanceOf(trader), 0);
+        assertGt(VaradaToken(token).balanceOf(trader), 0);
         assertEq(vault.totalPending() + vault.platformAccrued(), 0);
         assertEq(usdc.balanceOf(address(vault)), 0);
     }
 
     function test_predictTokenAddress_sameForBothModes() public {
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(9)), address(quote), 0, 0);
         address predicted = factory.predictTokenAddress(creator, p);
 
@@ -261,30 +261,30 @@ contract LiveFactoryTest is LiveFactoryBase {
         vm.revertToState(snap);
         vm.prank(creator);
         (address live,) = factory.deployLiveToken(
-            p, IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
+            p, IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
         );
         assertEq(weekly, predicted);
         assertEq(live, predicted);
     }
 
     function test_sameSaltAcrossModes_reverts() public {
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(11)), address(quote), 0, 0);
         vm.prank(creator);
         (address token,) = factory.deployToken(p);
         vm.prank(creator);
-        vm.expectRevert(abi.encodeWithSelector(IVeradaFactory.TokenAlreadyDeployed.selector, token));
-        factory.deployLiveToken(p, IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaFactory.TokenAlreadyDeployed.selector, token));
+        factory.deployLiveToken(p, IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0));
     }
 
     function test_deployLiveToken_revertsUntilConfigured() public {
-        VeradaFactory bare = _bareFactory();
+        VaradaFactory bare = _bareFactory();
         assertEq(bare.liveHook(), address(0));
         assertEq(bare.liveVault(), address(0));
-        vm.expectRevert(IVeradaFactory.LiveModeNotConfigured.selector);
+        vm.expectRevert(IVaradaFactory.LiveModeNotConfigured.selector);
         bare.deployLiveToken(
             _deployParams(bytes32(uint256(1)), address(quote), 0, 0),
-            IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
+            IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
         );
     }
 
@@ -293,22 +293,22 @@ contract LiveFactoryTest is LiveFactoryBase {
         assertEq(factory.liveHook(), address(hook));
         assertEq(factory.liveVault(), address(vault));
         assertEq(factory.deployer(), address(this));
-        vm.expectRevert(IVeradaFactory.LiveModeAlreadyConfigured.selector);
+        vm.expectRevert(IVaradaFactory.LiveModeAlreadyConfigured.selector);
         factory.configureLiveMode(address(hook), address(vault));
 
-        VeradaFactory bare = _bareFactory();
+        VaradaFactory bare = _bareFactory();
         vm.prank(alice);
-        vm.expectRevert(IVeradaFactory.NotDeployer.selector);
+        vm.expectRevert(IVaradaFactory.NotDeployer.selector);
         bare.configureLiveMode(address(hook), address(vault));
 
-        vm.expectRevert(VeradaFactory.ZeroAddress.selector);
+        vm.expectRevert(VaradaFactory.ZeroAddress.selector);
         bare.configureLiveMode(address(0), address(vault));
-        vm.expectRevert(VeradaFactory.ZeroAddress.selector);
+        vm.expectRevert(VaradaFactory.ZeroAddress.selector);
         bare.configureLiveMode(address(hook), address(0));
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IVeradaFactory.InvalidLiveMode.selector, address(hook), address(feeVault)
+                IVaradaFactory.InvalidLiveMode.selector, address(hook), address(feeVault)
             )
         );
         bare.configureLiveMode(address(hook), address(feeVault));
@@ -318,35 +318,35 @@ contract LiveFactoryTest is LiveFactoryBase {
         bare.configureLiveMode(address(weeklyHook), address(vault));
 
         vm.expectEmit(false, false, false, true, address(bare));
-        emit IVeradaFactory.LiveModeConfigured(address(hook), address(vault));
+        emit IVaradaFactory.LiveModeConfigured(address(hook), address(vault));
         bare.configureLiveMode(address(hook), address(vault));
-        vm.expectRevert(IVeradaFactory.LiveModeAlreadyConfigured.selector);
+        vm.expectRevert(IVaradaFactory.LiveModeAlreadyConfigured.selector);
         bare.configureLiveMode(address(hook), address(vault));
 
         // The live hook and vault are bound to their own factory: another factory pointing at
         // them cannot launch.
         vm.prank(creator);
-        vm.expectRevert(IVeradaLiveHook.NotFactory.selector);
+        vm.expectRevert(IVaradaLiveHook.NotFactory.selector);
         bare.deployLiveToken(
             _deployParams(bytes32(uint256(3)), address(quote), 0, 0),
-            IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
+            IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
         );
     }
 
     function test_deployLiveToken_invalidLiveParamsRevertWholeLaunch() public {
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(21)), address(quote), 0, 0);
 
         causes.deactivateCause(CAUSE_C);
         vm.prank(creator);
         vm.expectRevert(abi.encodeWithSelector(IRotationGovernor.InactiveCause.selector, CAUSE_C));
-        factory.deployLiveToken(p, IVeradaFactory.LiveParams(CAUSE_C, RotationPeriod.OneHour, 0));
+        factory.deployLiveToken(p, IVaradaFactory.LiveParams(CAUSE_C, RotationPeriod.OneHour, 0));
 
         vm.prank(creator);
         vm.expectRevert(
             abi.encodeWithSelector(IRotationGovernor.InactiveCause.selector, bytes32(0))
         );
-        factory.deployLiveToken(p, IVeradaFactory.LiveParams(bytes32(0), RotationPeriod.OneHour, 0));
+        factory.deployLiveToken(p, IVaradaFactory.LiveParams(bytes32(0), RotationPeriod.OneHour, 0));
 
         uint96 tooHigh = uint96(vault.MAX_DONATION_THRESHOLD() + 1);
         vm.prank(creator);
@@ -354,42 +354,42 @@ contract LiveFactoryTest is LiveFactoryBase {
             abi.encodeWithSelector(ILiveDonationVault.ThresholdTooHigh.selector, tooHigh)
         );
         factory.deployLiveToken(
-            p, IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, tooHigh)
+            p, IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, tooHigh)
         );
 
         // Nothing was left behind: the label and salt are still free.
         address predicted = factory.predictTokenAddress(creator, p);
         assertEq(factory.tokenCount(), 0);
-        assertFalse(factory.isVeradaToken(predicted));
+        assertFalse(factory.isVaradaToken(predicted));
         assertEq(profileRegistry.tokenByLabelhash(keccak256(bytes(p.label))), address(0));
         vm.prank(creator);
         (address token,) = factory.deployLiveToken(
-            p, IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
+            p, IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0)
         );
         assertEq(token, predicted);
     }
 
     function test_deployLiveToken_factoryChecksStillApply() public {
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(31)), address(quote), 0, 0);
-        IVeradaFactory.LiveParams memory live =
-            IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0);
+        IVaradaFactory.LiveParams memory live =
+            IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0);
 
         vm.deal(creator, 1 ether);
         vm.prank(creator);
-        vm.expectRevert(VeradaFactory.UnexpectedValue.selector);
+        vm.expectRevert(VaradaFactory.UnexpectedValue.selector);
         factory.deployLiveToken{value: 1}(p, live);
 
         p.baseFeeBps = 50;
         vm.prank(creator);
-        vm.expectRevert(abi.encodeWithSelector(IVeradaFactory.InvalidFee.selector, uint24(50)));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaFactory.InvalidFee.selector, uint24(50)));
         factory.deployLiveToken(p, live);
 
         p.baseFeeBps = BASE_BPS;
         p.quoteAsset = address(usdc);
         vm.prank(creator);
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaFactory.QuoteAssetNotAllowed.selector, address(usdc))
+            abi.encodeWithSelector(IVaradaFactory.QuoteAssetNotAllowed.selector, address(usdc))
         );
         factory.deployLiveToken(p, live);
     }
@@ -397,14 +397,14 @@ contract LiveFactoryTest is LiveFactoryBase {
     /// @dev A live launch fixes the cause focus like a weekly one and is held to the same rule:
     ///      a non-empty focus that the latest catalogue gives at least two entries.
     function test_deployLiveToken_setsAndChecksTheCauseFocus() public {
-        (VeradaToken token,) = _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
+        (VaradaToken token,) = _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
         (uint64 categories, uint16 regions) = profileRegistry.focusOf(address(token));
         assertEq(categories, FOCUS_CATEGORIES);
         assertEq(regions, FOCUS_REGIONS);
 
-        IVeradaFactory.LiveParams memory live =
-            IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0);
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.LiveParams memory live =
+            IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0);
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(51)), address(quote), 0, 0);
         p.categoryMask = uint64(1) << 5; // no catalogue entry
         address predicted = factory.predictTokenAddress(creator, p);
@@ -438,12 +438,12 @@ contract LiveFactoryTest is LiveFactoryBase {
     ///      through live conversions in that epoch and the next, and still flush into their own
     ///      epoch afterwards.
     function test_liveConversionsLeaveWeeklyEpochTagsAlone() public {
-        IVeradaFactory.DeployParams memory p =
+        IVaradaFactory.DeployParams memory p =
             _deployParams(bytes32(uint256(61)), address(quote), 2000, 1 days);
         vm.prank(creator);
         (address weekly,) = factory.deployToken(p);
         PoolKey memory weeklyKey = _keyWith(weekly, address(quote), address(weeklyHook));
-        _fund(trader, VeradaToken(weekly));
+        _fund(trader, VaradaToken(weekly));
         _buyExactIn(weeklyKey, weekly, 1e18);
 
         uint256 epoch = epochGov.currentEpoch();
@@ -455,7 +455,7 @@ contract LiveFactoryTest is LiveFactoryBase {
         uint256 owedQuote = cons.totalHeld(q);
         uint256 balanceQuote = quote.balanceOf(address(cons));
 
-        (VeradaToken live, PoolKey memory liveKey) =
+        (VaradaToken live, PoolKey memory liveKey) =
             _launchLive(q, 0, RotationPeriod.OneHour, CAUSE_A);
         _fund(trader, live);
         for (uint256 round; round < 2; ++round) {
@@ -482,17 +482,17 @@ contract LiveFactoryTest is LiveFactoryBase {
 
     /// @dev An allowed quote without a route to USDC launches in weekly mode but not in live mode.
     function test_deployLiveToken_unroutableQuoteReverts() public {
-        address bare = address(new VeradaToken("Bare", "BARE", "", address(this), address(this)));
+        address bare = address(new VaradaToken("Bare", "BARE", "", address(this), address(this)));
         registry.addQuoteAsset(bare, IQuoteRegistry.Kind.Ondo);
-        IVeradaFactory.DeployParams memory p = _deployParams(bytes32(uint256(41)), bare, 0, 0);
+        IVaradaFactory.DeployParams memory p = _deployParams(bytes32(uint256(41)), bare, 0, 0);
         vm.prank(creator);
         vm.expectRevert();
-        factory.deployLiveToken(p, IVeradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0));
+        factory.deployLiveToken(p, IVaradaFactory.LiveParams(CAUSE_A, RotationPeriod.OneHour, 0));
     }
 
     /// @dev The LP fee is overridden to zero, so the locked position never accrues anything.
     function test_lockerCollectsNothingForLiveTokens() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
         _fund(trader, token);
         _buyExactIn(key, address(token), 5e18);
@@ -505,7 +505,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     // ------------------------------------------------------------------ donations in the swap
 
     function test_thresholdZero_everySwapDonates() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
         _fund(trader, token);
         address t = address(token);
@@ -548,7 +548,7 @@ contract LiveFactoryTest is LiveFactoryBase {
 
     function test_thresholdAboveZero_accruesThenPushesOnCrossingSwap() public {
         uint96 threshold = 10e6;
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), threshold, RotationPeriod.OneHour, CAUSE_A);
         _fund(trader, token);
         address t = address(token);
@@ -577,7 +577,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     function test_swapNeedsTheDocumentedGas() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
         _fund(trader, token);
         SwapParams memory sp = SwapParams({
@@ -602,7 +602,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     // ------------------------------------------------------------------ rotations
 
     function test_rotation_votedCauseTakesOverAtTheBoundary() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 1000e6, RotationPeriod.OneHour, CAUSE_A);
         address t = address(token);
         _fund(trader, token);
@@ -653,7 +653,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     function test_rotation_noVoteKeepsTheCurrentCause() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_C);
         address t = address(token);
         _fund(trader, token);
@@ -682,7 +682,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     function test_rotation_lateTallyAppliesFromTheNextBoundary() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 1000e6, RotationPeriod.OneHour, CAUSE_A);
         address t = address(token);
         _fund(trader, token);
@@ -722,7 +722,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     function test_periodChangeVote_appliesAtTheNextBoundary() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
         address t = address(token);
         _fund(trader, token);
@@ -794,7 +794,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     // ------------------------------------------------------------------ failures never revert
 
     function test_failedConversion_holdsThenRetryCreditsTheOriginalCause() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
         address t = address(token);
         _fund(trader, token);
@@ -856,7 +856,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     function test_failedDonation_undeployedOrgDeferredThenFlushed() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_B);
         address t = address(token);
         _fund(trader, token);
@@ -893,7 +893,7 @@ contract LiveFactoryTest is LiveFactoryBase {
     }
 
     function test_failedDonation_revertingOrgDoesNotRevertTheTrade() public {
-        (VeradaToken token, PoolKey memory key) =
+        (VaradaToken token, PoolKey memory key) =
             _launchLive(address(quote), 0, RotationPeriod.OneHour, CAUSE_A);
         address t = address(token);
         _fund(trader, token);

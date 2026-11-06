@@ -2,8 +2,8 @@
  * Generates `agents/report.schema.json` (JSON Schema draft 2020-12) from the zod `ReportSchema`, so
  * routines and other tools can validate a curator report without this package.
  *
- *   pnpm --filter @verada/curator schema:report         # write the file
- *   pnpm --filter @verada/curator schema:report:check   # exit 1 when the checked-in file is stale
+ *   pnpm --filter @varada/curator schema:report         # write the file
+ *   pnpm --filter @varada/curator schema:report:check   # exit 1 when the checked-in file is stale
  *
  * The walker translates only the zod constructs the report uses and throws on anything else. Zod
  * refinements are opaque functions, so each one must have an entry in `REFINEMENTS` saying how it
@@ -13,7 +13,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { REGIONS, agentBySlug } from "@verada/sdk";
+import { REGIONS, agentBySlug } from "@varada/sdk";
 import { datetimeRegex, type ZodTypeAny } from "zod";
 import { EventSchema, PickSchema, RegionReportSchema, ReportSchema } from "../src/report.js";
 
@@ -58,14 +58,14 @@ const REFINEMENTS: Record<string, (node: Json, doc: Json) => void> = {
 const DESCRIPTIONS: Record<string, string> = {
   Report: "A curator agent's weekly report for one cause: per region, the week's events, up to 32 ranked catalogue picks and an urgency weight, plus the newsletter. Published whole to Swarm; CuratorRegistry stores each region's picks root.",
   "Report.schema": "Report format identifier.",
-  "Report.category": "Cause category slug of the agent (CATEGORIES in @verada/sdk; only categories with a curator agent).",
+  "Report.category": "Cause category slug of the agent (CATEGORIES in @varada/sdk; only categories with a curator agent).",
   "Report.epoch": "The epoch the curation is for: CuratorRegistry.currentEpoch() + 1 at submission.",
   "Report.catalogVersion": "CauseCatalog version the picks index into; must be the version in effect at the epoch's start.",
   "Report.generatedAt": "ISO 8601 UTC timestamp (Z) of report generation.",
   "Report.intro": "Newsletter introduction, markdown.",
   "Report.regions": "One entry per region the agent reports on.",
   RegionReport: "One region's curation.",
-  "RegionReport.region": "Region slug (REGIONS in @verada/sdk).",
+  "RegionReport.region": "Region slug (REGIONS in @varada/sdk).",
   "RegionReport.weight": "Urgency of the cause in this region this week, 0-10000. Must be 0 when there are no picks.",
   "RegionReport.summary": "Short summary of the week in this region.",
   "RegionReport.events": "This week's events with sources.",
@@ -74,8 +74,8 @@ const DESCRIPTIONS: Record<string, string> = {
   Event: "A news event or article.",
   "Event.date": "ISO date (YYYY-MM-DD...) of the event or article.",
   Pick: "A catalogue org picked for the ballot.",
-  "Pick.orgId": "The org's 32-byte catalogue id (from `verada-curator pool`).",
-  "Pick.catalogIndex": "Index of the org's entry in this region's catalogue bucket (from `verada-curator pool`).",
+  "Pick.orgId": "The org's 32-byte catalogue id (from `varada-curator pool`).",
+  "Pick.catalogIndex": "Index of the org's entry in this region's catalogue bucket (from `varada-curator pool`).",
   "Pick.score": "Importance of the org's work this week, 0-100 (see the curator skill's rubric).",
   "Pick.reasons": "Why this org, this week.",
   "Pick.sources": "Supporting links.",
@@ -182,7 +182,7 @@ function convert(s: ZodTypeAny, key: string, ctx: Ctx, root = false): Json {
 export function reportJsonSchema(): Json {
   const doc: Json = {
     $schema: "https://json-schema.org/draft/2020-12/schema",
-    title: "Verada curator report (verada.curation/v1)",
+    title: "Varada curator report (varada.curation/v1)",
     $comment: "Generated from packages/curator/src/report.ts by packages/curator/scripts/report-schema.ts; do not edit by hand. Unknown object keys are accepted and dropped by the parser, so they never reach the published report.",
     $defs: {},
   };
@@ -203,7 +203,7 @@ async function main() {
   if (process.argv.includes("--check")) {
     const have = await readFile(REPORT_SCHEMA_PATH, "utf8").catch(() => "");
     if (have !== want) {
-      process.stderr.write(`${REPORT_SCHEMA_PATH} is stale; run: pnpm --filter @verada/curator schema:report\n`);
+      process.stderr.write(`${REPORT_SCHEMA_PATH} is stale; run: pnpm --filter @varada/curator schema:report\n`);
       process.exitCode = 1;
     }
     return;

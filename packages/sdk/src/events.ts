@@ -110,7 +110,7 @@ export interface OrgDeployedEvent {
   org: Address;
 }
 
-export interface VeradaEventMap {
+export interface VaradaEventMap {
   TokenCreated: TokenCreatedEvent;
   FeesCollected: FeesCollectedEvent;
   FeesAttributed: FeesAttributedEvent;
@@ -152,7 +152,7 @@ export interface VeradaEventMap {
 /** Numeric values of the on-chain `QuoteRegistry.Kind` enum. */
 export const QUOTE_KIND = { Native: 0, Ondo: 1 } as const;
 
-export type VeradaEventName = keyof VeradaEventMap;
+export type VaradaEventName = keyof VaradaEventMap;
 
 // ---------------------------------------------------------------- token profiles (ENS subnames)
 

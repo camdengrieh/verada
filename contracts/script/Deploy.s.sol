@@ -18,10 +18,10 @@ import {FeeVault} from "../src/FeeVault.sol";
 import {QuoteRegistry} from "../src/QuoteRegistry.sol";
 import {TakeoverGovernor} from "../src/TakeoverGovernor.sol";
 import {TokenProfileRegistry} from "../src/TokenProfileRegistry.sol";
-import {VeradaFactory} from "../src/VeradaFactory.sol";
-import {VeradaHook} from "../src/VeradaHook.sol";
-import {VeradaLpLocker} from "../src/VeradaLpLocker.sol";
-import {VeradaResolver} from "../src/VeradaResolver.sol";
+import {VaradaFactory} from "../src/VaradaFactory.sol";
+import {VaradaHook} from "../src/VaradaHook.sol";
+import {VaradaLpLocker} from "../src/VaradaLpLocker.sol";
+import {VaradaResolver} from "../src/VaradaResolver.sol";
 import {ZamaVotingScheme} from "../src/governance/ZamaVotingScheme.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
@@ -33,7 +33,7 @@ import {ILpLocker} from "../src/interfaces/ILpLocker.sol";
 import {IQuoteRegistry} from "../src/interfaces/IQuoteRegistry.sol";
 import {ITakeoverGovernor} from "../src/interfaces/ITakeoverGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
-import {IVeradaHook} from "../src/interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "../src/interfaces/IVaradaHook.sol";
 import {IVotingScheme} from "../src/interfaces/IVotingScheme.sol";
 import {IERC8004IdentityRegistry} from "../src/interfaces/external/IERC8004IdentityRegistry.sol";
 import {IEndaomentOrgFundFactory} from "../src/interfaces/external/IEndaomentOrgFundFactory.sol";
@@ -41,7 +41,7 @@ import {ContenthashLib} from "../src/libraries/ContenthashLib.sol";
 import {DnsNameLib} from "../src/libraries/DnsNameLib.sol";
 
 /// @title Deploy
-/// @notice Deploys the full Verada system on Ethereum mainnet (or a mainnet fork), mines the hook
+/// @notice Deploys the full Varada system on Ethereum mainnet (or a mainnet fork), mines the hook
 ///         address, wires roles and writes the resulting addresses to `deployments/<chainid>.json`.
 /// @dev Environment for `run()`:
 ///        OWNER               final owner of the admin contracts (two-step transfer, must accept)
@@ -224,20 +224,20 @@ contract Deploy is Script {
         _expect("feeConsolidator", consolidatorAddr, address(consolidator));
 
         bytes memory hookArgs = abi.encode(POOL_MANAGER, factoryAddr, consolidatorAddr);
-        bytes memory hookInit = abi.encodePacked(type(VeradaHook).creationCode, hookArgs);
+        bytes memory hookInit = abi.encodePacked(type(VaradaHook).creationCode, hookArgs);
         (address hookAddr, bytes32 hookSalt) = _mineHook(hookInit);
         _deployHook(hookSalt, hookInit, hookAddr);
 
-        VeradaLpLocker locker = new VeradaLpLocker(
+        VaradaLpLocker locker = new VaradaLpLocker(
             POSITION_MANAGER, IFeeConsolidator(address(consolidator)), factoryAddr
         );
         _expect("lpLocker", lockerAddr, address(locker));
 
-        VeradaFactory factory = new VeradaFactory(
+        VaradaFactory factory = new VaradaFactory(
             IPoolManager(POOL_MANAGER),
             IPositionManager(POSITION_MANAGER),
             IQuoteRegistry(address(quotes)),
-            IVeradaHook(hookAddr),
+            IVaradaHook(hookAddr),
             ILpLocker(address(locker)),
             IFeeVault(address(vault)),
             IEpochGovernor(address(governor)),
@@ -257,7 +257,7 @@ contract Deploy is Script {
         );
 
         // ENS resolver (stateless) and the takeover governor need no address prediction.
-        VeradaResolver resolver = new VeradaResolver(
+        VaradaResolver resolver = new VaradaResolver(
             ITokenProfileRegistry(address(profiles)),
             PARENT_DNS_NAME,
             ICuratorRegistry(address(curators)),
@@ -374,7 +374,7 @@ contract Deploy is Script {
     }
 
     function _write(Deployment memory d) internal {
-        string memory k = "verada";
+        string memory k = "varada";
         vm.serializeUint(k, "chainId", block.chainid);
         vm.serializeUint(k, "deployBlock", d.deployBlock);
         vm.serializeAddress(k, "factory", d.factory);

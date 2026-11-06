@@ -1,5 +1,5 @@
 // Written for Varada
-import { Badge, type BadgeProps } from "@verada/ui/components/ui/badge";
+import { Badge, type BadgeProps } from "@varada/ui/components/ui/badge";
 
 /** How often a live-donation coin rotates to the next charity. */
 export type LiveCadence = "1h" | "12h" | "24h" | "72h" | "week";

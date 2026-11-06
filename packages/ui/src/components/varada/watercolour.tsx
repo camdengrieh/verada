@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, type ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Watercolour texture drawn in code (SVG turbulence + displacement), so the painted look costs a few

@@ -2,7 +2,7 @@
 // Adapted from 21st.dev @jshguo/interfaces-switch (id 11886), Direction A tokens and a 44px hit area.
 import { Switch as SwitchPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * On/off setting that applies at once. Off is an ink-muted track (clear against paper); on is

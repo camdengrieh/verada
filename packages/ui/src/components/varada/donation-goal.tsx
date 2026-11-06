@@ -6,8 +6,8 @@
 import { Check } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useRef, type ComponentProps, type ReactNode } from "react";
-import { useConfetti } from "@verada/ui/components/motion/confetti";
-import { cn } from "@verada/ui/lib/utils";
+import { useConfetti } from "@varada/ui/components/motion/confetti";
+import { cn } from "@varada/ui/lib/utils";
 import { clamp01, formatUsd } from "./impact-shared";
 import { INK_TONES, type InkTone } from "./raised-counter";
 

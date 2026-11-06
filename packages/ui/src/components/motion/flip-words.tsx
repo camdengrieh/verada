@@ -5,8 +5,8 @@
 // it pauses while hovered or focused, and it stands still (first word) under reduced motion.
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface FlipWordsProps {
   words: string[];

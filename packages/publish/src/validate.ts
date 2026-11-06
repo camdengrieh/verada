@@ -132,7 +132,7 @@ export function validatePack(root: string): ValidationReport {
   const files = walk(root);
   const errors: string[] = [];
   const warnings: string[] = [];
-  if (files.length === 0) errors.push("pack is empty (run pnpm --filter @verada/web assets)");
+  if (files.length === 0) errors.push("pack is empty (run pnpm --filter @varada/web assets)");
   else if (!files.some((f) => f.path === "index.json")) errors.push("no index.json at the pack root");
   for (const f of files) {
     if (f.path === "index.json") continue;

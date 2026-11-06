@@ -1,4 +1,4 @@
-import { periodPollScope, rotationPollScope } from "@verada/sdk";
+import { periodPollScope, rotationPollScope } from "@varada/sdk";
 import type { Address } from "viem";
 import type { Log } from "../jobs/types.js";
 import { Backoff } from "./backoff.js";

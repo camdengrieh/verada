@@ -4,7 +4,7 @@
 import { Check } from "lucide-react";
 import { RadioGroup } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { CAUSE_SHORT_LABELS, CauseIcon, type CauseName } from "./cause-icon";
 
 /** Where an option on a weekly ballot came from. */

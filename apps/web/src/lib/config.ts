@@ -1,7 +1,7 @@
 import { getAddress, isAddress, type Address } from "viem";
 import { mainnet } from "viem/chains";
 import { z } from "zod";
-import { ENS_PARENT_NAME, isSwarmReference, normalizeSwarmReference } from "@verada/sdk";
+import { ENS_PARENT_NAME, isSwarmReference, normalizeSwarmReference } from "@varada/sdk";
 import { ANON_NETWORK_IDS, isAnonNetworkId, type AnonNetworkId } from "./anon-networks";
 import { siteBase } from "./base";
 

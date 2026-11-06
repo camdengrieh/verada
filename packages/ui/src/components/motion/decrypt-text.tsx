@@ -6,8 +6,8 @@
 // is on screen. Reduced motion shows the value at once.
 import { useInView } from "motion/react";
 import { useEffect, useRef, useState } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 const GLYPHS = "·:;+×÷=≈~*#%°¦‡§";
 const MAX_STEPS = 40;

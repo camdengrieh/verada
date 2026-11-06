@@ -1,9 +1,9 @@
-# @verada/endaoment-client
+# @varada/endaoment-client
 
 Typed, zod-validated client for the Endaoment public API (organization search and lookup).
 
 ```ts
-import { EndaomentClient, toCauseId, summarizeOrg } from "@verada/endaoment-client";
+import { EndaomentClient, toCauseId, summarizeOrg } from "@varada/endaoment-client";
 
 const client = new EndaomentClient(); // production by default
 

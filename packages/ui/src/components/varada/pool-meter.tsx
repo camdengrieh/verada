@@ -4,10 +4,10 @@
 "use client";
 
 import { useEffect, useId, useState, type ComponentProps } from "react";
-import { Countdown } from "@verada/ui/components/data/countdown";
-import { buttonVariants } from "@verada/ui/components/ui/button";
-import { NumberTicker } from "@verada/ui/components/motion/number-ticker";
-import { cn } from "@verada/ui/lib/utils";
+import { Countdown } from "@varada/ui/components/data/countdown";
+import { buttonVariants } from "@varada/ui/components/ui/button";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { cn } from "@varada/ui/lib/utils";
 import { InkFill, clamp01, formatUsd, usdFormatOptions } from "./impact-shared";
 import { DefaultLink, type LinkComponent } from "./shared";
 

@@ -2,8 +2,8 @@
 "use client";
 
 import type { ComponentProps } from "react";
-import { useAssetUrl } from "@verada/ui/lib/assets";
-import { cn } from "@verada/ui/lib/utils";
+import { useAssetUrl } from "@varada/ui/lib/assets";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Cause categories by the curator agent's ENS label (`<name>.agent.varada.eth`), plus the catch-all

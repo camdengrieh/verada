@@ -7,12 +7,12 @@
 import { Check, Search } from "lucide-react";
 import { RadioGroup, Tabs } from "radix-ui";
 import { useId, useMemo, useState } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@verada/ui/components/ui/drawer";
-import { AssetKindBadge } from "@verada/ui/components/varada/asset-kind-badge";
-import type { ImageSource } from "@verada/ui/components/varada/shared";
-import { StockLogo, type QuoteKind } from "@verada/ui/components/varada/stock-logo";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@varada/ui/components/ui/drawer";
+import { AssetKindBadge } from "@varada/ui/components/varada/asset-kind-badge";
+import type { ImageSource } from "@varada/ui/components/varada/shared";
+import { StockLogo, type QuoteKind } from "@varada/ui/components/varada/stock-logo";
+import { cn } from "@varada/ui/lib/utils";
 import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
 
 export interface PairOption {

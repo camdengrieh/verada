@@ -14,8 +14,8 @@ import { applySuppressions } from "../lib/suppressions";
 const app = new cdk.App();
 const config = loadConfig(app.node);
 const env: cdk.Environment = { account: config.account, region: config.region };
-const prefix = `Verada-${config.envName}`;
-const common = { env, config, tags: { Project: "verada", Environment: config.envName } };
+const prefix = `Varada-${config.envName}`;
+const common = { env, config, tags: { Project: "varada", Environment: config.envName } };
 
 const network = new NetworkStack(app, `${prefix}-Network`, common);
 const data = new DataStack(app, `${prefix}-Data`, {

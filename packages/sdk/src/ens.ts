@@ -20,7 +20,7 @@ export const LABEL_MIN_LENGTH = 3;
 export const LABEL_MAX_LENGTH = 63;
 
 /** Text record key the resolver synthesizes from the on-chain logo reference. */
-export const LOGO_TEXT_KEY = "verada.logo" as const;
+export const LOGO_TEXT_KEY = "varada.logo" as const;
 
 /** Standard ENS text record keys the token page reads and the controller may set. */
 export const TOKEN_TEXT_KEYS = {

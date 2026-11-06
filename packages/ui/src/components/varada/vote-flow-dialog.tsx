@@ -5,8 +5,8 @@ import { Check, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Dialog } from "radix-ui";
 import type { ReactNode } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { cn } from "@varada/ui/lib/utils";
 import { CauseIcon, type CauseName } from "./cause-icon";
 import type { ImageSource } from "./shared";
 

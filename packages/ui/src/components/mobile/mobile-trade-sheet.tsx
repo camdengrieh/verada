@@ -7,10 +7,10 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@verada/ui/components/ui/drawer";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { PriceChange } from "@verada/ui/components/varada/price-change";
-import { WASH_FILL, type ImageSource, type WashTone } from "@verada/ui/components/varada/shared";
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@varada/ui/components/ui/drawer";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { PriceChange } from "@varada/ui/components/varada/price-change";
+import { WASH_FILL, type ImageSource, type WashTone } from "@varada/ui/components/varada/shared";
 import {
   sanitizeAmount,
   tradeAction,
@@ -23,8 +23,8 @@ import {
   TradeTokenChip,
   useTradePresets,
   type TradePanelProps,
-} from "@verada/ui/components/varada/trade-panel";
-import { cn } from "@verada/ui/lib/utils";
+} from "@varada/ui/components/varada/trade-panel";
+import { cn } from "@varada/ui/lib/utils";
 import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
 
 type TicketProps = Pick<

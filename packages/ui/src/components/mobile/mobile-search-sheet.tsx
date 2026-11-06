@@ -7,9 +7,9 @@
 import { ArrowUpLeft, Clock, Search, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useId, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { DefaultLink, type LinkComponent } from "@verada/ui/components/varada/shared";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { DefaultLink, type LinkComponent } from "@varada/ui/components/varada/shared";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface MobileSearchResult {
   id: string;

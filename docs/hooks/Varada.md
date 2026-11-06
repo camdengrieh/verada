@@ -1,19 +1,19 @@
-# Case study: how Verada composes the generic hooks
+# Case study: how Varada composes the generic hooks
 
-Verada is a charity token launchpad on Ethereum. A factory launches a token, pairs it with an
+Varada is a charity token launchpad on Ethereum. A factory launches a token, pairs it with an
 allowed quote asset in a Uniswap v4 pool, places the launch liquidity in a locker that can never
 remove it, and routes trading fees to nonprofits chosen by holders. It has two hooks, one per
 launch mode:
 
 | Hook | Mode | Composition |
 | --- | --- | --- |
-| `contracts/src/VeradaHook.sol` | weekly: fees accumulate and holders vote on a cause each week | `IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook` |
-| `contracts/src/VeradaLiveHook.sol` | live: each swap's fee is converted to USDC in the same swap and credited to the active cause | `PoolInitGateHook, FeeConversionHook` |
+| `contracts/src/VaradaHook.sol` | weekly: fees accumulate and holders vote on a cause each week | `IVaradaHook, PoolInitGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook` |
+| `contracts/src/VaradaLiveHook.sol` | live: each swap's fee is converted to USDC in the same swap and credited to the active cause | `PoolInitGateHook, FeeConversionHook` |
 
 Both started as bespoke contracts that implemented `IHooks` directly and bundled every
-behaviour. They are now thin compositions of the generic features plus Verada glue: the glue
+behaviour. They are now thin compositions of the generic features plus Varada glue: the glue
 only overrides the features' `internal virtual` extension points; no feature was forked. Each
-keeps its previous external interface (`IVeradaHook`, `IVeradaLiveHook`), events, errors and
+keeps its previous external interface (`IVaradaHook`, `IVaradaLiveHook`), events, errors and
 address flags, so the contracts that call them did not change. The generic features add their
 own entry points and views on top (for example `twapTick(poolId, window)`, `decayingFee`,
 `swapFee`, `heldFees`).
@@ -21,13 +21,13 @@ own entry points and views on top (for example `twapTick(poolId, window)`, `deca
 This page shows each mapping, what stayed protocol glue and why, and what the exercise added to
 the generic library. Read it as a worked example of adopting the library in an existing protocol.
 
-## What stays Verada
+## What stays Varada
 
 Nothing below is a hook, and none of it moved into the library:
 
-- `VeradaFactory`: deploys the token, configures the hook for it (`configureToken`), initializes
-  the pool, and places the launch position with `VeradaLpLocker`.
-- `VeradaLpLocker`: holds the launch position with no removal path and forwards LP fees.
+- `VaradaFactory`: deploys the token, configures the hook for it (`configureToken`), initializes
+  the pool, and places the launch position with `VaradaLpLocker`.
+- `VaradaLpLocker`: holds the launch position with no removal path and forwards LP fees.
 - `FeeConsolidator` and `QuoteRegistry`: allowed quote assets, conversion routes, reference
   ticks and price guards.
 - `FeeVault`, `LiveDonationVault`, `RotationGovernor`, the cause registry and the voting
@@ -42,10 +42,10 @@ initializer, the quote and one-pool-per-token checks are a `_validatePoolKey` ov
 recording pattern from [AccessGates.md](AccessGates.md#extension-points)), and so is the
 dynamic-fee check (on the weekly hook `DecayingFeeHook` enforces it as well). The locked position is the outcome of the
 locked-liquidity recipe in [AccessGates.md](AccessGates.md#recipe-locked-launch-liquidity), but
-Verada gets it without `LiquidityGateHook`: its pools have no admin, and `VeradaLpLocker` simply
+Varada gets it without `LiquidityGateHook`: its pools have no admin, and `VaradaLpLocker` simply
 has no removal path.
 
-## VeradaHook (weekly mode)
+## VaradaHook (weekly mode)
 
 ### Behaviour to reproduce
 
@@ -63,7 +63,7 @@ has no removal path.
 
 ### Mapping
 
-| Behaviour | Feature | Glue in `VeradaHook` |
+| Behaviour | Feature | Glue in `VaradaHook` |
 | --- | --- | --- |
 | factory-only pools | `PoolInitGateHook` | constructor: `_setPoolInitializer(factory, true)` |
 | one pool per token, dynamic fee, exactly one configured side | `PoolInitGateHook` key rule | `_validatePoolKey` reverts `InvalidPool` |
@@ -88,7 +88,7 @@ Two design points worth copying:
 One deliberate deviation from the composition rules: `TwapOracleHook` asks for
 `afterInitialize` to seed its first checkpoint. To keep the deployed address flags of the
 original hook (`beforeInitialize | beforeSwap | afterSwap | afterSwapReturnDelta`),
-`VeradaHook._hookPermissions` clears that flag and calls `_seedOracle(id)` in
+`VaradaHook._hookPermissions` clears that flag and calls `_seedOracle(id)` in
 `_beforeInitialize` instead (the seed does not depend on the tick). A new protocol has no deployed flag set to keep
 and should simply take the extra flag.
 
@@ -98,14 +98,14 @@ truncated toward zero. Negative non-integer averages are one tick lower; nothing
 
 ### Linearization
 
-`VeradaHook is IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook`, so in
+`VaradaHook is IVaradaHook, PoolInitGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook`, so in
 each callback the features run in this order: the initializer gate and key rule, the pool admin
-record (zero), the dynamic-fee check, then the Verada initialization glue; in `beforeSwap` the
+record (zero), the dynamic-fee check, then the Varada initialization glue; in `beforeSwap` the
 oracle accrues before the LP fee override is merged; in `afterSwap` the surcharge is taken.
 The override lists are the same as in [ComposeYourOwn.md](ComposeYourOwn.md) plus
 `PoolInitGateHook` in `_beforeInitialize` and `_hookPermissions`.
 
-## VeradaLiveHook (live mode)
+## VaradaLiveHook (live mode)
 
 ### Behaviour to reproduce
 
@@ -126,7 +126,7 @@ The override lists are the same as in [ComposeYourOwn.md](ComposeYourOwn.md) plu
 
 ### Mapping
 
-| Behaviour | Feature | Glue in `VeradaLiveHook` |
+| Behaviour | Feature | Glue in `VaradaLiveHook` |
 | --- | --- | --- |
 | callbacks, address check, shared transient lock | `BaseHook` | |
 | factory-only pools | `PoolInitGateHook` | `_isAllowedInitializer`: `sender == factory`, else reverts `InvalidPool` (keeps the original error) |
@@ -135,7 +135,7 @@ The override lists are the same as in [ComposeYourOwn.md](ComposeYourOwn.md) plu
 | held amounts per `(token, causeId)` | `FeeConversionHook` buckets | bucket = `keccak256(token, causeId)`; `heldRaw(token, causeId)` reads `heldFees[bucket][quote]`; `totalHeld` is the feature's own (same selector as before) |
 | conversion through the consolidator | `FeeConversionHook._executeConversion` | override delegates to `consolidator.convertClaims(quote, amount, vault, inSwap)` (it burns the hook's claims as its ERC-6909 operator and pays USDC to the vault); `_settleConverted` is a no-op; `_hopMinOutput` is unreachable (no routes stored in the hook) |
 | credit the active cause | `_onFeeConverted`, `_onFeeHeld` | `creditLive(token, causeId, rotation, out)` on success; the `FeeTaken` event on both paths, from a transient conversion context `(token, causeId, rotation)` |
-| `retryHeld(token, causeId, amount)` | `FeeConversionHook._retryHeld` | the Verada entry point sets the lock and context and calls `_retryHeld(bucket, quote, amount)`; the generic bucket-keyed `retryHeld` always reverts because it carries no context |
+| `retryHeld(token, causeId, amount)` | `FeeConversionHook._retryHeld` | the Varada entry point sets the lock and context and calls `_retryHeld(bucket, quote, amount)`; the generic bucket-keyed `retryHeld` always reverts because it carries no context |
 | LP fee 0 | `BaseHook._mergeLpFeeOverride` | `_beforeSwap` merges `OVERRIDE_FEE_FLAG` (fee 0) |
 | quote-side fee on the gross flow | none | `_beforeSwap` (specified quote) and `_afterSwap` (unspecified quote, and the full-fill check) |
 | swap lock with the original error | `BaseHook` lock slot and states | taken in `_beforeSwap`, released in `_afterSwap`, reverting `SwapReentered`; `_usesSwapLock()` returns false so `BaseHook` does not take it a second time |
@@ -147,7 +147,7 @@ The override lists are the same as in [ComposeYourOwn.md](ComposeYourOwn.md) plu
 `afterSwap`. The live fee must always be in the quote, so when the quote is the specified currency
 it has to be taken in `beforeSwap` through the specified delta, and an exact-output fee is grossed
 up (`feeGrossUp(net, b) = ceil(net * b / (10_000 - b))`) so that it is `b` of the gross. That is a
-different fee model, not a parameter of the generic one, so it stays a Verada override of
+different fee model, not a parameter of the generic one, so it stays a Varada override of
 `_beforeSwap` and `_afterSwap`. Everything around it (claims accounting, conversion, hold, retry,
 gas floor, lock) is the generic feature.
 
@@ -174,11 +174,11 @@ See [FeeConversionHook.md](FeeConversionHook.md).
    0)` after configuring) turns admin-configurable features into fixed terms.
 3. Keep protocol economics in overrides, not forks. A decaying surcharge is `_swapFeeBps`; fee
    routing is `_onSwapFeeTaken`; a donation credit is `_onFeeConverted`.
-4. When a behaviour genuinely differs from a feature's model (Verada's gross quote-side fee),
+4. When a behaviour genuinely differs from a feature's model (Varada's gross quote-side fee),
    write it as glue on the callbacks and reuse the features around it, rather than bending a
    feature's semantics.
-5. Prove equivalence with the existing test suite. Verada kept its original hook test suites
-   (weekly in `contracts/test/VeradaHook.t.sol`, live in `contracts/test/live/`) as the
+5. Prove equivalence with the existing test suite. Varada kept its original hook test suites
+   (weekly in `contracts/test/VaradaHook.t.sol`, live in `contracts/test/live/`) as the
    equivalence check for the composed hooks. The only edits were error selectors that moved to
    `BaseHook` (for example `NotPoolManager`), `Currency`-typed arguments in Solidity callers
    (`totalHeld(Currency)`, same ABI selector as `totalHeld(address)`), the TWAP rounding

@@ -1,4 +1,4 @@
-import type { PeriodProposalState, RoundStatus } from "@verada/sdk";
+import type { PeriodProposalState, RoundStatus } from "@varada/sdk";
 import type { Address, Hex } from "viem";
 
 /** `ITakeoverGovernor.State`, in enum order. */
@@ -50,7 +50,7 @@ export interface ChainReader {
   proposal(id: bigint): Promise<ProposalView>;
   /**
    * LP fees the token's locked position has earned but nobody has collected yet (both currencies'
-   * raw amounts added; a simulated `VeradaLpLocker.collectFees`). Trading fees only reach the
+   * raw amounts added; a simulated `VaradaLpLocker.collectFees`). Trading fees only reach the
    * FeeVault, and the indexer, when someone collects them. Omitted when the locker is unknown.
    */
   uncollectedFees?(token: Address): Promise<bigint>;

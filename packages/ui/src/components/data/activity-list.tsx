@@ -3,7 +3,7 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Built-in kinds get their own chip colours; any other string renders as a neutral chip. */
 export type ActivityKind = "buy" | "sell" | "give" | "vote" | "new" | (string & {});

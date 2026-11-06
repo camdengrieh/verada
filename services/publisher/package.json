@@ -1,5 +1,5 @@
 {
-  "name": "@verada/publisher",
+  "name": "@varada/publisher",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,9 +12,9 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.19.5",
-    "@verada/arkiv-registry": "workspace:*",
-    "@verada/curator": "workspace:*",
-    "@verada/sdk": "workspace:*",
+    "@varada/arkiv-registry": "workspace:*",
+    "@varada/curator": "workspace:*",
+    "@varada/sdk": "workspace:*",
     "@x402/core": "2.30.0",
     "@x402/evm": "2.30.0",
     "@zama-fhe/sdk": "3.7.1",

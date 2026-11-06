@@ -22,7 +22,7 @@ export const SWARM_CONTENTHASH_PREFIX = "0xe40101fa011b20" as const;
  */
 export const ENS_REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e" as const;
 
-/** ENSv2 mainnet contracts (docs.ens.domains/learn/deployments; same values as `@verada/sdk`). */
+/** ENSv2 mainnet contracts (docs.ens.domains/learn/deployments; same values as `@varada/sdk`). */
 export const ENS_V2 = {
   ethRegistry: "0xf60aba43e1f7f3dab1186ff03b561401c9df85e2" as Hex,
   /** Canonical Universal Resolver proxy; stable across upgrades. */
@@ -72,7 +72,7 @@ export function dnsEncode(name: string): Hex {
 
 /**
  * Calldata for a standard resolver's `setContenthash(bytes32 node, bytes hash)`. Use this when
- * the name sits on an ENS public resolver. Names served by the Verada resolver use
+ * the name sits on an ENS public resolver. Names served by the Varada resolver use
  * {@link setDefaultContenthashCalldata} instead.
  */
 export function setContenthashCalldata(name: string, ref: string) {
@@ -84,7 +84,7 @@ export function setContenthashCalldata(name: string, ref: string) {
 
 /**
  * Calldata for `TokenProfileRegistry.setDefaultContenthash(bytes hash)`: the single contenthash
- * the Verada resolver serves for `varada.eth` and, by default, every `<label>.varada.eth`. Only
+ * the Varada resolver serves for `varada.eth` and, by default, every `<label>.varada.eth`. Only
  * the registry owner may send it. Point it at the site's feed manifest so it never changes.
  */
 export function setDefaultContenthashCalldata(registry: Hex, ref: string) {

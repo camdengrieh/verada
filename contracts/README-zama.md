@@ -86,7 +86,7 @@ installed `@fhevm/solidity/config/ZamaConfig.sol`; re-verify them on every libra
 
 - Options per poll: 32 (`MAX_OPTIONS`). Weight is whole tokens, at most `2^40 - 1` per ballot
   (`MAX_WEIGHT`), one ballot per voter per poll. A counter holds at most `2^40 - 1` (1.1e12 whole
-  tokens); the fixed supply of a Verada token is 1e11 whole tokens, so a poll's total weight cannot
+  tokens); the fixed supply of a Varada token is 1e11 whole tokens, so a poll's total weight cannot
   overflow into a neighbouring counter.
 - Each ballot runs one `fromExternal`, one `div`, `rem` and `mul` on the `euint8` choice, one
   cast and `shl` to place the weight, and then one `eq`, `select` and `add` per word: 11 words at

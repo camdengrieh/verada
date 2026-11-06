@@ -27,12 +27,12 @@ contract DnsNameLibTest is Test {
     // Reference values (viem `namehash`, ENS docs).
     bytes32 internal constant ETH_NODE =
         0x93cdeb708b7545dc668eb9280176169d1c33cfd8ed6f04690a0bcc88a93fc4ae;
-    bytes32 internal constant VERADA_NODE =
+    bytes32 internal constant VARADA_NODE =
         0x7d4d6e6569fdd1888104213a462800d63bbc25e3e300f7cf64c5cebeb6da0aa3;
-    bytes32 internal constant PEPE_VERADA_NODE =
+    bytes32 internal constant PEPE_VARADA_NODE =
         0x1d5d7832f3d8c36e3cd2f591b85b37bb1cfdc47fa841737d9e1632e10689c782;
 
-    bytes internal constant VERADA_DNS = hex"0676617261646103657468" hex"00";
+    bytes internal constant VARADA_DNS = hex"0676617261646103657468" hex"00";
 
     function setUp() public {
         lib = new DnsNameLibHarness();
@@ -62,9 +62,9 @@ contract DnsNameLibTest is Test {
 
     // ------------------------------------------------------------------ encode
 
-    function test_encode_veradaEth() public view {
+    function test_encode_varadaEth() public view {
         bytes memory enc = lib.encode("varada.eth");
-        assertEq(enc, VERADA_DNS);
+        assertEq(enc, VARADA_DNS);
         assertEq(enc.length, 12);
         assertEq(uint8(enc[0]), 6);
         assertEq(uint8(enc[7]), 3);
@@ -126,9 +126,9 @@ contract DnsNameLibTest is Test {
         );
     }
 
-    function test_namehash_veradaEth() public view {
-        bytes32 node = lib.namehash(VERADA_DNS, 0);
-        assertEq(node, VERADA_NODE, "viem reference");
+    function test_namehash_varadaEth() public view {
+        bytes32 node = lib.namehash(VARADA_DNS, 0);
+        assertEq(node, VARADA_NODE, "viem reference");
         assertEq(node, _refNamehash("varada.eth"), "recursive reference");
         assertEq(
             node,
@@ -143,11 +143,11 @@ contract DnsNameLibTest is Test {
 
     function test_namehash_pepeVaradaEth() public view {
         bytes memory enc = lib.encode("pepe.varada.eth");
-        assertEq(lib.namehash(enc, 0), PEPE_VERADA_NODE);
+        assertEq(lib.namehash(enc, 0), PEPE_VARADA_NODE);
         assertEq(lib.namehash(enc, 0), _refNamehash("pepe.varada.eth"));
-        assertEq(lib.namehash(enc, 0), keccak256(abi.encodePacked(VERADA_NODE, keccak256("pepe"))));
+        assertEq(lib.namehash(enc, 0), keccak256(abi.encodePacked(VARADA_NODE, keccak256("pepe"))));
         // Offset 5 skips the first label: the remainder is varada.eth.
-        assertEq(lib.namehash(enc, 5), VERADA_NODE);
+        assertEq(lib.namehash(enc, 5), VARADA_NODE);
     }
 
     function test_namehash_rejectsMissingTerminator() public {
@@ -160,7 +160,7 @@ contract DnsNameLibTest is Test {
         bytes memory name = hex"00ff";
         vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, name));
         lib.namehash(name, 0);
-        name = abi.encodePacked(VERADA_DNS, hex"00");
+        name = abi.encodePacked(VARADA_DNS, hex"00");
         vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, name));
         lib.namehash(name, 0);
     }
@@ -178,29 +178,29 @@ contract DnsNameLibTest is Test {
     }
 
     function test_namehash_rejectsOffsetPastEnd() public {
-        vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, VERADA_DNS));
-        lib.namehash(VERADA_DNS, 12);
-        vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, VERADA_DNS));
-        lib.namehash(VERADA_DNS, 100);
+        vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, VARADA_DNS));
+        lib.namehash(VARADA_DNS, 12);
+        vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, VARADA_DNS));
+        lib.namehash(VARADA_DNS, 100);
     }
 
     // ------------------------------------------------------------------ readLabel
 
     function test_readLabel() public view {
-        (bytes32 labelhash, uint256 next) = lib.readLabel(VERADA_DNS, 0);
+        (bytes32 labelhash, uint256 next) = lib.readLabel(VARADA_DNS, 0);
         assertEq(labelhash, keccak256("varada"));
         assertEq(next, 7);
-        (labelhash, next) = lib.readLabel(VERADA_DNS, 7);
+        (labelhash, next) = lib.readLabel(VARADA_DNS, 7);
         assertEq(labelhash, keccak256("eth"));
         assertEq(next, 11);
-        (labelhash, next) = lib.readLabel(VERADA_DNS, 11);
+        (labelhash, next) = lib.readLabel(VARADA_DNS, 11);
         assertEq(labelhash, bytes32(0));
         assertEq(next, 12);
     }
 
     function test_readLabel_rejectsOutOfRange() public {
-        vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, VERADA_DNS));
-        lib.readLabel(VERADA_DNS, 12);
+        vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, VARADA_DNS));
+        lib.readLabel(VARADA_DNS, 12);
         bytes memory name = hex"05616263";
         vm.expectRevert(abi.encodeWithSelector(DnsNameLib.InvalidDnsName.selector, name));
         lib.readLabel(name, 0);
@@ -236,10 +236,10 @@ contract DnsNameLibTest is Test {
         string memory label = LabelGen.valid(seed, len);
         bytes memory enc = lib.encode(string.concat(label, ".varada.eth"));
         assertEq(
-            enc, abi.encodePacked(bytes1(uint8(bytes(label).length)), bytes(label), VERADA_DNS)
+            enc, abi.encodePacked(bytes1(uint8(bytes(label).length)), bytes(label), VARADA_DNS)
         );
         assertEq(
-            lib.namehash(enc, 0), keccak256(abi.encodePacked(VERADA_NODE, keccak256(bytes(label))))
+            lib.namehash(enc, 0), keccak256(abi.encodePacked(VARADA_NODE, keccak256(bytes(label))))
         );
     }
 

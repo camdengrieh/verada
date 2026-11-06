@@ -1,5 +1,5 @@
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
-import { PICK_LEAF_TYPES } from "@verada/sdk";
+import { PICK_LEAF_TYPES } from "@varada/sdk";
 import type { Hex } from "viem";
 
 /** Read access to the curator agents tables (implemented over Ponder's db and by test fixtures). */

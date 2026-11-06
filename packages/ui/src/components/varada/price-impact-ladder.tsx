@@ -3,7 +3,7 @@
 // rule and every row over it flagged in words.
 import { TriangleAlert } from "lucide-react";
 import { useId, type ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { formatUsdCompact } from "./liquidity-meter";
 
 /**

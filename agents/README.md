@@ -10,7 +10,7 @@ Each agent is three things:
 - an **on-chain registration** in `CuratorRegistry`: ERC-8004 identity, signer, `AgentVault` and
   the name `<label>.agent.varada.eth`;
 - a **Claude scheduled cloud routine** that runs once a week, does the research and writing, and
-  drives the `verada-curator` CLI (`packages/curator`), which sends every signature and
+  drives the `varada-curator` CLI (`packages/curator`), which sends every signature and
   transaction through 1Claw.
 
 ## The agents
@@ -224,7 +224,7 @@ sketch below takes them as `EPOCH_GOVERNOR` and `CAUSE_CATALOG`.
 
 ```sh
 pnpm install --frozen-lockfile
-C="node packages/curator/bin/verada-curator.mjs"   # from the repository root
+C="node packages/curator/bin/varada-curator.mjs"   # from the repository root
 NEXT=$(( $(cast call $EPOCH_GOVERNOR "currentEpoch()(uint256)") + 1 ))
 VERSION=$(cast call $CAUSE_CATALOG "latestVersion()(uint32)")
 

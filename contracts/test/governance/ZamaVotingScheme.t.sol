@@ -721,7 +721,7 @@ contract ZamaVotingSchemeTest is Test {
     }
 
     function test_packedTally_supplySizedWeightsDoNotSpillIntoNeighbours() public {
-        // 1e11 whole tokens is the whole supply of a Verada token.
+        // 1e11 whole tokens is the whole supply of a Varada token.
         uint8[] memory choices = new uint8[](3);
         uint64[] memory weights = new uint64[](3);
         choices[0] = 1;

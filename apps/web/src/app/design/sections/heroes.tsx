@@ -1,13 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { ensLimoUrl } from "@verada/ui/components/varada/ens-shared";
-import { HeroCause } from "@verada/ui/components/varada/hero-cause";
-import { HeroHome } from "@verada/ui/components/varada/hero-home";
-import { HeroLaunch } from "@verada/ui/components/varada/hero-launch";
-import { HeroToken } from "@verada/ui/components/varada/hero-token";
-import { PaintedImage } from "@verada/ui/components/varada/painted-image";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { ensLimoUrl } from "@varada/ui/components/varada/ens-shared";
+import { HeroCause } from "@varada/ui/components/varada/hero-cause";
+import { HeroHome } from "@varada/ui/components/varada/hero-home";
+import { HeroLaunch } from "@varada/ui/components/varada/hero-launch";
+import { HeroToken } from "@varada/ui/components/varada/hero-token";
+import { PaintedImage } from "@varada/ui/components/varada/painted-image";
 import { ASSETS } from "@/lib/assets.generated";
 import { GallerySection, Specimen } from "../section";
 

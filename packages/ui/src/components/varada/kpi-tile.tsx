@@ -4,11 +4,11 @@
 "use client";
 
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { Delta } from "@verada/ui/components/data/stat-card";
-import { Sparkline, type SparklineTone } from "@verada/ui/components/data/sparkline";
-import { NumberTicker } from "@verada/ui/components/motion/number-ticker";
-import { ToggleGroup, ToggleGroupItem } from "@verada/ui/components/ui/toggle-group";
-import { cn } from "@verada/ui/lib/utils";
+import { Delta } from "@varada/ui/components/data/stat-card";
+import { Sparkline, type SparklineTone } from "@varada/ui/components/data/sparkline";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { ToggleGroup, ToggleGroupItem } from "@varada/ui/components/ui/toggle-group";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface KpiPeriod {
   /** "24h", "7d", "30d". */

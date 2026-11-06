@@ -6,9 +6,9 @@
 import { Check, LoaderCircle, Lock, X } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { Input, InputAddon, InputGroup } from "@verada/ui/components/ui/input";
-import { cn } from "@verada/ui/lib/utils";
+import { Button } from "@varada/ui/components/ui/button";
+import { Input, InputAddon, InputGroup } from "@varada/ui/components/ui/input";
+import { cn } from "@varada/ui/lib/utils";
 import { ENS_PARENT, LABEL_PROBLEM_TEXT, ensNameFor, labelProblem, normalizeLabel } from "./ens-shared";
 import { LogoMark } from "./logo-mark";
 

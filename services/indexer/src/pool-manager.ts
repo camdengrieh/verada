@@ -1,7 +1,7 @@
-import { EXTERNAL_ADDRESSES } from "@verada/sdk";
+import { EXTERNAL_ADDRESSES } from "@varada/sdk";
 import { parseAbi, toEventSelector } from "viem";
 
-/** Uniswap v4 singleton; every Verada pool lives in it. */
+/** Uniswap v4 singleton; every Varada pool lives in it. */
 export const POOL_MANAGER = EXTERNAL_ADDRESSES.poolManager;
 
 /** `IPoolManager.Swap`. Amounts are the swapper's deltas: positive is paid out to the swapper. */

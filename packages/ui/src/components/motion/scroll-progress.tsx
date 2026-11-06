@@ -5,8 +5,8 @@
 // with a whole-percent value, and no spring under reduced motion.
 import { motion, useMotionValueEvent, useScroll, useSpring, type MotionValue } from "motion/react";
 import { useId, useState, type RefObject } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface ScrollProgressProps {
   /** Track this scrollable element instead of the page. */

@@ -19,18 +19,18 @@ import {SwapFeeHook} from "./hooks/fee/SwapFeeHook.sol";
 import {LinearDecay} from "./hooks/libraries/LinearDecay.sol";
 import {TwapOracleHook} from "./hooks/oracle/TwapOracleHook.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
-import {IVeradaHook} from "./interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "./interfaces/IVaradaHook.sol";
 
 /// @dev Pool registration entry point of the fee consolidator.
 interface IConsolidatorPools {
     function registerPool(address token, PoolKey calldata key) external;
 }
 
-/// @title VeradaHook
-/// @notice Uniswap v4 hook for weekly-mode Verada pools (a launched token paired with an allowed
+/// @title VaradaHook
+/// @notice Uniswap v4 hook for weekly-mode Varada pools (a launched token paired with an allowed
 ///         quote asset). It is a thin composition of the generic hooks in `src/hooks` plus the
-///         Verada glue that maps the factory's per-token `FeeConfig` onto them:
-///          - `PoolInitGateHook`: only the factory may initialize pools; the Verada key rule
+///         Varada glue that maps the factory's per-token `FeeConfig` onto them:
+///          - `PoolInitGateHook`: only the factory may initialize pools; the Varada key rule
 ///            (exactly one configured side, dynamic fee, one pool per token) reverts
 ///            `InvalidPool`.
 ///          - `TwapOracleHook`: tick accumulator, 24 checkpoints at least 5 minutes apart, read
@@ -46,14 +46,14 @@ interface IConsolidatorPools {
 /// @dev Glue only, no hook logic of its own: per-pool config is written once at initialization
 ///      from the token's `FeeConfig` and frozen (no pool admin, so the generic setters
 ///      `setDecayingFee`, `setSwapFee` and `transferPoolAdmin` always revert `NotPoolAdmin`).
-///      The external API of the previous bespoke hook is kept unchanged (`IVeradaHook`,
+///      The external API of the previous bespoke hook is kept unchanged (`IVaradaHook`,
 ///      `configured`, `poolInitialized`, `sniperFeeBps`, `twapTick(address,uint32)`, the
 ///      constants, events and errors, and the address flags `beforeInitialize | beforeSwap |
 ///      afterSwap | afterSwapReturnDelta`). `TwapOracleHook` asks for `afterInitialize` to seed
 ///      its first checkpoint; this hook clears that flag to keep the deployed flag set and seeds
 ///      the oracle in `beforeInitialize` instead (the seed does not depend on the tick).
 ///      Mine a salt with the HookMiner library before deploying.
-contract VeradaHook is IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook {
+contract VaradaHook is IVaradaHook, PoolInitGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook {
     /// @notice Minimum spacing between two stored oracle checkpoints.
     uint32 public constant OBS_INTERVAL = 5 minutes;
     /// @notice Number of oracle checkpoints kept per pool (covers 2 hours at the minimum spacing).
@@ -104,7 +104,7 @@ contract VeradaHook is IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFe
 
     // ------------------------------------------------------------------ configuration
 
-    /// @inheritdoc IVeradaHook
+    /// @inheritdoc IVaradaHook
     function configureToken(address token, FeeConfig calldata config) external {
         if (msg.sender != factory) revert NotFactory();
         if (configured[token]) revert AlreadyConfigured(token);
@@ -129,12 +129,12 @@ contract VeradaHook is IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFe
         configured[token] = true;
     }
 
-    /// @inheritdoc IVeradaHook
+    /// @inheritdoc IVaradaHook
     function feeConfig(address token) external view returns (FeeConfig memory) {
         return _feeConfigs[token];
     }
 
-    /// @inheritdoc IVeradaHook
+    /// @inheritdoc IVaradaHook
     function currentFeeBps(address token) public view returns (uint24) {
         if (!configured[token]) revert TokenNotConfigured(token);
         FeeConfig storage c = _feeConfigs[token];
@@ -186,7 +186,7 @@ contract VeradaHook is IVeradaHook, PoolInitGateHook, TwapOracleHook, DecayingFe
 
     // ------------------------------------------------------------------ generic hook glue
 
-    /// @dev Verada key rule, run by `PoolInitGateHook` after the factory-only initializer check.
+    /// @dev Varada key rule, run by `PoolInitGateHook` after the factory-only initializer check.
     function _validatePoolKey(PoolKey calldata key, uint160) internal view override {
         address token = _tokenOf(key);
         if (

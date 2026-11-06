@@ -6,9 +6,9 @@
 import { motion } from "motion/react";
 import { Slot } from "radix-ui";
 import { useCallback, useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent, type PointerEvent, type ReactNode } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { buttonVariants } from "@verada/ui/components/ui/button";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { buttonVariants } from "@varada/ui/components/ui/button";
+import { cn } from "@varada/ui/lib/utils";
 import type { VariantProps } from "class-variance-authority";
 
 interface Drop {

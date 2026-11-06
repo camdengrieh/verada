@@ -4,7 +4,7 @@
 // (its CSS module, motion tokens and shared-card store are not included).
 import { HoverCard as HoverCardPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Read-only preview (a creator, a cause, a token) on hover or keyboard focus. Keep anything

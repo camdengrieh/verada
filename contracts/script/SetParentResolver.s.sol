@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {VeradaResolver} from "../src/VeradaResolver.sol";
+import {VaradaResolver} from "../src/VaradaResolver.sol";
 import {IEnsV2Registry} from "../src/interfaces/external/ens/IEnsV2.sol";
 import {DnsNameLib} from "../src/libraries/DnsNameLib.sol";
 import {Script} from "forge-std/Script.sol";
@@ -9,10 +9,10 @@ import {console} from "forge-std/console.sol";
 
 /// @title SetParentResolver
 /// @notice The one ENS transaction after deployment: the owner of `varada.eth` on ENSv2 points the
-///         name at the Verada resolver, so `varada.eth`, every `<label>.varada.eth` and the agent
+///         name at the Varada resolver, so `varada.eth`, every `<label>.varada.eth` and the agent
 ///         names resolve through it. Idempotent: sends nothing when the resolver is already set.
 /// @dev Environment for `run()`:
-///        RESOLVER    the deployed `VeradaResolver` (default: `resolver` in
+///        RESOLVER    the deployed `VaradaResolver` (default: `resolver` in
 ///                    `deployments/<chainid>.json`, written by `Deploy`)
 ///        ENS_OWNER   the account that signs (default: the registry's current owner of the name)
 ///      Before sending, the script checks that the resolver has code, serves ENSIP-10 and was
@@ -66,7 +66,7 @@ contract SetParentResolver is Script {
 
         console.log("ETHRegistry        ", address(ETH_REGISTRY));
         console.log("varada labelId     ", id);
-        console.log("VeradaResolver     ", resolver);
+        console.log("VaradaResolver     ", resolver);
         console.log("setResolver calldata:");
         console.logBytes(abi.encodeCall(IEnsV2Registry.setResolver, (id, resolver)));
 
@@ -90,13 +90,13 @@ contract SetParentResolver is Script {
     function check(address resolver, uint256 id, address nameOwner, address signer) public view {
         if (block.chainid != 1) revert NotMainnet(block.chainid);
         if (resolver.code.length == 0) revert NoCode(resolver);
-        try VeradaResolver(resolver).supportsInterface(ENSIP10_INTERFACE) returns (bool ok) {
+        try VaradaResolver(resolver).supportsInterface(ENSIP10_INTERFACE) returns (bool ok) {
             if (!ok) revert NotExtendedResolver(resolver);
         } catch {
             revert NotExtendedResolver(resolver);
         }
         bytes32 expected = DnsNameLib.namehash(PARENT_DNS_NAME, 0);
-        try VeradaResolver(resolver).parentNode() returns (bytes32 actual) {
+        try VaradaResolver(resolver).parentNode() returns (bytes32 actual) {
             if (actual != expected) revert WrongParent(expected, actual);
         } catch {
             revert WrongParent(expected, bytes32(0));

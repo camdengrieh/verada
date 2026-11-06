@@ -1,4 +1,4 @@
-import { periodPollScope, rotationPollScope, type PeriodProposalState, type RoundStatus } from "@verada/sdk";
+import { periodPollScope, rotationPollScope, type PeriodProposalState, type RoundStatus } from "@varada/sdk";
 import { getAddress, keccak256, toHex, zeroAddress, zeroHash, type Address, type Hex } from "viem";
 import {
   KeeperRevert,
@@ -75,7 +75,7 @@ export class FakeChain {
   ballots = new Map<string, Hex[]>();
   /** `token:epoch` keys whose ballot log lookup fails. */
   missingBallotLogs = new Set<string>();
-  /** Uncollected LP fees by lowercase token (`VeradaLpLocker.collectFees` simulated). */
+  /** Uncollected LP fees by lowercase token (`VaradaLpLocker.collectFees` simulated). */
   lpFees = new Map<string, bigint>();
   lpFeesError?: Error;
   /** `token:epoch` of epochs whose curation skip was requested. */

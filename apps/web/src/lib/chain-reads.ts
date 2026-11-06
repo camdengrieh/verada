@@ -1,16 +1,16 @@
 /** Direct chain reads (viem), used when every indexer URL is unreachable. */
 import { createPublicClient, getAbiItem, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
-import { categorySlugs, causeIdOfOrg, effectiveBallotSize, getTokenAddressByLabel, getTokenTextRecord, isValidLabel, regionSlugs, TOKEN_TEXT_KEYS, tokenLabelhash } from "@verada/sdk";
+import { categorySlugs, causeIdOfOrg, effectiveBallotSize, getTokenAddressByLabel, getTokenTextRecord, isValidLabel, regionSlugs, TOKEN_TEXT_KEYS, tokenLabelhash } from "@varada/sdk";
 import {
   epochGovernorAbi,
   feeVaultAbi,
   takeoverGovernorAbi,
   tokenProfileRegistryAbi,
-  veradaFactoryAbi,
-  veradaTokenAbi,
+  varadaFactoryAbi,
+  varadaTokenAbi,
   zamaVotingSchemeAbi,
-} from "@verada/sdk/abis";
+} from "@varada/sdk/abis";
 import type { AppConfig } from "./config";
 import { TAKEOVER_STATES, type EpochDetail, type TakeoverItem, type TokenBallotSize, type TokenDetail, type TokenFocus, type TokenProfile, type TokenSummary } from "./indexer";
 import type { PrivateRpc } from "./private-rpc";
@@ -20,12 +20,12 @@ export function createChainClient(rpc: PrivateRpc): PublicClient {
   return createPublicClient({ chain: mainnet, transport: rpc.transport({ kind: "public" }) }) as PublicClient;
 }
 
-const tokenCreated = getAbiItem({ abi: veradaFactoryAbi, name: "TokenCreated" });
+const tokenCreated = getAbiItem({ abi: varadaFactoryAbi, name: "TokenCreated" });
 
 async function nameAndSymbol(client: PublicClient, token: Address): Promise<{ name: string; symbol: string }> {
   const [name, symbol] = await Promise.all([
-    client.readContract({ address: token, abi: veradaTokenAbi, functionName: "name" }),
-    client.readContract({ address: token, abi: veradaTokenAbi, functionName: "symbol" }),
+    client.readContract({ address: token, abi: varadaTokenAbi, functionName: "name" }),
+    client.readContract({ address: token, abi: varadaTokenAbi, functionName: "symbol" }),
   ]);
   return { name, symbol };
 }

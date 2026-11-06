@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import type { Address } from "viem";
-import { ballotGasHint, BALLOT_GAS_PER_TALLY_WORD, effectiveBallotSize, MAX_BALLOT_OPTIONS } from "@verada/sdk";
-import { epochGovernorAbi } from "@verada/sdk/abis";
+import { ballotGasHint, BALLOT_GAS_PER_TALLY_WORD, effectiveBallotSize, MAX_BALLOT_OPTIONS } from "@varada/sdk";
+import { epochGovernorAbi } from "@varada/sdk/abis";
 import { useAppConfig } from "@/components/providers";
 import { sameAddress, TxStatus, useTx } from "@/components/use-tx";
 import type { TokenDetail } from "@/lib/indexer";

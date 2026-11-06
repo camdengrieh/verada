@@ -5,10 +5,10 @@
 // avatar is a focusable button (name on hover, focus and tap) and images come from the app.
 import { motion } from "motion/react";
 import { useState } from "react";
-import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
-import { Avatar, AvatarFallback, AvatarImage } from "@verada/ui/components/ui/avatar";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@verada/ui/components/ui/tooltip";
-import { cn } from "@verada/ui/lib/utils";
+import { usePrefersReducedMotion } from "@varada/ui/components/motion/marquee";
+import { Avatar, AvatarFallback, AvatarImage } from "@varada/ui/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@varada/ui/components/ui/tooltip";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface AvatarPerson {
   id: string;

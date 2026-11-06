@@ -22,7 +22,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowDown, ArrowUp, ChevronsUpDown } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Breakpoints below which a column is hidden (Tailwind defaults: sm 640, md 768, lg 1024, xl 1280). */
 export type DataTableBreakpoint = "sm" | "md" | "lg" | "xl";

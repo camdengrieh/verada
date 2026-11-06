@@ -1,14 +1,14 @@
-# @verada/indexer
+# @varada/indexer
 
-Ponder (^0.18) indexer for the Verada contracts on Ethereum mainnet, plus a read-only Hono API
+Ponder (^0.18) indexer for the Varada contracts on Ethereum mainnet, plus a read-only Hono API
 for the browser. Bigints are returned as decimal strings, lists are cursor-paginated and every
 `/api/*` response carries `Cache-Control` and a weak `ETag`.
 
 ```sh
 cp .env.example .env.local   # fill in RPC, addresses and START_BLOCK
-pnpm --filter @verada/indexer dev
-pnpm --filter @verada/indexer test
-pnpm --filter @verada/indexer typecheck
+pnpm --filter @varada/indexer dev
+pnpm --filter @varada/indexer test
+pnpm --filter @varada/indexer typecheck
 ```
 
 Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck do not.
@@ -18,7 +18,7 @@ Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck 
 | Variable | Meaning |
 | --- | --- |
 | `PONDER_RPC_URL_1` | Mainnet RPC URL, or a comma-separated list Ponder load-balances across |
-| `FACTORY_ADDRESS` | `VeradaFactory` |
+| `FACTORY_ADDRESS` | `VaradaFactory` |
 | `FEE_VAULT_ADDRESS` | `FeeVault` |
 | `FEE_CONSOLIDATOR_ADDRESS` | `FeeConsolidator` |
 | `QUOTE_REGISTRY_ADDRESS` | `QuoteRegistry` |
@@ -30,7 +30,7 @@ Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck 
 | `CURATOR_REGISTRY_ADDRESS` | `CuratorRegistry` (curator agents, weekly curations; their `AgentVault`s are found through `AgentRegistered`) |
 | `VOTING_SCHEME_ADDRESS` | `ZamaVotingScheme`, shared by both governors |
 | `TAKEOVER_GOVERNOR_ADDRESS` | `TakeoverGovernor` |
-| `ROTATION_GOVERNOR_ADDRESS` | `RotationGovernor` of live-donation tokens. Optional: unset indexes nothing for it. `VeradaLiveHook` and `LiveDonationVault` need no variable; they are found through the factory's `LiveModeConfigured` |
+| `ROTATION_GOVERNOR_ADDRESS` | `RotationGovernor` of live-donation tokens. Optional: unset indexes nothing for it. `VaradaLiveHook` and `LiveDonationVault` need no variable; they are found through the factory's `LiveModeConfigured` |
 | `START_BLOCK` | Deployment block; every contract is indexed from it |
 | `DATABASE_URL`, `DATABASE_SCHEMA` | Postgres (PGlite when unset) |
 
@@ -68,7 +68,7 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 | `vote` | event id | `VoteCast` |
 | `live_mode` | `id` | Factory `LiveModeConfigured`: the live hook and vault |
 | `live_token` | `token` | Live-donation token: hook `TokenConfigured` (fee config), vault `LiveTokenRegistered` (`threshold`, `initialCause`, `initialPeriod`), hook `PoolRegistered` (`quote`, `poolId`); all emitted before `TokenCreated` |
-| `holder` | `token, account` | `VeradaToken` `Transfer`: running balance, `firstSeenAt`, `lastActiveAt`. Rows that reach zero are kept; mints and burns only move `holder_stat.supply` |
+| `holder` | `token, account` | `VaradaToken` `Transfer`: running balance, `firstSeenAt`, `lastActiveAt`. Rows that reach zero are kept; mints and burns only move `holder_stat.supply` |
 | `holder_stat`, `holder_day` | `token`; `token, day` | Nonzero holders, supply and transfer count; holder count at the end of each UTC day with a transfer |
 | `token_market` | `token` | Quote asset (`quoteAssetOf`) and whether the token is currency0, read on the first trade |
 | `trade` | `<txHash>-<logIndex>` | PoolManager `Swap` on the token's pool, from the receipt of a transfer into or out of the PoolManager (see below) |
@@ -126,17 +126,17 @@ per proposer). Executing one makes every other pending proposal of the token cre
 proposal; the indexer stores the same counter (`generation`, `takeover_token.executions`), which
 also covers a proposal with a higher id that was created before the execution.
 
-**Trades and holders.** Every Verada token is indexed as a child of `TokenCreated` twice:
-`VeradaToken` takes every `Transfer` and keeps `holder` balances, `holder_stat` (nonzero holders,
-supply, transfer count) and `holder_day`; `VeradaTokenPool` takes only transfers into or out of the
+**Trades and holders.** Every Varada token is indexed as a child of `TokenCreated` twice:
+`VaradaToken` takes every `Transfer` and keeps `holder` balances, `holder_stat` (nonzero holders,
+supply, transfer count) and `holder_day`; `VaradaTokenPool` takes only transfers into or out of the
 Uniswap v4 PoolManager, reads that transaction's receipt and records each PoolManager `Swap` on the
 token's pool as a `trade` (keyed by the Swap log, so the several transfers of one swap record it
 once), with `trade_hour` and `trade_stat` totals. Swap amounts are the swapper's deltas (positive is
 paid out to the swapper, checked against mainnet transfers), so a positive token delta is a buy. The
-quote asset comes from `VeradaFactory.quoteAssetOf` on the first trade (`token_market`). Limits:
+quote asset comes from `VaradaFactory.quoteAssetOf` on the first trade (`token_market`). Limits:
 amounts are before any hook fee taken as a delta; `trader` is the transaction sender, so a smart
 account shows its bundler; a route that passes through the token inside one PoolManager unlock
-without moving it in or out is not seen. Only Verada tokens are indexed, so the cost grows with
+without moving it in or out is not seen. Only Varada tokens are indexed, so the cost grows with
 their activity, not with Uniswap's.
 
 ## HTTP API

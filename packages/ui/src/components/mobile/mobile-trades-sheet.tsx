@@ -4,12 +4,12 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@verada/ui/components/ui/drawer";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@verada/ui/components/ui/tabs";
-import { HolderInsights, type HolderInsightsProps } from "@verada/ui/components/varada/holder-insights";
-import { HoldersTable, type HolderItem } from "@verada/ui/components/varada/holders-table";
-import { TradeFeed, type TradeItem } from "@verada/ui/components/varada/trade-feed";
-import { cn } from "@verada/ui/lib/utils";
+import { Drawer, DrawerBody, DrawerContent, DrawerHeader } from "@varada/ui/components/ui/drawer";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@varada/ui/components/ui/tabs";
+import { HolderInsights, type HolderInsightsProps } from "@varada/ui/components/varada/holder-insights";
+import { HoldersTable, type HolderItem } from "@varada/ui/components/varada/holders-table";
+import { TradeFeed, type TradeItem } from "@varada/ui/components/varada/trade-feed";
+import { cn } from "@varada/ui/lib/utils";
 import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
 
 export type MobileTradesTab = "trades" | "holders";

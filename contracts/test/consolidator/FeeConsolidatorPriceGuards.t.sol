@@ -8,9 +8,9 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {LiveBase} from "../live/LiveBase.sol";
 import {ClaimsSource} from "../live/LiveMocks.sol";
 
@@ -119,7 +119,7 @@ contract FeeConsolidatorPriceGuardsTest is LiveBase {
     ///      fee is held (for a later retry at a fair price) instead of being converted at the
     ///      manipulated price.
     function test_liveSwap_afterRouteManipulation_holdsInsteadOfConverting() public {
-        (VeradaToken token, PoolKey memory liveKey) = _launchDefault(address(quote), 1_000_000e6);
+        (VaradaToken token, PoolKey memory liveKey) = _launchDefault(address(quote), 1_000_000e6);
         _fundTrader(trader, token);
         _push(250, true); // inside the in-swap band, beyond the in-swap tolerance
         vm.recordLogs();

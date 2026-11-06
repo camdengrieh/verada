@@ -1,8 +1,8 @@
 "use client";
 
 import { useState, type ComponentProps } from "react";
-import { useAssetUrl } from "@verada/ui/lib/assets";
-import { cn } from "@verada/ui/lib/utils";
+import { useAssetUrl } from "@varada/ui/lib/assets";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Shape of an entry in apps/web's generated asset manifest (ASSETS in assets.generated.ts). */
 export interface RasterAssetEntry {

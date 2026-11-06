@@ -2,9 +2,9 @@
 // Written for Varada on ui/tooltip (21st.dev @originui/tooltip, id 208, with the spring entry from
 // @manuarora700/animated-tooltip, id 791). Rows are separated with ui/divider's dashed ledger rule.
 import type { ReactNode } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { Tooltip, TooltipContent, TooltipTrigger, type TooltipContentProps } from "@verada/ui/components/ui/tooltip";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { Tooltip, TooltipContent, TooltipTrigger, type TooltipContentProps } from "@varada/ui/components/ui/tooltip";
+import { cn } from "@varada/ui/lib/utils";
 
 export interface RichTooltipRow {
   label: ReactNode;

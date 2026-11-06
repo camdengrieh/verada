@@ -1,9 +1,9 @@
 // Written for Varada (takeover poll card from the A-Vote board)
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button } from "@verada/ui/components/ui/button";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button } from "@varada/ui/components/ui/button";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 
 export type TakeoverStatus = "active" | "passed" | "failed" | "executed";
 export type TakeoverVote = "for" | "against";

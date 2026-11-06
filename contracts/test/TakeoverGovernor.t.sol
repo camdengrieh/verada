@@ -5,7 +5,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Test} from "forge-std/Test.sol";
 
 import {TakeoverGovernor} from "../src/TakeoverGovernor.sol";
-import {VeradaToken} from "../src/VeradaToken.sol";
+import {VaradaToken} from "../src/VaradaToken.sol";
 import {ITakeoverGovernor} from "../src/interfaces/ITakeoverGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
 import {IVotingScheme} from "../src/interfaces/IVotingScheme.sol";
@@ -21,7 +21,7 @@ contract TakeoverGovernorTest is Test {
     MockVotingScheme internal scheme;
     MockProfileRegistryLite internal profiles;
     TakeoverGovernor internal gov;
-    VeradaToken internal tokenContract;
+    VaradaToken internal tokenContract;
     address internal token;
 
     address internal owner = makeAddr("owner");
@@ -48,7 +48,7 @@ contract TakeoverGovernorTest is Test {
 
     function setUp() public {
         vm.warp(T0);
-        tokenContract = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", creator, factory);
+        tokenContract = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(tokenContract);
         _give(proposer, 2_000_000_000 * WHOLE);
         _give(whale, 10_000_000_000 * WHOLE);
@@ -511,7 +511,7 @@ contract TakeoverGovernorTest is Test {
     }
 
     function test_propose_independentTokens() public {
-        VeradaToken t2 = new VeradaToken("Two", "TWO", "ipfs://2", creator, factory);
+        VaradaToken t2 = new VaradaToken("Two", "TWO", "ipfs://2", creator, factory);
         vm.prank(factory);
         t2.transfer(proposer, 5_000_000_000 * WHOLE);
         profiles.register(address(t2), creator);

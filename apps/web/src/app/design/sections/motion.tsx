@@ -2,12 +2,12 @@
 // Written for Varada: gallery for motion and feedback (confetti, loading screen, button hovers,
 // drawers, transaction toasts, marquees and the launch wizard).
 
-import { Stepper, type StepperStep } from "@verada/ui/components/data/stepper";
-import { ConfettiButton, fireConfetti, useConfetti } from "@verada/ui/components/motion/confetti";
-import { LoadingScreen, PageLoader, type LoadingStep } from "@verada/ui/components/motion/loading-screen";
-import { Marquee } from "@verada/ui/components/motion/marquee";
-import { Badge } from "@verada/ui/components/ui/badge";
-import { Button, type ButtonEffect } from "@verada/ui/components/ui/button";
+import { Stepper, type StepperStep } from "@varada/ui/components/data/stepper";
+import { ConfettiButton, fireConfetti, useConfetti } from "@varada/ui/components/motion/confetti";
+import { LoadingScreen, PageLoader, type LoadingStep } from "@varada/ui/components/motion/loading-screen";
+import { Marquee } from "@varada/ui/components/motion/marquee";
+import { Badge } from "@varada/ui/components/ui/badge";
+import { Button, type ButtonEffect } from "@varada/ui/components/ui/button";
 import {
   Drawer,
   DrawerBody,
@@ -19,14 +19,14 @@ import {
   DrawerScaleWrapper,
   DrawerTitle,
   DrawerTrigger,
-} from "@verada/ui/components/ui/drawer";
-import { ArrowDownUp, Coins, HandHeart, Sparkles, Vote } from "@verada/ui/components/ui/icons";
-import { Toaster } from "@verada/ui/components/ui/toaster";
-import { CauseChip } from "@verada/ui/components/varada/cause-chip";
-import { CauseIcon } from "@verada/ui/components/varada/cause-icon";
-import { LogoMark } from "@verada/ui/components/varada/logo-mark";
-import { TxToastCard, txToast } from "@verada/ui/components/varada/tx-toast";
-import { Wash } from "@verada/ui/components/varada/watercolour";
+} from "@varada/ui/components/ui/drawer";
+import { ArrowDownUp, Coins, HandHeart, Sparkles, Vote } from "@varada/ui/components/ui/icons";
+import { Toaster } from "@varada/ui/components/ui/toaster";
+import { CauseChip } from "@varada/ui/components/varada/cause-chip";
+import { CauseIcon } from "@varada/ui/components/varada/cause-icon";
+import { LogoMark } from "@varada/ui/components/varada/logo-mark";
+import { TxToastCard, txToast } from "@varada/ui/components/varada/tx-toast";
+import { Wash } from "@varada/ui/components/varada/watercolour";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { GallerySection, Specimen } from "../section";
 

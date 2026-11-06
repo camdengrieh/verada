@@ -1,5 +1,5 @@
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
-import { toCauseId, toOrgId } from "@verada/endaoment-client";
+import { toCauseId, toOrgId } from "@varada/endaoment-client";
 import {
   BUCKET_COUNT,
   CATALOG_LEAF_TYPES,
@@ -10,7 +10,7 @@ import {
   categorySlugs,
   regionSlugs,
   type CatalogEntry,
-} from "@verada/sdk";
+} from "@varada/sdk";
 import type { Hex } from "viem";
 import { classify, type Overrides, type TagSource } from "./classify.js";
 import type { HarvestedOrg } from "./harvest.js";

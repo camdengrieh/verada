@@ -9,11 +9,11 @@
 import { ArrowDownRight, ArrowUpRight, ExternalLink, HandHeart } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useMemo, useRef, useState, type ComponentProps, type FocusEvent, type ReactNode } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { Skeleton } from "@verada/ui/components/ui/skeleton";
-import { ToggleGroup, ToggleGroupItem } from "@verada/ui/components/ui/toggle-group";
-import { Marquee } from "@verada/ui/components/motion/marquee";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { Skeleton } from "@varada/ui/components/ui/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "@varada/ui/components/ui/toggle-group";
+import { Marquee } from "@varada/ui/components/motion/marquee";
+import { cn } from "@varada/ui/lib/utils";
 import { EnsAddress } from "./ens-address";
 import { shortenAddress } from "./ens-shared";
 import type { TradeSide } from "./trade-panel";

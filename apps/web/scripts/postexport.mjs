@@ -38,7 +38,7 @@ export function patchRuntime(js) {
 
 /**
  * Relative URL of the token page for a one-segment path such as `/pepe` (or `/bzz/<ref>/pepe`),
- * or null when the path is not a token label. Mirrors `isValidLabel` in @verada/sdk. Inlined into
+ * or null when the path is not a token label. Mirrors `isValidLabel` in @varada/sdk. Inlined into
  * 404.html via toString(), so it must stay self-contained plain JavaScript.
  */
 export function labelRedirect(pathname) {
@@ -63,7 +63,7 @@ export function labelRedirect(pathname) {
 }
 
 export const NOT_FOUND_HTML = `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Not found - Verada</title></head>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Not found - Varada</title></head>
 <body><main><h1>Page not found</h1>
 <p><a id="home" href="./">Back to the start</a></p></main>
 <script>

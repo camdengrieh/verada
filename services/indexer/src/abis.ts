@@ -1,6 +1,6 @@
 // ABIs come from the SDK, which generates them from the forge artifacts.
 export {
-  veradaFactoryAbi as VeradaFactoryAbi,
+  varadaFactoryAbi as VaradaFactoryAbi,
   feeVaultAbi as FeeVaultAbi,
   feeConsolidatorAbi as FeeConsolidatorAbi,
   quoteRegistryAbi as QuoteRegistryAbi,
@@ -13,8 +13,8 @@ export {
   tokenProfileRegistryAbi as TokenProfileRegistryAbi,
   zamaVotingSchemeAbi as ZamaVotingSchemeAbi,
   takeoverGovernorAbi as TakeoverGovernorAbi,
-  veradaLiveHookAbi as VeradaLiveHookAbi,
+  varadaLiveHookAbi as VaradaLiveHookAbi,
   liveDonationVaultAbi as LiveDonationVaultAbi,
   rotationGovernorAbi as RotationGovernorAbi,
-  veradaTokenAbi as VeradaTokenAbi,
-} from "@verada/sdk/abis";
+  varadaTokenAbi as VaradaTokenAbi,
+} from "@varada/sdk/abis";

@@ -17,27 +17,27 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
-import {VeradaLiveHook} from "../../src/VeradaLiveHook.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaLiveHook} from "../../src/VaradaLiveHook.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {
     FeeConversionHook as FeeConversionHookEvents
 } from "../../src/hooks/conversion/FeeConversionHook.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
-import {IVeradaHook} from "../../src/interfaces/IVeradaHook.sol";
-import {IVeradaLiveHook} from "../../src/interfaces/IVeradaLiveHook.sol";
+import {IVaradaHook} from "../../src/interfaces/IVaradaHook.sol";
+import {IVaradaLiveHook} from "../../src/interfaces/IVaradaLiveHook.sol";
 import {FeeScheduleLib} from "../../src/libraries/FeeScheduleLib.sol";
 import {LiveBase} from "./LiveBase.sol";
 import {SyncingRouter} from "./LiveMocks.sol";
 
-contract VeradaLiveHookTest is LiveBase {
+contract VaradaLiveHookTest is LiveBase {
     using StateLibrary for IPoolManager;
     using PoolIdLibrary for PoolKey;
 
     uint96 internal constant NO_PUSH = 1_000_000e6;
 
-    VeradaToken internal token;
+    VaradaToken internal token;
     PoolKey internal liveKey;
 
     function setUp() public {
@@ -128,8 +128,8 @@ contract VeradaLiveHookTest is LiveBase {
         // A vault whose USDC differs from the consolidator's settlement asset.
         address fakeVault = makeAddr("fakeVault");
         vm.mockCall(fakeVault, abi.encodeWithSignature("usdc()"), abi.encode(address(quote)));
-        vm.expectRevert(IVeradaLiveHook.SettlementMismatch.selector);
-        new VeradaLiveHook(
+        vm.expectRevert(IVaradaLiveHook.SettlementMismatch.selector);
+        new VaradaLiveHook(
             manager,
             address(this),
             IFeeConsolidator(address(cons)),
@@ -139,8 +139,8 @@ contract VeradaLiveHookTest is LiveBase {
     }
 
     function test_constructor_rejectsZeroAddress() public {
-        vm.expectRevert(IVeradaLiveHook.ZeroAddress.selector);
-        new VeradaLiveHook(
+        vm.expectRevert(IVaradaLiveHook.ZeroAddress.selector);
+        new VaradaLiveHook(
             manager,
             address(0),
             IFeeConsolidator(address(cons)),
@@ -152,15 +152,15 @@ contract VeradaLiveHookTest is LiveBase {
     // ------------------------------------------------------------------ configuration
 
     function test_configureToken_selectorEqualsWeeklyHook() public pure {
-        assertEq(IVeradaLiveHook.configureToken.selector, IVeradaHook.configureToken.selector);
+        assertEq(IVaradaLiveHook.configureToken.selector, IVaradaHook.configureToken.selector);
     }
 
     function test_configureToken_storesAndDefaultsLaunch() public {
         address t = makeAddr("t");
         vm.expectEmit(address(hook));
-        emit IVeradaLiveHook.TokenConfigured(t, 250, 4000, 600, uint40(block.timestamp));
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(250, 4000, 600, 0));
-        IVeradaLiveHook.LiveFeeConfig memory c = hook.feeConfig(t);
+        emit IVaradaLiveHook.TokenConfigured(t, 250, 4000, 600, uint40(block.timestamp));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(250, 4000, 600, 0));
+        IVaradaLiveHook.LiveFeeConfig memory c = hook.feeConfig(t);
         assertEq(c.baseFeeBps, 250);
         assertEq(c.launchSurchargeBps, 4000);
         assertEq(c.surchargeDecaySeconds, 600);
@@ -173,36 +173,36 @@ contract VeradaLiveHookTest is LiveBase {
     function test_configureToken_factoryOnlyAndOnce() public {
         address t = makeAddr("t");
         vm.prank(trader);
-        vm.expectRevert(IVeradaLiveHook.NotFactory.selector);
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
-        vm.expectRevert(abi.encodeWithSelector(IVeradaLiveHook.AlreadyConfigured.selector, t));
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
+        vm.expectRevert(IVaradaLiveHook.NotFactory.selector);
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaLiveHook.AlreadyConfigured.selector, t));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(300, 0, 0, 0));
     }
 
     function test_configureToken_validatesBounds() public {
         address t = makeAddr("t");
         vm.expectRevert(abi.encodeWithSelector(FeeScheduleLib.InvalidFee.selector, 99));
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(99, 0, 0, 0));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(99, 0, 0, 0));
         vm.expectRevert(abi.encodeWithSelector(FeeScheduleLib.InvalidFee.selector, 501));
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(501, 0, 0, 0));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(501, 0, 0, 0));
         vm.expectRevert(
             abi.encodeWithSelector(FeeScheduleLib.InvalidLaunchSurcharge.selector, 8001, 60)
         );
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(300, 8001, 60, 0));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(300, 8001, 60, 0));
         vm.expectRevert(
             abi.encodeWithSelector(FeeScheduleLib.InvalidLaunchSurcharge.selector, 100, 0)
         );
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(300, 100, 0, 0));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(300, 100, 0, 0));
         vm.expectRevert(
             abi.encodeWithSelector(FeeScheduleLib.InvalidLaunchSurcharge.selector, 100, 86_401)
         );
-        hook.configureToken(t, IVeradaLiveHook.LiveFeeConfig(300, 100, 86_401, 0));
+        hook.configureToken(t, IVaradaLiveHook.LiveFeeConfig(300, 100, 86_401, 0));
     }
 
     function test_currentFeeBps_revertsForUnknownToken() public {
         address t = makeAddr("t");
-        vm.expectRevert(abi.encodeWithSelector(IVeradaLiveHook.TokenNotConfigured.selector, t));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaLiveHook.TokenNotConfigured.selector, t));
         hook.currentFeeBps(t);
     }
 
@@ -213,9 +213,9 @@ contract VeradaLiveHookTest is LiveBase {
         assertEq(hook.quoteOf(address(token)), address(quote));
     }
 
-    function _freshConfigured() internal returns (VeradaToken t) {
-        t = new VeradaToken("X", "X", "ipfs://x", creator, address(this));
-        hook.configureToken(address(t), IVeradaLiveHook.LiveFeeConfig(BASE_BPS, 0, 0, 0));
+    function _freshConfigured() internal returns (VaradaToken t) {
+        t = new VaradaToken("X", "X", "ipfs://x", creator, address(this));
+        hook.configureToken(address(t), IVaradaLiveHook.LiveFeeConfig(BASE_BPS, 0, 0, 0));
     }
 
     function _keyFor(address t, address q, uint24 fee, int24 spacing)
@@ -233,73 +233,73 @@ contract VeradaLiveHookTest is LiveBase {
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeInitialize.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.InvalidPool.selector)
+                abi.encodeWithSelector(IVaradaLiveHook.InvalidPool.selector)
             )
         );
         manager.initialize(k2, TickMath.getSqrtPriceAtTick(0));
     }
 
     function test_beforeInitialize_rejectsStaticFee() public {
-        VeradaToken t = _freshConfigured();
+        VaradaToken t = _freshConfigured();
         vault.registerToken(address(t), 0, CAUSE_A, RotationPeriod.OneHour);
         PoolKey memory k2 = _keyFor(address(t), address(quote), 3000, 60);
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeInitialize.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.InvalidPool.selector)
+                abi.encodeWithSelector(IVaradaLiveHook.InvalidPool.selector)
             )
         );
         manager.initialize(k2, TickMath.getSqrtPriceAtTick(0));
     }
 
     function test_beforeInitialize_rejectsNonFactorySender() public {
-        VeradaToken t = _freshConfigured();
+        VaradaToken t = _freshConfigured();
         vault.registerToken(address(t), 0, CAUSE_A, RotationPeriod.OneHour);
         PoolKey memory k2 = _keyFor(address(t), address(quote), LPFeeLibrary.DYNAMIC_FEE_FLAG, 60);
         vm.prank(trader);
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeInitialize.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.InvalidPool.selector)
+                abi.encodeWithSelector(IVaradaLiveHook.InvalidPool.selector)
             )
         );
         manager.initialize(k2, TickMath.getSqrtPriceAtTick(0));
     }
 
     function test_beforeInitialize_rejectsUsdcQuote() public {
-        VeradaToken t = _freshConfigured();
+        VaradaToken t = _freshConfigured();
         vault.registerToken(address(t), 0, CAUSE_A, RotationPeriod.OneHour);
         PoolKey memory k2 = _keyFor(address(t), address(usdc), LPFeeLibrary.DYNAMIC_FEE_FLAG, 60);
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeInitialize.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.QuoteNotRoutable.selector, address(usdc))
+                abi.encodeWithSelector(IVaradaLiveHook.QuoteNotRoutable.selector, address(usdc))
             )
         );
         manager.initialize(k2, TickMath.getSqrtPriceAtTick(0));
     }
 
     function test_beforeInitialize_rejectsUnroutableQuote() public {
-        VeradaToken t = _freshConfigured();
+        VaradaToken t = _freshConfigured();
         vault.registerToken(address(t), 0, CAUSE_A, RotationPeriod.OneHour);
-        address other = address(new VeradaToken("Q", "Q", "", creator, address(this)));
+        address other = address(new VaradaToken("Q", "Q", "", creator, address(this)));
         PoolKey memory k2 = _keyFor(address(t), other, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60);
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeInitialize.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.QuoteNotRoutable.selector, other)
+                abi.encodeWithSelector(IVaradaLiveHook.QuoteNotRoutable.selector, other)
             )
         );
         manager.initialize(k2, TickMath.getSqrtPriceAtTick(0));
     }
 
     function test_beforeInitialize_rejectsUnregisteredToken() public {
-        VeradaToken t = _freshConfigured();
+        VaradaToken t = _freshConfigured();
         PoolKey memory k2 = _keyFor(address(t), address(quote), LPFeeLibrary.DYNAMIC_FEE_FLAG, 60);
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeInitialize.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.TokenNotRegistered.selector, address(t))
+                abi.encodeWithSelector(IVaradaLiveHook.TokenNotRegistered.selector, address(t))
             )
         );
         manager.initialize(k2, TickMath.getSqrtPriceAtTick(0));
@@ -311,7 +311,7 @@ contract VeradaLiveHookTest is LiveBase {
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeInitialize.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.InvalidPool.selector)
+                abi.encodeWithSelector(IVaradaLiveHook.InvalidPool.selector)
             )
         );
         manager.initialize(k2, TickMath.getSqrtPriceAtTick(0));
@@ -389,7 +389,7 @@ contract VeradaLiveHookTest is LiveBase {
     }
 
     function test_launchSurcharge_decaysInFee() public {
-        (VeradaToken t2, PoolKey memory k2) =
+        (VaradaToken t2, PoolKey memory k2) =
             _launch(address(quote), NO_PUSH, RotationPeriod.OneHour, 6000, 1000);
         _fundTrader(trader, t2);
         assertEq(hook.currentFeeBps(address(t2)), 6300);
@@ -405,7 +405,7 @@ contract VeradaLiveHookTest is LiveBase {
     }
 
     function test_maxSurcharge_exactOutStillWorks() public {
-        (VeradaToken t2, PoolKey memory k2) =
+        (VaradaToken t2, PoolKey memory k2) =
             _launch(address(quote), NO_PUSH, RotationPeriod.OneHour, 8000, 3600);
         _fundTrader(trader, t2);
         assertEq(hook.currentFeeBps(address(t2)), 8300);
@@ -432,7 +432,7 @@ contract VeradaLiveHookTest is LiveBase {
         uint160 limit = zeroForOne ? sqrtP - sqrtP / 10_000 : sqrtP + sqrtP / 10_000;
         (bool ok, bytes memory ret) = _swapRaw(liveKey, zeroForOne, -1e24, limit, 30_000_000);
         assertFalse(ok);
-        assertEq(_innerSelector(ret), IVeradaLiveHook.PartialFillNotSupported.selector);
+        assertEq(_innerSelector(ret), IVaradaLiveHook.PartialFillNotSupported.selector);
     }
 
     function test_insufficientGas_reverts_belowRequirement() public {
@@ -440,7 +440,7 @@ contract VeradaLiveHookTest is LiveBase {
         uint160 limit = zeroForOne ? MIN_PRICE_LIMIT : MAX_PRICE_LIMIT;
         (bool ok, bytes memory ret) = _swapRaw(liveKey, zeroForOne, -1e18, limit, 700_000);
         assertFalse(ok);
-        assertEq(_innerSelector(ret), IVeradaLiveHook.InsufficientGas.selector);
+        assertEq(_innerSelector(ret), IVaradaLiveHook.InsufficientGas.selector);
     }
 
     function test_insufficientGas_boundary() public {
@@ -459,7 +459,7 @@ contract VeradaLiveHookTest is LiveBase {
         }
         (bool okLo, bytes memory retLo) = _swapRaw(liveKey, zeroForOne, -1e18, limit, lo);
         assertFalse(okLo);
-        assertEq(_innerSelector(retLo), IVeradaLiveHook.InsufficientGas.selector, "just below");
+        assertEq(_innerSelector(retLo), IVaradaLiveHook.InsufficientGas.selector, "just below");
         vm.revertToState(snap);
         (bool okHi,) = _swapRaw(liveKey, zeroForOne, -1e18, limit, hi);
         assertTrue(okHi, "just above");
@@ -497,7 +497,7 @@ contract VeradaLiveHookTest is LiveBase {
         });
         vm.startPrank(address(manager));
         hook.beforeSwap(address(this), liveKey, p, "");
-        vm.expectRevert(IVeradaLiveHook.SwapReentered.selector);
+        vm.expectRevert(IVaradaLiveHook.SwapReentered.selector);
         hook.beforeSwap(address(this), liveKey, p, "");
         vm.stopPrank();
     }
@@ -506,37 +506,37 @@ contract VeradaLiveHookTest is LiveBase {
         SwapParams memory p = SwapParams({
             zeroForOne: true, amountSpecified: -1e18, sqrtPriceLimitX96: MIN_PRICE_LIMIT
         });
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.beforeSwap(address(this), liveKey, p, "");
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.afterSwap(address(this), liveKey, p, BalanceDelta.wrap(0), "");
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.beforeInitialize(address(this), liveKey, 1);
     }
 
     function test_inlineConvert_onlySelf() public {
-        vm.expectRevert(IVeradaLiveHook.NotSelf.selector);
+        vm.expectRevert(IVaradaLiveHook.NotSelf.selector);
         hook.inlineConvert(address(token), CAUSE_A, 0, address(quote), 1);
     }
 
     function test_unlockCallback_requiresRetryLock() public {
         vm.prank(address(manager));
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.unlockCallback(abi.encode(address(token), CAUSE_A, address(quote), uint256(1)));
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.unlockCallback("");
     }
 
     function test_unusedCallbacks_revert() public {
         // Every callback is pool-manager only (BaseHook), including the unused ones.
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.afterInitialize(address(0), liveKey, 0, 0);
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.beforeDonate(address(0), liveKey, 0, 0, "");
         vm.startPrank(address(manager));
-        vm.expectRevert(IVeradaLiveHook.HookNotImplemented.selector);
+        vm.expectRevert(IVaradaLiveHook.HookNotImplemented.selector);
         hook.afterInitialize(address(0), liveKey, 0, 0);
-        vm.expectRevert(IVeradaLiveHook.DonateNotAllowed.selector);
+        vm.expectRevert(IVaradaLiveHook.DonateNotAllowed.selector);
         hook.beforeDonate(address(0), liveKey, 0, 0, "");
         vm.stopPrank();
     }
@@ -556,7 +556,7 @@ contract VeradaLiveHookTest is LiveBase {
         vm.expectRevert(
             _hookErr(
                 IHooks.beforeDonate.selector,
-                abi.encodeWithSelector(IVeradaLiveHook.DonateNotAllowed.selector)
+                abi.encodeWithSelector(IVaradaLiveHook.DonateNotAllowed.selector)
             )
         );
         donateRouter.donate(liveKey, a0, a1, "");
@@ -603,10 +603,10 @@ contract VeradaLiveHookTest is LiveBase {
         assertEq(hook.heldRaw(address(token), CAUSE_A), f - f / 3);
         assertEq(_claims(address(hook), address(quote)), f - f / 3);
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaLiveHook.AmountExceedsHeld.selector, f, f - f / 3)
+            abi.encodeWithSelector(IVaradaLiveHook.AmountExceedsHeld.selector, f, f - f / 3)
         );
         hook.retryHeld(address(token), CAUSE_A, f);
-        vm.expectRevert(IVeradaLiveHook.NothingHeld.selector);
+        vm.expectRevert(IVaradaLiveHook.NothingHeld.selector);
         hook.retryHeld(address(token), CAUSE_A, 0);
     }
 
@@ -642,7 +642,7 @@ contract VeradaLiveHookTest is LiveBase {
         uint256 f = _holdOne(1e18);
         // A retry from inside another unlock is refused.
         RetryFromUnlock r = new RetryFromUnlock(manager, hook);
-        vm.expectRevert(IVeradaLiveHook.PoolManagerBusy.selector);
+        vm.expectRevert(IVaradaLiveHook.PoolManagerBusy.selector);
         r.run(address(token), CAUSE_A, f);
     }
 
@@ -652,11 +652,11 @@ contract VeradaLiveHookTest is LiveBase {
         return keccak256(abi.encode(t, cause));
     }
 
-    /// @dev The bundled hook's ABI is served unchanged through `IVeradaLiveHook`, including
+    /// @dev The bundled hook's ABI is served unchanged through `IVaradaLiveHook`, including
     ///      `totalHeld(address)`, which is `FeeConversionHook.totalHeld(Currency)`.
     function test_composition_interfaceAbi() public {
         uint256 f = _holdOne(1e18);
-        IVeradaLiveHook i = IVeradaLiveHook(address(hook));
+        IVaradaLiveHook i = IVaradaLiveHook(address(hook));
         assertEq(i.totalHeld(address(quote)), f);
         assertEq(i.heldRaw(address(token), CAUSE_A), f);
         assertEq(i.quoteOf(address(token)), address(quote));
@@ -669,7 +669,7 @@ contract VeradaLiveHookTest is LiveBase {
         assertEq(i.totalHeld(address(quote)), 0);
     }
 
-    /// @dev Generic views agree with the Verada views: the bucket of a hold is
+    /// @dev Generic views agree with the Varada views: the bucket of a hold is
     ///      `keccak256(token, cause)`, the target is USDC and the gas requirement is the live one.
     function test_composition_genericViews() public {
         uint256 f = _holdOne(1e18);
@@ -682,7 +682,7 @@ contract VeradaLiveHookTest is LiveBase {
         assertFalse(hook.isPoolInitializer(address(this)), "gate rule is factory-only");
     }
 
-    /// @dev A hold reports the generic `FeeHeld` and the Verada `FeeTaken` with the same reason.
+    /// @dev A hold reports the generic `FeeHeld` and the Varada `FeeTaken` with the same reason.
     function test_composition_holdEmitsBothEvents() public {
         cons.setSource(address(hook), false);
         vm.recordLogs();
@@ -695,20 +695,20 @@ contract VeradaLiveHookTest is LiveBase {
         assertEq(hook.heldRaw(address(token), CAUSE_A), f);
     }
 
-    /// @dev The bucket-keyed retry of `FeeConversionHook` carries no Verada context (token,
+    /// @dev The bucket-keyed retry of `FeeConversionHook` carries no Varada context (token,
     ///      cause), so it reverts and the hold is unchanged. Retries go through
     ///      `retryHeld(token, causeId, amount)`.
     function test_composition_bucketRetryReverts() public {
         uint256 f = _holdOne(1e18);
         bytes32 bucket = _bucket(address(token), CAUSE_A);
-        vm.expectRevert(IVeradaLiveHook.NotPoolManager.selector);
+        vm.expectRevert(IVaradaLiveHook.NotPoolManager.selector);
         hook.retryHeld(bucket, Currency.wrap(address(quote)), f);
         assertEq(hook.heldRaw(address(token), CAUSE_A), f, "unchanged");
         assertEq(_claims(address(hook), address(quote)), f);
     }
 
     function test_composition_convertInline_onlySelf() public {
-        vm.expectRevert(IVeradaLiveHook.NotSelf.selector);
+        vm.expectRevert(IVaradaLiveHook.NotSelf.selector);
         hook.convertInline(bytes32(0), Currency.wrap(address(quote)), 1);
     }
 
@@ -720,7 +720,7 @@ contract VeradaLiveHookTest is LiveBase {
         });
         vm.prank(address(manager));
         hook.beforeSwap(address(this), liveKey, p, "");
-        vm.expectRevert(IVeradaLiveHook.Busy.selector);
+        vm.expectRevert(IVaradaLiveHook.Busy.selector);
         hook.retryHeld(address(token), CAUSE_A, f);
     }
 
@@ -750,9 +750,9 @@ contract VeradaLiveHookTest is LiveBase {
 /// @dev Calls `retryHeld` while holding its own pool manager unlock.
 contract RetryFromUnlock {
     IPoolManager internal immutable manager;
-    VeradaLiveHook internal immutable hook;
+    VaradaLiveHook internal immutable hook;
 
-    constructor(IPoolManager m, VeradaLiveHook h) {
+    constructor(IPoolManager m, VaradaLiveHook h) {
         manager = m;
         hook = h;
     }

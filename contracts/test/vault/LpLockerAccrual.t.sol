@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-import {VeradaLpLocker} from "../../src/VeradaLpLocker.sol";
+import {VaradaLpLocker} from "../../src/VaradaLpLocker.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {MockFeeConsolidator, MockPositionManager, VaultTestToken} from "./VaultMocks.sol";
 import {Test} from "forge-std/Test.sol";
@@ -10,7 +10,7 @@ import {Test} from "forge-std/Test.sol";
 ///      consolidator can attribute them to those epochs rather than to the collection epoch.
 contract LpLockerAccrualTest is Test {
     MockFeeConsolidator cons;
-    VeradaLpLocker locker;
+    VaradaLpLocker locker;
     MockPositionManager pm;
     VaultTestToken weth;
     VaultTestToken meme;
@@ -22,7 +22,7 @@ contract LpLockerAccrualTest is Test {
         meme = new VaultTestToken("MEME");
         pm = new MockPositionManager(address(weth), address(meme));
         cons = new MockFeeConsolidator();
-        locker = new VeradaLpLocker(address(pm), IFeeConsolidator(address(cons)), factory);
+        locker = new VaradaLpLocker(address(pm), IFeeConsolidator(address(cons)), factory);
     }
 
     function _accrue(uint256 id, uint256 a0, uint256 a1) internal {

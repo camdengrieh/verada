@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 import { parseEventLogs, type Address } from "viem";
-import { EXTERNAL_ADDRESSES, isValidLabel, labelFromSymbol, ONDO_TOKENS } from "@verada/sdk";
+import { EXTERNAL_ADDRESSES, isValidLabel, labelFromSymbol, ONDO_TOKENS } from "@varada/sdk";
 import { factoryAbi } from "@/lib/abis";
 import { chainLabelStatus, type LabelStatus } from "@/lib/chain-reads";
 import { ensGatewayUrl } from "@/lib/host";

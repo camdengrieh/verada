@@ -2,7 +2,7 @@
 // 21st.dev @haydenbleasel/ticker (id 19171); the kind glyph on the logo corner is Varada's own.
 import { Building2, Coins, Gem, Layers } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { formatUsdCompact } from "./liquidity-meter";
 import type { ImpactStep } from "./price-impact-ladder";
 import type { ImageSource } from "./shared";

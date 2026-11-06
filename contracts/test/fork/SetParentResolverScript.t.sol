@@ -51,12 +51,12 @@ contract SetParentResolverScriptForkTest is Test, Deploy {
         script.run();
         assertEq(ETH_REGISTRY.getResolver("varada"), d.resolver);
 
-        // The parent now answers through the Verada resolver: its addr is the platform treasury.
+        // The parent now answers through the Varada resolver: its addr is the platform treasury.
         bytes32 node = DnsNameLib.namehash(PARENT_DNS_NAME, 0);
         (bytes memory result, address answering) = UNIVERSAL_RESOLVER.resolve(
             DnsNameLib.encode(PARENT_NAME), abi.encodeWithSelector(ADDR_SELECTOR, node)
         );
-        assertEq(answering, d.resolver, "UR used the Verada resolver");
+        assertEq(answering, d.resolver, "UR used the Varada resolver");
         assertEq(abi.decode(result, (address)), treasury, "varada.eth -> treasury");
     }
 

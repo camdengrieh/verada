@@ -1,6 +1,6 @@
-# Verada Architecture
+# Varada Architecture
 
-Verada is a memecoin launchpad on Ethereum mainnet (chain id 1). Every token launches into a
+Varada is a memecoin launchpad on Ethereum mainnet (chain id 1). Every token launches into a
 Uniswap v4 pool paired with an approved quote asset (WETH or an Ondo token), with single-sided
 liquidity that is locked permanently. Trading fees are consolidated to USDC and split between the
 platform and a per-token cause pool. Each token chooses a cause focus at launch (categories such as
@@ -21,8 +21,8 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 | `contracts/` | Foundry project (solc 0.8.26, cancun). Dependencies under `contracts/lib` as git submodules. |
 | `packages/sdk` | ABIs, addresses, viem helpers, fee math. |
 | `packages/endaoment-client` | Typed Endaoment organization search client. |
-| `packages/cause-catalog` | Harvests Endaoment orgs, classifies them by cause and region, and builds the catalogue Merkle tree (`verada-catalog` CLI). |
-| `packages/curator` | Curator agent tooling (`verada-curator` CLI): weekly report schema (`verada.curation/v1`), pick trees, calldata, and the 1Claw signer. |
+| `packages/cause-catalog` | Harvests Endaoment orgs, classifies them by cause and region, and builds the catalogue Merkle tree (`varada-catalog` CLI). |
+| `packages/curator` | Curator agent tooling (`varada-curator` CLI): weekly report schema (`varada.curation/v1`), pick trees, calldata, and the 1Claw signer. |
 | `services/indexer` | Ponder indexer and API over protocol events, plus the x402 paid data routes. |
 | `apps/web` | Next.js app built as a static export (token list, launch, token page, causes, governance, curator agents). |
 | `packages/publish` | Swarm upload, site feed updates and ENS contenthash tooling (dry-run by default). |
@@ -35,16 +35,16 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 
 | Contract | Responsibility |
 |---|---|
-| `VeradaToken` | ERC20 with permit, burn and vote checkpoints (ERC20Votes with a timestamp clock; holders are self-delegated on first receipt). Fixed supply minted to the factory. Immutable creator and metadata URI. |
-| `VeradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Verada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. `deployLiveToken` runs the same launch on the live hook and registers the token with the live vault and rotation governor instead. |
+| `VaradaToken` | ERC20 with permit, burn and vote checkpoints (ERC20Votes with a timestamp clock; holders are self-delegated on first receipt). Fixed supply minted to the factory. Immutable creator and metadata URI. |
+| `VaradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Varada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. `deployLiveToken` runs the same launch on the live hook and registers the token with the live vault and rotation governor instead. |
 | `QuoteRegistry` | Owner-managed allowlist of quote assets. |
 | `FeeConsolidator` | Swaps collected fees into USDC through Uniswap v4 before the split. |
 | `TokenProfileRegistry` | Per-token profile: ENS label, controller and editor roles, text records, logo reference, contenthash override, suppression flag, and the cause focus (category and region masks, written once at launch). Factory-written at launch; the takeover governor may replace a controller. |
-| `VeradaResolver` | Stateless ENSIP-10 wildcard resolver for `varada.eth`: answers `addr`, `text`, `contenthash` for every `<label>.varada.eth` from the registry, and for `agent.varada.eth` and every `<label>.agent.varada.eth` from `CuratorRegistry`. |
+| `VaradaResolver` | Stateless ENSIP-10 wildcard resolver for `varada.eth`: answers `addr`, `text`, `contenthash` for every `<label>.varada.eth` from the registry, and for `agent.varada.eth` and every `<label>.agent.varada.eth` from `CuratorRegistry`. |
 | `TakeoverGovernor` | Community takeover votes that replace a token's profile controller. |
 | `ZamaVotingScheme` | `IVotingScheme` implementation that hides ballot choices with Zama FHEVM and reveals only aggregates. |
-| `VeradaHook` | Uniswap v4 hook. Sets the dynamic fee (base fee plus a decaying anti-sniper surcharge) and routes collected fees to the fee vault. |
-| `VeradaLpLocker` | Holds liquidity position NFTs permanently. Principal can never be withdrawn; only accrued fees are collected and forwarded to the fee vault. |
+| `VaradaHook` | Uniswap v4 hook. Sets the dynamic fee (base fee plus a decaying anti-sniper surcharge) and routes collected fees to the fee vault. |
+| `VaradaLpLocker` | Holds liquidity position NFTs permanently. Principal can never be withdrawn; only accrued fees are collected and forwarded to the fee vault. |
 | `FeeVault` | Splits incoming fees between platform and cause pool; tracks balances per token; releases a token's cause pool for an epoch once a winner exists. |
 | `CauseCatalog` | Owner-published, versioned Merkle root over every eligible Endaoment org, bucketed by `category x region`, with per-bucket sizes and the Swarm reference of the snapshot. A version applies to epochs starting after it is set. |
 | `CauseRegistry` | Causes that can be paid: `causeId` (`keccak256` of the 32-byte Endaoment org id) to the org's factory-computed address and an active flag. The governor materializes catalogue winners into it; the owner can add causes directly or block any org. |
@@ -52,7 +52,7 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 | `DonationDistributor` | After finalization, sends the epoch's cause funds to the winning cause's payout address. |
 | `CuratorRegistry` | One curator agent per cause category: ERC-8004 identity (owned by the registry), signer, vault, active flag and ENS label. Accepts each agent's weekly curations for the next epoch. |
 | `AgentVault` | Per-agent USDC donation vault. Only the agent's signer can give, only to unblocked catalogue orgs in the agent's own buckets, within a per-epoch cap. No withdrawal. |
-| `VeradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to USDC inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
+| `VaradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to USDC inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
 | `LiveDonationVault` | USDC ledger of live tokens: splits every conversion 10% platform / 90% cause, keeps the cause share per `(token, cause)` and pushes it to the cause's Endaoment org once the token's donation threshold is reached, or on `flush`. |
 | `RotationGovernor` | Live tokens' rotation schedule (anchor-based, period chosen at launch, changeable by vote), the private rotation polls that pick the next cause, and the private yes/no polls that change the period. |
 | `IPrivateDonationAdapter` | Interface only; see Deferred work. |
@@ -68,8 +68,8 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
   defined in one place only and is never duplicated elsewhere.
 
 ```
-swap -> VeradaHook (dynamic fee) -> FeeVault
-LP fees -> VeradaLpLocker.collectFees -> FeeVault
+swap -> VaradaHook (dynamic fee) -> FeeVault
+LP fees -> VaradaLpLocker.collectFees -> FeeVault
 FeeVault --10%--> platform treasury
 FeeVault --90%--> causePool[token] --settle(epoch winner)--> DonationDistributor --> cause payout
 ```
@@ -183,7 +183,7 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   uncollected fees. The last check matters because the pool's LP fee, a token's main revenue once
   the launch surcharge has decayed, accrues inside the locked position and reaches the FeeVault
   (and `FeesAttributed`, the indexer's fee signal) only when someone calls
-  `VeradaLpLocker.collectFees` or `FeeVault.settle`; the keeper therefore simulates `collectFees`
+  `VaradaLpLocker.collectFees` or `FeeVault.settle`; the keeper therefore simulates `collectFees`
   (an `eth_call`, free) for every token the indexer calls idle, through the factory's `locker()`
   (`FACTORY_ADDRESS`), and any amount above zero, or a failed read, opens the epoch. Uncollected
   fees keep a token active until someone collects them. The set is re-read every run, so the
@@ -216,7 +216,7 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   With picks missing from the start of the epoch, that is a few minutes after 6 hours in, as
   before. The web app's button does the same: it sends the skip request, then explains when the
   ballot can be opened in rotation.
-- Voting weight is the holder's `VeradaToken.getPastVotes` one second before the epoch start,
+- Voting weight is the holder's `VaradaToken.getPastVotes` one second before the epoch start,
   counted in whole tokens. In the epoch a token launches in, that time predates the token, so its
   weights are read at a launch snapshot one day after registration instead (halfway to the
   epoch's end when less than two days remain; `snapshotFor`, `launchSnapshotOf`). The voter and
@@ -282,13 +282,13 @@ and the agent vaults' `Donated`/`Given`.
 
 Live mode is the second way to launch a token. A weekly token accrues a cause pool that holders
 assign once a week; a live token donates as it trades. The creator picks the mode at launch
-(`VeradaFactory.deployLiveToken` instead of `deployToken`); it cannot be changed afterwards. The
+(`VaradaFactory.deployLiveToken` instead of `deployToken`); it cannot be changed afterwards. The
 token, its ENS name, its profile, the locked single-sided liquidity, the takeover governor and the
 10% / 90% split are the same in both modes.
 
 | | Weekly mode | Live mode |
 |---|---|---|
-| Hook | `VeradaHook` | `VeradaLiveHook` |
+| Hook | `VaradaHook` | `VaradaLiveHook` |
 | Fee to USDC | Collected, then consolidated by `FeeConsolidator` | Converted inside the trader's swap |
 | Ledger | `FeeVault` cause pool per token | `LiveDonationVault` credit per `(token, cause)` |
 | Payout | Once per epoch, to the winner, through `DonationDistributor` | Continuously, to the cause active when the fee was earned |
@@ -354,7 +354,7 @@ token, its ENS name, its profile, the locked single-sided liquidity, the takeove
   `usdc.balanceOf(vault) >= platformAccrued + totalPending`.
 
 ```
-swap -> VeradaLiveHook (fee in quote) --inlineConvert--> FeeConsolidator (route to USDC) --> LiveDonationVault
+swap -> VaradaLiveHook (fee in quote) --inlineConvert--> FeeConsolidator (route to USDC) --> LiveDonationVault
 LiveDonationVault --10%--> platform treasury
 LiveDonationVault --90%--> pending[token][activeCause] --threshold reached or flush--> Endaoment org
 conversion failed -> heldRaw[token][activeCause] --retryHeld--> FeeConsolidator --> LiveDonationVault
@@ -515,11 +515,11 @@ Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured
 
 Every launch registers a label in `TokenProfileRegistry`; `<label>.varada.eth` exists exactly when
 the token exists, with no per-name ENS transaction. `varada.eth` is registered on ENSv2 and its
-resolver is `VeradaResolver`, an ENSIP-10 wildcard resolver that the Universal Resolver reaches
+resolver is `VaradaResolver`, an ENSIP-10 wildcard resolver that the Universal Resolver reaches
 for every subname. Records: `addr` is the token address and can never change; `contenthash` is the
 registry's default (the dApp's Swarm feed manifest) unless the controller sets an override; text
 records (`url`, `description`, `avatar`, `com.twitter`, `org.telegram`, `com.discord`) are edited by
-the controller or an appointed editor; `verada.logo` is synthesized from the on-chain logo
+the controller or an appointed editor; `varada.logo` is synthesized from the on-chain logo
 reference. The registry owner can reserve labels and suppress a profile (the resolver then answers
 empty values while the label stays taken).
 
@@ -536,9 +536,9 @@ they leave empty. Operating them is described in [`agents/README.md`](../agents/
   id, signer, vault, active flag, ENS label and description. `registerAgent(categoryBit, label,
   signer, agentURI, description)` deploys the agent's `AgentVault` (CREATE2, salt = category bit)
   and registers an identity on the ERC-8004 Identity Registry on mainnet
-  (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`) with metadata `verada.category` and
-  `verada.vault`. The registry owns the identity NFT. The registry is the source of truth; ERC-8004
-  (a Draft standard behind an upgradeable proxy) is the public identity layer, and no Verada
+  (`0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`) with metadata `varada.category` and
+  `varada.vault`. The registry owns the identity NFT. The registry is the source of truth; ERC-8004
+  (a Draft standard behind an upgradeable proxy) is the public identity layer, and no Varada
   contract depends on its state after registration.
 - `linkAgentWallet` makes the vault the identity's ERC-8004 agent wallet. The Identity Registry
   checks the signer's EIP-712 `AgentWalletSet(agentId, newWallet, owner, deadline)` signature
@@ -550,9 +550,9 @@ they leave empty. Operating them is described in [`agents/README.md`](../agents/
 - Names are `<ensLabel>.agent.varada.eth`, with the labels from `packages/sdk/src/catalog.ts`
   (`homeless`, `wildlife`, `mental-health`, ...); a label is permanent once registered. The deploy
   script reserves the label `agent` in `TokenProfileRegistry`, so no token can take it.
-  `VeradaResolver` answers the agent namespace from `CuratorRegistry`, with no ENS write per
+  `VaradaResolver` answers the agent namespace from `CuratorRegistry`, with no ENS write per
   agent: `addr` is the agent's vault (`agent.varada.eth` itself resolves to the registry), text
-  records are `url` (`https://<label>.agent.varada.eth.limo`), `description`, `verada.category` and
+  records are `url` (`https://<label>.agent.varada.eth.limo`), `description`, `varada.category` and
   `agent-registration` (`eip155:1:<identity registry>:<agentId>`), and the contenthash is the
   site default. A label under `agent` that no agent holds resolves to the zero address and empty
   text records (its contenthash is still the site default); it never falls through to a token.
@@ -576,12 +576,12 @@ they leave empty. Operating them is described in [`agents/README.md`](../agents/
 
 ### Reports
 
-- `packages/curator` (`verada-curator` CLI) covers the agent's side: `pool` lists a bucket's
+- `packages/curator` (`varada-curator` CLI) covers the agent's side: `pool` lists a bucket's
   catalogue entries, `template` prints an empty report, `build` validates a report and builds the
   pick trees, `publish` uploads it, `submit` sends `submitCurations`, and `give` sends a vault gift.
   Transactions and signatures go through the 1Claw signer (`--dry-run` prints the transaction
   instead).
-- A report (`ReportSchema`, `schema: "verada.curation/v1"`) names the category, epoch and
+- A report (`ReportSchema`, `schema: "varada.curation/v1"`) names the category, epoch and
   catalogue version, has a title and newsletter introduction, and per region: the urgency weight,
   a summary, the week's events with sources, up to 32 ranked picks (org id, catalogue index, name,
   score 0-100, reasons, sources) and the region's newsletter. A region without picks has weight 0.
@@ -676,8 +676,8 @@ under `/x402/v1`. It is off unless `X402_ENABLED` is set; when off, every `/x402
 ## Arkiv mirror
 
 `services/publisher` reconciles the indexer's view of tokens and causes into Arkiv entities
-(`verada.token` core records made read-only with burned ownership, `verada.token-profile` records
-owned by the platform key and patched when records change on mainnet, `verada.cause` records) so
+(`varada.token` core records made read-only with burned ownership, `varada.token-profile` records
+owned by the platform key and patched when records change on mainnet, `varada.cause` records) so
 other chains and apps can query the token list. Since schema version 2 the core record carries the
 token's cause focus: `causeCategory` and `causeRegion` hold comma-wrapped slug lists
 (`,hunger,children-youth,`, or `*` for every category or region) so one cause or region can be
@@ -695,11 +695,11 @@ API responses are ignored.
 
 Every compliant Endaoment org with a mainnet address is eligible, without a transaction per org:
 
-1. **Harvest** (`verada-catalog harvest`): the search API is crawled one NTEE major group at a time
+1. **Harvest** (`varada-catalog harvest`): the search API is crawled one NTEE major group at a time
    (about 250k orgs in November 2026), checkpointed and resumable. Endaoment bans an IP for about
    ten minutes after a 429, so the crawl is throttled and backs off in minutes; for the full crawl,
    ask Endaoment for a workload-specific rate limit.
-2. **Classify** (`verada-catalog build`): the shared taxonomy (`packages/sdk/src/catalog.ts`, 21
+2. **Classify** (`varada-catalog build`): the shared taxonomy (`packages/sdk/src/catalog.ts`, 21
    categories and 8 regions) maps specific NTEE codes to categories. Name and description keywords
    classify orgs whose code is missing, unclassified (`Z`), major-group-only or international
    (`Q*`), which covers most non-US orgs. A few high-precision phrases apply to every org whatever
@@ -711,8 +711,8 @@ Every compliant Endaoment org with a mainnet address is eligible, without a tran
 3. **Tree**: an org appears once in every `category x region` bucket it belongs to, ordered by org
    id; leaves are OpenZeppelin standard-tree leaves of `(uint16 bucket, uint32 index, bytes32 orgId)`.
 4. **Publish**: the snapshot (`catalog.json`, `orgs.jsonl`, `tree.json`) is uploaded to Swarm
-   (`verada-catalog publish`), and the owner signs `CauseCatalog.setVersion(root, bucketSizes,
-   swarmRef)` (`verada-catalog calldata` prints it; the keeper key never sets roots). The indexer
+   (`varada-catalog publish`), and the owner signs `CauseCatalog.setVersion(root, bucketSizes,
+   swarmRef)` (`varada-catalog calldata` prints it; the keeper key never sets roots). The indexer
    loads the snapshot (`CATALOG_SOURCE`) and serves `/api/catalog`, `/search`, `/pool`, `/entries`
    (with proofs), `/causes` and `/orgs/:id`.
 
@@ -731,7 +731,7 @@ on AWS.
 
 ```
 browser --ENS name--> gateway (eth.limo, bzz.link) --contenthash (feed manifest)--> Swarm feed --> release manifest --> static files
-   |     (hostname label -> token page; `verada.com/<label>` for the plain-DNS deployment)
+   |     (hostname label -> token page; `varada.com/<label>` for the plain-DNS deployment)
    |--HTTPS JSON + SSE--> indexer (ALB -> ECS Fargate) --> Postgres
    |--HTTPS multipart----> publisher (uploads: logo, metadata) --> swarm-gateway --> Bee light node
    |--JSON-RPC (anon-rpc transports)--> Ethereum node   (chain reads fallback, and all wallet writes)
@@ -743,14 +743,14 @@ browser --ENS name--> gateway (eth.limo, bzz.link) --contenthash (feed manifest)
   static route that reads the address from the query string, so no route depends on a server.
 - All asset references are relative so the same files work under a subdomain gateway and a
   `/bzz/<ref>/` path gateway. Binary files ship only as optimised assets under `assets/`
-  (`pnpm --filter @verada/web assets` writes them to `public/assets/` from `apps/web/assets-src/`,
+  (`pnpm --filter @varada/web assets` writes them to `public/assets/` from `apps/web/assets-src/`,
   whose originals are stored in Git LFS; run `git lfs install` and `git lfs pull` before regenerating):
   `.webp`, `.avif`, `.svg`, `.woff2` or `.png`, at most 400 KB each (100 KB for `.png`) and 5 MB in
   total. `verify:export` and the publish tool both enforce this budget and reject binaries anywhere
   else.
 - Large or growing art sets (stock logos, later art packs) stay out of the bundle. The same script
   builds them into `apps/web/packs/<name>/` (not tracked) with an `index.json`;
-  `verada-publish upload-pack --dir apps/web/packs/<name>` uploads each once as its own Swarm
+  `varada-publish upload-pack --dir apps/web/packs/<name>` uploads each once as its own Swarm
   collection, and the app loads it from `<swarmGatewayUrl>/bzz/<ref>/` like token logos, using the
   reference in config.json `assetPacks` (`NEXT_PUBLIC_STOCK_LOGOS_REF` for stocks). Packs have only
   the per-file limit and are not re-uploaded with each site release.
@@ -762,7 +762,7 @@ browser --ENS name--> gateway (eth.limo, bzz.link) --contenthash (feed manifest)
   the bundle, with build-time defaults from `NEXT_PUBLIC_*`. They are public values; no secrets.
   Changing indexer URLs therefore needs a new Swarm reference and a contenthash update.
 - Swarm content is immutable per reference. A release is: build, validate, upload, append the new
-  reference to the site feed (`verada-publish feed-update`). The contenthash points at the feed
+  reference to the site feed (`varada-publish feed-update`). The contenthash points at the feed
   manifest and does not change. The previous reference stays addressable while its stamp lasts.
 
 ### Swarm and ENS contenthash
@@ -771,7 +771,7 @@ browser --ENS name--> gateway (eth.limo, bzz.link) --contenthash (feed manifest)
   node (only with `--execute`), and encodes the reference as an ENS contenthash.
 - Encoding is ENSIP-7 / EIP-1577 for Swarm: `0xe40101fa011b20` followed by the 32-byte reference
   (swarm-ns, CIDv1, swarm-manifest, keccak-256, 32 bytes). The tool prints the exact calldata, either
-  `TokenProfileRegistry.setDefaultContenthash(bytes)` for the Verada resolver or
+  `TokenProfileRegistry.setDefaultContenthash(bytes)` for the Varada resolver or
   `setContenthash(bytes32,bytes)` for a standard resolver; it never signs or sends it.
 - Postage stamps (xBZZ on Gnosis Chain) and the ENS transaction are paid by the operator. Content
   expires when its stamp does, so the batch must be topped up.
@@ -848,7 +848,7 @@ service).
 | `PublisherStack` | ECR repository and Fargate service for `services/publisher` behind an HTTPS ALB. |
 | `ObservabilityStack` | Alarms and a dashboard for the services and database. |
 
-Stack ids are `Verada-<env>-<Name>`. Configuration comes from CDK context and Secrets Manager; no
+Stack ids are `Varada-<env>-<Name>`. Configuration comes from CDK context and Secrets Manager; no
 secrets live in code, and IAM is least-privilege. `cdk synth` runs offline in CI with dummy context.
 
 ## CI and deployment
@@ -858,7 +858,7 @@ secrets live in code, and IAM is least-privilege. `cdk synth` runs offline in CI
   that sends nothing); an infra job (typecheck, jest, `cdk synth` with dummy context and no AWS
   credentials); and an asset placement check: binary files are tracked only in
   `apps/web/assets-src/` (originals, never published) and `apps/web/public/assets/` (optimised
-  copies from `pnpm --filter @verada/web assets`, the only art that reaches Swarm).
+  copies from `pnpm --filter @varada/web assets`, the only art that reaches Swarm).
 - `.github/workflows/deploy-aws.yml`: manual dispatch. Deploys only the network, data, indexer and
   observability stacks for a chosen environment name. It assumes an AWS role through GitHub OIDC
   (no long-lived keys) and needs the repository variables `AWS_ACCOUNT_ID`, `AWS_REGION` and

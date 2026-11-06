@@ -1,6 +1,6 @@
-import { buildReport, canonicalJson, ReportSchema } from "@verada/curator";
-import { swarmGatewayUrl } from "@verada/sdk";
-import { curatorRegistryAbi } from "@verada/sdk/abis";
+import { buildReport, canonicalJson, ReportSchema } from "@varada/curator";
+import { swarmGatewayUrl } from "@varada/sdk";
+import { curatorRegistryAbi } from "@varada/sdk/abis";
 import type { Context, Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { createPublicClient, fallback, http, isAddressEqual, recoverMessageAddress, type Address, type Hex } from "viem";

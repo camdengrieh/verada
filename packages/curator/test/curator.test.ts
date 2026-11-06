@@ -1,6 +1,6 @@
-import { buildCatalog, type HarvestedOrg } from "@verada/cause-catalog";
-import { bucketId, pickLeafHash } from "@verada/sdk";
-import { curatorRegistryAbi } from "@verada/sdk/abis";
+import { buildCatalog, type HarvestedOrg } from "@varada/cause-catalog";
+import { bucketId, pickLeafHash } from "@varada/sdk";
+import { curatorRegistryAbi } from "@varada/sdk/abis";
 import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { decodeFunctionData, keccak256, toHex, type Hex } from "viem";
 import { describe, expect, it, vi } from "vitest";
@@ -29,7 +29,7 @@ const africa = [...catalog.tree.entries()].filter(([, [b]]) => b === HA).map(([,
 
 const report = (picks = africa.map((e) => ({ orgId: e.orgId, catalogIndex: e.index, name: "x", score: 80, reasons: "Drought relief", sources: ["https://news.example/a"] }))) =>
   parseReport({
-    schema: "verada.curation/v1",
+    schema: "varada.curation/v1",
     category: "hunger",
     epoch: 12,
     catalogVersion: 1,

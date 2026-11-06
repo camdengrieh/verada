@@ -1,4 +1,4 @@
-import { buildReport, canonicalJson } from "@verada/curator";
+import { buildReport, canonicalJson } from "@varada/curator";
 import { keccak256, toHex, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ const stranger = privateKeyToAccount(`0x${"22".repeat(32)}`);
 const h = (n: number) => `0x${n.toString(16).padStart(64, "0")}` as Hex;
 
 const report = {
-  schema: "verada.curation/v1",
+  schema: "varada.curation/v1",
   category: "hunger",
   epoch: 12,
   catalogVersion: 1,
@@ -74,7 +74,7 @@ describe("POST /agents/reports", () => {
     const res = await post({ report, regions: [{ region: "africa", tree: { forged: true } }] }, sig);
     expect(res.status).toBe(201);
     const body = await res.json();
-    expect(body).toMatchObject({ reference: REF, reportRef: `0x${REF}`, reportHash: HASH, url: `https://gw.verada.xyz/bzz/${REF}/` });
+    expect(body).toMatchObject({ reference: REF, reportRef: `0x${REF}`, reportHash: HASH, url: `https://gw.varada.xyz/bzz/${REF}/` });
     expect(lookups).toEqual([2]);
     expect(uploads).toHaveLength(1);
     expect(uploads[0]!.name).toBe("hunger-12.json");

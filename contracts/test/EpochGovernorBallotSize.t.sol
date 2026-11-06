@@ -6,7 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {CauseRegistry} from "../src/CauseRegistry.sol";
 import {EpochGovernor} from "../src/EpochGovernor.sol";
-import {VeradaToken} from "../src/VeradaToken.sol";
+import {VaradaToken} from "../src/VaradaToken.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICuratorRegistry} from "../src/interfaces/ICuratorRegistry.sol";
 import {IEpochGovernor} from "../src/interfaces/IEpochGovernor.sol";
@@ -63,7 +63,7 @@ contract EpochGovernorBallotSizeTest is BallotLog {
     function setUp() public {
         _recordBallots();
         vm.warp(T0);
-        VeradaToken t = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", creator, factory);
+        VaradaToken t = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(t);
         vm.startPrank(factory);
         t.transfer(v1, 100e18);

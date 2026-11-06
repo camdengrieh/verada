@@ -4,7 +4,7 @@
  * not parse are dropped, and requests go through `IndexerClient.get` (failover, timeouts, anon
  * routing). Report text is LLM-written from untrusted news: render it as text or with `./markdown`.
  */
-import { REGIONS, USDC_DECIMALS, agentByLabel } from "@verada/sdk";
+import { REGIONS, USDC_DECIMALS, agentByLabel } from "@varada/sdk";
 import { IndexerError, type IndexerClient, type TokenFocus } from "./indexer";
 
 /** USDC totals of an agent's vault (6-decimal base units as decimal strings). */

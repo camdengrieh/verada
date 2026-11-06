@@ -3,25 +3,25 @@
 // (text reveals, ink, decrypting tallies, beams, orbits, live lists, tilt and spotlight cards,
 // the quick-action dock, ink ripples and scroll effects).
 
-import { AnimatedBeam, BeamNode } from "@verada/ui/components/motion/animated-beam";
-import { AnimatedList, type AnimatedListItem } from "@verada/ui/components/motion/animated-list";
-import { DecryptText } from "@verada/ui/components/motion/decrypt-text";
-import { Dock, type DockAction } from "@verada/ui/components/motion/dock";
-import { FlipWords } from "@verada/ui/components/motion/flip-words";
-import { InkRippleButton } from "@verada/ui/components/motion/ink-ripple";
-import { InkText } from "@verada/ui/components/motion/ink-text";
-import { Orbit, OrbitRing } from "@verada/ui/components/motion/orbit";
-import { ScrollProgress } from "@verada/ui/components/motion/scroll-progress";
-import { ScrollReveal, ScrollWordReveal } from "@verada/ui/components/motion/scroll-reveal";
-import { SpotlightCard } from "@verada/ui/components/motion/spotlight-card";
-import { TextReveal } from "@verada/ui/components/motion/text-reveal";
-import { TiltCard } from "@verada/ui/components/motion/tilt-card";
-import { Button } from "@verada/ui/components/ui/button";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { ArrowDownUp, Bell, Copy, HandHeart, Search, Sparkles, Vote } from "@verada/ui/components/ui/icons";
-import { CAUSE_SHORT_LABELS, CauseIcon, type CauseName } from "@verada/ui/components/varada/cause-icon";
-import { LogoMark } from "@verada/ui/components/varada/logo-mark";
-import { Wash } from "@verada/ui/components/varada/watercolour";
+import { AnimatedBeam, BeamNode } from "@varada/ui/components/motion/animated-beam";
+import { AnimatedList, type AnimatedListItem } from "@varada/ui/components/motion/animated-list";
+import { DecryptText } from "@varada/ui/components/motion/decrypt-text";
+import { Dock, type DockAction } from "@varada/ui/components/motion/dock";
+import { FlipWords } from "@varada/ui/components/motion/flip-words";
+import { InkRippleButton } from "@varada/ui/components/motion/ink-ripple";
+import { InkText } from "@varada/ui/components/motion/ink-text";
+import { Orbit, OrbitRing } from "@varada/ui/components/motion/orbit";
+import { ScrollProgress } from "@varada/ui/components/motion/scroll-progress";
+import { ScrollReveal, ScrollWordReveal } from "@varada/ui/components/motion/scroll-reveal";
+import { SpotlightCard } from "@varada/ui/components/motion/spotlight-card";
+import { TextReveal } from "@varada/ui/components/motion/text-reveal";
+import { TiltCard } from "@varada/ui/components/motion/tilt-card";
+import { Button } from "@varada/ui/components/ui/button";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { ArrowDownUp, Bell, Copy, HandHeart, Search, Sparkles, Vote } from "@varada/ui/components/ui/icons";
+import { CAUSE_SHORT_LABELS, CauseIcon, type CauseName } from "@varada/ui/components/varada/cause-icon";
+import { LogoMark } from "@varada/ui/components/varada/logo-mark";
+import { Wash } from "@varada/ui/components/varada/watercolour";
 import { useEffect, useRef, useState } from "react";
 import { GallerySection, Specimen } from "../section";
 

@@ -6,7 +6,7 @@ import { isAddress } from "viem";
 import { useRel } from "@/components/nav";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText } from "@/components/use-tx";
-import { MAX_BALLOT_OPTIONS } from "@verada/sdk";
+import { MAX_BALLOT_OPTIONS } from "@varada/sdk";
 import { loadBallotSizeCap, loadCurrentEpoch } from "@/lib/data";
 
 /** Epoch overview. Ballots are cast per token, on the token's page. */

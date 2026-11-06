@@ -205,7 +205,7 @@ contract MockFhevmExecutor {
     }
 
     function getInputVerifierAddress() external pure returns (address) {
-        return address(uint160(uint256(keccak256("verada.mock.inputVerifier"))));
+        return address(uint160(uint256(keccak256("varada.mock.inputVerifier"))));
     }
 
     /// @dev FHE type byte of a handle, as the real handle layout stores it.

@@ -1,6 +1,6 @@
 // shadcn/ui new-york, Direction A styling
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * Loading placeholder in sand. Decorative: mark the loading region with `aria-busy` and give it a

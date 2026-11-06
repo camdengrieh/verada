@@ -3,18 +3,18 @@ pragma solidity ^0.8.26;
 
 import {Test} from "forge-std/Test.sol";
 
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 
 /// @notice An explicit delegate(address(0)) opt-out survives every incoming transfer, whoever
 ///         sends it and whatever the amount (zero included), through transfer and transferFrom.
-contract VeradaTokenOptOutTest is Test {
-    VeradaToken internal token;
+contract VaradaTokenOptOutTest is Test {
+    VaradaToken internal token;
     address internal factory = makeAddr("factory");
     address internal holder = makeAddr("holder");
 
     function setUp() public {
         vm.warp(1_750_000_000);
-        token = new VeradaToken("Verada Test", "VTEST", "ipfs://meta", makeAddr("creator"), factory);
+        token = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", makeAddr("creator"), factory);
         vm.prank(factory);
         token.transfer(holder, 1000e18);
         vm.prank(holder);

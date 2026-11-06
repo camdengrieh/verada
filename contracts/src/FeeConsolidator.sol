@@ -23,7 +23,7 @@ import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
-import {IVeradaHook} from "./interfaces/IVeradaHook.sol";
+import {IVaradaHook} from "./interfaces/IVaradaHook.sol";
 
 interface IConsolidatorRegistry is IQuoteRegistry {
     function routeOf(address asset) external view returns (PoolKey[] memory);
@@ -928,7 +928,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     {
         if (tokenHop) {
             // The token pool uses an overridden dynamic fee equal to the token's base fee.
-            feeBps = IVeradaHook(address(key.hooks)).feeConfig(token).baseFeeBps;
+            feeBps = IVaradaHook(address(key.hooks)).feeConfig(token).baseFeeBps;
         } else {
             uint256 pips = LPFeeLibrary.isDynamicFee(key.fee) ? lpFee : key.fee;
             feeBps = (pips + 99) / 100;

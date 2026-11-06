@@ -1,13 +1,13 @@
 import { parseArgs } from "node:util";
 import { resolve } from "node:path";
-import { BUCKET_COUNT, CATEGORIES, REGIONS, bucketParts } from "@verada/sdk";
+import { BUCKET_COUNT, CATEGORIES, REGIONS, bucketParts } from "@varada/sdk";
 import type { Hex } from "viem";
 import { buildCatalog, entryProof } from "./build.js";
 import { setVersionCalldata } from "./calldata.js";
 import { coverage, crawlClient, harvest, loadHarvest, readState } from "./harvest.js";
 import { readCatalog, readOverrides, writeCatalog } from "./io.js";
 
-const HELP = `verada-catalog <command> [options]
+const HELP = `varada-catalog <command> [options]
 
   harvest    crawl Endaoment org search into --harvest-dir (resumable)
   build      classify, bucket and build the Merkle tree into --out

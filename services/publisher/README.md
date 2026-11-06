@@ -1,9 +1,9 @@
-# @verada/publisher
+# @varada/publisher
 
 Small Hono service (Node 22) that uploads token logos, token metadata and signed curator reports to
-Swarm through Verada's swarm-gateway, reports postage status, optionally settles the indexer's
+Swarm through Varada's swarm-gateway, reports postage status, optionally settles the indexer's
 mainnet x402 payments, and runs background jobs (the tally keeper, and Arkiv mirroring of public
-records). It is the only Verada server that accepts writes, so it keeps no state and logs no request
+records). It is the only Varada server that accepts writes, so it keeps no state and logs no request
 bodies, file names, IPs or addresses (see `docs/PRIVACY.md`).
 
 ## Endpoints
@@ -44,7 +44,7 @@ unless the gateway's secret includes it), `Content-Type`, `swarm-postage-batch-i
 ## Curator reports
 
 `POST /agents/reports` (code: `src/agents.ts`) takes a curator agent's weekly report, the body that
-`verada-curator publish` sends (`packages/curator`). The publisher never trusts uploaded trees: it
+`varada-curator publish` sends (`packages/curator`). The publisher never trusts uploaded trees: it
 parses `report` with the curator package's `ReportSchema`, rebuilds every region's pick tree from the
 report itself, and hashes the canonical report. `x-curator-signature` (65-byte hex) must be an EIP-191
 signature over that hash, over either the 32 raw bytes or the 66-character hex string, that recovers
@@ -99,7 +99,7 @@ address to the upload, and the form should leave it out unless the creator asks 
 | `BEE_GATEWAY_AUTH_SECRET` | none | secret, sent as the `Authorization` header |
 | `BEE_STAMPS_URL` | `BEE_GATEWAY_URL` | serves `GET /stamps/{batchId}`. swarm-gateway does not proxy `/stamps`, so point this at the Bee API (port 1633, internal only) |
 | `SWARM_BATCH_ID` | none | secret, 64-hex postage batch id (`0x` optional) |
-| `PUBLIC_GATEWAY_URL` | none | gateway browsers read from, e.g. `https://gw.verada.xyz` |
+| `PUBLIC_GATEWAY_URL` | none | gateway browsers read from, e.g. `https://gw.varada.xyz` |
 | `INDEXER_URL` | none | public indexer API, read by `arkiv-mirror` |
 | `CHAIN_ID` | `1` | Ethereum chain id of the mirrored records |
 | `ARKIV_ENABLED` | `false` | turn on the Arkiv jobs |
@@ -150,7 +150,7 @@ its configuration is present.
 
 - `arkiv-mirror` (`ARKIV_ENABLED`, `ARKIV_PRIVATE_KEY`, `INDEXER_URL`): reads `/api/tokens` (all pages)
   and `/api/causes`, reads the platform's entities from Arkiv, runs `planReconcile`, and applies the plan
-  with `@verada/arkiv-registry`. Idempotent: an unchanged indexer gives no writes. At most 50 new tokens
+  with `@varada/arkiv-registry`. Idempotent: an unchanged indexer gives no writes. At most 50 new tokens
   per run.
 - `arkiv-extend` (`ARKIV_ENABLED`, `ARKIV_PRIVATE_KEY`): extends every platform entity expiring within 30
   days to the maximum lifetime (about 182 days).
@@ -242,7 +242,7 @@ backoff timers.
    tokens with fees credited to a pool of those epochs, ballots or a curation-skip request in them,
    a pin change or a launch since then. Fees count there only once collected, and LP trading fees
    stay in the locked position until someone collects them, so for every other token the keeper
-   also simulates `VeradaLpLocker.collectFees` (an `eth_call`; the locker is `locker()` of
+   also simulates `VaradaLpLocker.collectFees` (an `eth_call`; the locker is `locker()` of
    `FACTORY_ADDRESS`): any uncollected fee, or a failed read, opens the epoch. The rest stay
    closed (`keeper skipped idle epoch`, logged once per token and epoch; `idleSkipped` in the run
    summary). The checks are re-run every run, so an epoch opens on the first run after a trade, a
@@ -347,7 +347,7 @@ lines (planned transaction, gas estimate; decryption is skipped), then turn dry 
 ```sh
 ETH_RPC_URL=... KEEPER_PRIVATE_KEY=0x... VOTING_SCHEME_ADDRESS=0x... \
 E2E_GOVERNOR=0x... E2E_TOKEN=0x... E2E_SCOPE=<epoch or proposal id> \
-pnpm --filter @verada/publisher e2e:zama
+pnpm --filter @varada/publisher e2e:zama
 # optional: ZAMA_RELAYER_URL, ZAMA_RELAYER_API_KEY, E2E_DRY_RUN=true (decrypt and estimate only)
 ```
 
@@ -371,9 +371,9 @@ totals, the gas estimate, then the `submitTally` hash, status and `gasUsed`.
 ## Build and run
 
 ```sh
-pnpm --filter @verada/publisher test
-pnpm --filter @verada/publisher typecheck
-pnpm --filter @verada/publisher dev        # tsx watch src/index.ts
+pnpm --filter @varada/publisher test
+pnpm --filter @varada/publisher typecheck
+pnpm --filter @varada/publisher dev        # tsx watch src/index.ts
 
 # Image (build context: repository root)
 docker build -f services/publisher/Dockerfile .

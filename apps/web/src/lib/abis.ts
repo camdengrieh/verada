@@ -1,5 +1,5 @@
 // ABIs come from the SDK, which generates them from the forge artifacts.
 export {
-  veradaFactoryAbi as factoryAbi,
+  varadaFactoryAbi as factoryAbi,
   epochGovernorAbi as governorAbi,
-} from "@verada/sdk/abis";
+} from "@varada/sdk/abis";

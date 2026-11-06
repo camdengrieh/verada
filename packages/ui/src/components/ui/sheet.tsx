@@ -5,7 +5,7 @@ import { cva } from "class-variance-authority";
 import { X } from "lucide-react";
 import { Dialog as SheetPrimitive } from "radix-ui";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /**
  * A dialog that slides in from an edge: navigation, filters, detail panels. Focus moves in, stays

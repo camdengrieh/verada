@@ -103,7 +103,7 @@ describe("parseGatewayHostname", () => {
   });
 
   it("returns null for non-gateway hosts", () => {
-    expect(parseGatewayHostname("verada.com")).toBeNull();
+    expect(parseGatewayHostname("varada.com")).toBeNull();
     expect(parseGatewayHostname("localhost")).toBeNull();
     expect(parseGatewayHostname("eth.limo")).toBeNull();
   });

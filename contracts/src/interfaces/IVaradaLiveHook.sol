@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
-/// @title IVeradaLiveHook
+/// @title IVaradaLiveHook
 /// @notice Uniswap v4 hook of live-donation tokens. A fee (base fee plus the decaying launch
 ///         surcharge) is taken from every swap in the quote currency and converted to USDC inside
 ///         the same swap; the USDC is credited to the cause active at that moment. A failed
 ///         conversion never reverts the swap: the fee is held as ERC-6909 claims attributed to that
 ///         cause and anyone can retry it later.
-interface IVeradaLiveHook {
-    /// @notice Per-token fee configuration. Same ABI layout as `IVeradaHook.FeeConfig`.
+interface IVaradaLiveHook {
+    /// @notice Per-token fee configuration. Same ABI layout as `IVaradaHook.FeeConfig`.
     /// @param baseFeeBps Base fee in basis points, in [100, 500].
     /// @param launchSurchargeBps Launch surcharge at launch in basis points, at most 8000.
     /// @param surchargeDecaySeconds Seconds over which the surcharge decays linearly to zero.
@@ -73,7 +73,7 @@ interface IVeradaLiveHook {
     error AmountExceedsHeld(uint256 amount, uint256 held);
 
     /// @notice Registers the fee configuration of `token`. Factory only, once. Same selector as
-    ///         `IVeradaHook.configureToken`.
+    ///         `IVaradaHook.configureToken`.
     function configureToken(address token, LiveFeeConfig calldata cfg) external;
 
     /// @notice Converts `amount` of the quote held for `(token, causeId)` into USDC and credits it

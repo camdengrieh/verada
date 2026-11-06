@@ -5,7 +5,7 @@ import {BallotLog} from "../utils/BallotLog.sol";
 
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
@@ -29,7 +29,7 @@ contract CatalogZamaIntegrationTest is BallotLog, ColdGas {
     CauseRegistry internal registry;
     MockOrgFactory internal orgFactory;
     CatalogFixture internal cat;
-    VeradaToken internal tokenContract;
+    VaradaToken internal tokenContract;
     address internal token;
     address internal owner = makeAddr("owner");
     address internal factory = makeAddr("factory");
@@ -43,7 +43,7 @@ contract CatalogZamaIntegrationTest is BallotLog, ColdGas {
 
         vm.warp(1_750_000_123);
         tokenContract =
-            new VeradaToken("Verada Test", "VTEST", "ipfs://meta", makeAddr("c"), factory);
+            new VaradaToken("Varada Test", "VTEST", "ipfs://meta", makeAddr("c"), factory);
         token = address(tokenContract);
         for (uint256 i; i < voters.length; ++i) {
             voters[i] = address(uint160(0x5000 + i));

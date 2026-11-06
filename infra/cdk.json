@@ -1,5 +1,5 @@
 {
-  "app": "npx tsx bin/verada.ts",
+  "app": "npx tsx bin/varada.ts",
   "watch": { "include": ["**"], "exclude": ["README.md", "cdk*.json", "node_modules", "test", "cdk.out"] },
   "context": {
     "@aws-cdk/aws-lambda:recognizeLayerVersion": true,

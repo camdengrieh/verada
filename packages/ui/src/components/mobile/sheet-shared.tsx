@@ -3,8 +3,8 @@
 
 import { X } from "lucide-react";
 import { createContext, useContext, useId, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
-import { DrawerDescription, DrawerTitle } from "@verada/ui/components/ui/drawer";
-import { cn } from "@verada/ui/lib/utils";
+import { DrawerDescription, DrawerTitle } from "@varada/ui/components/ui/drawer";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Open state and placement, common to every mobile sheet (all built on ui/drawer, i.e. vaul). */
 export interface MobileSheetBaseProps {

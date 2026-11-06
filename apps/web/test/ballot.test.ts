@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PublicClient } from "viem";
-import { decodeFheBallot } from "@verada/sdk";
+import { decodeFheBallot } from "@varada/sdk";
 
 const handle = `0x${"22".repeat(32)}` as const;
 const encrypt = vi.fn(async (_p: unknown) => ({ encryptedValues: [handle], inputProof: "0xabcdef" }));

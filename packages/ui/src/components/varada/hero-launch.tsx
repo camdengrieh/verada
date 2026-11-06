@@ -5,8 +5,8 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { Divider } from "@verada/ui/components/ui/divider";
-import { cn } from "@verada/ui/lib/utils";
+import { Divider } from "@varada/ui/components/ui/divider";
+import { cn } from "@varada/ui/lib/utils";
 import {
   DriftingWash,
   HeroActions,

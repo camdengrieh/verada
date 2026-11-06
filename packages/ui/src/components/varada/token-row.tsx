@@ -2,7 +2,7 @@
 "use client";
 
 import type { ComponentProps, ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { CauseIcon } from "./cause-icon";
 import { PriceChange } from "./price-change";
 import { DefaultLink, WASH_FILL, type LinkComponent } from "./shared";

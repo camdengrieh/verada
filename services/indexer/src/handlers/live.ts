@@ -11,7 +11,7 @@ import {
 } from "ponder:schema";
 import type { Hex } from "viem";
 
-// Live-donation mode: factory configuration, VeradaLiveHook, LiveDonationVault and the
+// Live-donation mode: factory configuration, VaradaLiveHook, LiveDonationVault and the
 // consolidator's claim conversions. RotationGovernor events live in ./rotation.
 
 type Db = Context["db"];
@@ -87,7 +87,7 @@ async function bumpVault(db: Db, p: { accrued?: bigint; withdrawn?: bigint; skim
   else await db.insert(liveVaultTotal).values({ id, ...next });
 }
 
-// ---- VeradaFactory
+// ---- VaradaFactory
 
 export async function onLiveModeConfigured({ event, context }: { event: Event<"Factory:LiveModeConfigured">; context: Context<"Factory:LiveModeConfigured"> }) {
   await context.db
@@ -102,9 +102,9 @@ export async function onLiveModeConfigured({ event, context }: { event: Event<"F
     .onConflictDoNothing();
 }
 
-// ---- VeradaLiveHook
+// ---- VaradaLiveHook
 
-export async function onLiveTokenConfigured({ event, context }: { event: Event<"VeradaLiveHook:TokenConfigured">; context: Context<"VeradaLiveHook:TokenConfigured"> }) {
+export async function onLiveTokenConfigured({ event, context }: { event: Event<"VaradaLiveHook:TokenConfigured">; context: Context<"VaradaLiveHook:TokenConfigured"> }) {
   const a = event.args;
   await upsertToken(context.db, a.token, event, {
     baseFeeBps: a.baseFeeBps,
@@ -114,12 +114,12 @@ export async function onLiveTokenConfigured({ event, context }: { event: Event<"
   });
 }
 
-export async function onLivePoolRegistered({ event, context }: { event: Event<"VeradaLiveHook:PoolRegistered">; context: Context<"VeradaLiveHook:PoolRegistered"> }) {
+export async function onLivePoolRegistered({ event, context }: { event: Event<"VaradaLiveHook:PoolRegistered">; context: Context<"VaradaLiveHook:PoolRegistered"> }) {
   await upsertToken(context.db, event.args.token, event, { quote: event.args.quote, poolId: event.args.poolId });
 }
 
 /** One swap fee: converted and credited (the vault's `Credited` follows), or held for its cause. */
-export async function onFeeTaken({ event, context }: { event: Event<"VeradaLiveHook:FeeTaken">; context: Context<"VeradaLiveHook:FeeTaken"> }) {
+export async function onFeeTaken({ event, context }: { event: Event<"VaradaLiveHook:FeeTaken">; context: Context<"VaradaLiveHook:FeeTaken"> }) {
   const a = event.args;
   await context.db.insert(liveFee).values({
     id: event.id,
@@ -137,7 +137,7 @@ export async function onFeeTaken({ event, context }: { event: Event<"VeradaLiveH
   if (!a.converted) await bumpCause(context.db, a.token, a.causeId, { heldQuote: a.quoteAmount, at: event.block.timestamp });
 }
 
-export async function onHeldRetried({ event, context }: { event: Event<"VeradaLiveHook:HeldRetried">; context: Context<"VeradaLiveHook:HeldRetried"> }) {
+export async function onHeldRetried({ event, context }: { event: Event<"VaradaLiveHook:HeldRetried">; context: Context<"VaradaLiveHook:HeldRetried"> }) {
   const a = event.args;
   await context.db.insert(liveHeldRetry).values({
     id: event.id,

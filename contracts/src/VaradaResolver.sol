@@ -18,11 +18,11 @@ interface ICuratorIdentity {
     function identityRegistry() external view returns (address);
 }
 
-/// @title VeradaResolver
-/// @notice Stateless ENSIP-10 wildcard resolver for the Verada parent name and every
+/// @title VaradaResolver
+/// @notice Stateless ENSIP-10 wildcard resolver for the Varada parent name and every
 ///         `<label>.<parent>` registered in the `TokenProfileRegistry`. The parent resolves to the
 ///         platform address and the default site contenthash; a child resolves to its token
-///         address, its text records (with `verada.logo` synthesized from the logo reference) and
+///         address, its text records (with `varada.logo` synthesized from the logo reference) and
 ///         its contenthash override or the default. Unknown and suppressed labels resolve to
 ///         zero values rather than reverting, so clients see "no record" instead of an error.
 ///         Curator agents resolve as `<label>.agent.<parent>` (the agent's vault, its description,
@@ -31,7 +31,7 @@ interface ICuratorIdentity {
 ///      Every answer from `resolve` is ABI-encoded (never raw empty bytes). Legacy direct entry
 ///      points (`addr`, `text`, ...) look the node up in the registry for callers that bypass
 ///      the Universal Resolver. Ownerless: all configuration lives in the registry.
-contract VeradaResolver is
+contract VaradaResolver is
     IExtendedResolver,
     IAddrResolver,
     IAddressResolver,
@@ -42,7 +42,7 @@ contract VeradaResolver is
     /// @notice ENSIP-9 coin type of Ether.
     uint256 public constant COIN_TYPE_ETH = 60;
     /// @notice Text record key answered from the registry's logo reference.
-    string public constant LOGO_TEXT_KEY = "verada.logo";
+    string public constant LOGO_TEXT_KEY = "varada.logo";
 
     ITokenProfileRegistry public immutable registry;
     /// @notice Curator registry for `<label>.agent.<parent>` (zero: no agent names).
@@ -362,7 +362,7 @@ contract VeradaResolver is
             if (k == keccak256("url")) {
                 return string.concat("https://agent.", _parentName, ".limo");
             }
-            if (k == keccak256("description")) return "Verada curator agents";
+            if (k == keccak256("description")) return "Varada curator agents";
             return "";
         }
         if (categoryBit == type(uint8).max) return "";
@@ -371,7 +371,7 @@ contract VeradaResolver is
             return string.concat("https://", a.label, ".agent.", _parentName, ".limo");
         }
         if (k == keccak256("description")) return a.description;
-        if (k == keccak256("verada.category")) return _decimal(categoryBit);
+        if (k == keccak256("varada.category")) return _decimal(categoryBit);
         if (k == keccak256("agent-registration")) {
             return string.concat(_agentRegistryPrefix, _decimal(a.agentId));
         }

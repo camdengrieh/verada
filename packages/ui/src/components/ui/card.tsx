@@ -1,5 +1,5 @@
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Paper card: warm surface, hairline border, 22px corners. `tone="ink"` is the dark callout card. */
 export function Card({ className, tone = "paper", ...props }: ComponentProps<"div"> & { tone?: "paper" | "ink" | "sand" }) {

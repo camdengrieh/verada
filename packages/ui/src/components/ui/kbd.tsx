@@ -1,6 +1,6 @@
 // shadcn/ui new-york, Direction A styling
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** A keyboard key, e.g. <Kbd>⌘</Kbd><Kbd>K</Kbd>. */
 export function Kbd({ className, ...props }: ComponentProps<"kbd">) {

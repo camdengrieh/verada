@@ -5,8 +5,8 @@
 import { Select as SelectPrimitive } from "radix-ui";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import type { ComponentProps } from "react";
-import { controlClasses } from "@verada/ui/components/ui/input";
-import { cn } from "@verada/ui/lib/utils";
+import { controlClasses } from "@varada/ui/components/ui/input";
+import { cn } from "@varada/ui/lib/utils";
 
 export function Select(props: ComponentProps<typeof SelectPrimitive.Root>) {
   return <SelectPrimitive.Root data-slot="select" {...props} />;

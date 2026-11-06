@@ -5,7 +5,7 @@
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 import { Check, ChevronRight } from "lucide-react";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 const panel =
   "z-50 min-w-[12rem] max-w-[calc(100vw-1.5rem)] overflow-x-hidden overflow-y-auto rounded-xl border border-line bg-popover p-1.5 text-popover-foreground shadow-float " +

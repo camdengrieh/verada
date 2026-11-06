@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { AGENT_CATEGORIES, REGIONS, agentByLabel } from "@verada/sdk";
+import { AGENT_CATEGORIES, REGIONS, agentByLabel } from "@varada/sdk";
 import { AgentDetail } from "@/components/agent-detail";
 
 // Static export: every agent x region, and nothing else.

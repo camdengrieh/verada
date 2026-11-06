@@ -1,6 +1,6 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 /** Small labels: asset kinds (stock, ETF, RWA), giving modes, fees and statuses. */
 export const badgeVariants = cva(

@@ -8,7 +8,7 @@ COPY package.json pnpm-workspace.yaml pnpm-lock.yaml ./
 COPY packages/sdk/package.json packages/sdk/package.json
 COPY packages/arkiv-registry/package.json packages/arkiv-registry/package.json
 COPY services/publisher/package.json services/publisher/package.json
-RUN pnpm install --prod --frozen-lockfile --filter @verada/publisher...
+RUN pnpm install --prod --frozen-lockfile --filter @varada/publisher...
 
 FROM node:22-slim AS runtime
 ENV NODE_ENV=production PORT=42070

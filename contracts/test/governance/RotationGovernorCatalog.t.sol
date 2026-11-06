@@ -9,7 +9,7 @@ import {CauseRegistry} from "../../src/CauseRegistry.sol";
 import {CuratorRegistry} from "../../src/CuratorRegistry.sol";
 import {EpochGovernor} from "../../src/EpochGovernor.sol";
 import {RotationGovernor} from "../../src/RotationGovernor.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {ICuratorRegistry} from "../../src/interfaces/ICuratorRegistry.sol";
@@ -50,7 +50,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
     EpochGovernor internal weekly;
     CuratorRegistry internal curators;
     RotationGovernor internal gov;
-    VeradaToken internal tokenContract;
+    VaradaToken internal tokenContract;
     address internal token;
     bytes32 internal initialCause;
     uint256 internal t0;
@@ -75,7 +75,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
         _recordBallots();
         vm.warp(1_750_000_123);
         tokenContract =
-            new VeradaToken("Verada Live", "VLIVE", "ipfs://meta", creator, address(this));
+            new VaradaToken("Varada Live", "VLIVE", "ipfs://meta", creator, address(this));
         token = address(tokenContract);
         tokenContract.transfer(voter, 1000e18);
 
@@ -433,7 +433,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
 
     function test_noBallot_belowTwoOptions_keepsTheCurrentCause() public {
         // A token whose focus is hunger x Europe (ten orgs), nine of them blocked.
-        address other = address(new VeradaToken("O", "O", "", creator, address(this)));
+        address other = address(new VaradaToken("O", "O", "", creator, address(this)));
         profiles.register(other, creator);
         profiles.setFocus(other, uint64(1) << 2, uint16(1) << 2);
         _start();
@@ -625,7 +625,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
     }
 
     function test_register_focusPoolTooSmall() public {
-        address other = address(new VeradaToken("O", "O", "", creator, address(this)));
+        address other = address(new VaradaToken("O", "O", "", creator, address(this)));
         profiles.setFocus(other, uint64(1) << 9, FOCUS_R); // no entries
         vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.PoolTooSmall.selector, other, 0));
         gov.registerToken(other, initialCause, RotationPeriod.OneDay);

@@ -3,7 +3,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useId, useMemo, type ComponentProps } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export type SparklineTone = "auto" | "gain" | "loss" | "cause" | "primary" | "muted" | "stock";
 

@@ -1,19 +1,19 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useRef } from "react";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { AnimatedBeam, BeamNode } from "@verada/ui/components/motion/animated-beam";
-import { AnimatedList } from "@verada/ui/components/motion/animated-list";
-import { DecryptText } from "@verada/ui/components/motion/decrypt-text";
-import { Dock } from "@verada/ui/components/motion/dock";
-import { FlipWords } from "@verada/ui/components/motion/flip-words";
-import { InkRippleButton } from "@verada/ui/components/motion/ink-ripple";
-import { InkText } from "@verada/ui/components/motion/ink-text";
-import { Orbit, OrbitRing } from "@verada/ui/components/motion/orbit";
-import { ScrollProgress } from "@verada/ui/components/motion/scroll-progress";
-import { ScrollReveal, ScrollWordReveal } from "@verada/ui/components/motion/scroll-reveal";
-import { SpotlightCard } from "@verada/ui/components/motion/spotlight-card";
-import { TextReveal } from "@verada/ui/components/motion/text-reveal";
-import { TiltCard } from "@verada/ui/components/motion/tilt-card";
+import { AnimatedBeam, BeamNode } from "@varada/ui/components/motion/animated-beam";
+import { AnimatedList } from "@varada/ui/components/motion/animated-list";
+import { DecryptText } from "@varada/ui/components/motion/decrypt-text";
+import { Dock } from "@varada/ui/components/motion/dock";
+import { FlipWords } from "@varada/ui/components/motion/flip-words";
+import { InkRippleButton } from "@varada/ui/components/motion/ink-ripple";
+import { InkText } from "@varada/ui/components/motion/ink-text";
+import { Orbit, OrbitRing } from "@varada/ui/components/motion/orbit";
+import { ScrollProgress } from "@varada/ui/components/motion/scroll-progress";
+import { ScrollReveal, ScrollWordReveal } from "@varada/ui/components/motion/scroll-reveal";
+import { SpotlightCard } from "@varada/ui/components/motion/spotlight-card";
+import { TextReveal } from "@varada/ui/components/motion/text-reveal";
+import { TiltCard } from "@varada/ui/components/motion/tilt-card";
 
 /* A controllable prefers-reduced-motion, as in motion.test.tsx. */
 let reduced = false;

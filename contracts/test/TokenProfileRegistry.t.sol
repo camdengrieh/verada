@@ -190,46 +190,46 @@ contract TokenProfileRegistryTest is Test {
 
     function test_register_reservedBlocksOthers() public {
         vm.expectEmit(true, true, true, true, address(registry));
-        emit ITokenProfileRegistry.ReservationChanged(keccak256("verada"), true, creator);
-        registry.setReservation(keccak256("verada"), true, creator);
-        ITokenProfileRegistry.Reservation memory r = registry.reservationOf(keccak256("verada"));
+        emit ITokenProfileRegistry.ReservationChanged(keccak256("varada"), true, creator);
+        registry.setReservation(keccak256("varada"), true, creator);
+        ITokenProfileRegistry.Reservation memory r = registry.reservationOf(keccak256("varada"));
         assertTrue(r.reserved);
         assertEq(r.allowedCreator, creator);
 
         vm.prank(factory);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ITokenProfileRegistry.LabelReserved.selector, keccak256("verada")
+                ITokenProfileRegistry.LabelReserved.selector, keccak256("varada")
             )
         );
-        registry.register(token, "verada", other, 0);
+        registry.register(token, "varada", other, 0);
 
         // The allowed creator claims it.
-        bytes32 node = _register(token, "verada", creator, 0);
+        bytes32 node = _register(token, "varada", creator, 0);
         assertEq(registry.tokenByNode(node), token);
         assertEq(registry.controllerOf(token), creator);
     }
 
     function test_register_reservedForNobody() public {
-        registry.setReservation(keccak256("verada"), true, address(0));
+        registry.setReservation(keccak256("varada"), true, address(0));
         vm.prank(factory);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ITokenProfileRegistry.LabelReserved.selector, keccak256("verada")
+                ITokenProfileRegistry.LabelReserved.selector, keccak256("varada")
             )
         );
-        registry.register(token, "verada", creator, 0);
+        registry.register(token, "varada", creator, 0);
     }
 
     function test_register_reservationLifted() public {
-        registry.setReservation(keccak256("verada"), true, address(0));
-        registry.setReservation(keccak256("verada"), false, address(0));
-        _register(token, "verada", other, 0);
+        registry.setReservation(keccak256("varada"), true, address(0));
+        registry.setReservation(keccak256("varada"), false, address(0));
+        _register(token, "varada", other, 0);
         assertEq(registry.controllerOf(token), other);
     }
 
     function test_register_reservationOfAnotherLabelIsIrrelevant() public {
-        registry.setReservation(keccak256("verada"), true, address(0));
+        registry.setReservation(keccak256("varada"), true, address(0));
         _register(token, "pepe", other, 0);
         assertTrue(registry.isRegistered(token));
     }

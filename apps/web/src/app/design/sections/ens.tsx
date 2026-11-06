@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Button } from "@verada/ui/components/ui/button";
-import { EnsAddress } from "@verada/ui/components/varada/ens-address";
-import { EnsClaim, type EnsAvailability, type EnsLookupResult } from "@verada/ui/components/varada/ens-claim";
-import { EnsName } from "@verada/ui/components/varada/ens-name";
-import { EnsProfileCard } from "@verada/ui/components/varada/ens-profile-card";
-import { EnsRecordList, type EditableRecord } from "@verada/ui/components/varada/ens-record-list";
-import { ensLimoUrl } from "@verada/ui/components/varada/ens-shared";
-import { PaintedImage } from "@verada/ui/components/varada/painted-image";
-import { SubnameTree } from "@verada/ui/components/varada/subname-tree";
+import { Button } from "@varada/ui/components/ui/button";
+import { EnsAddress } from "@varada/ui/components/varada/ens-address";
+import { EnsClaim, type EnsAvailability, type EnsLookupResult } from "@varada/ui/components/varada/ens-claim";
+import { EnsName } from "@varada/ui/components/varada/ens-name";
+import { EnsProfileCard } from "@varada/ui/components/varada/ens-profile-card";
+import { EnsRecordList, type EditableRecord } from "@varada/ui/components/varada/ens-record-list";
+import { ensLimoUrl } from "@varada/ui/components/varada/ens-shared";
+import { PaintedImage } from "@varada/ui/components/varada/painted-image";
+import { SubnameTree } from "@varada/ui/components/varada/subname-tree";
 import { ASSETS } from "@/lib/assets.generated";
 import { GallerySection, Specimen } from "../section";
 

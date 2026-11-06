@@ -5,7 +5,7 @@ import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
-import {VeradaLpLocker} from "../../src/VeradaLpLocker.sol";
+import {VaradaLpLocker} from "../../src/VaradaLpLocker.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {IFeeVault} from "../../src/interfaces/IFeeVault.sol";
 import {ILpLocker} from "../../src/interfaces/ILpLocker.sol";
@@ -84,8 +84,8 @@ contract SettleOrderingTest is ConsolidatorBase {
     /// share of fees earned across the boundary instead of losing it to epoch 2.
     function test_settleBeforeLpCollectionStillPaysTheEpoch() public {
         MockPositionManager pm = new MockPositionManager(address(meme), address(quote));
-        VeradaLpLocker lpLocker =
-            new VeradaLpLocker(address(pm), IFeeConsolidator(address(cons)), address(this));
+        VaradaLpLocker lpLocker =
+            new VaradaLpLocker(address(pm), IFeeConsolidator(address(cons)), address(this));
         cons.setSource(address(lpLocker), true);
         vault.setLpLocker(ILpLocker(address(lpLocker)));
         uint256 id = pm.mintTo(address(lpLocker), 1e18);

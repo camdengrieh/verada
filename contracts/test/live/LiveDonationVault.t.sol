@@ -8,7 +8,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {FeeVault} from "../../src/FeeVault.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
-import {VeradaToken} from "../../src/VeradaToken.sol";
+import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
@@ -378,7 +378,7 @@ contract LiveDonationVaultTest is LiveBase {
     // ------------------------------------------------------------------ in-swap pushes
 
     function test_inSwap_thresholdZero_orgReceivesNetInSameTx() public {
-        (VeradaToken t, PoolKey memory k) = _launchDefault(address(quote), 0);
+        (VaradaToken t, PoolKey memory k) = _launchDefault(address(quote), 0);
         _fundTrader(trader, t);
         uint256 before = MockOrg(orgA).balance();
         vm.recordLogs();
@@ -392,7 +392,7 @@ contract LiveDonationVaultTest is LiveBase {
     }
 
     function test_inSwap_crossingSwapPushes() public {
-        (VeradaToken t, PoolKey memory k) = _launchDefault(address(quote), 5e6);
+        (VaradaToken t, PoolKey memory k) = _launchDefault(address(quote), 5e6);
         _fundTrader(trader, t);
         // ~2.9 USDC per 1 quote buy at 3%: the second swap crosses 5 USDC.
         _buyExactIn(k, address(t), 1e18);
@@ -407,7 +407,7 @@ contract LiveDonationVaultTest is LiveBase {
     }
 
     function _assertPmGuard(AdversarialOrg.Mode mode) internal {
-        (VeradaToken t, PoolKey memory k) = _launchDefault(address(quote), 0);
+        (VaradaToken t, PoolKey memory k) = _launchDefault(address(quote), 0);
         _fundTrader(trader, t);
         AdversarialOrg org = _makeAdversarial(orgA);
         org.configure(mode, address(manager), address(t), CAUSE_A);

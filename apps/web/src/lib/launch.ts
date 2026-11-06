@@ -8,7 +8,7 @@ import {
   normalizeSwarmReference,
   regionMaskOf,
   swarmReferenceToBytes32,
-} from "@verada/sdk";
+} from "@varada/sdk";
 import type { TokenMetadataDocument } from "./publisher";
 
 // Fee bounds mirror the contract constants MIN_FEE_BPS / MAX_FEE_BPS.

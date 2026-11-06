@@ -5,7 +5,7 @@
 
 import { motion, useReducedMotion } from "motion/react";
 import { useId, type ComponentProps, type ReactNode } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 import { CAUSE_SHORT_LABELS, CauseIcon, type CauseName } from "./cause-icon";
 import { formatUsd } from "./impact-shared";
 import { DefaultLink, type LinkComponent } from "./shared";

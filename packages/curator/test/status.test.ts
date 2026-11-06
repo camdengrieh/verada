@@ -1,5 +1,5 @@
-import { agentBySlug } from "@verada/sdk";
-import { agentVaultAbi, causeCatalogAbi, curatorRegistryAbi, epochGovernorAbi } from "@verada/sdk/abis";
+import { agentBySlug } from "@varada/sdk";
+import { agentVaultAbi, causeCatalogAbi, curatorRegistryAbi, epochGovernorAbi } from "@varada/sdk/abis";
 import { erc20Abi, getAddress, zeroAddress, type Address } from "viem";
 import { describe, expect, it } from "vitest";
 import { curatorStatus, toJson, vaultOf, type ChainReader } from "../src/status.js";

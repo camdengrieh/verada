@@ -1,4 +1,4 @@
-import { CATEGORIES, MAX_PICKS, MAX_WEIGHT, REGIONS, agentBySlug } from "@verada/sdk";
+import { CATEGORIES, MAX_PICKS, MAX_WEIGHT, REGIONS, agentBySlug } from "@varada/sdk";
 import { z } from "zod";
 
 /**
@@ -42,7 +42,7 @@ export const RegionReportSchema = z.object({
 
 export const ReportSchema = z
   .object({
-    schema: z.literal("verada.curation/v1"),
+    schema: z.literal("varada.curation/v1"),
     category: z.enum(CATEGORIES.map((c) => c.slug) as [string, ...string[]]).refine((c) => agentBySlug(c) !== null, "no agent for this category"),
     epoch: z.number().int().min(0),
     catalogVersion: z.number().int().min(1),

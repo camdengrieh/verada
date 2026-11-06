@@ -1,6 +1,6 @@
 "use client";
 
-import { MAX_WEIGHT } from "@verada/sdk";
+import { MAX_WEIGHT } from "@varada/sdk";
 import { regionName, SourceLink } from "@/components/agent-common";
 import type { AgentRegionReport } from "@/lib/agents";
 import { Markdown, SafeLink } from "@/lib/markdown";

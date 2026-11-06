@@ -8,8 +8,8 @@
 import { Ellipsis, ShoppingBag, Star, type LucideIcon } from "lucide-react";
 import { animate, motion, useMotionValue, useReducedMotion, type PanInfo } from "motion/react";
 import { useEffect, useId, useRef, useState, type ComponentProps, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
-import { TokenRow, type TokenRowProps } from "@verada/ui/components/varada/token-row";
-import { cn } from "@verada/ui/lib/utils";
+import { TokenRow, type TokenRowProps } from "@varada/ui/components/varada/token-row";
+import { cn } from "@varada/ui/lib/utils";
 
 export type SwipeActionTone = "primary" | "cause" | "ink" | "ochre";
 

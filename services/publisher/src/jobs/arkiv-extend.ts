@@ -1,4 +1,4 @@
-import { expiringKeys, type ArkivRegistry } from "@verada/arkiv-registry";
+import { expiringKeys, type ArkivRegistry } from "@varada/arkiv-registry";
 import { RENEW_BEFORE_BLOCKS, type Job, type Log } from "./types.js";
 
 /**

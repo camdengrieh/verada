@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from "react";
-import { cn } from "@verada/ui/lib/utils";
+import { cn } from "@varada/ui/lib/utils";
 
 export type QuoteKind = "stock" | "etf" | "rwa" | "crypto";
 

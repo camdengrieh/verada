@@ -21,15 +21,15 @@ import {IPositionManager} from "v4-periphery/interfaces/IPositionManager.sol";
 import {IWETH9} from "v4-periphery/interfaces/external/IWETH9.sol";
 
 import {TokenProfileRegistry} from "../src/TokenProfileRegistry.sol";
-import {VeradaFactory} from "../src/VeradaFactory.sol";
-import {VeradaToken} from "../src/VeradaToken.sol";
+import {VaradaFactory} from "../src/VaradaFactory.sol";
+import {VaradaToken} from "../src/VaradaToken.sol";
 import {IEpochGovernor} from "../src/interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "../src/interfaces/IFeeVault.sol";
 import {ILpLocker} from "../src/interfaces/ILpLocker.sol";
 import {IQuoteRegistry} from "../src/interfaces/IQuoteRegistry.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
-import {IVeradaFactory} from "../src/interfaces/IVeradaFactory.sol";
-import {IVeradaHook} from "../src/interfaces/IVeradaHook.sol";
+import {IVaradaFactory} from "../src/interfaces/IVaradaFactory.sol";
+import {IVaradaHook} from "../src/interfaces/IVaradaHook.sol";
 import {LabelLib} from "../src/libraries/LabelLib.sol";
 import {
     MockFeeVault,
@@ -41,7 +41,7 @@ import {
     MockWeth
 } from "./mocks/FactoryMocks.sol";
 
-contract VeradaFactoryTest is Test {
+contract VaradaFactoryTest is Test {
     using PoolIdLibrary for PoolKey;
     using StateLibrary for IPoolManager;
 
@@ -68,7 +68,7 @@ contract VeradaFactoryTest is Test {
     MockQuote internal ondo8; // 8 decimals
     MockQuote internal ondo18; // 18 decimals
     TokenProfileRegistry internal profiles;
-    VeradaFactory internal factory;
+    VaradaFactory internal factory;
     PoolSwapTest internal swapRouter;
 
     address internal creator = makeAddr("creator");
@@ -120,11 +120,11 @@ contract VeradaFactoryTest is Test {
         deployCodeTo("FactoryMocks.sol:MockHook", abi.encode(predictedFactory), hookAddr);
         hook = MockHook(hookAddr);
 
-        factory = new VeradaFactory(
+        factory = new VaradaFactory(
             IPoolManager(address(poolManager)),
             posm,
             IQuoteRegistry(address(registry)),
-            IVeradaHook(hookAddr),
+            IVaradaHook(hookAddr),
             ILpLocker(address(locker)),
             IFeeVault(address(vault)),
             IEpochGovernor(address(governor)),
@@ -144,9 +144,9 @@ contract VeradaFactoryTest is Test {
         return string.concat("frog-", vm.toString(uint256(salt) % 1e18));
     }
 
-    function _params(bytes32 salt) internal view returns (IVeradaFactory.DeployParams memory p) {
-        p = IVeradaFactory.DeployParams({
-            name: "Verada Frog",
+    function _params(bytes32 salt) internal view returns (IVaradaFactory.DeployParams memory p) {
+        p = IVaradaFactory.DeployParams({
+            name: "Varada Frog",
             symbol: "FROG",
             metadataURI: "ipfs://frog",
             salt: salt,
@@ -166,7 +166,7 @@ contract VeradaFactoryTest is Test {
     function _paramsOrdered(bool tokenIsCurrency0, address who)
         internal
         view
-        returns (IVeradaFactory.DeployParams memory p)
+        returns (IVaradaFactory.DeployParams memory p)
     {
         for (uint256 i; i < 64; ++i) {
             p = _params(bytes32(i));
@@ -176,7 +176,7 @@ contract VeradaFactoryTest is Test {
         revert("no salt");
     }
 
-    function _deploy(address who, IVeradaFactory.DeployParams memory p)
+    function _deploy(address who, IVaradaFactory.DeployParams memory p)
         internal
         returns (address token, uint256 id)
     {
@@ -196,9 +196,9 @@ contract VeradaFactoryTest is Test {
     function _assertLaunchInvariants(
         address token,
         uint256 id,
-        IVeradaFactory.DeployParams memory p
+        IVaradaFactory.DeployParams memory p
     ) internal view {
-        VeradaToken t = VeradaToken(token);
+        VaradaToken t = VaradaToken(token);
         // The factory keeps nothing and the whole (post-dust) supply sits in the pool manager.
         assertEq(t.balanceOf(address(factory)), 0, "factory balance");
         assertEq(t.balanceOf(address(poolManager)), t.totalSupply(), "pool holds supply");
@@ -214,7 +214,7 @@ contract VeradaFactoryTest is Test {
         (uint64 cm, uint16 rm) = profiles.focusOf(token);
         assertEq(cm, FOCUS_CATEGORIES);
         assertEq(rm, FOCUS_REGIONS);
-        assertTrue(factory.isVeradaToken(token));
+        assertTrue(factory.isVaradaToken(token));
 
         // Token metadata.
         assertEq(t.creator(), creator);
@@ -228,7 +228,7 @@ contract VeradaFactoryTest is Test {
         assertEq(profiles.tokenByLabelhash(keccak256(bytes(p.label))), token);
 
         // Hook config.
-        IVeradaHook.FeeConfig memory cfg = IVeradaHook(address(hook)).feeConfig(token);
+        IVaradaHook.FeeConfig memory cfg = IVaradaHook(address(hook)).feeConfig(token);
         assertEq(cfg.baseFeeBps, p.baseFeeBps);
         assertEq(cfg.sniperFeeStartBps, p.sniperFeeStartBps);
         assertEq(cfg.sniperDecaySeconds, p.sniperDecaySeconds);
@@ -249,7 +249,7 @@ contract VeradaFactoryTest is Test {
     // ------------------------------------------------------------------ deploy
 
     function test_deployToken_currency0() public {
-        IVeradaFactory.DeployParams memory p = _paramsOrdered(true, creator);
+        IVaradaFactory.DeployParams memory p = _paramsOrdered(true, creator);
         address predicted = factory.predictTokenAddress(creator, p);
 
         vm.expectEmit(true, true, false, false, address(factory));
@@ -264,14 +264,14 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_deployToken_currency1() public {
-        IVeradaFactory.DeployParams memory p = _paramsOrdered(false, creator);
+        IVaradaFactory.DeployParams memory p = _paramsOrdered(false, creator);
         (address token, uint256 id) = _deploy(creator, p);
         assertTrue(token > address(weth));
         _assertLaunchInvariants(token, id, p);
     }
 
     function test_deployToken_eventFields() public {
-        IVeradaFactory.DeployParams memory p = _paramsOrdered(true, creator);
+        IVaradaFactory.DeployParams memory p = _paramsOrdered(true, creator);
         vm.recordLogs();
         (address token, uint256 id) = _deploy(creator, p);
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -294,7 +294,7 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_sameSaltDifferentCreators() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(uint256(7)));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(uint256(7)));
         address other = makeAddr("other");
         address a = factory.predictTokenAddress(creator, p);
         address b = factory.predictTokenAddress(other, p);
@@ -308,15 +308,15 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_duplicateReverts() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(uint256(1)));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(uint256(1)));
         (address token,) = _deploy(creator, p);
         vm.prank(creator);
-        vm.expectRevert(abi.encodeWithSelector(IVeradaFactory.TokenAlreadyDeployed.selector, token));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaFactory.TokenAlreadyDeployed.selector, token));
         factory.deployToken(p);
     }
 
     function test_preInitializedPoolReverts() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(uint256(2)));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(uint256(2)));
         address token = factory.predictTokenAddress(creator, p);
         // A griefer initializing the predicted pool first makes the launch revert atomically.
         PoolKey memory key = _key(token);
@@ -326,20 +326,20 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_rejectsValue() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         vm.deal(creator, 1 ether);
         vm.prank(creator);
-        vm.expectRevert(VeradaFactory.UnexpectedValue.selector);
+        vm.expectRevert(VaradaFactory.UnexpectedValue.selector);
         factory.deployToken{value: 1}(p);
     }
 
     function test_feeBoundsRevert() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.baseFeeBps = 99;
-        vm.expectRevert(abi.encodeWithSelector(IVeradaFactory.InvalidFee.selector, uint24(99)));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaFactory.InvalidFee.selector, uint24(99)));
         factory.deployToken(p);
         p.baseFeeBps = 501;
-        vm.expectRevert(abi.encodeWithSelector(IVeradaFactory.InvalidFee.selector, uint24(501)));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaFactory.InvalidFee.selector, uint24(501)));
         factory.deployToken(p);
 
         p.baseFeeBps = 100;
@@ -353,78 +353,78 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_sniperBoundsRevert() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.sniperFeeStartBps = 8001;
         p.sniperDecaySeconds = 60;
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaFactory.InvalidSniperFee.selector, uint24(8001))
+            abi.encodeWithSelector(IVaradaFactory.InvalidSniperFee.selector, uint24(8001))
         );
         factory.deployToken(p);
 
         p.sniperFeeStartBps = 5000;
         p.sniperDecaySeconds = 0;
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaFactory.InvalidSniperFee.selector, uint24(5000))
+            abi.encodeWithSelector(IVaradaFactory.InvalidSniperFee.selector, uint24(5000))
         );
         factory.deployToken(p);
 
         p.sniperDecaySeconds = 1 days + 1;
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaFactory.InvalidSniperFee.selector, uint24(5000))
+            abi.encodeWithSelector(IVaradaFactory.InvalidSniperFee.selector, uint24(5000))
         );
         factory.deployToken(p);
 
         p.sniperFeeStartBps = 8000;
         p.sniperDecaySeconds = 1 days;
         (address t,) = _deploy(creator, p);
-        assertEq(IVeradaHook(address(hook)).feeConfig(t).sniperFeeStartBps, 8000);
+        assertEq(IVaradaHook(address(hook)).feeConfig(t).sniperFeeStartBps, 8000);
     }
 
     function test_startTickValidation() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.startTick = -230_201; // not aligned to spacing
         vm.expectRevert(
-            abi.encodeWithSelector(VeradaFactory.InvalidStartTick.selector, int24(-230_201))
+            abi.encodeWithSelector(VaradaFactory.InvalidStartTick.selector, int24(-230_201))
         );
         factory.deployToken(p);
 
         int24 limit = TickMath.maxUsableTick(200);
         p.startTick = limit;
-        vm.expectRevert(abi.encodeWithSelector(VeradaFactory.InvalidStartTick.selector, limit));
+        vm.expectRevert(abi.encodeWithSelector(VaradaFactory.InvalidStartTick.selector, limit));
         factory.deployToken(p);
         p.startTick = -limit;
-        vm.expectRevert(abi.encodeWithSelector(VeradaFactory.InvalidStartTick.selector, -limit));
+        vm.expectRevert(abi.encodeWithSelector(VaradaFactory.InvalidStartTick.selector, -limit));
         factory.deployToken(p);
     }
 
     function test_liquidityTooLargeReverts() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.startTick = 400_000; // price far above any sane launch
-        vm.expectPartialRevert(VeradaFactory.LiquidityTooLarge.selector);
+        vm.expectPartialRevert(VaradaFactory.LiquidityTooLarge.selector);
         factory.deployToken(p);
     }
 
     function test_highButValidStartTick() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.startTick = 240_000;
         (address token, uint256 id) = _deploy(creator, p);
         _assertLaunchInvariants(token, id, p);
     }
 
     function test_lowStartTick() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.startTick = -887_000;
         (address token, uint256 id) = _deploy(creator, p);
         _assertLaunchInvariants(token, id, p);
     }
 
     function test_constructorZeroAddressReverts() public {
-        vm.expectRevert(VeradaFactory.ZeroAddress.selector);
-        new VeradaFactory(
+        vm.expectRevert(VaradaFactory.ZeroAddress.selector);
+        new VaradaFactory(
             IPoolManager(address(poolManager)),
             posm,
             IQuoteRegistry(address(0)),
-            IVeradaHook(address(hook)),
+            IVaradaHook(address(hook)),
             ILpLocker(address(locker)),
             IFeeVault(address(vault)),
             IEpochGovernor(address(governor)),
@@ -433,12 +433,12 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_constructorZeroProfileRegistryReverts() public {
-        vm.expectRevert(VeradaFactory.ZeroAddress.selector);
-        new VeradaFactory(
+        vm.expectRevert(VaradaFactory.ZeroAddress.selector);
+        new VaradaFactory(
             IPoolManager(address(poolManager)),
             posm,
             IQuoteRegistry(address(registry)),
-            IVeradaHook(address(hook)),
+            IVaradaHook(address(hook)),
             ILpLocker(address(locker)),
             IFeeVault(address(vault)),
             IEpochGovernor(address(governor)),
@@ -463,7 +463,7 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_registersProfile() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.label = "frog";
         p.logoRef = keccak256("logo");
         address predicted = factory.predictTokenAddress(creator, p);
@@ -496,7 +496,7 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_invalidLabelRevertsBeforePoolInit() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.label = "Frog";
         address predicted = factory.predictTokenAddress(creator, p);
 
@@ -505,7 +505,7 @@ contract VeradaFactoryTest is Test {
         factory.deployToken(p);
 
         assertEq(factory.tokenCount(), 0);
-        assertFalse(factory.isVeradaToken(predicted));
+        assertFalse(factory.isVaradaToken(predicted));
         assertEq(predicted.code.length, 0, "token not deployed");
         assertFalse(hook.configured(predicted), "hook untouched");
         (uint160 sqrtPriceX96,,,) =
@@ -533,11 +533,11 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_duplicateLabelReverts() public {
-        IVeradaFactory.DeployParams memory p1 = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p1 = _params(bytes32(0));
         p1.label = "frog";
         (address t1,) = _deploy(creator, p1);
 
-        IVeradaFactory.DeployParams memory p2 = _params(bytes32(uint256(1)));
+        IVaradaFactory.DeployParams memory p2 = _params(bytes32(uint256(1)));
         p2.label = "frog";
         address other = makeAddr("other");
         address predicted = factory.predictTokenAddress(other, p2);
@@ -547,7 +547,7 @@ contract VeradaFactoryTest is Test {
         );
         factory.deployToken(p2);
         assertEq(factory.tokenCount(), 1);
-        assertFalse(factory.isVeradaToken(predicted));
+        assertFalse(factory.isVaradaToken(predicted));
         assertEq(predicted.code.length, 0);
 
         // Same creator, different salt, same label: also taken.
@@ -564,21 +564,21 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_reservedLabel() public {
-        profiles.setReservation(keccak256("verada"), true, creator);
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
-        p.label = "verada";
+        profiles.setReservation(keccak256("varada"), true, creator);
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
+        p.label = "varada";
         address other = makeAddr("other");
         vm.prank(other);
         vm.expectRevert(
             abi.encodeWithSelector(
-                ITokenProfileRegistry.LabelReserved.selector, keccak256("verada")
+                ITokenProfileRegistry.LabelReserved.selector, keccak256("varada")
             )
         );
         factory.deployToken(p);
         assertEq(factory.tokenCount(), 0);
 
         (address token,) = _deploy(creator, p);
-        assertEq(profiles.labelOf(token), "verada");
+        assertEq(profiles.labelOf(token), "varada");
         assertEq(profiles.controllerOf(token), creator);
     }
 
@@ -589,7 +589,7 @@ contract VeradaFactoryTest is Test {
         bool zeroForOne = Currency.unwrap(key.currency0) == address(weth);
         weth.mint(address(this), wethIn);
         weth.approve(address(swapRouter), wethIn);
-        uint256 before_ = VeradaToken(token).balanceOf(address(this));
+        uint256 before_ = VaradaToken(token).balanceOf(address(this));
         swapRouter.swap(
             key,
             SwapParams({
@@ -602,7 +602,7 @@ contract VeradaFactoryTest is Test {
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
             ""
         );
-        tokensOut = VeradaToken(token).balanceOf(address(this)) - before_;
+        tokensOut = VaradaToken(token).balanceOf(address(this)) - before_;
     }
 
     function test_launchedPoolIsTradable_currency0() public {
@@ -616,7 +616,7 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_tradableWithSniperSurcharge() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(uint256(3)));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(uint256(3)));
         p.sniperFeeStartBps = 5000;
         p.sniperDecaySeconds = 600;
         (address token,) = _deploy(creator, p);
@@ -639,7 +639,7 @@ contract VeradaFactoryTest is Test {
         // Very high start prices overflow per-tick liquidity limits; confine to a sane band.
         int24 startTick = int24(bound(int256(steps), -3000, 1200)) * 200;
 
-        IVeradaFactory.DeployParams memory p = IVeradaFactory.DeployParams({
+        IVaradaFactory.DeployParams memory p = IVaradaFactory.DeployParams({
             name: "Fuzz",
             symbol: "FZ",
             metadataURI: "ipfs://fuzz",
@@ -663,15 +663,15 @@ contract VeradaFactoryTest is Test {
 
     function testFuzz_invalidFeeAlwaysReverts(uint24 feeBps) public {
         vm.assume(feeBps < 100 || feeBps > 500);
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.baseFeeBps = feeBps;
-        vm.expectRevert(abi.encodeWithSelector(IVeradaFactory.InvalidFee.selector, feeBps));
+        vm.expectRevert(abi.encodeWithSelector(IVaradaFactory.InvalidFee.selector, feeBps));
         factory.deployToken(p);
     }
 
     function testFuzz_predictMatchesDeploy(bytes32 salt, address who) public {
         vm.assume(who != address(0) && who.code.length == 0);
-        IVeradaFactory.DeployParams memory p = _params(salt);
+        IVaradaFactory.DeployParams memory p = _params(salt);
         address predicted = factory.predictTokenAddress(who, p);
         (address token,) = _deploy(who, p);
         assertEq(token, predicted);
@@ -689,7 +689,7 @@ contract VeradaFactoryTest is Test {
     function _paramsQuote(address quote, bool tokenIsCurrency0, int24 startTick, uint256 saltBase)
         internal
         view
-        returns (IVeradaFactory.DeployParams memory p)
+        returns (IVaradaFactory.DeployParams memory p)
     {
         for (uint256 i; i < 64; ++i) {
             p = _params(bytes32(saltBase + i));
@@ -708,7 +708,7 @@ contract VeradaFactoryTest is Test {
         bool zeroForOne = Currency.unwrap(key.currency0) == quote;
         MockQuote(quote).mint(address(this), amountIn);
         MockQuote(quote).approve(address(swapRouter), amountIn);
-        uint256 before_ = VeradaToken(token).balanceOf(address(this));
+        uint256 before_ = VaradaToken(token).balanceOf(address(this));
         swapRouter.swap(
             key,
             SwapParams({
@@ -721,7 +721,7 @@ contract VeradaFactoryTest is Test {
             PoolSwapTest.TestSettings({takeClaims: false, settleUsingBurn: false}),
             ""
         );
-        tokensOut = VeradaToken(token).balanceOf(address(this)) - before_;
+        tokensOut = VaradaToken(token).balanceOf(address(this)) - before_;
     }
 
     function _assertQuoteLaunch(
@@ -732,7 +732,7 @@ contract VeradaFactoryTest is Test {
         int24 humanTick,
         uint256 poolQuoteBefore
     ) internal view {
-        VeradaToken t = VeradaToken(token);
+        VaradaToken t = VaradaToken(token);
         assertEq(factory.quoteAssetOf(token), quote);
         assertEq(t.balanceOf(address(factory)), 0, "factory token balance");
         assertEq(t.balanceOf(address(poolManager)), t.totalSupply(), "pool holds supply");
@@ -762,26 +762,26 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_unregisteredQuoteReverts() public {
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.quoteAsset = address(0xdead);
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaFactory.QuoteAssetNotAllowed.selector, address(0xdead))
+            abi.encodeWithSelector(IVaradaFactory.QuoteAssetNotAllowed.selector, address(0xdead))
         );
         factory.deployToken(p);
 
         p.quoteAsset = address(0);
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaFactory.QuoteAssetNotAllowed.selector, address(0))
+            abi.encodeWithSelector(IVaradaFactory.QuoteAssetNotAllowed.selector, address(0))
         );
         factory.deployToken(p);
     }
 
     function test_deactivatedQuoteReverts() public {
         registry.set(address(ondo8), 8, true, false);
-        IVeradaFactory.DeployParams memory p = _params(bytes32(0));
+        IVaradaFactory.DeployParams memory p = _params(bytes32(0));
         p.quoteAsset = address(ondo8);
         vm.expectRevert(
-            abi.encodeWithSelector(IVeradaFactory.QuoteAssetNotAllowed.selector, address(ondo8))
+            abi.encodeWithSelector(IVaradaFactory.QuoteAssetNotAllowed.selector, address(ondo8))
         );
         factory.deployToken(p);
         assertEq(factory.tokenCount(), 0);
@@ -802,7 +802,7 @@ contract VeradaFactoryTest is Test {
     function test_poolTickOutOfRangeReverts() public {
         // 6-decimal quote pushes a very low human tick below the usable range.
         vm.expectRevert(
-            abi.encodeWithSelector(VeradaFactory.InvalidStartTick.selector, int24(-700_000))
+            abi.encodeWithSelector(VaradaFactory.InvalidStartTick.selector, int24(-700_000))
         );
         factory.poolTickFor(-700_000, 6, true);
     }
@@ -814,7 +814,7 @@ contract VeradaFactoryTest is Test {
         for (uint256 q; q < 3; ++q) {
             for (uint256 o; o < 2; ++o) {
                 (MockQuote quote, uint8 dec) = _quote(q);
-                IVeradaFactory.DeployParams memory p =
+                IVaradaFactory.DeployParams memory p =
                     _paramsQuote(address(quote), o == 0, 0, (q * 2 + o) * 1000);
                 uint256 poolQuoteBefore = quote.balanceOf(address(poolManager));
                 (address token, uint256 id) = _deploy(creator, p);
@@ -831,7 +831,7 @@ contract VeradaFactoryTest is Test {
     }
 
     function test_ondoQuoteLaunchHoldsNoQuote() public {
-        IVeradaFactory.DeployParams memory p = _paramsQuote(address(usdcLike), true, -230_200, 0);
+        IVaradaFactory.DeployParams memory p = _paramsQuote(address(usdcLike), true, -230_200, 0);
         (address token, uint256 id) = _deploy(creator, p);
         _assertQuoteLaunch(token, id, address(usdcLike), 6, -230_200, 0);
         assertEq(usdcLike.balanceOf(address(factory)), 0);
@@ -842,7 +842,7 @@ contract VeradaFactoryTest is Test {
     {
         (MockQuote quote, uint8 dec) = _quote(qi);
         int24 humanTick = int24(bound(int256(stepRaw), -2000, 1200)) * 200;
-        IVeradaFactory.DeployParams memory p = _params(salt);
+        IVaradaFactory.DeployParams memory p = _params(salt);
         p.quoteAsset = address(quote);
         p.startTick = humanTick;
         address predicted = factory.predictTokenAddress(creator, p);
