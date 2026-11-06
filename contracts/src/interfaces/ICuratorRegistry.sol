@@ -59,6 +59,8 @@ interface ICuratorRegistry {
     event CurationsSubmitted(
         uint8 indexed categoryBit, uint256 indexed epoch, uint32 catalogVersion, bytes32 reportRef
     );
+    /// @notice The owner dropped `bucket`'s curation for `epoch` (`voidCurations`).
+    event CurationVoided(uint16 indexed bucket, uint256 indexed epoch);
 
     error ZeroAddress();
     error UnknownAgent(uint8 categoryBit);
@@ -92,6 +94,13 @@ interface ICuratorRegistry {
         CurationInput[] calldata curations
     ) external;
 
+    /// @notice Owner only. Deletes the curations of `buckets` for `epoch`, so ballots and rounds of
+    ///         that epoch not yet prepared skip them and fill with rotation. For picks committed
+    ///         but never served, or a bad root: unlike pausing the agent, it touches one epoch
+    ///         only, so the agent stays active and can submit the next epoch's picks. Only the next
+    ///         epoch's curation can be submitted again.
+    function voidCurations(uint256 epoch, uint16[] calldata buckets) external;
+
     function agentOf(uint8 categoryBit) external view returns (Agent memory);
     function isRegistered(uint8 categoryBit) external view returns (bool);
     function signerOf(uint8 categoryBit) external view returns (address);
@@ -106,7 +115,8 @@ interface ICuratorRegistry {
     function curationOf(uint16 bucket, uint256 epoch) external view returns (Curation memory);
 
     /// @notice Usable curations of `buckets` for `epoch` under `catalogVersion`: zeroed for a bucket
-    ///         with no agent, an inactive agent, nothing submitted, or another catalogue version.
+    ///         with no agent, an inactive agent, nothing submitted (or voided), or another catalogue
+    ///         version.
     function curationsFor(uint256 epoch, uint32 catalogVersion, uint16[] calldata buckets)
         external
         view

@@ -126,8 +126,8 @@ contract CatalogBallotBuilder {
     ///         compatibility; `build` no longer reads it.
     /// @dev A round with usable curations needs its curated draws for its whole vote window, so
     ///      the first preparer cannot leave published picks off. A round without them needs
-    ///      none. Picks committed but never served are dropped by pausing their agent
-    ///      (`curationsFor` ignores an inactive agent).
+    ///      none. Picks committed but never served are dropped by the curator registry owner
+    ///      (`CuratorRegistry.voidCurations`).
     function curationGraceEnd(uint256 voteStart, uint256 voteEnd) public pure returns (uint256) {
         uint256 grace = (voteEnd - voteStart) / 3;
         return voteStart + (grace < CURATION_GRACE ? grace : CURATION_GRACE);

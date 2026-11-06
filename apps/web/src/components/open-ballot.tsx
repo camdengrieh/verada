@@ -11,8 +11,8 @@ import { openingErrorText, openingRequest, planOpening } from "@/lib/open-ballot
  * Offered while the current epoch's ballot is not prepared. The platform keeper only opens epochs
  * of tokens with recent fees, ballots or pin changes, so a quiet token's voter opens it here: the
  * button plans the same `openEpoch` / `prepareBallot` / `prepareCuratedBallot` the keeper would
- * send and the voter's wallet sends it. When a curator agent's picks cannot be obtained, the plan
- * is `requestCurationSkip` instead, and the ballot can be opened in rotation once its grace ends.
+ * send and the voter's wallet sends it. When a curator agent's published picks cannot be obtained,
+ * nothing is sent: the governor takes no ballot without them, so the button explains the wait.
  */
 export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: bigint; onOpened: () => void }) {
   const config = useAppConfig();
@@ -24,18 +24,16 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
   });
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string>();
-  const [sent, setSent] = useState<string>();
   const [opened, setOpened] = useState(false);
   const governor = config.governorAddress as Address;
 
   const confirmed = tx.receipt?.status === "success";
-  const skipRequested = confirmed && sent === "requestCurationSkip";
   useEffect(() => {
-    if (confirmed && sent !== "requestCurationSkip") {
+    if (confirmed) {
       setOpened(true);
       onOpened();
     }
-  }, [confirmed, sent, onOpened]);
+  }, [confirmed, onOpened]);
 
   async function open() {
     setError(undefined);
@@ -54,7 +52,6 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
       setOpened(true);
       return onOpened();
     }
-    setSent(request.functionName);
     try {
       await tx.send(request as never);
     } catch {
@@ -87,13 +84,7 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
           {error}
         </p>
       )}
-      {skipRequested && (
-        <p role="status" className="m-0 rounded-xl bg-ochre-tint px-3 py-2 text-sm text-ochre-ink">
-          A curator agent&apos;s picks for this ballot are missing, so you asked for them to be skipped. Anyone holding the picks can still
-          use them for the next 6 hours; after that the ballot can be opened in rotation.
-        </p>
-      )}
-      <TxStatus tx={tx} label={sent === "requestCurationSkip" ? "Skip request" : "Ballot opening"} />
+      <TxStatus tx={tx} label="Ballot opening" />
     </div>
   );
 }

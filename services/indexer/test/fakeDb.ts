@@ -45,6 +45,9 @@ export function createFakeContext(pks: Map<object, string[]>, readContract?: Rea
         },
       };
     },
+    async delete(t: object, key: Row) {
+      return store(t).delete(keyOf(t, key));
+    },
     update(t: object, key: Row) {
       return {
         async set(patch: Row | ((r: Row) => Row)) {

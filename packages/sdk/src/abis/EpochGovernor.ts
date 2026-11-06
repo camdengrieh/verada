@@ -334,12 +334,12 @@ export const epochGovernorAbi = [
     "name": "curationSkipAt",
     "inputs": [
       {
-        "name": "token",
+        "name": "",
         "type": "address",
         "internalType": "address"
       },
       {
-        "name": "epoch",
+        "name": "",
         "type": "uint256",
         "internalType": "uint256"
       }
@@ -351,7 +351,7 @@ export const epochGovernorAbi = [
         "internalType": "uint256"
       }
     ],
-    "stateMutability": "view"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -947,7 +947,7 @@ export const epochGovernorAbi = [
       }
     ],
     "outputs": [],
-    "stateMutability": "nonpayable"
+    "stateMutability": "pure"
   },
   {
     "type": "function",
@@ -1830,6 +1830,22 @@ export const epochGovernorAbi = [
   {
     "type": "error",
     "name": "CurationSkipAlreadyRequested",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "CurationSkipDisabled",
     "inputs": [
       {
         "name": "token",

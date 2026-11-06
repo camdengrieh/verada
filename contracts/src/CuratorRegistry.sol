@@ -23,7 +23,9 @@ import {LabelLib} from "./libraries/LabelLib.sol";
 /// @dev The registry is the source of truth; ERC-8004 is the public identity layer (a Draft
 ///      standard behind an upgradeable proxy), so nothing here depends on its state after
 ///      registration. A curation applies to exactly one epoch and can be replaced until that epoch
-///      starts, so a running epoch's ballot can never be reshaped.
+///      starts, so an agent can never reshape a running epoch's ballot. During the epoch the owner
+///      can only drop it (`voidCurations`), for picks that are never served; ballots already
+///      prepared keep their options.
 contract CuratorRegistry is ICuratorRegistry, Ownable2Step, IERC721Receiver {
     /// @inheritdoc ICuratorRegistry
     uint8 public constant MAX_PICKS = 32;
@@ -137,10 +139,19 @@ contract CuratorRegistry is ICuratorRegistry, Ownable2Step, IERC721Receiver {
     }
 
     /// @notice Pauses or resumes an agent. A paused agent cannot submit, and its curations are
-    ///         ignored by the governor (ballots fall back to rotation).
+    ///         ignored by the governor (ballots fall back to rotation) for every epoch while it
+    ///         is paused. To drop one epoch's picks only, use `voidCurations`.
     function setActive(uint8 categoryBit, bool active) external onlyOwner {
         _agent(categoryBit).active = active;
         emit ActiveSet(categoryBit, active);
+    }
+
+    /// @inheritdoc ICuratorRegistry
+    function voidCurations(uint256 epoch, uint16[] calldata buckets) external onlyOwner {
+        for (uint256 i; i < buckets.length; ++i) {
+            delete _curations[buckets[i]][epoch];
+            emit CurationVoided(buckets[i], epoch);
+        }
     }
 
     function setAgentURI(uint8 categoryBit, string calldata agentURI) external onlyOwner {

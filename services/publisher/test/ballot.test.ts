@@ -290,19 +290,15 @@ describe("curated ballots", () => {
     await expect(plan(undefined)).rejects.toBeInstanceOf(CuratedPicksUnavailable);
   });
 
-  it("asks for the curation skip, waits out its grace, then prepares with rotation only", async () => {
+  it("never plans a skip: missing picks fail until they are served or the owner voids the curation", async () => {
+    // The governor takes no ballot without published picks (requestCurationSkip always reverts).
     const chain = new FakeChain();
-    const plan = (skipAt: bigint, now = 1_000n) =>
-      createBallotPreparer({
-        reader: cReader(chain, { curationSkipAt: async () => skipAt, now: async () => now }),
-        entries: entries(),
-        picks: picks({ asia: null }),
-      }).plan(T1, 10n);
-    // No request yet: the plan is the request itself.
-    expect(await plan(0n)).toEqual({ type: "send", action: { kind: "requestCurationSkip", token: T1, epoch: 10n } });
-    // Requested: wait for the skip (the picks may still turn up and be used meanwhile).
-    await expect(plan(1_001n)).rejects.toMatchObject({ name: "CuratedPicksUnavailable", retryAt: 1_031_000 });
-    const step = await plan(1_000n);
+    const plan = (over: Partial<BallotReader> = {}) =>
+      createBallotPreparer({ reader: cReader(chain, over), entries: entries(), picks: picks({ asia: null }) }).plan(T1, 10n);
+    await expect(plan()).rejects.toMatchObject({ name: "CuratedPicksUnavailable", retryAt: undefined });
+    await expect(plan()).rejects.toThrow(/voidCurations/);
+    // Voided (`curationsFor` answers zeroes): rotation fills the ballot.
+    const step = await plan({ curationsFor: async () => onChain.map((c) => ({ ...c, count: 0, weight: 0 })) });
     if (step.type !== "send" || step.action.kind !== "prepareBallot") throw new Error("expected a rotation prepare");
     const expected = await planRotation(
       { token: T1, epoch: 10n, version: 1, bucketSizes: cSizes, ...cFocus, pinned: [], ballotSize: 6 },
@@ -311,14 +307,45 @@ describe("curated ballots", () => {
     expect(step.action.draws.map((d) => d.orgId)).toEqual(expected.draws.map((d) => d.orgId));
   });
 
-  it("uses the picks when they turn up after a skip was requested", async () => {
-    const chain = new FakeChain();
-    const step = await createBallotPreparer({
-      reader: cReader(chain, { curationSkipAt: async () => 5_000n, now: async () => 1_000n }),
-      entries: entries(),
-      picks: picks(),
-    }).plan(T1, 10n);
-    expect(step).toMatchObject({ type: "send", action: { kind: "prepareCuratedBallot" } });
+  it("is retried by the keeper at least every 15 minutes, sends nothing meanwhile, and uses the picks once served", async () => {
+    const chain = new FakeChain().register(T1);
+    let wall = 1_000_000;
+    let served = false;
+    const all = picks();
+    const src: PickSource = { picks: async (label, epoch, region) => (served || region === "africa" ? all.picks(label, epoch, region) : null) };
+    const { log, logs } = collectLogs();
+    const backoff = new Backoff({ now: () => wall });
+    const keeper = createKeeper({
+      reader: chain.reader(),
+      writer: chain.writer(),
+      decryptor: chain.decryptor(),
+      ballots: createBallotPreparer({ reader: cReader(chain), entries: entries(), picks: src }),
+      tokens: async () => [T1],
+      epochGovernor: EG,
+      takeoverGovernor: TG,
+      zamaScheme: ZAMA,
+      dryRun: false,
+      maxTxPerRun: 10,
+      lookbackEpochs: 0,
+      log,
+      backoff,
+      now: () => wall,
+    });
+    // Six hours of failures: the wait doubles from 5 minutes but stops at 15.
+    for (let i = 0; i < 24; i++) {
+      await keeper.run();
+      wall += 15 * 60_000;
+    }
+    expect(chain.sent).toEqual([]);
+    const failed = logs.filter((l) => l.msg === "keeper step failed");
+    expect(failed.length).toBeGreaterThanOrEqual(20);
+    expect(failed.every((l) => l.data?.awaitingCuratedPicks === true && Number(l.data?.retryInSeconds) <= 900)).toBe(true);
+    // The first report alarms; repeats of the same missing picks do not.
+    expect(failed.filter((l) => l.level === "error")).toHaveLength(1);
+    expect(String(failed[0]!.data!.error)).toMatch(/hunger\/asia picks for epoch 10.*voidCurations/);
+    served = true;
+    await keeper.run();
+    expect(chain.sent.map((a) => a.kind)).toEqual(["prepareCuratedBallot"]);
   });
 
   it("is sent by the keeper as prepareCuratedBallot", async () => {
@@ -344,6 +371,11 @@ describe("curated ballots", () => {
 });
 
 describe("backoff cap", () => {
+  it("never waits longer than a failure's maxMs", () => {
+    const b = new Backoff({ baseMs: 1_000, maxMs: 100_000, now: () => 0 });
+    expect([1, 2, 3, 4].map(() => b.fail("k", undefined, 3_000))).toEqual([1_000, 2_000, 3_000, 3_000]);
+  });
+
   it("never waits past a failure's retryAt", () => {
     let now = 0;
     const b = new Backoff({ baseMs: 1_000, maxMs: 100_000, now: () => now });

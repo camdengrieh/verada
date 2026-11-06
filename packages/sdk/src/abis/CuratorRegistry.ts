@@ -718,6 +718,24 @@ export const curatorRegistryAbi = [
     "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "voidCurations",
+    "inputs": [
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "buckets",
+        "type": "uint16[]",
+        "internalType": "uint16[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "event",
     "name": "ActiveSet",
     "inputs": [
@@ -850,6 +868,25 @@ export const curatorRegistryAbi = [
         "type": "uint32",
         "indexed": false,
         "internalType": "uint32"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "CurationVoided",
+    "inputs": [
+      {
+        "name": "bucket",
+        "type": "uint16",
+        "indexed": true,
+        "internalType": "uint16"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false

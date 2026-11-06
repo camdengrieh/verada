@@ -103,7 +103,6 @@ export interface RotationReader {
 /** A permissionless transaction the keeper may send. */
 export type KeeperAction =
   | { kind: "openEpoch"; token: Address; epoch: bigint }
-  | { kind: "requestCurationSkip"; token: Address; epoch: bigint }
   | { kind: "closeEpoch"; token: Address; epoch: bigint }
   /** `orgIds`: the ballot's org ids when the epoch has ballots (checked against its commitment), else empty. */
   | { kind: "finalizeEpoch"; token: Address; epoch: bigint; orgIds: Hex[] }

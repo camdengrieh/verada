@@ -226,7 +226,7 @@ interface IEpochGovernor {
 
     /// @notice Former grace of `requestCurationSkip`. Kept for compatibility: a ballot with
     ///         usable curator picks now always needs its curated draws. Picks committed but
-    ///         never served are dropped by pausing their agent (`curationsFor` ignores it).
+    ///         never served are dropped by the curator registry owner (`voidCurations`).
     function CURATION_GRACE() external view returns (uint256);
 
     /// @notice Timestamp at which epoch 0 starts.
@@ -324,7 +324,7 @@ interface IEpochGovernor {
         Draw[] calldata draws
     ) external;
     /// @notice Disabled: always reverts `CurationSkipDisabled`. Published curations cannot be
-    ///         skipped; the curator registry owner pauses an agent whose picks are unavailable.
+    ///         skipped; the curator registry owner voids picks nobody can get (`voidCurations`).
     function requestCurationSkip(address token, uint256 epoch) external;
     /// @notice Always 0 (`requestCurationSkip` is disabled). Kept for compatibility.
     function curationSkipAt(address token, uint256 epoch) external view returns (uint256);

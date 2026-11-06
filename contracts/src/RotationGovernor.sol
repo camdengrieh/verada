@@ -60,7 +60,8 @@ interface ICuratorClock {
 ///      version the weekly ballot of that epoch uses (in effect at the epoch's start; see
 ///      `CatalogBallotBuilder.versionOf`), so a round includes curated picks exactly when that
 ///      weekly ballot does. A round with usable curations always needs its curated draws, as a
-///      weekly epoch does; picks never served are dropped by pausing their agent. Anyone
+///      weekly epoch does; picks never served are dropped by the curator registry owner
+///      (`CuratorRegistry.voidCurations`). Anyone
 ///      prepares it with the drawn entries
 ///      and their proofs (`prepareRound`); it is frozen then and never built inside a ballot, so
 ///      a ballot's option index always refers to a list fixed by an earlier transaction. A

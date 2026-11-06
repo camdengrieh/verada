@@ -239,8 +239,6 @@ async function planCase(c: CaseInput) {
     isBlocked,
     curationsFor: async (_e, _v, buckets) =>
       c.curations.filter((x) => buckets.includes(x.bucket)).map((x) => ({ bucket: x.bucket, picksRoot: pickRoot(x.bucket), count: x.picks.length, weight: x.weight })),
-    curationSkipAt: async () => 0n,
-    now: async () => 0n,
   };
   const step = await planBallotOpening(
     {

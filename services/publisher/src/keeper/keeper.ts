@@ -18,6 +18,12 @@ import {
   type Step,
 } from "./plan.js";
 
+/**
+ * Longest wait between attempts at a ballot or round blocked by missing curator picks: they can be
+ * served, or the curation voided, at any time, and an hourly round votes for 45 minutes.
+ */
+export const PICKS_RETRY_MAX_MS = 15 * 60_000;
+
 /** Live-mode rotation rounds (`RotationGovernor`). */
 export interface RotationDeps {
   governor: Address;
@@ -121,7 +127,6 @@ type ItemRef =
 const describe = (a: KeeperAction): Record<string, unknown> => {
   switch (a.kind) {
     case "openEpoch":
-    case "requestCurationSkip":
     case "closeEpoch":
       return { tx: a.kind, token: a.token, epoch: a.epoch };
     case "finalizeEpoch":
@@ -188,7 +193,7 @@ export function createKeeper(deps: KeeperDeps) {
   const MAX_CARRIED = 64;
   /** Period-change proposals in a terminal state: never read again. */
   const donePeriods = new Set<bigint>();
-  /** `CuratedPicksUnavailable` messages already logged at error for a round (then at warn). */
+  /** `CuratedPicksUnavailable` messages already logged at error (then at warn). */
   const picksReported = new Set<string>();
   const lookbackRounds = BigInt(deps.rotation?.lookbackRounds ?? 24);
 
@@ -263,27 +268,30 @@ export function createKeeper(deps: KeeperDeps) {
     /**
      * Records a failed step and backs the item off. Logged at `error` (alarmed on by infra), except
      * `NoVotes`: an empty epoch with no default cause is an expected, owner-fixable state, so it stays
-     * at `warn` and just waits out its backoff. A rotation round waiting out its curation grace for
-     * missing picks (`CuratedPicksUnavailable` with a `retryAt`) logs at `error` the first time
-     * each message is seen (it names the agent, region and epoch), then at `warn`: every round of
-     * every live token in that focus hits the same missing picks until the next weekly epoch.
+     * at `warn` and just waits out its backoff. A ballot or round waiting for missing curator picks
+     * (`CuratedPicksUnavailable`) is retried at least every `PICKS_RETRY_MAX_MS`, since the picks
+     * may be served (or the curation voided by the registry owner) at any time; there is no
+     * rotation-only fallback. It logs at `error` the first time each message is seen (it names the
+     * agent, region and epoch), then at `warn`: every ballot and round of every token in that focus
+     * hits the same missing picks until someone acts or the weekly epoch ends.
      */
     const fail = (key: string, ref: ItemRef, op: string, err: unknown) => {
       s.failed++;
       const hint = (err as { retryAt?: unknown } | null)?.retryAt;
       const retryAt = typeof hint === "number" ? hint : undefined;
-      const delay = backoff.fail(key, retryAt);
+      const missingPicks = err instanceof CuratedPicksUnavailable;
+      const delay = backoff.fail(key, retryAt, missingPicks ? PICKS_RETRY_MAX_MS : undefined);
       const data: Record<string, unknown> = { ...ref, op, retryInSeconds: Math.round(delay / 1000), failures: backoff.failures(key) };
       if (err instanceof KeeperRevert) data.revert = err.errorName ?? "unknown";
       else data.error = redact(err instanceof Error ? `${err.name}: ${err.message}` : String(err));
       let expected = err instanceof KeeperRevert && err.errorName === "NoVotes";
-      if ("round" in ref && err instanceof CuratedPicksUnavailable && retryAt !== undefined) {
+      if (missingPicks) {
         if (picksReported.has(err.message)) expected = true;
         else {
           if (picksReported.size >= 1_000) picksReported.clear();
           picksReported.add(err.message);
         }
-        data.awaitingCurationGrace = true;
+        data.awaitingCuratedPicks = true;
       }
       deps.log(expected ? "warn" : "error", "keeper step failed", data);
     };

@@ -35,12 +35,14 @@ export interface CuratorStatus {
   currentEpoch: bigint;
   /** The only epoch `submitCurations` accepts (`currentEpoch() + 1`). */
   nextEpoch: bigint;
-  /** `EpochGovernor.epochStart(nextEpoch)`, ISO 8601 UTC. */
+  /**
+   * `EpochGovernor.epochStart(nextEpoch)`, ISO 8601 UTC: the deadline for mining the curation and
+   * serving its picks. From then ballots in the focus wait for the picks (there is no grace and no
+   * rotation fallback) until they are served or the registry owner voids the curation.
+   */
   nextEpochStart: string;
   /** Until the next epoch starts, from the latest block's timestamp (negative once it has started). */
   secondsUntilNextEpoch: bigint;
-  /** `epochStart(nextEpoch) + CURATION_GRACE`, ISO 8601 UTC: the keeper waits for curated picks until then. */
-  curationGraceEnds: string;
   /** `CauseCatalog.latestVersion()` (0: no catalogue yet) and its root (null for version 0). */
   catalogVersion: number;
   catalogRoot: Hex | null;
@@ -95,9 +97,8 @@ export async function curatorStatus(reader: ChainReader, registry: Address, agen
   const catalog = getAddress(catalogRaw);
   if (governor === zeroAddress) throw new Error(`CuratorRegistry ${registry} has no governor set`);
 
-  const [current, grace, version, block] = await Promise.all([
+  const [current, version, block] = await Promise.all([
     read(governor, epochGovernorAbi, "currentEpoch") as Promise<bigint>,
-    read(governor, epochGovernorAbi, "CURATION_GRACE") as Promise<bigint>,
     read(catalog, causeCatalogAbi, "latestVersion") as Promise<number>,
     reader.getBlock(),
   ]);
@@ -141,7 +142,6 @@ export async function curatorStatus(reader: ChainReader, registry: Address, agen
     nextEpoch: next,
     nextEpochStart: iso(start),
     secondsUntilNextEpoch: start - block.timestamp,
-    curationGraceEnds: iso(start + grace),
     catalogVersion: Number(version),
     catalogRoot: root,
     agent: { ...a, registered },

@@ -2,9 +2,9 @@
  * Opening a token's current epoch: the planning shared by the publisher's keeper and the web app's
  * "Open this week's ballot" button. `planBallotOpening` decides, from chain state and the indexer's
  * catalogue and pick proofs, which permissionless call opens the epoch (`openEpoch`,
- * `prepareBallot` or `prepareCuratedBallot`, or `requestCurationSkip` first when a curator's picks
- * cannot be obtained) and builds its arguments; `ballotCall` turns that into
- * a contract call for any viem or wagmi writer.
+ * `prepareBallot` or `prepareCuratedBallot`) and builds its arguments; `ballotCall` turns that into
+ * a contract call for any viem or wagmi writer. When a curator's published picks cannot be obtained
+ * the plan fails with `CuratedPicksUnavailable`: the governors take no ballot without them.
  *
  * Live tokens' rotation rounds are prepared by the same planner (`planRoundOpening`, `roundCall`),
  * since both governors build ballots with `CatalogBallotLib`.
@@ -35,13 +35,6 @@ export interface BallotReader {
    * (ascending). Omitted, or answering [], when the governor has no curator registry.
    */
   curationsFor?(epoch: bigint, version: number, buckets: number[]): Promise<{ bucket: number; picksRoot: Hex; count: number; weight: number }[]>;
-  /**
-   * `EpochGovernor.curationSkipAt`: when `prepareBallot` / `openEpoch` may skip the epoch's curated
-   * phase, in seconds (0 until someone calls `requestCurationSkip`).
-   */
-  curationSkipAt?(token: Address, epoch: bigint): Promise<bigint>;
-  /** Latest block timestamp, in seconds. */
-  now?(): Promise<bigint>;
 }
 
 export interface PickWithProof {
@@ -75,19 +68,23 @@ export interface CatalogEntrySource {
 }
 
 /**
- * A usable curation whose picks cannot be obtained. The governor requires a draw for every
- * curated slot until `CURATION_GRACE` after a `requestCurationSkip`, so the plan first sends that
- * request, then the ballot waits for the report (or for the agent to be paused); once the skip
- * applies, the ballot is prepared with rotation only.
+ * A usable curation whose picks cannot be obtained. Both governors require a draw for every curated
+ * slot for as long as the curation is usable, so the ballot waits: retry until the agent serves the
+ * picks, or the curator registry owner voids that epoch's curation (`CuratorRegistry.voidCurations`)
+ * and rotation fills the ballot.
  */
 export class CuratedPicksUnavailable extends Error {
-  /** When the requested skip applies (epoch ms): a rotation-only ballot is possible from then. */
+  /** Optional retry hint (epoch ms). The planners leave it unset: the picks may turn up any time. */
   retryAt?: number;
   constructor(message: string) {
-    super(message);
+    super(`${message}; ${PICKS_REMEDY}`);
     this.name = "CuratedPicksUnavailable";
   }
 }
+
+/** What unblocks a ballot waiting for curator picks, appended to every `CuratedPicksUnavailable`. */
+export const PICKS_REMEDY =
+  "waiting for the agent to serve them or the registry owner to void the curation (CuratorRegistry.voidCurations)";
 
 export class CatalogMismatch extends Error {
   constructor(message: string) {
@@ -103,9 +100,7 @@ export type DrawArg = { orgId: Hex; proof: Hex[] };
 export type BallotAction =
   | { kind: "openEpoch"; token: Address; epoch: bigint }
   | { kind: "prepareBallot"; token: Address; epoch: bigint; draws: DrawArg[] }
-  | { kind: "prepareCuratedBallot"; token: Address; epoch: bigint; curated: CuratedDrawArg[]; draws: DrawArg[] }
-  /** Starts the grace after which the epoch's ballot may skip curator picks nobody can obtain. */
-  | { kind: "requestCurationSkip"; token: Address; epoch: bigint };
+  | { kind: "prepareCuratedBallot"; token: Address; epoch: bigint; curated: CuratedDrawArg[]; draws: DrawArg[] };
 
 export type BallotStep = { type: "none"; reason: string; terminal: boolean } | { type: "send"; action: BallotAction };
 
@@ -114,8 +109,7 @@ export function ballotCall(action: BallotAction, epochGovernor: Address): { addr
   const base = { address: epochGovernor, abi: epochGovernorAbi as Abi };
   switch (action.kind) {
     case "openEpoch":
-    case "requestCurationSkip":
-      return { ...base, functionName: action.kind, args: [action.token, action.epoch] };
+      return { ...base, functionName: "openEpoch", args: [action.token, action.epoch] };
     case "prepareBallot":
       return { ...base, functionName: "prepareBallot", args: [action.token, action.epoch, action.draws] };
     case "prepareCuratedBallot":
@@ -139,28 +133,14 @@ const none = (reason: string, terminal = false): BallotStep => ({ type: "none", 
  * it has no catalogue pool), `prepareCuratedBallot` when curator agents' picks fill some of it,
  * `prepareBallot` with rotation draws otherwise. The plan is computed locally (`planBallot`,
  * mirroring the governor); the indexer supplies catalogue entries, pick leaves and their proofs,
- * and both must match the roots on chain, so a wrong indexer can only make the plan fail.
+ * and both must match the roots on chain, so a wrong indexer can only make the plan fail. When a
+ * usable curation's picks cannot be obtained it throws {@link CuratedPicksUnavailable}.
  */
 export async function planBallotOpening(deps: BallotPreparerDeps, token: Address, epoch: bigint): Promise<BallotStep> {
   const r = deps.reader;
   if (await r.isPrepared(token, epoch)) return none("ballot prepared", true);
-  const plan = await planCatalogBallot<BallotStep>(deps, token, epoch, epoch, async (err) => {
-    // Missing picks: ask for the skip, which applies CURATION_GRACE later. Until then the governor
-    // still takes a curated ballot from anyone holding the picks; from then, prepareBallot skips
-    // the curated phase and rotation fills the ballot rather than leaving the epoch closed.
-    if (!r.curationSkipAt || !r.now) throw err;
-    const skipAt = await r.curationSkipAt(token, epoch);
-    if (skipAt === 0n) return { type: "send", action: { kind: "requestCurationSkip", token, epoch } };
-    if ((await r.now()) < skipAt) {
-      // Retry no later than the skip, when rotation becomes possible (a margin for block time).
-      err.retryAt = Number(skipAt) * 1000 + RETRY_MARGIN_MS;
-      throw err;
-    }
-    return null;
-  });
+  const plan = await planCatalogBallot(deps, token, epoch, epoch);
   switch (plan.kind) {
-    case "early":
-      return plan.step;
     case "open":
       return { type: "send", action: { kind: "openEpoch", token, epoch } };
     case "rotation":
@@ -169,9 +149,6 @@ export async function planBallotOpening(deps: BallotPreparerDeps, token: Address
       return { type: "send", action: { kind: "prepareCuratedBallot", token, epoch, curated: plan.curated, draws: plan.draws } };
   }
 }
-
-/** A retry waits this long past the moment the curated phase may be skipped (block time margin). */
-export const RETRY_MARGIN_MS = 30_000;
 
 /**
  * Chain reads every catalogue ballot needs, weekly or rotation: `round` is the epoch or the target
@@ -184,28 +161,26 @@ export type CatalogBallotReader = Pick<
   "poolOf" | "pinned" | "ballotSize" | "focusOf" | "bucketSizes" | "catalogRoot" | "isBlocked" | "curationsFor"
 >;
 
-/** The ballot {@link planCatalogBallot} built, or the caller's own step when picks are missing. */
-type CatalogPlan<E> =
+/** The ballot {@link planCatalogBallot} built. */
+type CatalogPlan =
   | { kind: "open" }
   | { kind: "rotation"; draws: DrawArg[] }
-  | { kind: "curated"; curated: CuratedDrawArg[]; draws: DrawArg[] }
-  | { kind: "early"; step: E };
+  | { kind: "curated"; curated: CuratedDrawArg[]; draws: DrawArg[] };
 
 /**
  * `CatalogBallotLib` planned locally (`planBallot`): pins, then the curated phase over the
  * curations of weekly epoch `curationEpoch` (null: no curated phase), then rotation draws seeded by
  * `round` (`drawIndex(token, round, version, k, pool)`, the same seed in both governors). When a
- * usable curation's picks cannot be obtained, `missing` decides: a step to send instead, null to
- * drop the curated phase so rotation fills the ballot, or a throw. The indexer supplies catalogue
- * entries, pick leaves and their proofs, and both must match the roots on chain.
+ * usable curation's picks cannot be obtained it throws {@link CuratedPicksUnavailable}: both
+ * governors require them, so there is no rotation-only ballot to fall back to. The indexer supplies
+ * catalogue entries, pick leaves and their proofs, and both must match the roots on chain.
  */
-async function planCatalogBallot<E>(
+async function planCatalogBallot(
   deps: { reader: CatalogBallotReader; entries: CatalogEntrySource; picks?: PickSource },
   token: Address,
   round: bigint,
   curationEpoch: bigint | null,
-  missing: (err: CuratedPicksUnavailable) => Promise<E | null>,
-): Promise<CatalogPlan<E>> {
+): Promise<CatalogPlan> {
   const r = deps.reader;
   const [{ version, poolSize }, pinnedAll, size, focus] = await Promise.all([
     r.poolOf(token, round),
@@ -227,33 +202,24 @@ async function planCatalogBallot<E>(
   // Curated phase: the agents' picks for the focus buckets, with proofs, from the indexer.
   const onChain =
     curationEpoch !== null && r.curationsFor && fb.length > 0 ? await r.curationsFor(curationEpoch, version, fb.map((b) => b.bucket)) : [];
-  let curations: (CurationSlot & { picksRoot: Hex })[] = onChain.filter((c) => c.count > 0 && c.weight > 0).sort((a, b) => a.bucket - b.bucket);
-  let quotas = curatedQuotas(slots, curations);
+  const curations: (CurationSlot & { picksRoot: Hex })[] = onChain.filter((c) => c.count > 0 && c.weight > 0).sort((a, b) => a.bucket - b.bucket);
+  const quotas = curatedQuotas(slots, curations);
   const picks = new Map<string, PickWithProof>();
-  try {
-    for (let i = 0; i < curations.length; i++) {
-      const c = curations[i]!;
-      if (quotas[i] === 0) continue;
-      const { categoryBit, regionBit } = bucketParts(c.bucket);
-      const label = AGENT_CATEGORIES.find((a) => a.bit === categoryBit)?.ensLabel;
-      const region = REGIONS.find((x) => x.bit === regionBit)?.slug;
-      if (!deps.picks || !label || !region) throw new CuratedPicksUnavailable(`no pick source for bucket ${c.bucket}`);
-      const got = await deps.picks.picks(label, curationEpoch!, region);
-      if (!got || got.picksRoot.toLowerCase() !== c.picksRoot.toLowerCase()) {
-        throw new CuratedPicksUnavailable(`${label}/${region} picks for epoch ${curationEpoch} are not published with root ${c.picksRoot}`);
-      }
-      for (const p of got.items) picks.set(`${c.bucket}:${p.rank}`, p);
-      for (let rank = 0; rank < quotas[i]!; rank++) {
-        if (!picks.has(`${c.bucket}:${rank}`)) throw new CuratedPicksUnavailable(`${label}/${region} has no pick at rank ${rank}`);
-      }
+  for (let i = 0; i < curations.length; i++) {
+    const c = curations[i]!;
+    if (quotas[i] === 0) continue;
+    const { categoryBit, regionBit } = bucketParts(c.bucket);
+    const label = AGENT_CATEGORIES.find((a) => a.bit === categoryBit)?.ensLabel;
+    const region = REGIONS.find((x) => x.bit === regionBit)?.slug;
+    if (!deps.picks || !label || !region) throw new CuratedPicksUnavailable(`no pick source for bucket ${c.bucket} (epoch ${curationEpoch})`);
+    const got = await deps.picks.picks(label, curationEpoch!, region);
+    if (!got || got.picksRoot.toLowerCase() !== c.picksRoot.toLowerCase()) {
+      throw new CuratedPicksUnavailable(`${label}/${region} picks for epoch ${curationEpoch} are not published with root ${c.picksRoot}`);
     }
-  } catch (err) {
-    if (!(err instanceof CuratedPicksUnavailable)) throw err;
-    const step = await missing(err);
-    if (step !== null) return { kind: "early", step };
-    curations = [];
-    quotas = [];
-    picks.clear();
+    for (const p of got.items) picks.set(`${c.bucket}:${p.rank}`, p);
+    for (let rank = 0; rank < quotas[i]!; rank++) {
+      if (!picks.has(`${c.bucket}:${rank}`)) throw new CuratedPicksUnavailable(`${label}/${region} has no pick at rank ${rank} for epoch ${curationEpoch}`);
+    }
   }
 
   // Every entry the ballot could consume, fetched up front in batches: the curated picks'
@@ -350,7 +316,6 @@ export function createBallotReader(client: BallotReadClient, epochGovernor: Addr
   const eg = epochGovernor;
   const read = <T>(address: Address, abi: Abi, functionName: string, args: readonly unknown[] = []) =>
     client.readContract({ address, abi, functionName, args } as never) as Promise<T>;
-  const latest = () => client.getBlock({ blockTag: "latest" } as never) as Promise<{ timestamp: bigint }>;
   let linked: Promise<{ catalog: Address; registry: Address; profiles: Address }> | undefined;
   const links = () =>
     (linked ??= Promise.all([
@@ -384,8 +349,6 @@ export function createBallotReader(client: BallotReadClient, epochGovernor: Addr
       const { registry } = await links();
       return read<boolean>(registry, causeRegistryAbi, "isBlocked", [causeId]);
     },
-    curationSkipAt: (token, epoch) => read<bigint>(eg, epochGovernorAbi, "curationSkipAt", [token, epoch]),
-    now: async () => (await latest()).timestamp,
     async curationsFor(epoch, version, buckets) {
       const curators = await (curatorsOf ??= read<Address>(eg, epochGovernorAbi, "curators"));
       if (curators === zeroAddress) return [];
@@ -422,19 +385,6 @@ export function periodPollScope(id: bigint): bigint {
 /** `IRotationGovernor.ProposalState` (period-change proposals), in enum order. */
 export const PERIOD_PROPOSAL_STATES = ["None", "Active", "Ended", "Closed", "Defeated", "Executed", "Expired", "Canceled"] as const;
 export type PeriodProposalState = (typeof PERIOD_PROPOSAL_STATES)[number];
-
-/** `CatalogBallotBuilder.CURATION_GRACE`: the longest curation grace of a round, in seconds. */
-export const ROUND_CURATION_GRACE = 6n * 3_600n;
-
-/**
- * End of a round's curation grace, in seconds. Mirrors `CatalogBallotBuilder.curationGraceEnd`:
- * `voteStart + min(CURATION_GRACE, (voteEnd - voteStart) / 3)`, which is the round's close buffer
- * (15 minutes for hourly rotations, 3 hours for 12-hour ones, 6 hours for longer ones).
- */
-export function roundCurationGraceEnd(voteStart: bigint, voteEnd: bigint): bigint {
-  const grace = (voteEnd - voteStart) / 3n;
-  return voteStart + (grace < ROUND_CURATION_GRACE ? grace : ROUND_CURATION_GRACE);
-}
 
 /** Chain reads round preparation needs (`RotationGovernor` and its linked contracts). */
 export interface RoundReader extends CatalogBallotReader {
@@ -484,11 +434,9 @@ const noneRound = (reason: string, terminal = false): RoundStep => ({ type: "non
  * `target`, which only the next rotation's round (`target = currentRotation + 1`) can get, during
  * its vote window. The ballot is planned exactly like a weekly one ({@link planBallotOpening}, the
  * same `CatalogBallotLib`): pins, then the curated picks of the weekly epoch containing the vote
- * start (`curationEpochOf`), then rotation draws seeded by `target`. There is no skip request in
- * live mode: when a usable curation's picks cannot be obtained, the plan fails with
- * {@link CuratedPicksUnavailable} until the round's curation grace ends (`retryAt` is then, plus a
- * margin for block time), and from then the round is prepared with rotation only, as the builder
- * skips the curated phase of a round prepared without curated draws after its grace.
+ * start (`curationEpochOf`), then rotation draws seeded by `target`. When a usable curation's picks
+ * cannot be obtained, the plan fails with {@link CuratedPicksUnavailable} for the whole vote window:
+ * the builder requires the curated draws for as long as the curation is usable.
  */
 export async function planRoundOpening(deps: RoundPreparerDeps, token: Address, target: bigint): Promise<RoundStep> {
   const r = deps.reader;
@@ -501,18 +449,8 @@ export async function planRoundOpening(deps: RoundPreparerDeps, token: Address, 
   // The rotation moves on at `start(target)`; the round is then out of reach for good.
   if (now >= window.voteEnd) return noneRound("round's vote window ended");
   const curation = await r.curationEpochOf(token, target);
-  const graceEnd = roundCurationGraceEnd(window.voteStart, window.voteEnd);
-  const plan = await planCatalogBallot<RoundStep>(deps, token, target, curation.ok ? curation.epoch : null, async (err) => {
-    if (now < graceEnd) {
-      // Until the grace ends the builder requires the curated draws; retry then at the latest.
-      err.retryAt = Number(graceEnd) * 1000 + RETRY_MARGIN_MS;
-      throw err;
-    }
-    return null;
-  });
+  const plan = await planCatalogBallot(deps, token, target, curation.ok ? curation.epoch : null);
   switch (plan.kind) {
-    case "early":
-      return plan.step;
     case "open":
       return { type: "send", action: { kind: "openRound", token, target } };
     case "rotation":

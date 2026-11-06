@@ -281,7 +281,6 @@ export function createViemChain(opts: ViemChainOptions): {
       case "submitOutcome":
         return { address: a.scheme, abi: zamaVotingSchemeAbi, functionName: "submitOutcome", args: [a.governor, a.token, a.scope, a.cleartexts, a.proof] };
       case "openEpoch":
-      case "requestCurationSkip":
       case "prepareBallot":
       case "prepareCuratedBallot":
         return ballotCall(a, eg);

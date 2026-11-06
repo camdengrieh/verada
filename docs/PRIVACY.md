@@ -190,7 +190,7 @@ Status as of 2026-11-06. Gaps are listed with the change that would close each o
 | RPC failover across several providers, all reached through anon-rpc | Met |
 | Indexer runs on a single AWS account | Gap: publish the indexer image and config so others can run mirrors, and list them in `indexerUrls` |
 | The anon-rpc worker bundle is served from one resolver (jsDelivr) | Gap, upstream: the specifier owner controls resolvers. We could publish our own specifier with extra resolvers |
-| Curator picks cannot keep an epoch closed: a paused agent's picks are ignored and ballots open with rotation. Published picks cannot be left off by the first preparer (no permissionless skip) | Met |
+| Curator picks cannot keep an epoch closed: picks that are never served block that epoch's ballots in the agent's focus until the registry owner voids them (`voidCurations`), and then ballots open with rotation; a paused agent's picks are ignored. Published picks cannot be left off by the first preparer (no permissionless skip) | Partial: unblocking needs the owner within the epoch; an epoch left unprepared pays its fees to the default cause |
 | Curator agents run on one account's scheduled routines with one key custodian (1Claw); only the registry owner registers signers | Gap: pins and rotation keep ballots working without the agents; the report schema and pick format are public, so an independent curator could be registered later |
 | Curator data is free per epoch; x402 sells only packaged views of it | Met |
 

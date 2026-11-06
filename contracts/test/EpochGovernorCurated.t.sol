@@ -2,6 +2,7 @@
 pragma solidity ^0.8.26;
 
 import {BallotLog} from "./utils/BallotLog.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {Test} from "forge-std/Test.sol";
 
@@ -43,6 +44,7 @@ contract EpochGovernorCuratedTest is BallotLog {
     EpochGovernor internal gov;
     CuratorRegistry internal curators;
     IdentityRegistryMock internal identity;
+    MockOrgFactory internal orgFactory;
     address internal token;
 
     address internal owner = makeAddr("owner");
@@ -69,7 +71,7 @@ contract EpochGovernorCuratedTest is BallotLog {
         token = address(t);
 
         MockUSDC usdc = new MockUSDC();
-        MockOrgFactory orgFactory =
+        orgFactory =
             new MockOrgFactory(new MockEndaomentRegistry(address(usdc), makeAddr("treasury")));
         registry = new CauseRegistry(owner, IEndaomentOrgFundFactory(address(orgFactory)));
         scheme = new MockVotingScheme();
@@ -433,6 +435,103 @@ contract EpochGovernorCuratedTest is BallotLog {
         curators.setActive(HUNGER, false);
         gov.prepareBallot(token, 1, d);
         assertEq(_options(address(gov), token, 1).length, 10);
+    }
+
+    /// @dev Regression (review): pausing drops every epoch's picks while the agent is paused, so
+    ///      the owner had to reactivate it during the stuck epoch for the agent to submit the
+    ///      next epoch's picks, and the unserved picks then blocked the rest of the epoch again.
+    ///      `voidCurations` drops one epoch's picks and leaves the agent active.
+    function test_voidCurations_dropsOneEpoch_agentKeepsCurating() public {
+        _reversePicks(AF, 8, 20);
+        _reversePicks(AS, 4, 10);
+        _submit(6000, 4000);
+        _toEpoch1();
+        IEpochGovernor.Draw[] memory d = cat.draws(gov, registry, token, 1, FOCUS_C, FOCUS_R);
+        bytes memory blocked =
+            abi.encodeWithSelector(IEpochGovernor.IncompleteCuratedBallot.selector, token, 1, 0);
+        // Pause, then reactivate so the agent may submit for epoch 2: the picks block again.
+        vm.startPrank(owner);
+        curators.setActive(HUNGER, false);
+        curators.setActive(HUNGER, true);
+        vm.stopPrank();
+        vm.expectRevert(blocked);
+        gov.prepareBallot(token, 1, d);
+
+        uint16[] memory buckets = new uint16[](2);
+        buckets[0] = AF;
+        buckets[1] = AS;
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, address(this))
+        );
+        curators.voidCurations(1, buckets);
+        vm.expectEmit(true, true, false, false, address(curators));
+        emit ICuratorRegistry.CurationVoided(AF, 1);
+        vm.prank(owner);
+        curators.voidCurations(1, buckets);
+        assertTrue((curators.agentOf(HUNGER)).active, "the agent stays active");
+        assertEq(curators.curationOf(AF, 1).count, 0);
+
+        // Epoch 1 fills with rotation; the agent still submits epoch 2, which applies there.
+        gov.prepareBallot(token, 1, d);
+        assertEq(_options(address(gov), token, 1).length, 10);
+        ICuratorRegistry.CurationInput[] memory c = new ICuratorRegistry.CurationInput[](2);
+        // forge-lint: disable-next-line(unsafe-typecast)
+        c[0] = ICuratorRegistry.CurationInput(
+            0, CatalogTree.root(_pickLeaves(AF)), uint8(_pickIndex[AF].length), 6000
+        );
+        // forge-lint: disable-next-line(unsafe-typecast)
+        c[1] = ICuratorRegistry.CurationInput(
+            1, CatalogTree.root(_pickLeaves(AS)), uint8(_pickIndex[AS].length), 4000
+        );
+        vm.prank(signer);
+        curators.submitCurations(HUNGER, 2, 1, bytes32("report2"), c);
+        vm.warp(gov.epochStart(2));
+        IEpochGovernor.Draw[] memory d2 = cat.draws(gov, registry, token, 2, FOCUS_C, FOCUS_R);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEpochGovernor.IncompleteCuratedBallot.selector, token, 2, 0)
+        );
+        gov.prepareBallot(token, 2, d2);
+    }
+
+    /// @dev Liveness bound: the owner can void unserved picks until the epoch's last second. If
+    ///      nobody does, the epoch's ballot is never prepared and its fees go to the default
+    ///      cause (`finalizeEpoch` reverts `NoVotes` until the owner sets one).
+    function test_unservedPicks_ownerFallbackBoundsTheStall() public {
+        _reversePicks(AF, 8, 20);
+        _reversePicks(AS, 4, 10);
+        _submit(6000, 4000);
+        uint16[] memory buckets = new uint16[](2);
+        buckets[0] = AF;
+        buckets[1] = AS;
+        uint256 snap = vm.snapshotState();
+
+        // Voided in the epoch's last second: the ballot still prepares.
+        vm.warp(gov.epochStart(2) - 1);
+        IEpochGovernor.Draw[] memory d = cat.draws(gov, registry, token, 1, FOCUS_C, FOCUS_R);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEpochGovernor.IncompleteCuratedBallot.selector, token, 1, 0)
+        );
+        gov.prepareBallot(token, 1, d);
+        vm.prank(owner);
+        curators.voidCurations(1, buckets);
+        gov.prepareBallot(token, 1, d);
+        assertTrue(gov.isOpened(token, 1));
+
+        // Nobody acts: the epoch ends unprepared and the default cause gets its fees.
+        vm.revertToState(snap);
+        vm.warp(gov.epochStart(2));
+        vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.EpochNotCurrent.selector, 1));
+        gov.prepareBallot(token, 1, d);
+        vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.NoVotes.selector, token, 1));
+        gov.finalizeEpoch(token, 1, new bytes32[](0));
+        bytes32 org = keccak256("default org");
+        bytes32 cause = _cause(org);
+        vm.startPrank(owner);
+        registry.addCause(cause, org, orgFactory.computeOrgAddress(org), "");
+        gov.setDefaultCause(cause);
+        vm.stopPrank();
+        gov.finalizeEpoch(token, 1, new bytes32[](0));
+        assertEq(gov.winningCause(token, 1), cause);
     }
 
     /// @dev Liveness: with no curations, the ballot prepares at the epoch's start.

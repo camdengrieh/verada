@@ -49,7 +49,6 @@ function stub(o: Opts = {}) {
           return { agentId: 7n, signer: SIGNER, vault: o.vault ?? VAULT, active: true, labelhash: ROOT, label: "hunger", description: "" };
         },
         [`${GOVERNOR}.currentEpoch`]: () => 41n,
-        [`${GOVERNOR}.CURATION_GRACE`]: () => 6n * 3600n,
         [`${GOVERNOR}.epochStart`]: () => {
           expect(args).toEqual([42n]);
           return START;
@@ -96,7 +95,6 @@ describe("curatorStatus", () => {
       nextEpoch: 42n,
       nextEpochStart: new Date(Number(START) * 1000).toISOString(),
       secondsUntilNextEpoch: 7200n,
-      curationGraceEnds: new Date(Number(START + 21_600n) * 1000).toISOString(),
       catalogVersion: 3,
       catalogRoot: ROOT,
       agent: { agentId: 7n, signer: SIGNER, vault: VAULT, active: true, registered: true },

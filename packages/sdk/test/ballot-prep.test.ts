@@ -5,12 +5,11 @@ import { BUCKET_COUNT, bucketId, categoryMaskOf, regionMaskOf } from "../src/cat
 import {
   ballotCall,
   createBallotReader,
+  CuratedPicksUnavailable,
   createRoundReader,
   planBallotOpening,
   planRoundOpening,
-  ROUND_CURATION_GRACE,
   roundCall,
-  roundCurationGraceEnd,
   periodPollScope,
   rotationPollScope,
   type BallotReader,
@@ -26,8 +25,7 @@ describe("ballotCall", () => {
     const open = ballotCall({ kind: "openEpoch", token: T, epoch: 3n }, EG);
     expect(open.address).toBe(EG);
     expect(open.functionName).toBe("openEpoch");
-    const skip = ballotCall({ kind: "requestCurationSkip", token: T, epoch: 3n }, EG);
-    expect(skip).toMatchObject({ functionName: "requestCurationSkip", args: [T, 3n] });
+    expect(open.args).toEqual([T, 3n]);
     expect(() => encodeFunctionData(open as never)).not.toThrow();
     const prep = ballotCall({ kind: "prepareBallot", token: T, epoch: 3n, draws: [{ orgId: ORG, proof: [] }] }, EG);
     expect(prep.args).toEqual([T, 3n, [{ orgId: ORG, proof: [] }]]);
@@ -62,7 +60,43 @@ describe("planBallotOpening", () => {
     });
     expect(await planBallotOpening({ reader: base, entries }, T, 1n)).toEqual({ type: "send", action: { kind: "openEpoch", token: T, epoch: 1n } });
   });
+
+  it("fails while a usable curation's picks are missing and never plans a skip or a rotation-only ballot", async () => {
+    // The governor takes no ballot without published picks (requestCurationSkip always reverts).
+    const b = bucketId(2, 0);
+    const sizes = Array.from({ length: BUCKET_COUNT }, (_, i) => (i === b ? 20 : 0));
+    const reader: BallotReader = {
+      ...base,
+      poolOf: async () => ({ version: 1, poolSize: 20n }),
+      focusOf: async () => ({ categoryMask: categoryMaskOf(["hunger"]), regionMask: regionMaskOf(["africa"]) }),
+      bucketSizes: async () => sizes,
+      curationsFor: async () => [{ bucket: b, picksRoot: ORG, count: 3, weight: 5_000 }],
+    };
+    for (const picks of [undefined, { picks: async () => null }, { picks: async () => ({ picksRoot: `0x${"22".repeat(32)}` as Hex, items: [] }) }]) {
+      const err = await planBallotOpening({ reader, entries, picks }, T, 1n).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CuratedPicksUnavailable);
+      expect(err).toMatchObject({ retryAt: undefined });
+      expect(String((err as Error).message)).toMatch(/voidCurations/);
+    }
+    // Once the owner voids the curation, the same plan is a rotation ballot.
+    expect(await planBallotOpening({ reader: { ...reader, curationsFor: async () => [] }, entries: fullEntries(sizes) }, T, 1n)).toMatchObject({
+      type: "send",
+      action: { kind: "prepareBallot" },
+    });
+  });
 });
+
+/** An entry source answering every requested entry with a made-up org and no proof. */
+function fullEntries(sizes: number[]) {
+  return {
+    async entries(at: { bucket: number; index: number }[]) {
+      return {
+        root: ORG,
+        items: at.filter((e) => e.index < (sizes[e.bucket] ?? 0)).map((e) => ({ ...e, orgId: `0x${(e.bucket * 100 + e.index + 1).toString(16).padStart(64, "0")}` as Hex, proof: [] })),
+      };
+    },
+  };
+}
 
 describe("createBallotReader", () => {
   it("reads the governor and its linked contracts through one client", async () => {
@@ -85,8 +119,6 @@ describe("createBallotReader", () => {
             return "0x00000000000000000000000000000000000000f2";
           case "focusOf":
             return [4n, 1];
-          case "curationSkipAt":
-            return 22_600n;
           case "curators":
             return zeroAddress;
           default:
@@ -104,8 +136,7 @@ describe("createBallotReader", () => {
     expect(await r.ballotSize(T, 2n)).toBe(32);
     expect(calls).toContain(`${EG}:ballotSizeFor`);
     expect(await r.focusOf(T)).toEqual({ categoryMask: 4n, regionMask: 1 });
-    expect(await r.curationSkipAt!(T, 1n)).toBe(22_600n);
-    expect(await r.now!()).toBe(2000n);
+    expect("curationSkipAt" in r).toBe(false);
     expect(await r.curationsFor!(1n, 2, [3])).toEqual([]);
     // Links are read once.
     expect(calls.filter((c) => c.endsWith(":profileRegistry"))).toHaveLength(1);
@@ -131,19 +162,6 @@ describe("roundCall", () => {
     expect(cur.functionName).toBe("prepareCuratedRound");
     expect(() => encodeFunctionData(cur as never)).not.toThrow();
     expect(rotationGovernorAbi.some((x) => x.type === "function" && x.name === "prepareCuratedRound")).toBe(true);
-  });
-});
-
-describe("roundCurationGraceEnd", () => {
-  // Vote window = period - min(6h, period / 4); the grace is min(6h, window / 3) from the vote start.
-  const window = (period: bigint) => period - (period / 4n < 21_600n ? period / 4n : 21_600n);
-  it("mirrors CatalogBallotBuilder.curationGraceEnd: the close buffer of each period", () => {
-    expect(roundCurationGraceEnd(1_000n, 1_000n + window(3_600n))).toBe(1_000n + 900n);
-    expect(roundCurationGraceEnd(1_000n, 1_000n + window(43_200n))).toBe(1_000n + 10_800n);
-    expect(roundCurationGraceEnd(1_000n, 1_000n + window(86_400n))).toBe(1_000n + ROUND_CURATION_GRACE);
-    expect(roundCurationGraceEnd(1_000n, 1_000n + window(604_800n))).toBe(1_000n + ROUND_CURATION_GRACE);
-    // Integer division, as in Solidity.
-    expect(roundCurationGraceEnd(0n, 10n)).toBe(3n);
   });
 });
 
@@ -212,6 +230,31 @@ describe("planRoundOpening", () => {
     expect(step).toMatchObject({ type: "send", action: { kind: "prepareRound", target: 5n } });
     expect(asked.length).toBeGreaterThan(0);
     for (const c of asked) expect(c).toEqual({ version: 3, root: OLD_ROOT });
+  });
+
+  it("fails for the whole vote window while a usable curation's picks are missing", async () => {
+    // The builder requires the curated draws for as long as the curation is usable, so a
+    // rotation-only prepareRound would revert IncompleteCuratedBallot even after the old grace.
+    const b = bucketId(2, 0);
+    const sizes = Array.from({ length: BUCKET_COUNT }, (_, i) => (i === b ? 20 : 0));
+    const reader: RoundReader = {
+      ...base,
+      poolOf: async () => ({ version: 1, poolSize: 20n }),
+      focusOf: async () => ({ categoryMask: categoryMaskOf(["hunger"]), regionMask: regionMaskOf(["africa"]) }),
+      bucketSizes: async () => sizes,
+      curationsFor: async () => [{ bucket: b, picksRoot: ORG, count: 3, weight: 5_000 }],
+    };
+    const picks = { picks: async () => null };
+    // Vote window 10_000..12_700: its start, past the old 900-second grace, and its last second.
+    for (const now of [10_000n, 10_901n, 12_699n]) {
+      const err = await planRoundOpening({ reader: { ...reader, now: async () => now }, entries, picks }, T, 5n).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(CuratedPicksUnavailable);
+      expect(err).toMatchObject({ retryAt: undefined });
+    }
+    expect(await planRoundOpening({ reader: { ...reader, curationsFor: async () => [] }, entries: fullEntries(sizes) }, T, 5n)).toMatchObject({
+      type: "send",
+      action: { kind: "prepareRound", target: 5n },
+    });
   });
 });
 

@@ -78,8 +78,6 @@ export class FakeChain {
   /** Uncollected LP fees by lowercase token (`VaradaLpLocker.collectFees` simulated). */
   lpFees = new Map<string, bigint>();
   lpFeesError?: Error;
-  /** `token:epoch` of epochs whose curation skip was requested. */
-  skipRequested = new Set<string>();
   /** Live mode: round actions are applied to it, and the decryptor knows its outcome handles. */
   rotation?: FakeRotation;
   private handleSeq = 0;
@@ -263,14 +261,6 @@ export class FakeChain {
         }
         return;
       }
-      case "requestCurationSkip": {
-        const k = `${a.token}:${a.epoch}`.toLowerCase();
-        if (a.epoch !== this.current) throw revert("EpochNotCurrent");
-        if (this.prepared.has(k)) throw revert("BallotAlreadyPrepared");
-        if (this.skipRequested.has(k)) throw revert("CurationSkipAlreadyRequested");
-        if (!dry) this.skipRequested.add(k);
-        return;
-      }
       case "openEpoch":
       case "prepareBallot":
       case "prepareCuratedBallot": {
@@ -387,8 +377,8 @@ export class FakeRotation {
   outcomes = new Map<string, OutcomePoll>();
   periodProposals = new Map<bigint, FakePeriodProposal>();
   minVoters = 1n;
-  /** Models usable curations: until the grace ends a round needs `prepareCuratedRound`. */
-  curatedUntilGrace = false;
+  /** Models usable curations: for its whole vote window a round needs `prepareCuratedRound`. */
+  curatedRequired = false;
   reads = 0;
   private seq = 0;
 
@@ -408,7 +398,7 @@ export class FakeRotation {
   window(target: bigint) {
     const voteStart = this.anchor + (target - 1n) * FakeRotation.PERIOD;
     const voteEnd = this.anchor + target * FakeRotation.PERIOD - FakeRotation.BUFFER;
-    return { snapshot: voteStart - 1n, voteStart, voteEnd, graceEnd: voteStart + (voteEnd - voteStart) / 3n };
+    return { snapshot: voteStart - 1n, voteStart, voteEnd };
   }
 
   roundOf(t: Address, target: bigint): FakeRound {
@@ -506,7 +496,7 @@ export class FakeRotation {
         if (r.status !== "None") throw revert("RoundAlreadyOpened");
         const w = this.window(target);
         if (this.now >= w.voteEnd) throw revert("VotingClosed");
-        if (this.curatedUntilGrace && this.now < w.graceEnd && a.kind !== "prepareCuratedRound") throw revert("IncompleteCuratedBallot");
+        if (this.curatedRequired && a.kind !== "prepareCuratedRound") throw revert("IncompleteCuratedBallot");
         if (!dry) Object.assign(r, { status: "Open", voteEnd: w.voteEnd, scheme: ZAMA });
         return;
       }

@@ -156,15 +156,13 @@ From `EpochGovernor`:
   that Thursday 00:00 UTC.
 - The keeper opens ballots shortly after Thursday 00:00 UTC (it runs every
   `KEEPER_INTERVAL_SECONDS`, 300 by default). By then the report must be on Swarm, the submission
-  mined, and both indexed. If they are not, the keeper sends `EpochGovernor.requestCurationSkip`
-  and keeps retrying (`CuratedPicksUnavailable`, exponential backoff from 5 minutes, doubling, but
-  never waiting past `curationSkipAt`, 6 hours after the request). Picks that turn up meanwhile
-  are still used. Once `curationSkipAt` has passed, the keeper retries within 30 seconds plus one
-  keeper interval and opens the ballot with rotation only, so with picks missing from the start of
-  the epoch that comes a few minutes after 6 hours in. Anyone can call `prepareBallot` or
-  `openEpoch` from `curationSkipAt`, and restarting the publisher clears the backoff. The grace
-  runs from the request, not from Thursday 00:00 UTC, so a quiet token whose ballot is opened late
-  in the week still gets your picks.
+  mined, and both indexed. If they are not, the keeper fails with `CuratedPicksUnavailable` and
+  keeps retrying (backoff from 5 minutes, doubling, at most 15 minutes), and sends nothing. There
+  is no grace and no rotation fallback: both governors take no ballot or round without the
+  published picks of a usable curation (`requestCurationSkip` always reverts). Picks that turn up
+  later are used on the next retry, so a quiet token whose ballot is opened late in the week
+  still gets your picks. If they never turn up, the platform voids that epoch's curation
+  (`CuratorRegistry.voidCurations`, see the runbook below) and rotation fills the ballots.
 - A curation counts only under the catalogue version in effect at the epoch's start: the last
   `CauseCatalog.setVersion` before Thursday 00:00 UTC. Publish catalogue versions before the
   routines run (by Tuesday). A version set after a routine has submitted voids that submission;
@@ -281,7 +279,7 @@ holds a key with ETH and nothing else.
 | Missed weeks | `GET /api/agents`: each agent's `latest.epoch`; `CurationsSubmitted` events | `currentEpoch() + 1` for every active agent by Wednesday 18:00 UTC |
 | Unverified reports | `GET /api/agents/:label/reports/:epoch`, `verified` per region | `true` for every region |
 | Run failures | Routine run history (the CLI prints `publisher returned 401: ...bad_signature` or `403: ...agent_inactive`); publisher logs (`curator report uploaded`, `swarm upload failed`) | One upload and one submission per agent per week |
-| Picks the keeper cannot get | Publisher keeper logs: `keeper step failed` with `CuratedPicksUnavailable: <label>/<region> picks for epoch N ...` (also `CatalogMismatch`, or a revert `IncompleteCuratedBallot`) | None; any hit early in an epoch delays ballots, by up to the 6-hour grace plus a few minutes |
+| Picks the keeper cannot get | Publisher keeper logs: `keeper step failed` (level `error` the first time, `awaitingCuratedPicks: true`) with `CuratedPicksUnavailable: <label>/<region> picks for epoch N ...` (also `CatalogMismatch`, or a revert `IncompleteCuratedBallot`) | None. Every hit blocks that focus's weekly ballots and rotation rounds until the picks are served or the curation is voided: act on it (runbook below) |
 | Picks that miss | `CuratedPicksUsed(token, epoch, drawn, included)` | `included` close to `drawn`; a gap means mismatched, blocked or repeated picks |
 | Vault balances and gifts | USDC `balanceOf(vault)`, `givenIn(epoch)` against `maxGivePerEpoch`, `Given` events, `paused()` | Gifts only to expected orgs, under the cap |
 | Gas | ETH balance of the 20 signers and the facilitator key | Several weeks of gas each |
@@ -331,13 +329,27 @@ ballot phase and `give` reverts with `OrgBlocked`.
 submission replaces every region it lists. Or pause the agent.
 
 **Keeper reports `CuratedPicksUnavailable` after the epoch started** (a root is on chain but the
-picks cannot be fetched): the submission can no longer be replaced. Either re-upload the same
-`built.json` through `publish` (the same bytes give the same Swarm reference, which is what the
-chain points at), or `setActive(categoryBit, false)` so the keeper prepares with rotation on its next retry (the
-item may be backed off until `curationSkipAt` at the latest; restarting the publisher clears the backoff), or let
-`CURATION_GRACE` (6 hours after the keeper's `requestCurationSkip`) run out. The keeper's backoff never waits past
-`curationSkipAt` plus 30 seconds, so it uses rotation on its first run after that, a few minutes after the skip
-applies at most. Anyone can also call `prepareBallot` or `openEpoch` directly from `curationSkipAt`.
+picks cannot be fetched). Nothing falls back on its own: every weekly ballot and rotation round of
+that epoch in the agent's focus stays unprepared until someone acts, and the keeper retries at
+least every 15 minutes. The submission can no longer be replaced. Runbook for the curator registry
+owner:
+
+1. **Respond within 6 hours of the first alarm** (the keeper logs the first hit at `error`). Live
+   tokens' hourly and daily rounds in the focus are not prepared meanwhile, and a token whose round
+   is missed keeps its current cause for that rotation.
+2. If the report exists, re-upload the same `built.json` through `publish` (the same bytes give
+   the same Swarm reference, which is what the chain points at). The keeper uses the picks on its
+   next retry.
+3. Otherwise void the epoch's curation: `CuratorRegistry.voidCurations(epoch, buckets)` with the
+   agent's buckets (`categoryBit * 16 + regionBit`) for that epoch. It drops that epoch only: the
+   agent stays active and can still submit next week's picks. Do not use `setActive(false)` for
+   this: a paused agent cannot submit, and reactivating it during the epoch makes the unserved
+   picks block that epoch's remaining ballots and rounds again. Restarting the publisher clears its
+   backoff if you want the retry at once.
+4. **Hard deadline: the end of the epoch** (Thursday 00:00 UTC). A weekly ballot can only be
+   prepared during its epoch, so a token whose ballot never opened gets no vote that week, and
+   `finalizeEpoch` pays its fees to `EpochGovernor.defaultCause` (it reverts `NoVotes` until one
+   is set). The default cause must be set at launch, before the first epoch ends (deploy step 2).
 
 **Missed week:** nothing breaks. In each token's ballot, the free slots go to the other agents'
 picks in that token's focus (up to their pick counts) and then to rotation. Run the routine by hand if

@@ -232,9 +232,9 @@ describe("open this week's ballot", () => {
     expect(screen.queryByRole("group", { name: "Open ballot" })).toBeNull();
   });
 
-  it("explains missing curator picks", () => {
-    const e = new CuratedPicksUnavailable("no picks");
-    e.retryAt = Date.UTC(2026, 10, 2, 6, 0, 30);
-    expect(openingErrorText(e)).toMatch(/not published yet\. Try again after 2026-11-02T06:00:30Z/);
+  it("explains missing curator picks without promising a rotation fallback at a set time", () => {
+    const text = openingErrorText(new CuratedPicksUnavailable("no picks"));
+    expect(text).toMatch(/not published yet, and the ballot cannot open without them/);
+    expect(text).not.toMatch(/after \d{4}-/);
   });
 });

@@ -758,6 +758,36 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
         weekly.prepareBallot(token, 1, cat.draws(weekly, registry, token, 1, FOCUS_C, FOCUS_R));
     }
 
+    /// @dev Regression (review): the agent has to be active to submit the next epoch's picks,
+    ///      and reactivating it during the stuck epoch made its unserved picks block that epoch's
+    ///      remaining rounds again. `voidCurations` drops the one epoch's picks instead.
+    function test_voidCurations_unblocksTheEpochsRounds_agentSubmitsTheNext() public {
+        _submitPicks();
+        _start();
+        vm.warp(t0 + 1 days);
+        curators.setActive(HUNGER, false);
+        gov.prepareRound(token, 2, _draws(2));
+        // Reactivated so it can curate epoch 2: round 3 (still in epoch 1) is blocked again.
+        curators.setActive(HUNGER, true);
+        vm.warp(t0 + 2 days);
+        IEpochGovernor.Draw[] memory d = _draws(3);
+        vm.expectRevert(_incompleteCurated(3));
+        gov.prepareRound(token, 3, d);
+
+        uint16[] memory buckets = new uint16[](1);
+        buckets[0] = HUNGER_AF;
+        curators.voidCurations(1, buckets);
+        gov.prepareRound(token, 3, d);
+        _expectNoCuratedPhase(3);
+        weekly.prepareBallot(token, 1, cat.draws(weekly, registry, token, 1, FOCUS_C, FOCUS_R));
+
+        ICuratorRegistry.CurationInput[] memory c = new ICuratorRegistry.CurationInput[](1);
+        c[0] = ICuratorRegistry.CurationInput(0, CatalogTree.root(_pickLeaves()), 3, 5000);
+        vm.prank(signer);
+        curators.submitCurations(HUNGER, 2, 1, bytes32("report2"), c);
+        assertEq(curators.curationOf(HUNGER_AF, 2).count, 3);
+    }
+
     /// @dev Liveness: with no curations at all, a round prepares at its vote start.
     function test_noCurations_roundPreparesAtOnce() public {
         _start();

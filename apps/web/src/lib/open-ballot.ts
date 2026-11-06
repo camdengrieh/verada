@@ -30,8 +30,7 @@ export function openingRequest(step: BallotStep, governor: Address, chainId: num
 /** Plain-language reason a ballot cannot be opened yet. */
 export function openingErrorText(e: unknown): string {
   if (e instanceof CuratedPicksUnavailable) {
-    const when = e.retryAt ? ` after ${new Date(e.retryAt).toISOString().replace(".000Z", "Z")}` : " later";
-    return `A curator agent's picks for this ballot are not published yet. Try again${when}, when the ballot can be filled in rotation.`;
+    return "A curator agent's picks for this ballot are not published yet, and the ballot cannot open without them. It opens once the agent publishes them, or once the platform drops this week's picks and fills the ballot in rotation. Try again later.";
   }
   if (e instanceof Error && e.name === "CatalogMismatch") return "The indexer's catalogue does not match the chain, so the ballot cannot be built right now.";
   return e instanceof Error ? e.message.split("\n")[0]! : String(e);

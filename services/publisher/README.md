@@ -189,11 +189,10 @@ backoff timers.
      agents' picks of the weekly epoch containing the round's vote start (`curationEpochOf`).
      `openRound` when pins fill the ballot or there is no pool, `prepareCuratedRound` when curated
      picks take slots, `prepareRound` otherwise. Needs `INDEXER_URL`; without it rounds are still
-     closed and finalized. There is no skip request in live mode: when a usable curation's picks
-     cannot be fetched the step fails with `CuratedPicksUnavailable` until the round's curation
-     grace ends (`CatalogBallotBuilder.curationGraceEnd`: `min(6 h, vote window / 3)` from the
-     vote start, 15 minutes for hourly rotations), and the first attempt after it prepares the
-     round with rotation only (see "Failure handling"). The entries come from the round's own
+     closed and finalized. When a usable curation's picks cannot be fetched the step fails with
+     `CuratedPicksUnavailable` for the round's whole vote window: the builder requires the curated
+     draws for as long as the curation is usable, so a rotation-only round would revert
+     `IncompleteCuratedBallot` (see "Failure handling"). The entries come from the round's own
      catalogue version, the one in effect at the start of that weekly epoch (`poolOf`), which
      every round keeps until the next epoch even when a new version is published mid-week; the
      keeper asks the indexer for it by root (`/api/catalog/entries?root=`). After a mid-week
@@ -251,9 +250,11 @@ backoff timers.
    `KEEPER_INDEXER_MAX_LAG_SECONDS` behind the wall clock (re-sync or lag), or without
    `FACTORY_ADDRESS`. Ended epochs of idle tokens are still finalized (step 4).
 
-   When a curator agent's picks cannot be fetched, the keeper sends `requestCurationSkip`, then
-   retries until the picks turn up or `curationSkipAt` (6 hours later) passes, and then prepares
-   with rotation only.
+   When a curator agent's picks cannot be fetched, the keeper sends nothing and retries until the
+   picks turn up or the curator registry owner voids that epoch's curation
+   (`CuratorRegistry.voidCurations`); then it prepares with rotation only. There is no skip:
+   `requestCurationSkip` always reverts, and so would a rotation-only ballot while the curation
+   is usable.
 4. Epochs, for every token (indexer `/api/tokens`, all pages; `TokenCreated` logs of `FACTORY_ADDRESS`
    from `FACTORY_DEPLOY_BLOCK` when the indexer fails) and every epoch in
    `[current - KEEPER_LOOKBACK_EPOCHS, current)`, skipping unregistered tokens and finalized epochs:
@@ -292,19 +293,16 @@ used while one may be pending. Run a single publisher task.
 
 **Failure handling.** A failed step backs its item off in memory: 5 min, doubling to 6 h, reset on
 success; the item is retried on the first run after its backoff ends. One exception is capped: when a
-ballot has usable on-chain curations whose picks the indexer does not serve yet
-(`CuratedPicksUnavailable`, `src/keeper/ballot.ts`) and the governor still requires them (before
-`CURATION_GRACE` into the epoch), the backoff never waits past the grace end plus 30 s
-(`src/keeper/backoff.ts`, `retryAt` in `src/keeper/keeper.ts`). The first attempt after the grace
-prepares the ballot with rotation only, so it comes within one `KEEPER_INTERVAL_SECONDS` of that time.
-A rotation round is capped the same way at its own curation grace end
-(`CatalogBallotBuilder.curationGraceEnd(voteStart, voteEnd)`) plus 30 s, mirrored in the SDK as
-`roundCurationGraceEnd`; with the default 300-second interval an hourly round whose picks never
-arrive is prepared about 15 to 20 minutes into its 45-minute vote window. Every round of every
-live token in that agent's focus waits for the same missing picks until the next weekly epoch, so
-for rounds the `CuratedPicksUnavailable` failure logs at `error` only the first time each message
-is seen (it names the agent, the region and the epoch), and at `warn` with
-`awaitingCurationGrace: true` after that.
+ballot or round has usable on-chain curations whose picks the indexer does not serve
+(`CuratedPicksUnavailable`, `src/keeper/ballot.ts`), the backoff never exceeds 15 minutes
+(`PICKS_RETRY_MAX_MS` in `src/keeper/keeper.ts`), since the picks can be served, or the curation
+voided, at any time. Nothing falls back on its own: both governors require the picks for as long as
+the curation is usable, so every weekly ballot and rotation round in that agent's focus waits until
+the agent serves them or the curator registry owner calls `CuratorRegistry.voidCurations(epoch,
+buckets)` (runbook and deadlines in `agents/README.md`, "Keeper reports
+`CuratedPicksUnavailable`"). The failure logs at `error` only the first time each message is seen
+(it names the agent, the region and the epoch, and the remedy), and at `warn` with
+`awaitingCuratedPicks: true` after that. Treat that first `error` as a page for the registry owner.
 Failures log `keeper step failed` at `error` with the item, the step and the decoded revert name
 (never its arguments) or a redacted message (no URLs, no addresses). Alarm on `error` lines
 whose msg starts with `keeper`/`tally keeper` and on `job tally-keeper failed` (whole run failed,

@@ -145,9 +145,21 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   preparer cannot choose whether published picks appear. A ballot without usable curations needs
   no curated draws and can be prepared at any time. `requestCurationSkip` is disabled (it reverts
   `CurationSkipDisabled`; `curationSkipAt` is always 0). An agent that submits a root but never
-  serves its picks keeps the epoch unpreparable until the curator registry owner pauses it
-  (`setActive(categoryBit, false)`); `curationsFor` then ignores its curations and rotation
-  fills the ballot.
+  serves its picks keeps the epoch's ballots (and its rotation rounds) in that focus unpreparable
+  until the curator registry owner voids that epoch's curation
+  (`CuratorRegistry.voidCurations(epoch, buckets)`); `curationsFor` then returns nothing for those
+  buckets and rotation fills the ballot. Voiding touches one epoch only, so the agent stays active
+  and can submit the next epoch's picks. Pausing the agent (`setActive(categoryBit, false)`) also
+  drops its picks, but for every epoch while it is paused, and a paused agent cannot submit, so
+  it is for a misbehaving agent rather than one missed week.
+- Liveness has no automatic bound: nothing falls back to rotation on its own. The bound is the
+  owner's response. A weekly ballot can only be prepared during its epoch (`_checkPreparable`),
+  so the hard deadline for `voidCurations` is the epoch's end; a ballot never prepared gets no
+  ballots, and `finalizeEpoch` pays the epoch's fees to `defaultCause` (it reverts `NoVotes` until
+  one is set, so funds are never lost, only delayed). The default cause cannot be set by the deploy
+  script, as no cause exists yet at deploy time: the owner sets it at launch, before the first
+  epoch ends (`script/Deploy.s.sol`, step 2). Response target and steps: `agents/README.md`,
+  "Keeper reports `CuratedPicksUnavailable`".
 - Anyone may fix the ballot with `prepareBallot(token, epoch, draws)`, supplying each drawn entry
   and its proof, or with `prepareCuratedBallot(token, epoch, curated, draws)` when the curated phase
   takes slots. A ballot that needs no draws opens with `openEpoch(token, epoch)`. Ballots are
@@ -202,17 +214,13 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   must equal the one on chain) and the catalogue entries with proofs (the root must equal the
   epoch's version), plans the ballot locally with the SDK's `planBallotOpening` (over
   `planBallot`, which mirrors `_prepare`; the web app's button runs the same code), and sends `openEpoch`, `prepareCuratedBallot` when any slot is curated, or
-  `prepareBallot`. If a usable curation's picks cannot be fetched, the plan is
-  `requestCurationSkip` when nobody has requested the skip yet; after that the step fails with
-  `CuratedPicksUnavailable`, which carries `curationSkipAt` (read on chain). The keeper retries
-  with exponential backoff (5 minutes, doubling, at most 6 hours apart; a publisher restart clears
-  it), but never waits past `curationSkipAt` plus a 30-second margin for block time. If the picks
-  turn up meanwhile, the retry uses them; otherwise the retry on the keeper's first run from then
-  (every `KEEPER_INTERVAL_SECONDS`, 300 by default) prepares the whole ballot with rotation only.
-  With picks missing from the start of the epoch, that is a few minutes after 6 hours in, as
-  before. The web app's button does the same: it sends the skip request, then explains when the
-  ballot can be opened in rotation. Since `requestCurationSkip` now reverts, that skip step fails
-  on chain: missing picks wait for the report or for the agent to be paused.
+  `prepareBallot`. If a usable curation's picks cannot be fetched, the step fails with
+  `CuratedPicksUnavailable` and nothing is sent. The keeper retries with exponential backoff
+  (5 minutes, doubling, at most 15 minutes apart for missing picks; a publisher restart clears it)
+  and uses the picks once they turn up, or prepares with rotation only once the registry owner has
+  voided the curation. The first failure for each agent, region and epoch logs at `error`, which
+  pages the owner. The web app's button runs the same plan and, with picks missing, sends nothing
+  and explains the wait.
 - Voting weight is the holder's `VaradaToken.getPastVotes` one second before the epoch start,
   counted in whole tokens. In the epoch a token launches in, that time predates the token, so its
   weights are read at a launch snapshot one day after registration instead (halfway to the
@@ -450,7 +458,9 @@ options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens
   its whole vote window, as a weekly epoch does: `openRound` and `prepareRound` revert
   `IncompleteCuratedBallot`, so the first preparer cannot leave the picks off. A round without
   them prepares at any time. `CatalogBallotBuilder.curationGraceEnd` is kept as a view but no
-  longer gates the build. Picks committed but never served hold rounds until the agent is paused.
+  longer gates the build. Picks committed but never served hold rounds until the registry owner
+  voids that epoch's curation (`CuratorRegistry.voidCurations`); a round whose vote window ends
+  first is not prepared, and the token keeps its current cause for that rotation.
 - **Round size.** `maxOptions()` is `min(RotationGovernor.MAX_OPTIONS, scheme.MAX_OPTIONS())`, so
   at most 10 options against the weekly ballot's 32. The pin limit is the same, but with fewer free
   slots the curated quotas can split differently from the weekly ballot of the same epoch, so a
@@ -462,9 +472,10 @@ options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens
   every live token's rounds (`services/publisher/README.md`, "Tally keeper", step 2). It prepares
   the next rotation's round with the SDK's `planRoundOpening`, the weekly planner run over the
   rotation governor's views (pins, then the curated picks of `curationEpochOf`, then draws seeded by
-  the target rotation). When a usable curation's picks are not served yet it backs off, never past
-  `curationGraceEnd` plus 30 seconds; that attempt now fails until the picks are served or the
-  agent is paused. It then closes each ended round that got ballots, relays the public
+  the target rotation). When a usable curation's picks are not served yet the step fails with
+  `CuratedPicksUnavailable` and is retried at least every 15 minutes until the picks are served or
+  the curation is voided; it never sends a rotation-only round that would revert. It then closes
+  each ended round that got ballots, relays the public
   decryption of the winner only (`outcomeHandle`, `submitOutcome`) and calls `finalizeRound`.
   Rounds that ended without ballots are left open: nothing would change. A round still unfinished
   when it leaves the keeper's lookback is followed until it is final, since a late finalize is
@@ -537,7 +548,8 @@ they leave empty. Operating them is described in [`agents/README.md`](../agents/
   only for the Identity Registry, only during `linkAgentWallet`, and never while paused, so the
   signer cannot approve a USDC permit for the vault. The deadline may be at most 5 minutes ahead.
 - The signer is a 1Claw HSM key. The owner can replace it (`setSigner`), pause or resume the agent
-  (`setActive`), and update the agent URI and description. A paused agent cannot submit, its
+  (`setActive`), void one epoch's curations of some buckets (`voidCurations`, for picks that are
+  never served), and update the agent URI and description. A paused agent cannot submit, its
   curations are ignored by the governor, and the publisher rejects its reports.
 - Names are `<ensLabel>.agent.varada.eth`, with the labels from `packages/sdk/src/catalog.ts`
   (`homeless`, `wildlife`, `mental-health`, ...); a label is permanent once registered. The deploy

@@ -262,6 +262,52 @@ contract CuratorRegistryTest is CuratorBase {
         assertEq(curators.curationsFor(6, 1, buckets)[0].count, 0, "inactive agent");
     }
 
+    /// @dev The owner drops one epoch's curations of some buckets; the agent stays active, other
+    ///      epochs and buckets are kept, and only the next epoch's can be submitted again.
+    function test_voidCurations_dropsOneEpochOnly() public {
+        _register();
+        ICuratorRegistry.CurationInput[] memory c = new ICuratorRegistry.CurationInput[](2);
+        c[0] = ICuratorRegistry.CurationInput(AFRICA, bytes32("rootA"), 3, 7000);
+        c[1] = ICuratorRegistry.CurationInput(ASIA, bytes32("rootS"), 1, 3000);
+        vm.prank(signer);
+        curators.submitCurations(HUNGER, 6, 1, 0, c);
+        clock.set(6);
+        vm.prank(signer);
+        curators.submitCurations(HUNGER, 7, 1, 0, c);
+
+        uint16[] memory buckets = new uint16[](1);
+        buckets[0] = 32;
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, signer)
+        );
+        vm.prank(signer);
+        curators.voidCurations(6, buckets);
+        vm.expectEmit(true, true, false, false, address(curators));
+        emit ICuratorRegistry.CurationVoided(32, 6);
+        vm.prank(owner);
+        curators.voidCurations(6, buckets);
+
+        uint16[] memory both = new uint16[](2);
+        both[0] = 32;
+        both[1] = 33;
+        ICuratorRegistry.Curation[] memory got = curators.curationsFor(6, 1, both);
+        assertEq(got[0].count, 0, "voided");
+        assertEq(got[1].count, 1, "other bucket kept");
+        assertEq(curators.curationOf(32, 6).picksRoot, bytes32(0));
+        assertEq(curators.curationsFor(7, 1, both)[0].count, 3, "other epoch kept");
+        assertTrue(curators.agentOf(HUNGER).active);
+        // The running epoch's curation cannot come back.
+        vm.prank(signer);
+        vm.expectRevert(abi.encodeWithSelector(ICuratorRegistry.NotNextEpoch.selector, 6));
+        curators.submitCurations(HUNGER, 6, 1, 0, c);
+        // Pausing and resuming the agent does not restore it either.
+        vm.startPrank(owner);
+        curators.setActive(HUNGER, false);
+        curators.setActive(HUNGER, true);
+        vm.stopPrank();
+        assertEq(curators.curationsFor(6, 1, both)[0].count, 0);
+    }
+
     function test_linkAgentWallet_withVaultErc1271() public {
         (uint256 agentId, address vault) = _register();
         uint256 deadline = block.timestamp + 60;

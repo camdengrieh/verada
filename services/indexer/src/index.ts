@@ -13,6 +13,7 @@ import {
   onAgentURISet,
   onAgentWalletLinked,
   onCurationSet,
+  onCurationVoided,
   onCurationsSubmitted,
   onDescriptionSet,
   onSignerSet,
@@ -142,6 +143,7 @@ ponder.on("CuratorRegistry:DescriptionSet", onDescriptionSet);
 ponder.on("CuratorRegistry:AgentURISet", onAgentURISet);
 ponder.on("CuratorRegistry:AgentWalletLinked", onAgentWalletLinked);
 ponder.on("CuratorRegistry:CurationSet", onCurationSet);
+ponder.on("CuratorRegistry:CurationVoided", onCurationVoided);
 ponder.on("CuratorRegistry:CurationsSubmitted", onCurationsSubmitted);
 ponder.on("AgentVault:Donated", onVaultDonated);
 ponder.on("AgentVault:Given", onVaultGiven);

@@ -861,6 +861,7 @@ describe("curator agents", () => {
       onAgentRegistered,
       onActiveSet,
       onCurationSet,
+      onCurationVoided,
       onCurationsSubmitted,
       onVaultDonated,
       onVaultGiven,
@@ -892,6 +893,10 @@ describe("curator agents", () => {
     expect(h.rows(schema.curation)[0]).toMatchObject({ categoryBit: 2, regionBit: 0, count: 4, weight: 5000 });
     await run(onCurationsSubmitted, { categoryBit: 2, epoch: 6n, catalogVersion: 1, reportRef: root }, "c3", block(4, 130), REG);
     expect(h.rows(schema.curationReport)[0]).toMatchObject({ reportRef: root, epoch: 6n });
+    // Voided by the owner: the picks no longer count; another epoch's curation is kept.
+    await run(onCurationSet, { bucket: 32, epoch: 7n, picksRoot: root, count: 2, weight: 5000, catalogVersion: 1 }, "c4", block(4, 131), REG);
+    await run(onCurationVoided, { bucket: 32, epoch: 6n }, "c5", block(4, 132), REG);
+    expect(h.rows(schema.curation).map((c) => c.epoch)).toEqual([7n]);
     await run(onVaultDonated, { from: sig, amount: 5n, credit: false }, "d1", block(5, 140), VAULT);
     await run(onVaultDonated, { from: sig, amount: 7n, credit: true }, "d2", block(6, 150), VAULT);
     expect(h.rows(schema.vaultDonation).map((d) => d.donor)).toEqual([null, sig]);

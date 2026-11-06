@@ -252,43 +252,39 @@ describe("rotation keeper: preparing rounds", () => {
     expect(a.curated[0]!.pickProof).toEqual(pickProof(bAf, 0, 3, af[0]!.orgId));
   });
 
-  it("backs off until the curation grace ends when picks are missing, then prepares with rotation only", async () => {
-    const { chain, rot, keeper, logs, backoff, advance } = setup({ over: { curationsFor: async () => onChain }, picks: picks({ asia: null }) });
-    rot.curatedUntilGrace = true;
-    const w = rot.window(5n);
-    const retryAt = Number(w.graceEnd) * 1000 + 30_000;
-    expect(w.graceEnd - w.voteStart).toBe(900n); // hourly: a 15-minute grace
-
-    // One minute into the vote window: the base backoff (5 minutes) is shorter than the grace.
+  it("never prepares a rotation-only round while picks are missing, and retries until the owner voids the curation", async () => {
+    // The builder requires the curated draws for the whole vote window: a rotation-only
+    // prepareRound past the old 15-minute grace would revert IncompleteCuratedBallot.
+    let voided = false;
+    const { chain, rot, keeper, logs, backoff, advance } = setup({
+      over: { curationsFor: async () => (voided ? [] : onChain) },
+      picks: picks({ asia: null }),
+    });
+    rot.curatedRequired = true;
     const s1 = await keeper.run();
     expect(s1.failed).toBe(1);
     expect(chain.sent).toEqual([]);
     const fail1 = logs.find((l) => l.msg === "keeper step failed")!;
-    expect(fail1.data).toMatchObject({ token: T1, round: 5n, op: "read", retryInSeconds: 300, awaitingCurationGrace: true });
+    expect(fail1.data).toMatchObject({ token: T1, round: 5n, op: "read", retryInSeconds: 300, awaitingCuratedPicks: true });
     // The first report of these missing picks alarms; retries of the same wait do not.
     expect(fail1.level).toBe("error");
-    expect(String(fail1.data!.error)).toMatch(/CuratedPicksUnavailable/);
+    expect(String(fail1.data!.error)).toMatch(/CuratedPicksUnavailable.*voidCurations/);
     expect(backoff.blocked(`round:${T1.toLowerCase()}:5`)).toBe(true);
 
-    // Still blocked a second before the backoff ends.
-    advance(299n);
-    expect((await keeper.run()).backedOff).toBe(1);
-
-    // The doubled backoff (10 minutes) is capped at the grace end plus 30 seconds.
-    advance(1n);
-    await keeper.run();
-    const fail2 = logs.filter((l) => l.msg === "keeper step failed")[1]!;
-    const nowMs = Number(rot.now) * 1000;
-    expect(fail2.data).toMatchObject({ failures: 2, retryInSeconds: Math.round((retryAt - nowMs) / 1000) });
-    expect(fail2.data!.retryInSeconds).toBe(570);
-    expect(fail2.level).toBe("warn");
-    advance(569n);
-    expect((await keeper.run()).backedOff).toBe(1);
+    // Past the old 15-minute grace (retries at 6, 16 and 31 minutes in): still nothing sent.
+    for (let i = 0; i < 4; i++) {
+      advance(300n);
+      await keeper.run();
+    }
     expect(chain.sent).toEqual([]);
+    const failed = logs.filter((l) => l.msg === "keeper step failed");
+    expect(failed.length).toBeGreaterThanOrEqual(3);
+    expect(failed.slice(1).every((l) => l.level === "warn" && Number(l.data!.retryInSeconds) <= 900)).toBe(true);
 
-    // Grace over: prepared with rotation draws only, which the builder accepts from then.
-    advance(1n);
-    expect(rot.now * 1000n).toBe(BigInt(retryAt));
+    // The registry owner voids the curation: the next attempt prepares with rotation only.
+    voided = true;
+    rot.curatedRequired = false;
+    advance(600n);
     await keeper.run();
     expect(kinds(chain.sent)).toEqual(["prepareRound"]);
     const a = chain.sent[0] as Extract<KeeperAction, { kind: "prepareRound" }>;
@@ -298,8 +294,8 @@ describe("rotation keeper: preparing rounds", () => {
 
   it("logs missing picks at error once, not for every round of every live token", async () => {
     const { chain, rot, keeper, logs, advance } = setup({ live: [T3], over: { curationsFor: async () => onChain }, picks: picks({ asia: null }) });
-    rot.curatedUntilGrace = true;
-    // Three hours of 5-minute runs: three rounds per token wait out their grace, then use rotation.
+    rot.curatedRequired = true;
+    // Three hours of 5-minute runs: every round of both tokens waits for the picks.
     for (let i = 0; i < 36; i++) {
       await keeper.run();
       advance(300n);
@@ -307,17 +303,17 @@ describe("rotation keeper: preparing rounds", () => {
     const failed = logs.filter((l) => l.msg === "keeper step failed");
     expect(failed.length).toBeGreaterThanOrEqual(6);
     expect(failed.filter((l) => l.level === "error")).toHaveLength(1);
-    expect(failed.every((l) => l.data?.awaitingCurationGrace === true)).toBe(true);
-    expect(kinds(chain.sent).filter((k) => k === "prepareRound").length).toBeGreaterThanOrEqual(6);
+    expect(failed.every((l) => l.data?.awaitingCuratedPicks === true)).toBe(true);
+    expect(chain.sent.filter((a) => "target" in a)).toEqual([]);
     // Any other failure of a round still logs at error.
     expect(logs.filter((l) => l.level === "error" && l.msg !== "keeper step failed")).toEqual([]);
   });
 
-  it("uses the picks when they turn up during the grace", async () => {
+  it("uses the picks when they turn up", async () => {
     let published = false;
     const src: PickSource = { picks: async (label, epoch, region) => (published ? picks().picks(label, epoch, region) : null) };
     const { chain, rot, keeper, advance } = setup({ over: { curationsFor: async () => onChain }, picks: src });
-    rot.curatedUntilGrace = true;
+    rot.curatedRequired = true;
     await keeper.run();
     expect(chain.sent).toEqual([]);
     published = true;

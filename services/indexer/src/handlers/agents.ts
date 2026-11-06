@@ -73,6 +73,12 @@ export async function onCurationSet({ event, context }: { event: Event<"CuratorR
   else await context.db.insert(curation).values({ ...key, ...row });
 }
 
+/** `CurationVoided`: the registry owner dropped the curation, so its picks no longer count. */
+export async function onCurationVoided({ event, context }: { event: Event<"CuratorRegistry:CurationVoided">; context: Context<"CuratorRegistry:CurationVoided"> }) {
+  const { bucket, epoch } = event.args;
+  await context.db.delete(curation, { bucket: Number(bucket), epoch });
+}
+
 export async function onCurationsSubmitted({ event, context }: { event: Event<"CuratorRegistry:CurationsSubmitted">; context: Context<"CuratorRegistry:CurationsSubmitted"> }) {
   const { categoryBit, epoch, catalogVersion, reportRef } = event.args;
   const key = { categoryBit: Number(categoryBit), epoch };
