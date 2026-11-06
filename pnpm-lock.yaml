@@ -33,7 +33,7 @@ importers:
         version: 3.7.1(@tanstack/query-core@5.106.1)(typescript@5.6.3)(viem@2.57.16(bufferutil@4.1.0)(typescript@5.6.3)(utf-8-validate@5.0.10)(zod@3.25.76))
       next:
         specifier: ^15
-        version: 15.5.29(@babel/core@7.29.13)(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 15.5.29(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       postcss:
         specifier: ^8.5.32
         version: 8.5.32
@@ -294,6 +294,9 @@ importers:
       '@tanstack/react-table':
         specifier: ^9.3.1
         version: 9.3.1(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      canvas-confetti:
+        specifier: ^1.9.4
+        version: 1.9.4
       class-variance-authority:
         specifier: ^0.7.1
         version: 0.7.1
@@ -334,6 +337,9 @@ importers:
       '@testing-library/react':
         specifier: ^16
         version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@types/canvas-confetti':
+        specifier: ^1.9.0
+        version: 1.9.0
       '@types/react':
         specifier: ^19
         version: 19.3.0
@@ -3318,6 +3324,9 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/canvas-confetti@1.9.0':
+    resolution: {integrity: sha512-aBGj/dULrimR1XDZLtG9JwxX1b4HPRF6CX9Yfwh3NvstZEm1ZL7RBnel4keCPSqs1ANRu1u2Aoz9R+VmtjYuTg==}
+
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
 
@@ -4271,6 +4280,9 @@ packages:
 
   caniuse-lite@1.0.30001822:
     resolution: {integrity: sha512-Y3fvWQWzc69dlCyr07tuNrEhotv+db5FpMSPD3slZnkPKwRNOKwFBz2dP966XUmWMXLTOt+YShkFoQoom3U7hg==}
+
+  canvas-confetti@1.9.4:
+    resolution: {integrity: sha512-yxQbJkAVrFXWNbTUjPqjF7G+g6pDotOUHGbkZq2NELZUMDpiJ85rIEazVb8GTaAptNW2miJAXbs1BtioA251Pw==}
 
   cdk-nag@2.34.23:
     resolution: {integrity: sha512-TCvQy5uCk1QHek7UhbmFh4Uk2HveXyuQ6jfUC0ZfW5HgAMhv8+6lTY56Jq09/rm0csKDzWnMpGGAXjgLW6rg0A==}
@@ -11577,6 +11589,8 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.11
 
+  '@types/canvas-confetti@1.9.0': {}
+
   '@types/chai@5.2.3':
     dependencies:
       '@types/deep-eql': 4.0.2
@@ -13120,6 +13134,8 @@ snapshots:
   camelcase@6.3.0: {}
 
   caniuse-lite@1.0.30001822: {}
+
+  canvas-confetti@1.9.4: {}
 
   cdk-nag@2.34.23(aws-cdk-lib@2.170.0(constructs@10.4.2))(constructs@10.4.2):
     dependencies:
@@ -15167,7 +15183,7 @@ snapshots:
 
   neo-async@2.6.2: {}
 
-  next@15.5.29(@babel/core@7.29.13)(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
+  next@15.5.29(@opentelemetry/api@1.10.0)(@types/node@20.19.43)(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
       '@next/env': 15.5.29
       '@swc/helpers': 0.5.15
@@ -15175,7 +15191,7 @@ snapshots:
       postcss: 8.4.31
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
-      styled-jsx: 5.1.6(@babel/core@7.29.13)(react@19.3.1)
+      styled-jsx: 5.1.6(react@19.3.1)
     optionalDependencies:
       '@next/swc-darwin-arm64': 15.5.29
       '@next/swc-darwin-x64': 15.5.29
@@ -16373,12 +16389,10 @@ snapshots:
     dependencies:
       js-tokens: 9.0.1
 
-  styled-jsx@5.1.6(@babel/core@7.29.13)(react@19.3.1):
+  styled-jsx@5.1.6(react@19.3.1):
     dependencies:
       client-only: 0.0.1
       react: 19.3.1
-    optionalDependencies:
-      '@babel/core': 7.29.13
 
   superjson@2.2.6:
     dependencies:

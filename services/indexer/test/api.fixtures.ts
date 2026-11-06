@@ -9,6 +9,7 @@ import {
   type FeeTotalRow,
   type PollRow,
   type Repo,
+  type BallotSizeSettings,
   type ShortlistSchedule,
   type TakeoverRow,
   type TextRecordRow,
@@ -73,6 +74,12 @@ export const NOW_EPOCH = 5n;
 export const shortlists: Record<Hex, ShortlistSchedule> = {
   [T1]: { causeIds: [H(0x13)], effectiveFrom: 6n, previousCauseIds: [H(0x11), H(0x12)] },
   [T2]: { causeIds: [], effectiveFrom: 3n, previousCauseIds: [H(0x11)] },
+};
+/** Protocol cap 30; T1 chose 9 from epoch 6, T2 chose more than the cap. T3 never chose. */
+export const BALLOT_CAP = 30;
+export const ballotSizes: Record<Hex, BallotSizeSettings> = {
+  [T1]: { cap: BALLOT_CAP, choice: 9, choiceEffectiveFrom: 6n },
+  [T2]: { cap: BALLOT_CAP, choice: 32, choiceEffectiveFrom: 2n },
 };
 /** T1 focuses on hunger and children in Africa and Asia. */
 export const focus = { [T1]: { categoryMask: (1n << 2n) | (1n << 3n), regionMask: 0b11 } } as Record<Hex, { categoryMask: bigint; regionMask: number }>;
@@ -194,6 +201,7 @@ export const epochs: EpochRow[] = [0n, 1n, 2n].map((e) => ({
   catalogVersion: e === 2n ? 1 : null,
   poolSize: e === 2n ? 120n : null,
   pinnedCount: e === 2n ? 1 : null,
+  ballotSize: e === 2n ? 32 : null,
   curatedDrawn: e === 2n ? 2 : null,
   curatedCount: e === 2n ? 1 : null,
   // Epoch 0 is T1's launch epoch: registered without supply at the regular snapshot.
@@ -303,6 +311,7 @@ export function fixtureRepo(items: ActivityItem[] = activity): Repo {
         shortlist: shortlists[address] ?? null,
         focus: focus[address] ?? null,
         clock,
+        ballotSize: ballotSizes[address] ?? { cap: null, choice: null, choiceEffectiveFrom: null },
       };
     },
     async findTokenByLabel(label) {

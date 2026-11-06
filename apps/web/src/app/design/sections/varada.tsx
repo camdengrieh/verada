@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button } from "@verada/ui/components/ui/button";
 import { ActivityFeed, type ActivityFeedItem } from "@verada/ui/components/varada/activity-feed";
 import { ActivityTicker, type ActivityTickerItem } from "@verada/ui/components/varada/activity-ticker";
@@ -146,6 +146,25 @@ const NAV = [
 
 const noop = () => undefined;
 
+/**
+ * The same demo in a 360px column and in a wide one. The components are size containers, so this is
+ * what they look like in a phone-width card versus a desktop column, whatever the window width.
+ */
+function NarrowWide({ children, stack, wideLabel = "Wide" }: { children: (width: "narrow" | "wide") => ReactNode; stack?: boolean; wideLabel?: string }) {
+  return (
+    <div className={stack ? "flex flex-col gap-5" : "flex flex-col gap-5 xl:flex-row xl:items-start"}>
+      <figure className="m-0 flex w-full max-w-[360px] shrink-0 flex-col gap-2">
+        <figcaption className="text-xs font-semibold text-ink-muted">360px</figcaption>
+        {children("narrow")}
+      </figure>
+      <figure className="m-0 flex min-w-0 flex-1 flex-col gap-2">
+        <figcaption className="text-xs font-semibold text-ink-muted">{wideLabel}</figcaption>
+        {children("wide")}
+      </figure>
+    </div>
+  );
+}
+
 /* ---------- interactive demos ---------- */
 
 const NVDA_PRICE = 129.48;
@@ -175,7 +194,7 @@ function TradeDemo() {
       onPayAmountChange={setAmount}
       payFiat={n ? `$${(nvda * NVDA_PRICE).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : undefined}
       receiveAmount={n ? fmtOut(out) : ""}
-      onPercent={(p) => setAmount(buying ? ((NVDA_BALANCE * p) / 100).toFixed(2) : String((38_900_000 * p) / 100))}
+      payPriceUsd={buying ? NVDA_PRICE : undefined}
       onPickPayToken={noop}
       slippage={slippage}
       onSlippageChange={setSlippage}
@@ -219,7 +238,7 @@ function VoteDemo() {
         onValueChange={setChoice}
         footer={
           <>
-            <span className="flex-[1_1_280px] text-sm text-ink-soft">
+            <span className="text-sm text-ink-soft @2xl:flex-[1_1_280px]">
               Your choice is encrypted in your browser. Nobody, including Varada, can see who you voted for; only the totals are decrypted when voting ends.
             </span>
             <Button variant="cause" size="lg" onClick={() => openAt("confirm")}>
@@ -299,21 +318,28 @@ export function VaradaSection() {
     <GallerySection
       id="varada"
       title="Varada components"
-      intro="The pieces only Varada needs: coins, causes, giving modes, trading, private voting and the live strips. All presentational; the app passes data and callbacks in. Sample data."
+      intro="The pieces only Varada needs: coins, causes, giving modes, trading, private voting and the live strips. All presentational; the app passes data and callbacks in. They lay out for their own width (container queries), so the narrow and wide demos below differ whatever the window size. Sample data."
     >
       <Specimen label="Site header" source="21st.dev @ln-dev7/header-17 (id 26888) · radix Dialog sheet">
-        <div className="overflow-hidden rounded-xl border border-line">
-          <SiteHeader
-            className="static"
-            links={NAV}
-            activeHref="#varada-discover"
-            homeHref="#varada"
-            search={{}}
-            privacy={<PrivacyPill state="private" />}
-            wallet={<Button>Connect wallet</Button>}
-          />
-        </div>
-        <p className="m-0 text-sm text-ink-muted">Press / to jump to search. Narrow the window to see the menu button and its sheet.</p>
+        <NarrowWide stack wideLabel="Full column">
+          {() => (
+            <div className="overflow-hidden rounded-xl border border-line">
+              <SiteHeader
+                className="static"
+                links={NAV}
+                activeHref="#varada-discover"
+                homeHref="#varada"
+                search={{}}
+                privacy={<PrivacyPill state="private" />}
+                wallet={<Button>Connect wallet</Button>}
+              />
+            </div>
+          )}
+        </NarrowWide>
+        <p className="m-0 text-sm text-ink-muted">
+          Press / to jump to search. The header collapses by its own width: wallet from 448px, search from 672px, privacy from 1024px, nav links from 1280px. Everything
+          hidden is in the menu sheet.
+        </p>
       </Specimen>
 
       <Specimen label="Activity ticker" source="21st.dev @kevingirelli/marquee (id 35200) · animate-marquee">
@@ -427,36 +453,56 @@ export function VaradaSection() {
         </div>
       </Specimen>
 
+      <Specimen label="Token card · narrow and feature width" source="Container queries: stats fold under 288px, art moves left from 576px">
+        <NarrowWide wideLabel="Feature slot">
+          {(w) =>
+            w === "narrow" ? (
+              <TokenCard token={mog} href="#varada-token-mog" onBuy={noop} />
+            ) : (
+              <TokenCard token={harambe} href="#varada-token-harambe" onBuy={noop} className="max-w-3xl" />
+            )
+          }
+        </NarrowWide>
+      </Specimen>
+
       <Specimen label="Token rows · mobile lists and watchlists" source="Written for Varada · A-Mobile board">
-        <div className="flex max-w-[390px] flex-col gap-3">
-          {[harambe, mog, crown].map((t) => (
-            <TokenRow key={t.symbol} token={t} href={`#varada-token-${t.symbol.toLowerCase()}`} />
-          ))}
-          <TokenRow
-            token={tigr}
-            href="#varada-token-tigr"
-            trailing={
-              <Button size="sm" variant="soft" className="min-h-11" aria-pressed="true" aria-label="Watching Tiger Wif Hat">
-                Watching
-              </Button>
-            }
-          />
-        </div>
+        <NarrowWide wideLabel="Wide (desktop watchlist columns from 512px)">
+          {() => (
+            <div className="flex flex-col gap-3">
+              {[harambe, mog, crown].map((t) => (
+                <TokenRow key={t.symbol} token={t} href={`#varada-token-${t.symbol.toLowerCase()}`} />
+              ))}
+              <TokenRow
+                token={tigr}
+                href="#varada-token-tigr"
+                trailing={
+                  <Button size="sm" variant="soft" className="min-h-11" aria-pressed="true" aria-label="Watching Tiger Wif Hat">
+                    Watching
+                  </Button>
+                }
+              />
+            </div>
+          )}
+        </NarrowWide>
       </Specimen>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Specimen label="Trade panel · interactive" source="21st.dev @ssychui/swap-ticket (id 27122) + @ravikatiyar162/swap-card (id 7804)">
+        <Specimen
+          label="Trade panel · interactive: buy presets in USD, sell percentages"
+          source="21st.dev @ssychui/swap-ticket (id 27122) + @ravikatiyar162/swap-card (id 7804)"
+        >
           <TradeDemo />
         </Specimen>
         <div className="flex flex-col gap-4">
-          <Specimen label="Trade panel · wallet blocker, sniper fee, high impact" source="The button label names what's in the way">
+          <Specimen label="Trade panel · WETH presets disabled until a wallet connects, sniper fee, high impact" source="The button label names what's in the way">
             <TradePanel
               side="buy"
               onSideChange={noop}
-              pay={{ symbol: "NVDAon", kind: "stock" }}
+              pay={{ symbol: "WETH", kind: "crypto" }}
               receive={{ symbol: "$HARAMBE" }}
-              payAmount="9.65"
+              payAmount="0.5"
               onPayAmountChange={noop}
+              presetsDisabledReason="Connect a wallet to use the presets."
               receiveAmount="295,820,000"
               slippage={1}
               fee="2.5%"
@@ -492,6 +538,53 @@ export function VaradaSection() {
           </Specimen>
         </div>
       </div>
+
+      <Specimen label="Trade panel · WBTC and USDC presets, narrow and wide" source="Chips three to a row under 320px; inputs and details side by side from 672px">
+        <NarrowWide>
+          {(w) =>
+            w === "narrow" ? (
+              <TradePanel
+                side="buy"
+                onSideChange={noop}
+                pay={{ symbol: "WBTC", kind: "crypto", balance: "0.0842" }}
+                receive={{ symbol: "$HARAMBE" }}
+                payAmount="0.001"
+                onPayAmountChange={noop}
+                payPriceUsd={97_120}
+                payFiat="$97.12"
+                receiveAmount="23,572,815"
+                slippage={1}
+                fee="2.5%"
+                priceImpact={0.42}
+                causeAmount="$2.19"
+                causeName="Save the Elephants"
+                causeIcon="wildlife"
+                onSubmit={noop}
+              />
+            ) : (
+              <TradePanel
+                side="buy"
+                onSideChange={noop}
+                pay={{ symbol: "USDC", kind: "crypto", balance: "2,450.00" }}
+                receive={{ symbol: "$TIGR" }}
+                payAmount="100"
+                onPayAmountChange={noop}
+                payFiat="$100.00"
+                receiveAmount="1,204,800"
+                slippage={0.5}
+                fee="2.5%"
+                priceImpact={1.6}
+                minReceived="1,198,776"
+                causeAmount="$2.25"
+                platformAmount="$0.25"
+                causeName="Save the Children"
+                causeIcon="children"
+                onSubmit={noop}
+              />
+            )
+          }
+        </NarrowWide>
+      </Specimen>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         <Specimen label="Liquidity · market closed" source="Written for Varada · A-Token board">
@@ -529,8 +622,77 @@ export function VaradaSection() {
         </Specimen>
       </div>
 
+      <Specimen label="Cards at 360px and wide" source="Liquidity, cause pool, takeover, curator agent and live giving">
+        <NarrowWide>
+          {() => (
+            <div className="flex flex-col gap-4">
+              <CausePoolCard
+                epoch={12}
+                countdown="closes in 2d 14h"
+                amount="$1,284.60"
+                attributed="$1,112.40"
+                carriedForward="$172.20"
+                ballot={{ pinned: 2, curated: 6, rotation: 24 }}
+                curator="wildlife.agent.varada.eth"
+                voteHref="#varada-vote"
+              />
+              <LiquidityPanel
+                quote={{ symbol: "WBTC", name: "Wrapped Bitcoin", kind: "crypto", description: "8 decimals" }}
+                poolLiquidity="$19,400"
+                quotePrice="$97,120"
+                routeDepth="$21M"
+                lpStatus="Locked forever"
+                route="Fees convert $MOG → WBTC → USDC before donation."
+              />
+              <TakeoverCard
+                status="active"
+                proposal={
+                  <>
+                    Replace the controller with <span className="num">0x52e1…aa04</span>. It manages pins and the profile.
+                  </>
+                }
+                turnout={3.1}
+                quorum={5}
+                endsIn="ends in 1d 6h"
+                onVote={noop}
+              />
+              <CuratorAgentCard
+                ens="wildlife.agent.varada.eth"
+                cause="wildlife"
+                status="active"
+                agentId={14}
+                picks={6}
+                rationale="Poaching pressure rose in East Africa after the drought."
+                topPicks={[
+                  { org: "Save the Elephants", score: "94/100" },
+                  { org: "TRAFFIC International", score: "81/100" },
+                ]}
+                verified
+              />
+              <ActivityFeed items={FEED} />
+            </div>
+          )}
+        </NarrowWide>
+      </Specimen>
+
       <Specimen label="Ballot list and private vote flow" source="21st.dev @sean0205/c-radio-group-8 (id 28339) · @ddoemonn/task-steps (id 23569)">
-        <VoteDemo />
+        <NarrowWide>
+          {(w) =>
+            w === "narrow" ? (
+              <BallotList
+                options={BALLOT}
+                defaultValue="1"
+                footer={
+                  <Button variant="cause" size="lg">
+                    Vote privately
+                  </Button>
+                }
+              />
+            ) : (
+              <VoteDemo />
+            )
+          }
+        </NarrowWide>
       </Specimen>
 
       <Specimen label="Ballot options · unselected, selected, disabled" source="21st.dev @sean0205/c-radio-group-8 (id 28339)">

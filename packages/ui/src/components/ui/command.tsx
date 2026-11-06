@@ -5,7 +5,7 @@
 import { Command as CommandPrimitive } from "cmdk";
 import { Search } from "lucide-react";
 import { Dialog as DialogPrimitive } from "radix-ui";
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode, type Ref } from "react";
 import { Kbd } from "@verada/ui/components/ui/kbd";
 import { cn } from "@verada/ui/lib/utils";
 
@@ -71,9 +71,32 @@ export function CommandEmpty({ className, ...props }: ComponentProps<typeof Comm
   return <CommandPrimitive.Empty data-slot="command-empty" className={cn("px-3 py-8 text-center text-sm text-muted-foreground", className)} {...props} />;
 }
 
-export function CommandGroup({ className, ...props }: ComponentProps<typeof CommandPrimitive.Group>) {
+/**
+ * cmdk scrolls the selected item (and its group heading) into view whenever the selection changes,
+ * including the automatic first selection on mount, which scrolls the whole page to an inline
+ * palette. Only allow that scroll while the palette has focus, i.e. during keyboard navigation.
+ */
+function guardScrollIntoView(el: HTMLElement | null) {
+  if (!el) return;
+  el.scrollIntoView = function guarded(this: HTMLElement, arg?: boolean | ScrollIntoViewOptions) {
+    const root = this.closest("[cmdk-root]");
+    if (root && root.contains(document.activeElement)) HTMLElement.prototype.scrollIntoView.call(this, arg);
+  };
+}
+
+function composeRefs<T>(...refs: (Ref<T> | undefined)[]) {
+  return (node: T | null) => {
+    for (const r of refs) {
+      if (typeof r === "function") r(node);
+      else if (r) (r as { current: T | null }).current = node;
+    }
+  };
+}
+
+export function CommandGroup({ className, ref, ...props }: ComponentProps<typeof CommandPrimitive.Group>) {
   return (
     <CommandPrimitive.Group
+      ref={composeRefs(ref, (el: HTMLDivElement | null) => guardScrollIntoView(el?.querySelector<HTMLElement>("[cmdk-group-heading]") ?? null))}
       data-slot="command-group"
       className={cn(
         "overflow-hidden py-1 text-ink [&_[cmdk-group-heading]]:px-3 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-ink-muted",
@@ -98,9 +121,10 @@ export interface CommandItemProps extends ComponentProps<typeof CommandPrimitive
   trailing?: ReactNode;
 }
 
-export function CommandItem({ className, icon, shortcut, hint, trailing, children, ...props }: CommandItemProps) {
+export function CommandItem({ className, icon, shortcut, hint, trailing, children, ref, ...props }: CommandItemProps) {
   return (
     <CommandPrimitive.Item
+      ref={composeRefs(ref, guardScrollIntoView)}
       data-slot="command-item"
       className={cn(
         "relative flex min-h-11 cursor-default select-none items-center gap-3 rounded-lg px-3 py-2 text-[15px] text-ink outline-none",

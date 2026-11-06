@@ -48,9 +48,18 @@ const BUNDLE = [
   },
   // 128 covers a 64 px chip on high-density screens; 256 is for large cards.
   { dir: "causes", out: "causes", variants: [{ format: "webp", widths: [128, 256], quality: 80 }] },
+  // Quote-asset marks. Crypto pairs (WETH, WBTC, USDC…) are few, so they always ship in the bundle.
+  { dir: "tokens", out: "tokens", variants: [{ format: "webp", widths: [64, 128], quality: 82 }] },
+  // The common Ondo marks also ship in the bundle (about 190 KB), so logos show before the stocks
+  // pack is published; the pack stays the source for the long tail once its reference is set.
+  { dir: "stocks", out: "stocks", variants: [{ format: "webp", widths: [64, 128], quality: 82 }] },
 ];
 /** Bundle folders copied as they are (vectors). */
-const BUNDLE_VECTORS = [{ dir: "logo", out: "logo" }];
+const BUNDLE_VECTORS = [
+  { dir: "logo", out: "logo" },
+  { dir: "tokens", out: "tokens" },
+  { dir: "stocks", out: "stocks" },
+];
 /**
  * Bundle folders copied byte for byte: self-hosted fonts with their stylesheet and licences.
  * fonts.css uses URLs relative to itself, so it works under any site prefix.
@@ -119,8 +128,6 @@ const packs = {};
 for (const g of BUNDLE) rmSync(join(bundleOut, g.out), { recursive: true, force: true });
 for (const v of BUNDLE_VECTORS) rmSync(join(bundleOut, v.out), { recursive: true, force: true });
 for (const c of BUNDLE_COPIES) rmSync(join(bundleOut, c.out), { recursive: true, force: true });
-// Earlier layouts kept stock logos in the bundle; make sure none linger there.
-rmSync(join(bundleOut, "stocks"), { recursive: true, force: true });
 rmSync(packsOut, { recursive: true, force: true });
 
 for (const g of BUNDLE) {

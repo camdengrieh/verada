@@ -54,9 +54,11 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 | `fee_attribution` | event id | `FeesAttributed`: one non-zero part of a deposit, `causeAmount` earned in `accrualEpoch` credited to the pool of `epoch` (the accrual epoch, or the first unsettled one after it). Emitted just before the deposit's `FeesCollected`; the parts share its `depositSeq` and sum to its `causeAmount` |
 | `cause_pool_attribution` | `token, epoch, accrualEpoch` | Running sum of `FeesAttributed` per pool epoch and accrual epoch (`causeAmount`, `parts`); the rows of an epoch sum to `epoch.causeAttributed` |
 | `quote_asset`, `cause`, `org_deployment`, `donation` | | Registries and distributor |
-| `epoch` | `token, epoch` | Votes, `EpochOpened` (`opened`, `openedAt`, `governor`, `scheme`), `EpochClosed` (`closed`, `closedAt`, clears `closeFailed`), `EpochCloseFailed` (`closed` and `closeFailed`, as on-chain; no `closedAt`), `NoVoteFallbackApplied` / `TallyTimeoutFallbackApplied` (`fallbackApplied`, `fallbackReason` = `no_votes` / `timeout`), `EpochFinalized`, donations, `BallotPrepared` (`prepared`, `preparedAt`, `catalogVersion`, `poolSize`, `pinnedCount`), `LaunchSnapshotSet` (`launchSnapshot`), `FeesAttributed` (`causeAttributed`), `Settled` (`settledAmount`, `settledAt`). `voterCount` equals `voteCount` |
+| `epoch` | `token, epoch` | Votes, `EpochOpened` (`opened`, `openedAt`, `governor`, `scheme`), `EpochClosed` (`closed`, `closedAt`, clears `closeFailed`), `EpochCloseFailed` (`closed` and `closeFailed`, as on-chain; no `closedAt`), `NoVoteFallbackApplied` / `TallyTimeoutFallbackApplied` (`fallbackApplied`, `fallbackReason` = `no_votes` / `timeout`), `EpochFinalized`, donations, `BallotPrepared` (`prepared`, `preparedAt`, `catalogVersion`, `poolSize`, `pinnedCount`, `ballotSize`: the indexed choice bounded by the indexed cap, as the governor reads both in that transaction), `LaunchSnapshotSet` (`launchSnapshot`), `FeesAttributed` (`causeAttributed`), `Settled` (`settledAmount`, `settledAt`). `voterCount` equals `voteCount` |
 | `epoch_option` | `token, epoch, index` | Options fixed by `BallotPrepared`: `orgId` from the event and `causeId = keccak256(orgId)` (also written by `EpochOpened`, cause ids only). The governor stores only a commitment, so this log is the source of the options |
 | `epoch_clock` | `id` | `epochZeroStart` and `epochLength` of the epoch governor (see below) |
+| `ballot_size_cap` | `id` | `BallotSizeCapSet`: the epoch governor's protocol ballot size cap (2..32; emitted at deployment). Absent: 32 |
+| `token_ballot_size` | `token` | `BallotSizeSet`: the controller's own ballot size (`choice`, 0 follows the cap) from epoch `effectiveFrom` |
 | `shortlist` | `token` | The controller's pinned causes. `ShortlistScheduled`: latest list `causeIds` from epoch `effectiveFrom`, and `previousCauseIds` before it. `ShortlistSet` is only used until the first scheduled event (`scheduled` false) |
 | `poll` | `governor, token, scope` | Scheme `PollOpened`, `BallotCast` (`ballotCount`), `TallyRequested` (`closed`), `TallySubmitted` (`isFinal`, `counts`). `scope` is the epoch for the epoch governor and the proposal id for the takeover governor |
 | `ballot` | `ballotRef` | `BallotCast`: voter and weight (public on-chain), never the choice |
@@ -129,7 +131,7 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | --- | --- |
 | `/api/health` | `{ status: "ok" }` |
 | `/api/tokens?cursor&limit` | `{ items: Token[], nextCursor }`; each item has every `token` column plus `feeTotals` |
-| `/api/tokens/:address` | `Token & { feeTotals, profile, shortlist, shortlistPending, focus }` |
+| `/api/tokens/:address` | `Token & { feeTotals, profile, shortlist, shortlistPending, ballotSize, focus }` |
 | `/api/tokens/by-label/:label` | Same as the detail; 400 unless the label passes `isValidLabel`, 404 if unregistered |
 | `/api/activity?kind&token&cursor&limit` | `{ items: ActivityItem[], nextCursor }` |
 | `/api/activity/stream?token` | Server-Sent Events, `Last-Event-ID` resume |
@@ -145,7 +147,7 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/catalog` | Loaded catalogue: `root`, taxonomy version, org and entry counts, per-category and per-region org counts, `bucketSizes` |
 | `/api/catalog/search?q&categories&regions&offset&limit` | `{ items: CatalogOrg[], total }` (comma-separated slugs; none means any) |
 | `/api/catalog/pool?categories&regions` | `{ poolSize, buckets: [{ bucket, category, region, size }] }` |
-| `/api/catalog/entries?at=bucket:index,...` | `{ root, items: [{ bucket, index, orgId, proof }] }`, at most 100 entries (what the keeper's `prepareBallot` needs) |
+| `/api/catalog/entries?at=bucket:index,...&root=` | `{ root, items: [{ bucket, index, orgId, proof }] }`, at most 100 entries (what the keeper's `prepareBallot` and round preparation need). With `root` (optional), from the loaded snapshot with that root, or 404 `catalog_root_unavailable` when none has it |
 | `/api/catalog/causes?ids=0x..,...` | `{ items: CatalogOrg[] }` by cause id, at most 50 (names for ballot options) |
 | `/api/catalog/orgs/:id` | `{ root, org, entries }` by org id, cause id, EIN or Endaoment id, entries with proofs |
 
@@ -153,6 +155,14 @@ The `/api/catalog/*` routes answer 503 `catalog_unavailable` until the snapshot 
 `CATALOG_SOURCE` (a directory, or a Swarm gateway URL such as `https://<gateway>/bzz/<swarmRef>`)
 has loaded. The catalogue is held in memory (a full catalogue takes a few hundred MB); clients
 should compare `root` with `CauseCatalog.rootOf` for the version they use.
+
+`CATALOG_SOURCE` may be a comma-separated list. The first snapshot is the one every route serves;
+the others are served only by `/api/catalog/entries?root=`. Ballots use the version in effect at
+their epoch's start, and live-mode rotation rounds keep that version until the next weekly epoch
+starts, so after `CauseCatalog.setVersion` mid-week, list the new snapshot first and the previous
+one second until the next epoch starts. Without it, the keeper cannot prepare that week's
+remaining rotation rounds: the indexer answers 404 `catalog_root_unavailable` for their version.
+Each extra snapshot adds its own memory.
 
 ```ts
 type Token = {
@@ -168,6 +178,10 @@ type Token = {
 profile: { label, labelhash, controller, editor, logoRef, contenthash, suppressed, registeredAt,
            textRecords: Record<string, string> } | null;
 shortlist: Hex[] | null; shortlistPending: { causeIds: Hex[], effectiveFrom: string } | null;
+// `ballotSize`: the protocol `cap` (32 until one is indexed), the token's own `choice` (0 follows
+// the cap) and the epoch it applies from, and `size`, what its next unprepared ballot gets
+// (`ballotSizeFor`, assuming a 32-option scheme). A prepared epoch keeps its own `ballotSize`.
+ballotSize: { cap: number, choice: number, size: number, choiceEffectiveFrom: string | null };
 focus: { categoryMask: string, regionMask: number, categories: string[], regions: string[] } | null;
 
 type Epoch = {
@@ -176,7 +190,7 @@ type Epoch = {
   fallbackApplied: boolean, fallbackReason: "no_votes" | "timeout" | null,
   governor: Hex | null, scheme: Hex | null,
   prepared: boolean, preparedAt, catalogVersion: number | null, poolSize: string | null,
-  pinnedCount: number | null,
+  pinnedCount: number | null, ballotSize: number | null,
   launchSnapshot: string | null, causeAttributed: string,
   settledAmount: string | null, settledAt: string | null,
 };

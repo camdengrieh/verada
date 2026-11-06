@@ -7,6 +7,8 @@ import {
   categoryMaskOf,
   categorySlugs,
   agentByLabel,
+  effectiveBallotSize,
+  MAX_BALLOT_OPTIONS,
   isValidLabel,
   regionBySlug,
   regionMaskOf,
@@ -14,6 +16,7 @@ import {
 } from "@verada/sdk";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import type { Hex } from "viem";
 import { z } from "zod";
 import { ActivityBus } from "./bus";
 import type { ApiConfig } from "./config";
@@ -35,6 +38,7 @@ import { mountX402 } from "./x402";
 import {
   ACTIVITY_KINDS,
   type ActivityKind,
+  type BallotSizeSettings,
   type CausePoolAttributionRow,
   type EpochClock,
   type EpochRow,
@@ -207,6 +211,12 @@ const EntriesQuery = z.object({
       }
       return out;
     }),
+  /** Root of the catalogue version the ballot is built from; omitted: the main snapshot. */
+  root: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/)
+    .transform((s) => s.toLowerCase() as Hex)
+    .optional(),
 });
 
 const CausesQuery = z.object({
@@ -259,6 +269,18 @@ function epochTiming(clock: EpochClock | null, n: bigint, launchSnapshot: bigint
   if (!clock) return { start: null, end: null, snapshot: launchSnapshot };
   const start = clock.epochZeroStart + n * clock.epochLength;
   return { start, end: start + clock.epochLength, snapshot: launchSnapshot ?? start - 1n };
+}
+
+/**
+ * A token's ballot size: the protocol `cap`, the token's own `choice` (0 follows the cap) and the
+ * epoch it applies from, and `size`, what its next unprepared ballot gets (`ballotSizeFor`,
+ * assuming the scheme allows 32 options as `ZamaVotingScheme` does). A prepared epoch keeps the
+ * size it was prepared with (`ballotSize` on the epoch).
+ */
+export function ballotSizeOf(s: BallotSizeSettings) {
+  const cap = s.cap ?? MAX_BALLOT_OPTIONS;
+  const choice = s.choice ?? 0;
+  return { cap, choice, size: effectiveBallotSize({ cap, choice }), choiceEffectiveFrom: s.choiceEffectiveFrom };
 }
 
 export type OptionSource = "pinned" | "curated" | "rotation";
@@ -518,6 +540,13 @@ export function createApi(deps: ApiDeps): Hono {
   app.get("/api/catalog/entries", (c) => {
     const p = parse(c, EntriesQuery, c.req.query());
     if (!p.ok) return p.res;
+    if (p.data.root) {
+      // A ballot built from a given version (a rotation round keeps the epoch-start one all week).
+      const r = deps.catalog?.entriesOf(p.data.root, p.data.at);
+      if (r === null || !deps.catalog) return unavailable(c);
+      if (r === undefined) return send(c, { error: "catalog_root_unavailable" }, CACHE.none, 404);
+      return send(c, { root: p.data.root, items: r }, CACHE.catalog);
+    }
     const cat = deps.catalog?.catalog();
     const r = deps.catalog?.entries(p.data.at);
     if (!r || !cat) return unavailable(c);
@@ -581,6 +610,7 @@ export function createApi(deps: ApiDeps): Hono {
         profile: profileOf(found.token, found.textRecords),
         shortlist: own.inEffect.length > 0 ? own.inEffect : null,
         shortlistPending: own.pending,
+        ballotSize: ballotSizeOf(found.ballotSize),
         focus: found.focus
           ? {
               categoryMask: found.focus.categoryMask,

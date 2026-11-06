@@ -128,6 +128,66 @@ contract CatalogZamaIntegrationTest is BallotLog, ColdGas {
         );
     }
 
+    /// @dev Token-chosen ballot sizes on the real scheme: `ceil(n / 3)` packed tally words, each
+    ///      ballot updates every word, and the vote is tallied and finalized against the option
+    ///      count the epoch was prepared with. Logs a steady-state ballot's gas per size.
+    function test_chosenBallotSizes_endToEnd_andBallotGas() public {
+        uint8[6] memory sizes = [2, 3, 8, 16, 30, 32];
+        uint256[6] memory gasBySize;
+        uint256 snap = vm.snapshotState();
+        for (uint256 i; i < sizes.length; ++i) {
+            vm.revertToState(snap);
+            uint8 n = sizes[i];
+            vm.prank(makeAddr("c"));
+            gov.setBallotSize(token, n);
+            assertEq(gov.ballotSizeFor(token, 1), n);
+            gov.prepareBallot(token, 1, cat.draws(gov, registry, token, 1, uint64(1) << 2, 1));
+            bytes32[] memory opts = _options(address(gov), token, 1);
+            assertEq(opts.length, n);
+            assertEq(zama.optionCountOf(address(gov), token, 1), n);
+
+            // The first ballot creates the words; the second is a typical voter's cost.
+            for (uint256 v; v < 2; ++v) {
+                bytes32 handle = keccak256(abi.encode("in", n, v));
+                executor.setInputValue(handle, n - 1);
+                bytes memory ballot = abi.encode(handle, hex"01");
+                vm.prank(voters[v]);
+                uint256 g = gasleft();
+                zama.castBallot(address(gov), token, 1, ballot);
+                gasBySize[i] = g - gasleft();
+            }
+            emit log_named_uint(
+                string.concat("castBallot gas, ", vm.toString(n), " options"), gasBySize[i]
+            );
+            bytes32[] memory words = zama.tallyHandles(address(gov), token, 1);
+            assertEq(words.length, (uint256(n) + 2) / 3);
+
+            // Lowering the size mid-epoch changes nothing for this epoch.
+            vm.prank(owner);
+            gov.setBallotSizeCap(2);
+            vm.warp(gov.epochStart(2));
+            gov.closeEpoch(token, 1);
+            bytes memory cleartexts;
+            for (uint256 j; j < words.length; ++j) {
+                cleartexts = bytes.concat(cleartexts, abi.encode(executor.valueOf(words[j])));
+            }
+            zama.submitTally(
+                address(gov), token, 1, cleartexts, abi.encodePacked(uint8(1), new bytes(65))
+            );
+            gov.finalizeEpoch(token, 1, _orgIds(address(gov), token, 1));
+            assertEq(gov.winningCause(token, 1), opts[n - 1]);
+            assertEq(gov.tally(token, 1, opts[n - 1]), 3_000_000);
+        }
+        // One word for 2 or 3 options (the same cost), eleven for 32. The mocked coprocessor
+        // charges more per word than the live one (about 86k gas per word on a mainnet fork).
+        assertApproxEqAbs(gasBySize[0], gasBySize[1], 1000);
+        assertLt(gasBySize[1], gasBySize[2]);
+        assertLt(gasBySize[2], gasBySize[3]);
+        assertLt(gasBySize[3], gasBySize[4]);
+        assertLt(gasBySize[4], gasBySize[5]);
+        emit log_named_uint("gas per tally word, mocked (30 -> 32)", gasBySize[5] - gasBySize[4]);
+    }
+
     function test_gas_castBallot_thirtyTwoOptions() public {
         gov.prepareBallot(token, 1, cat.draws(gov, registry, token, 1, uint64(1) << 2, 1));
         bytes32 handle = keccak256("in");

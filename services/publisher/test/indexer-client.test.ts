@@ -34,3 +34,26 @@ describe("indexer client: epochOrgIds", () => {
     await expect(bad.epochOrgIds(TOKEN, 4n)).rejects.toThrow();
   });
 });
+
+describe("indexer client: catalogEntries", () => {
+  const body = { root: A, items: [{ bucket: 3, index: 1, orgId: B, proof: [A] }] };
+
+  it("asks for the ballot's catalogue root when given, and the main snapshot otherwise", async () => {
+    const fetch = respond(200, body);
+    const c = createIndexerClient("https://api.verada.test", { fetch: fetch as typeof globalThis.fetch });
+    expect((await c.catalogEntries([{ bucket: 3, index: 1 }], A)).items[0]!.orgId).toBe(B.toLowerCase());
+    await c.catalogEntries([{ bucket: 3, index: 1 }]);
+    const urls = (fetch.mock.calls as unknown as [string][]).map(([u]) => u);
+    expect(urls[0]).toBe(`https://api.verada.test/api/catalog/entries?at=3%3A1&root=${A}`);
+    expect(urls[1]).toBe("https://api.verada.test/api/catalog/entries?at=3%3A1");
+  });
+
+  it("names the missing snapshot when the indexer does not serve the root", async () => {
+    const c = createIndexerClient("https://api.verada.test", { fetch: respond(404, { error: "catalog_root_unavailable" }) as typeof globalThis.fetch });
+    const err = await c.catalogEntries([{ bucket: 3, index: 1 }], A).catch((e: unknown) => e);
+    expect((err as Error).name).toBe("CatalogMismatch");
+    expect((err as Error).message).toMatch(/no catalogue snapshot with root/);
+    const down = createIndexerClient("https://api.verada.test", { fetch: respond(503, {}) as typeof globalThis.fetch });
+    await expect(down.catalogEntries([{ bucket: 3, index: 1 }], A)).rejects.toThrow(/HTTP 503/);
+  });
+});

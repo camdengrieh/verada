@@ -161,6 +161,19 @@ describe("profile, epoch and takeover routes", () => {
     expect(flat?.profile).toMatchObject({ label: "pepe", controller: "0xc", logoRef: `0x${"ab".repeat(32)}` });
     expect(flat?.shortlist).toBeNull();
     expect(flat?.focus).toBeNull();
+    expect(flat?.ballotSize).toBeNull();
+  });
+
+  it("parses a token's ballot size and rejects out-of-range values", async () => {
+    const { toTokenDetail, toEpochDetail } = await import("@/lib/indexer");
+    const at = (ballotSize: unknown) => toTokenDetail({ address: "0x1", ballotSize })?.ballotSize;
+    expect(at({ cap: 30, choice: 9, size: 9, choiceEffectiveFrom: "6" })).toEqual({ cap: 30, choice: 9, size: 9, choiceEffectiveFrom: "6" });
+    expect(at({ cap: 32, choice: 0, size: 32, choiceEffectiveFrom: null })).toEqual({ cap: 32, choice: 0, size: 32, choiceEffectiveFrom: null });
+    expect(at({ cap: 33, choice: 0, size: 32 })).toBeNull();
+    expect(at({ cap: 32, choice: 1, size: 32 })).toBeNull();
+    expect(at({ cap: 32, choice: 0, size: 1 })).toBeNull();
+    expect(at(undefined)).toBeNull();
+    expect(toEpochDetail({ epoch: "2", prepared: true, ballotSize: 8 })?.ballotSize).toBe(8);
   });
 
   it("tolerates epochs without a poll and normalizes takeover states", async () => {

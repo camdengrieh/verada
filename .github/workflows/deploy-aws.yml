@@ -89,6 +89,7 @@ jobs:
           CURATOR_REGISTRY_ADDRESS: ${{ vars.CURATOR_REGISTRY_ADDRESS }}
           TAKEOVER_GOVERNOR_ADDRESS: ${{ vars.TAKEOVER_GOVERNOR_ADDRESS }}
           VOTING_SCHEME_ADDRESS: ${{ vars.VOTING_SCHEME_ADDRESS }}
+          ROTATION_GOVERNOR_ADDRESS: ${{ vars.ROTATION_GOVERNOR_ADDRESS }}
           SWARM_DOMAIN_NAME: ${{ vars.SWARM_DOMAIN_NAME }}
           SWARM_CERTIFICATE_ARN: ${{ vars.SWARM_CERTIFICATE_ARN }}
           SWARM_HOSTED_ZONE_ID: ${{ vars.SWARM_HOSTED_ZONE_ID }}
@@ -148,6 +149,7 @@ jobs:
           add curatorRegistryAddress "$CURATOR_REGISTRY_ADDRESS"
           add takeoverGovernorAddress "$TAKEOVER_GOVERNOR_ADDRESS"
           add votingSchemeAddress "$VOTING_SCHEME_ADDRESS"
+          add rotationGovernorAddress "$ROTATION_GOVERNOR_ADDRESS"
           add swarmDomainName "$SWARM_DOMAIN_NAME"
           add swarmCertificateArn "$SWARM_CERTIFICATE_ARN"
           add swarmHostedZoneId "$SWARM_HOSTED_ZONE_ID"

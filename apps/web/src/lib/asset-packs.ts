@@ -1,5 +1,5 @@
 import { swarmGatewayUrl } from "@verada/sdk";
-import { PACKS, type AssetEntry, type PackName } from "./assets.generated";
+import { ASSETS, PACKS, type AssetEntry, type PackName } from "./assets.generated";
 import type { AppConfig } from "./config";
 
 /**
@@ -52,7 +52,47 @@ export function packImage(
   return { src, srcSet, width: entry.width, height: entry.height };
 }
 
-/** A stock or ETF logo by Ondo symbol (e.g. `NVDAon`). */
+/** A stock or ETF logo by Ondo symbol (e.g. `NVDAon`), from the published stocks pack. */
 export function stockLogo(cfg: Pick<AppConfig, "assetPacks" | "swarmGatewayUrl">, symbol: string, displayWidth = 32): PackImage | undefined {
   return packImage(cfg, "stocks", symbol, displayWidth);
+}
+
+/**
+ * A logo shipped inside the site bundle (assets/<group>/<symbol>…), resolved with the page's
+ * relative-path resolver (siteBase()/useRel()). Undefined when the bundle has no mark for it.
+ */
+export function bundledLogo(
+  group: "stocks" | "tokens",
+  symbol: string,
+  resolve: (path: string) => string,
+  displayWidth = 32,
+): PackImage | undefined {
+  const assets: Record<string, AssetEntry> = ASSETS;
+  const key = `${group}/${symbol}`;
+  const entry = Object.prototype.hasOwnProperty.call(assets, key) ? assets[key] : undefined;
+  if (!entry) return undefined;
+  if ("vector" in entry) return { src: resolve(`assets/${key}.svg`) };
+  const widths = entry.webp ?? [];
+  if (widths.length === 0) return undefined;
+  const pick = widths.find((w) => w >= displayWidth) ?? widths[widths.length - 1];
+  return {
+    src: resolve(`assets/${key}-${pick}.webp`),
+    srcSet: widths.map((w) => `${resolve(`assets/${key}-${w}.webp`)} ${w}w`).join(", "),
+    width: entry.width,
+    height: entry.height,
+  };
+}
+
+/**
+ * The logo for any quote asset: crypto pairs (WETH, WBTC, USDC…) and Ondo stocks/ETFs. Prefers the
+ * published stocks pack when it is configured, then the copies shipped in the bundle. Undefined means
+ * the UI shows its lettered fallback.
+ */
+export function quoteAssetLogo(
+  cfg: Pick<AppConfig, "assetPacks" | "swarmGatewayUrl">,
+  symbol: string,
+  resolve: (path: string) => string,
+  displayWidth = 32,
+): PackImage | undefined {
+  return stockLogo(cfg, symbol, displayWidth) ?? bundledLogo("stocks", symbol, resolve, displayWidth) ?? bundledLogo("tokens", symbol, resolve, displayWidth);
 }

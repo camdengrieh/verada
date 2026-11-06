@@ -124,6 +124,10 @@ const EnvSchema = z.object({
   EPOCH_GOVERNOR_ADDRESS: optionalAddress,
   VOTING_SCHEME_ADDRESS: optionalAddress,
   TAKEOVER_GOVERNOR_ADDRESS: optionalAddress,
+  /** Live mode's `RotationGovernor`: the keeper drives live tokens' rotation rounds. Unset: off. */
+  ROTATION_GOVERNOR_ADDRESS: optionalAddress,
+  /** Rounds before each live token's next round re-read every run (close, outcome, finalize). */
+  KEEPER_LOOKBACK_ROUNDS: int(24, 1, 720),
   /** Token discovery fallback when the indexer is down: `TokenCreated` logs from this factory. */
   FACTORY_ADDRESS: optionalAddress,
   FACTORY_DEPLOY_BLOCK: z.preprocess(blank, z.coerce.bigint().nonnegative().optional()),
@@ -212,10 +216,14 @@ export interface KeeperConfig {
   epochGovernor?: Address;
   votingScheme?: Address;
   takeoverGovernor?: Address;
+  /** Live mode; rotation rounds are left alone when unset. */
+  rotationGovernor?: Address;
   factory?: Address;
   factoryDeployBlock?: bigint;
   maxTxPerRun: number;
   lookbackEpochs: number;
+  /** See `RotationDeps.lookbackRounds`. */
+  lookbackRounds: number;
   /** See `KeeperDeps.idleEpochs`. */
   idleEpochs: number;
   /** See `KeeperDeps.maxIndexerLagSeconds`. */
@@ -275,10 +283,12 @@ export function readConfig(env: Record<string, string | undefined>): PublisherCo
       epochGovernor: e.EPOCH_GOVERNOR_ADDRESS,
       votingScheme: e.VOTING_SCHEME_ADDRESS,
       takeoverGovernor: e.TAKEOVER_GOVERNOR_ADDRESS,
+      rotationGovernor: e.ROTATION_GOVERNOR_ADDRESS,
       factory: e.FACTORY_ADDRESS,
       factoryDeployBlock: e.FACTORY_DEPLOY_BLOCK,
       maxTxPerRun: e.KEEPER_MAX_TX_PER_RUN,
       lookbackEpochs: e.KEEPER_LOOKBACK_EPOCHS,
+      lookbackRounds: e.KEEPER_LOOKBACK_ROUNDS,
       idleEpochs: e.KEEPER_IDLE_EPOCHS,
       maxIndexerLagSeconds: e.KEEPER_INDEXER_MAX_LAG_SECONDS,
       intervalMs: e.KEEPER_INTERVAL_SECONDS * 1000,

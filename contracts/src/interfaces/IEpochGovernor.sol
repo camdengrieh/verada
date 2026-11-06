@@ -9,11 +9,22 @@ import {ICuratorRegistry} from "./ICuratorRegistry.sol";
 ///      the start of the epoch from the token's cause focus (fixed at launch) and the cause
 ///      catalogue version in effect at that time:
 ///      - up to `PINNED_MAX` causes pinned by the token's controller (its "shortlist"), each proven
-///        to be a catalogue entry inside the focus; pins take effect from the next epoch;
+///        to be a catalogue entry inside the focus;
+///      - then curator agents' picks for the focus buckets, when published;
 ///      - the rest filled by rotation: draw `k` is pool entry
 ///        `keccak256(abi.encode(token, epoch, version, k)) % poolSize`, skipping blocked causes and
 ///        repeats, so over time every charity in the focus reaches a ballot. When the pool is not
 ///        larger than the free slots, the whole pool is taken in order.
+///      Ballot size: the owner sets a protocol cap (`ballotSizeCap`, `MIN_OPTIONS..MAX_OPTIONS`,
+///      `MAX_OPTIONS` by default) and a token's controller may choose its own size
+///      (`setBallotSize`, zero to follow the cap). An epoch gets
+///      `min(choice or cap, cap, scheme.MAX_OPTIONS())`. Pins and the size follow one timing rule:
+///      both are read when the epoch's ballot is prepared, so a change applies to the current
+///      epoch while its ballot is unprepared (nobody can vote before that) and otherwise from the
+///      next epoch. A prepared ballot keeps its size (`ballotSizeFor`) and its option count
+///      (`ballotCommitment`), which closing and finalizing use. Smaller ballots cost voters less:
+///      the scheme packs three counters per encrypted tally word, so a ballot costs
+///      `ceil(size / 3)` word updates and multiples of 3 waste no counter.
 ///      Anyone may prepare a ballot by supplying the entries and Merkle proofs for exactly those
 ///      draws (`prepareBallot`); the filler has no choice in what is drawn.
 ///      Voters do not call the governor: they call
@@ -117,6 +128,11 @@ interface IEpochGovernor {
     event FactorySet(address indexed factory);
     event DefaultCauseSet(bytes32 indexed causeId);
     event ShortlistSet(address indexed token, bytes32[] causes);
+    /// @notice The protocol's largest ballot size changed. Also emitted at deployment.
+    event BallotSizeCapSet(uint8 cap);
+    /// @notice A token's controller chose its ballot size (zero: follow `ballotSizeCap`), applying
+    ///         from epoch `effectiveFrom` (the current one when its ballot is not prepared yet).
+    event BallotSizeSet(address indexed token, uint8 size, uint256 effectiveFrom);
 
     error NotFactory();
     error NotScheme(address caller);
@@ -154,13 +170,17 @@ interface IEpochGovernor {
     error ZeroAddress();
     error FactoryAlreadySet();
     error InsufficientGas();
+    /// @notice A ballot size outside `MIN_OPTIONS..MAX_OPTIONS` (zero is allowed for a token).
+    error BallotSizeOutOfRange(uint256 size);
+    /// @notice More pins than the token's current ballot size holds.
+    error ShortlistTooLong(uint256 pins, uint256 size);
 
     // ------------------------------------------------------------------ constants / config
 
     /// @notice Length of an epoch in seconds.
     function EPOCH_LENGTH() external view returns (uint256);
 
-    /// @notice Largest ballot (further capped by the current scheme's `MAX_OPTIONS`).
+    /// @notice Hard ceiling of every ballot size (further capped by the scheme's `MAX_OPTIONS`).
     function MAX_OPTIONS() external view returns (uint8);
 
     /// @notice Smallest ballot that opens a poll; also the smallest focus pool a token may launch
@@ -173,8 +193,23 @@ interface IEpochGovernor {
     /// @notice Rotation gives up after `DRAW_FACTOR` draws per free slot (repeats are skipped).
     function DRAW_FACTOR() external view returns (uint256);
 
-    /// @notice Ballot size for epochs prepared now: `min(MAX_OPTIONS, scheme.MAX_OPTIONS())`.
+    /// @notice Ballot size for epochs prepared now of a token that chose none:
+    ///         `min(ballotSizeCap, scheme.MAX_OPTIONS())`. A token's own size is `ballotSizeFor`.
     function ballotSize() external view returns (uint256);
+
+    /// @notice Protocol ballot size cap (`MIN_OPTIONS..MAX_OPTIONS`, owner-set, `MAX_OPTIONS` by
+    ///         default). It bounds every token's ballot.
+    function ballotSizeCap() external view returns (uint8);
+
+    /// @notice The ballot size `token`'s controller chose (zero: follow `ballotSizeCap`). It may
+    ///         exceed the cap, which then applies; the size in force is `ballotSizeFor`.
+    function ballotSizeChoiceOf(address token) external view returns (uint8);
+
+    /// @notice Ballot size of `token`'s `epoch`: the size it was prepared with, or for an
+    ///         unprepared epoch the size it would get if prepared now,
+    ///         `min(choice or ballotSizeCap, ballotSizeCap, scheme.MAX_OPTIONS())`. The ballot may
+    ///         hold fewer options (`ballotCommitment`) when the pool is small.
+    function ballotSizeFor(address token, uint256 epoch) external view returns (uint256);
 
     /// @notice Cause catalogue that ballots draw from.
     function catalog() external view returns (address);
@@ -255,9 +290,22 @@ interface IEpochGovernor {
     function registerToken(address token) external;
 
     /// @notice Sets a token's pinned causes (0..PINNED_MAX distinct, unblocked catalogue entries
-    ///         inside its focus) from the next epoch, or from the current one if its ballot is not
-    ///         prepared yet. Callable by the token's profile controller only.
+    ///         inside its focus, no more than its current ballot size) from the next epoch, or
+    ///         from the current one if its ballot is not prepared yet. Callable by the token's
+    ///         profile controller only. If the size is lowered later, a ballot takes only the
+    ///         first `size` unblocked pins.
     function setShortlist(address token, Pin[] calldata pins) external;
+
+    /// @notice Sets a token's ballot size: `MIN_OPTIONS..MAX_OPTIONS`, or zero to follow
+    ///         `ballotSizeCap`. A choice above the cap gets the cap. Applies from the next epoch, or
+    ///         from the current one if its ballot is not prepared yet (the pins' rule). Callable by
+    ///         the token's profile controller only, like `setShortlist`.
+    function setBallotSize(address token, uint8 size) external;
+
+    /// @notice Sets the protocol ballot size cap (`MIN_OPTIONS..MAX_OPTIONS`). Owner only. It
+    ///         bounds every token, including those that chose more, from each token's next
+    ///         unprepared ballot; prepared ballots keep their size.
+    function setBallotSizeCap(uint8 cap) external;
 
     // ------------------------------------------------------------------ lifecycle
 

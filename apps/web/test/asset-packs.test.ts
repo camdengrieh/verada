@@ -47,3 +47,21 @@ describe("asset packs", () => {
     expect(mergeRuntimeConfig(base, { assetPacks: { stocks: "nope" } })).toBe(base);
   });
 });
+
+describe("bundled quote-asset logos", () => {
+  it("falls back to the bundle when no pack is configured, and to nothing for unknown symbols", async () => {
+    vi.resetModules();
+    vi.doMock("../src/lib/assets.generated", () => ({
+      ASSETS: { "stocks/NVDAon": { vector: true }, "tokens/USDC": { width: 1024, height: 1024, webp: [64, 128] } },
+      PACKS: { stocks: {} },
+    }));
+    const m = await import("../src/lib/asset-packs");
+    const rel = (p: string) => `../${p}`;
+    const none = { swarmGatewayUrl: undefined, assetPacks: {} };
+    expect(m.quoteAssetLogo(none, "NVDAon", rel)).toEqual({ src: "../assets/stocks/NVDAon.svg" });
+    expect(m.quoteAssetLogo(none, "USDC", rel, 32)!.src).toBe("../assets/tokens/USDC-64.webp");
+    expect(m.quoteAssetLogo(none, "USDC", rel, 32)!.srcSet).toContain("../assets/tokens/USDC-128.webp 128w");
+    expect(m.quoteAssetLogo(none, "PEPE", rel)).toBeUndefined();
+    vi.doUnmock("../src/lib/assets.generated");
+  });
+});

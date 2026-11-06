@@ -4,6 +4,7 @@
 import { Menu, Search, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useEffect, useId, useRef, useState, type ComponentProps, type FormEvent, type ReactNode, type Ref } from "react";
+import { Divider } from "@verada/ui/components/ui/divider";
 import { cn } from "@verada/ui/lib/utils";
 import { LogoMark } from "./logo-mark";
 import { DefaultLink, type LinkComponent } from "./shared";
@@ -31,6 +32,8 @@ export interface SiteHeaderProps extends Omit<ComponentProps<"header">, "childre
   privacy?: ReactNode;
   /** Wallet slot (connect button or account chip). */
   wallet?: ReactNode;
+  /** Where the menu sheet portals to (default `document.body`), e.g. a phone frame in a gallery. */
+  menuContainer?: HTMLElement | null;
 }
 
 function isTypingTarget(el: EventTarget | null): boolean {
@@ -40,8 +43,13 @@ function isTypingTarget(el: EventTarget | null): boolean {
 
 /**
  * Direction A top navigation: mark and wordmark, pill nav links, a search field with a "/" shortcut,
- * the privacy pill and a wallet slot. Below `lg` the nav, search and pill move into a sheet opened
- * from the menu button.
+ * the privacy pill and a wallet slot.
+ *
+ * It lays out for its own width (a size container), not the viewport's, so it also works inside a
+ * narrow column. Tiers by header width: under 448px only the mark and the menu button; from 448px
+ * the wallet; from 672px the search field; from 1024px the privacy pill; from 1280px the nav links,
+ * and the menu button goes away. Everything hidden at a width is in the menu sheet, so the wallet
+ * is never clipped.
  */
 export function SiteHeader({
   links,
@@ -51,6 +59,7 @@ export function SiteHeader({
   search,
   privacy,
   wallet,
+  menuContainer,
   className,
   ...props
 }: SiteHeaderProps) {
@@ -98,68 +107,72 @@ export function SiteHeader({
         search={search}
         showHint={!mobile}
         onSubmitted={mobile ? () => setOpen(false) : undefined}
-        className={mobile ? "w-full" : "hidden min-w-0 flex-[1_1_120px] lg:flex"}
+        className={mobile ? "w-full" : "hidden min-w-0 flex-[1_1_120px] @2xl:flex"}
       />
     ) : null;
 
   return (
     <header
-      className={cn("sticky top-0 z-40 flex items-center gap-x-7 gap-y-3 border-b border-line bg-card/90 px-4 py-3.5 backdrop-blur sm:px-10", className)}
+      data-slot="site-header"
+      className={cn("@container sticky top-0 z-40 border-b border-line bg-card/90 backdrop-blur", className)}
       {...props}
     >
-      <LinkComponent href={homeHref} aria-label="Varada home" className="inline-flex min-h-11 items-center gap-2.5 text-ink no-underline">
-        <LogoMark size={34} decorative />
-        <span className="font-display text-2xl font-extrabold tracking-tight">Varada</span>
-      </LinkComponent>
-      <nav aria-label="Main" className="hidden shrink-0 lg:block">
-        <ul className="m-0 flex list-none flex-nowrap gap-1 p-0">
-          {links.map((l) => (
-            <li key={l.href}>{navLink(l, false)}</li>
-          ))}
-        </ul>
-      </nav>
-      {searchField(false)}
-      <div className="ml-auto flex items-center gap-2 lg:ml-0">
-        {privacy ? <div className="hidden shrink-0 lg:block">{privacy}</div> : null}
-        {wallet ? <div className="hidden sm:block">{wallet}</div> : null}
-        <Dialog.Root open={open} onOpenChange={setOpen}>
-          <Dialog.Trigger asChild>
-            <button type="button" aria-label="Open menu" className="grid size-11 place-items-center rounded-full bg-ink text-paper hover:bg-ink-soft lg:hidden">
-              <Menu aria-hidden="true" className="size-[18px]" />
-            </button>
-          </Dialog.Trigger>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
-            <Dialog.Content className="fixed inset-y-0 right-0 z-50 flex w-[min(86vw,360px)] flex-col gap-5 overflow-y-auto bg-card p-5 text-card-foreground shadow-float data-[state=open]:animate-in data-[state=open]:slide-in-from-right data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right focus-visible:outline-none">
-              <div className="flex items-center justify-between">
-                <Dialog.Title className="m-0 inline-flex items-center gap-2 font-display text-xl font-extrabold">
-                  <LogoMark size={28} decorative />
-                  Varada
-                </Dialog.Title>
-                <Dialog.Close asChild>
-                  <button type="button" aria-label="Close menu" className="grid size-11 place-items-center rounded-full border border-line hover:bg-sand">
-                    <X aria-hidden="true" className="size-5" />
-                  </button>
-                </Dialog.Close>
-              </div>
-              <Dialog.Description className="sr-only">Site navigation and search</Dialog.Description>
-              {searchField(true)}
-              <nav aria-label="Main">
-                <ul className="m-0 flex list-none flex-col gap-1 p-0">
-                  {links.map((l) => (
-                    <li key={l.href}>{navLink(l, true)}</li>
-                  ))}
-                </ul>
-              </nav>
-              {privacy || wallet ? (
-                <div className="mt-auto flex flex-col items-start gap-3 border-t border-line pt-5">
-                  {privacy}
-                  {wallet ? <div className="sm:hidden">{wallet}</div> : null}
+      <div className="flex items-center gap-x-3 px-4 py-3.5 @md:gap-x-5 @2xl:px-10 @7xl:gap-x-7">
+        <LinkComponent href={homeHref} aria-label="Varada home" className="inline-flex min-h-11 shrink-0 items-center gap-2.5 text-ink no-underline">
+          <LogoMark size={34} decorative />
+          <span className="font-display text-2xl font-extrabold tracking-tight @max-3xs:sr-only">Varada</span>
+        </LinkComponent>
+        <nav aria-label="Main" className="hidden shrink-0 @7xl:block">
+          <ul className="m-0 flex list-none flex-nowrap gap-1 p-0">
+            {links.map((l) => (
+              <li key={l.href}>{navLink(l, false)}</li>
+            ))}
+          </ul>
+        </nav>
+        {searchField(false)}
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 @2xl:ml-0">
+          {privacy ? <div className="hidden shrink-0 @5xl:block">{privacy}</div> : null}
+          {wallet ? <div className="hidden shrink-0 @md:block">{wallet}</div> : null}
+          <Dialog.Root open={open} onOpenChange={setOpen}>
+            <Dialog.Trigger asChild>
+              <button type="button" aria-label="Open menu" className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-paper hover:bg-ink-soft @7xl:hidden">
+                <Menu aria-hidden="true" className="size-[18px]" />
+              </button>
+            </Dialog.Trigger>
+            <Dialog.Portal container={menuContainer ?? undefined}>
+              <Dialog.Overlay className="fixed inset-0 z-50 bg-ink/50 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=closed]:animate-out data-[state=closed]:fade-out-0" />
+              <Dialog.Content className="fixed inset-y-0 right-0 z-50 flex w-[min(86vw,360px)] flex-col gap-5 overflow-y-auto bg-card p-5 text-card-foreground shadow-float data-[state=open]:animate-in data-[state=open]:slide-in-from-right data-[state=closed]:animate-out data-[state=closed]:slide-out-to-right focus-visible:outline-none">
+                <div className="flex items-center justify-between">
+                  <Dialog.Title className="m-0 inline-flex items-center gap-2 font-display text-xl font-extrabold">
+                    <LogoMark size={28} decorative />
+                    Varada
+                  </Dialog.Title>
+                  <Dialog.Close asChild>
+                    <button type="button" aria-label="Close menu" className="grid size-11 place-items-center rounded-full border border-line hover:bg-sand">
+                      <X aria-hidden="true" className="size-5" />
+                    </button>
+                  </Dialog.Close>
                 </div>
-              ) : null}
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
+                <Dialog.Description className="sr-only">Site navigation and search</Dialog.Description>
+                {searchField(true)}
+                <nav aria-label="Main">
+                  <ul className="m-0 flex list-none flex-col gap-1 p-0">
+                    {links.map((l) => (
+                      <li key={l.href}>{navLink(l, true)}</li>
+                    ))}
+                  </ul>
+                </nav>
+                {privacy || wallet ? (
+                  <div className="mt-auto flex flex-col items-start gap-3">
+                    <Divider variant="dashed" className="mb-2" />
+                    {privacy}
+                    {wallet}
+                  </div>
+                ) : null}
+              </Dialog.Content>
+            </Dialog.Portal>
+          </Dialog.Root>
+        </div>
       </div>
     </header>
   );

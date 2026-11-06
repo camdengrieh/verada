@@ -220,6 +220,62 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "ballotSizeCap",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ballotSizeChoiceOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "ballotSizeFor",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "catalog",
     "inputs": [],
     "outputs": [
@@ -908,6 +964,37 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "setBallotSize",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "size",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setBallotSizeCap",
+    "inputs": [
+      {
+        "name": "cap",
+        "type": "uint8",
+        "internalType": "uint8"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setCuratorRegistry",
     "inputs": [
       {
@@ -1266,6 +1353,44 @@ export const epochGovernorAbi = [
         "type": "bytes32[]",
         "indexed": false,
         "internalType": "bytes32[]"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BallotSizeCapSet",
+    "inputs": [
+      {
+        "name": "cap",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "BallotSizeSet",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "size",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "uint8"
+      },
+      {
+        "name": "effectiveFrom",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1693,6 +1818,17 @@ export const epochGovernorAbi = [
   },
   {
     "type": "error",
+    "name": "BallotSizeOutOfRange",
+    "inputs": [
+      {
+        "name": "size",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "CurationSkipAlreadyRequested",
     "inputs": [
       {
@@ -2028,6 +2164,22 @@ export const epochGovernorAbi = [
       },
       {
         "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "ShortlistTooLong",
+    "inputs": [
+      {
+        "name": "pins",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "size",
         "type": "uint256",
         "internalType": "uint256"
       }

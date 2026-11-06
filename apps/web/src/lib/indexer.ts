@@ -1,4 +1,5 @@
 /** Client for the indexer HTTP API: JSON, cursor pagination, bigint values as decimal strings. */
+import { isBallotSize } from "@verada/sdk";
 
 export interface Page<T> {
   items: T[];
@@ -45,12 +46,26 @@ export interface TokenFocus {
   regions: string[];
 }
 
+/**
+ * A token's ballot size: the platform's cap, the token's own choice (0 follows the cap) and
+ * `size`, what its next unprepared ballot gets (2..32).
+ */
+export interface TokenBallotSize {
+  cap: number;
+  choice: number;
+  size: number;
+  /** Epoch from which `choice` applies; null when the token never chose. */
+  choiceEffectiveFrom: string | null;
+}
+
 export interface TokenDetail extends TokenSummary {
   profile: TokenProfile | null;
   /** Causes the controller pinned (they lead every ballot); null when none. */
   shortlist: string[] | null;
   /** Null when not known yet. */
   focus: TokenFocus | null;
+  /** Null when not reported (older indexer, chain read failed): assume up to 32 options. */
+  ballotSize: TokenBallotSize | null;
 }
 
 /** A catalogue org (`/api/catalog/*`). */
@@ -108,6 +123,8 @@ export interface EpochDetail {
   poolSize?: string;
   /** Pins at the head of the prepared ballot; null until prepared, undefined from an older indexer or the chain fallback. */
   pinnedCount?: number | null;
+  /** Ballot size the epoch was prepared with (2..32); null until prepared, undefined from an older indexer or the chain fallback. */
+  ballotSize?: number | null;
   /** Curated picks placed right after the pins; null until prepared, undefined from an older indexer or the chain fallback. */
   curatedCount?: number | null;
   /**
@@ -325,7 +342,18 @@ export function toTokenDetail(v: unknown): TokenDetail | null {
       textRecords: {},
     };
   }
-  return { ...t, profile, shortlist: strList(v.shortlist), focus: toFocus(v.focus) };
+  return { ...t, profile, shortlist: strList(v.shortlist), focus: toFocus(v.focus), ballotSize: toBallotSize(v.ballotSize) };
+}
+
+function toBallotSize(v: unknown): TokenBallotSize | null {
+  if (!isRecord(v)) return null;
+  const cap = num(v.cap);
+  const choice = num(v.choice);
+  const size = num(v.size);
+  if (cap === undefined || choice === undefined || size === undefined || !isBallotSize(cap) || !isBallotSize(size)) return null;
+  if (choice !== 0 && !isBallotSize(choice)) return null;
+  const from = v.choiceEffectiveFrom;
+  return { cap, choice, size, choiceEffectiveFrom: from === null || from === undefined ? null : dec(from) };
 }
 
 function toFocus(v: unknown): TokenFocus | null {
@@ -396,6 +424,7 @@ export function toEpochDetail(v: unknown): EpochDetail | null {
   const prepared = bool(v.prepared) || options.length > 0;
   const pinnedCount = countOrNull(v.pinnedCount);
   const curatedCount = countOrNull(v.curatedCount);
+  const ballotSize = countOrNull(v.ballotSize);
   return {
     ...v,
     epoch: dec(v.epoch),
@@ -419,6 +448,7 @@ export function toEpochDetail(v: unknown): EpochDetail | null {
     poolSize: v.poolSize === undefined || v.poolSize === null ? undefined : dec(v.poolSize),
     pinnedCount,
     curatedCount,
+    ballotSize,
     optionSources: epochOptionSources({ options, prepared, pinnedCount, curatedCount, optionSources: v.optionSources }),
   };
 }
