@@ -23,6 +23,7 @@ import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockEndaomentRegistry, MockOrgFactory, MockUSDC} from "../mocks/EndaomentMocks.sol";
 import {MockProfileRegistryLite, MockVotingScheme} from "../mocks/GovernanceMocks.sol";
 import {IdentityRegistryMock} from "../mocks/IdentityRegistryMock.sol";
+import {BallotLog} from "../utils/BallotLog.sol";
 import {CatalogFixture, CatalogTree} from "../utils/CatalogFixture.sol";
 
 /// @dev Profile registry stand-in that also exposes a parent node (for `CuratorRegistry`).
@@ -36,7 +37,7 @@ contract CatalogProfiles is MockProfileRegistryLite {
 ///      Africa (the first 5 also in hunger x Africa), 10 in hunger x Europe outside the focus. The
 ///      token's focus is {hunger, children} x Africa, a pool of 50; ballots hold 10 options. A
 ///      weekly governor is the curator registry's clock and the reference for equivalence.
-contract RotationGovernorCatalogTest is Test {
+contract RotationGovernorCatalogTest is Test, BallotLog {
     uint8 internal constant HUNGER = 2;
     uint64 internal constant FOCUS_C = (uint64(1) << 2) | (uint64(1) << 3);
     uint16 internal constant FOCUS_R = uint16(1);
@@ -71,6 +72,7 @@ contract RotationGovernorCatalogTest is Test {
     }
 
     function setUp() public {
+        _recordBallots();
         vm.warp(1_750_000_123);
         tokenContract =
             new VeradaToken("Verada Live", "VLIVE", "ipfs://meta", creator, address(this));
@@ -258,9 +260,9 @@ contract RotationGovernorCatalogTest is Test {
         vm.prank(makeAddr("anyone"));
         gov.prepareCuratedRound(token, 1, curated, d);
 
-        assertEq(gov.roundOptionOrgIds(token, 1), weekly.epochOptionOrgIds(token, 1));
+        assertEq(gov.roundOptionOrgIds(token, 1), _orgIds(address(weekly), token, 1));
         (IRotationGovernor.RoundStatus st,,,,,, bytes32[] memory opts) = gov.roundOf(token, 1);
-        assertEq(opts, weekly.epochOptions(token, 1));
+        assertEq(opts, _options(address(weekly), token, 1));
         assertEq(opts.length, 10);
         assertEq(opts[0], _cause(_org(3)), "pins first");
         assertEq(opts[2], _cause(_org(29)), "then curated picks");
@@ -682,9 +684,21 @@ contract RotationGovernorCatalogTest is Test {
             assertEq(uint8(_status(target)), uint8(IRotationGovernor.RoundStatus.Open));
             _expectNoCuratedPhase(target);
         }
-        // The weekly governor behaves the same way after its CURATION_GRACE.
+        _weeklySkipFallsBackToRotation();
+    }
+
+    /// @dev The weekly governor behaves the same way CURATION_GRACE after a skip request.
+    function _weeklySkipFallsBackToRotation() internal {
+        vm.warp(weekly.epochStart(1));
+        weekly.requestCurationSkip(token, 1);
+        IEpochGovernor.Draw[] memory wd = cat.draws(weekly, registry, token, 1, FOCUS_C, FOCUS_R);
+        vm.warp(weekly.epochStart(1) + weekly.CURATION_GRACE() - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEpochGovernor.IncompleteCuratedBallot.selector, token, 1, 0)
+        );
+        weekly.prepareBallot(token, 1, wd);
         vm.warp(weekly.epochStart(1) + weekly.CURATION_GRACE());
-        weekly.prepareBallot(token, 1, cat.draws(weekly, registry, token, 1, FOCUS_C, FOCUS_R));
+        weekly.prepareBallot(token, 1, wd);
     }
 
     function _curatedDraws(uint64 target) internal view returns (IEpochGovernor.Draw[] memory) {
@@ -766,7 +780,7 @@ contract RotationGovernorCatalogTest is Test {
         weekly.prepareCuratedBallot(
             token, 1, curated, cat.drawsAfter(weekly, registry, token, 1, FOCUS_C, FOCUS_R, taken)
         );
-        bytes32[] memory w = weekly.epochOptionOrgIds(token, 1);
+        bytes32[] memory w = _orgIds(address(weekly), token, 1);
         assertEq(w[0], _org(29));
         assertEq(w[1], _org(28));
         assertEq(w[2], _org(27));

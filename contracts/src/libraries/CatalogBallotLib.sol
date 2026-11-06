@@ -32,8 +32,8 @@ library CatalogBallotLib {
     /// @dev Largest number of causes a controller may pin.
     uint8 internal constant PINNED_MAX = 8;
 
-    /// @dev A ballot being built: cause ids (for repeats and events) and org ids (stored), `n`
-    ///      filled out of `size`.
+    /// @dev A ballot being built: cause ids (for repeats and events) and org ids (committed to or
+    ///      stored), `n` filled out of `size`.
     struct Ballot {
         bytes32[] options;
         bytes32[] orgs;

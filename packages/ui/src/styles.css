@@ -1,0 +1,233 @@
+/*
+ * Varada UI · Direction A "Paper & Pigment".
+ * Tokens follow the shadcn variable names (background, primary, muted…) so shadcn and 21st.dev
+ * components theme themselves; Varada-specific tokens (paper, terracotta, sage, stock…) sit beside
+ * them. Text pairs are checked at 4.5:1 or better; gains and losses also differ in lightness.
+ * The app imports this file and adds an @source for packages/ui/src (see apps/web globals.css).
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Paper & Pigment palette */
+  --paper: #f5eee1;
+  --paper-card: #fffbf4;
+  --sand: #efe4d2;
+  --line: #e3d6c2;
+  --line-strong: #d9c9b1;
+  --ink: #2b2118;
+  --ink-soft: #4a3b2e;
+  --ink-muted: #6a5848;
+  --terracotta: #a8432a;
+  --terracotta-strong: #7e2f1c;
+  --terracotta-tint: #f6e1da;
+  --sage: #3f6b4e;
+  --sage-ink: #2c4f38;
+  --sage-tint: #e1ede4;
+  --ochre: #c98a2b;
+  --ochre-ink: #7a3e12;
+  --ochre-tint: #f3e3d2;
+  --sky: #7fa9c4;
+  --stock-ink: #24465e;
+  --stock-tint: #e4ecf2;
+  --etf-ink: #4a3870;
+  --etf-tint: #e9e4f2;
+  --gain: #2f6b45;
+  --loss: #a8432a;
+
+  /* shadcn semantic tokens */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--paper-card);
+  --card-foreground: var(--ink);
+  --popover: var(--paper-card);
+  --popover-foreground: var(--ink);
+  --primary: var(--terracotta);
+  --primary-foreground: #fff8ee;
+  --secondary: var(--sand);
+  --secondary-foreground: var(--ink);
+  --muted: var(--sand);
+  --muted-foreground: var(--ink-muted);
+  --accent: var(--sage-tint);
+  --accent-foreground: var(--sage-ink);
+  --destructive: #9b2c1c;
+  --destructive-foreground: #fff8ee;
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--terracotta);
+  --chart-1: var(--sage);
+  --chart-2: var(--ochre);
+  --chart-3: var(--sky);
+  --chart-4: var(--terracotta);
+  --chart-5: var(--ink-muted);
+  --sidebar: var(--paper-card);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--ink);
+  --sidebar-primary-foreground: var(--paper);
+  --sidebar-accent: var(--sand);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--line);
+  --sidebar-ring: var(--terracotta);
+  --radius: 0.875rem;
+}
+
+/* Evening paper: a warm dark variant for the same direction. */
+.dark {
+  --paper: #1d1813;
+  --paper-card: #26201a;
+  --sand: #322a22;
+  --line: #3a3128;
+  --line-strong: #4a3f33;
+  --ink: #f1e8da;
+  --ink-soft: #d9ccb8;
+  --ink-muted: #b7a893;
+  --terracotta: #e07a5a;
+  --terracotta-strong: #f09a7e;
+  --terracotta-tint: #3d2620;
+  --sage: #7fbf95;
+  --sage-ink: #a9dcb9;
+  --sage-tint: #233229;
+  --ochre: #e0a54d;
+  --ochre-ink: #f0c483;
+  --ochre-tint: #3a2c19;
+  --stock-ink: #a8c8e4;
+  --stock-tint: #1f2c37;
+  --etf-ink: #c7b6ef;
+  --etf-tint: #2a2438;
+  --gain: #7fcf98;
+  --loss: #f08b72;
+  --primary-foreground: #1d1813;
+  --destructive: #f08b72;
+  --destructive-foreground: #1d1813;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-paper: var(--paper);
+  --color-paper-card: var(--paper-card);
+  --color-sand: var(--sand);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-muted: var(--ink-muted);
+  --color-terracotta: var(--terracotta);
+  --color-terracotta-strong: var(--terracotta-strong);
+  --color-terracotta-tint: var(--terracotta-tint);
+  --color-sage: var(--sage);
+  --color-sage-ink: var(--sage-ink);
+  --color-sage-tint: var(--sage-tint);
+  --color-ochre: var(--ochre);
+  --color-ochre-ink: var(--ochre-ink);
+  --color-ochre-tint: var(--ochre-tint);
+  --color-sky: var(--sky);
+  --color-stock-ink: var(--stock-ink);
+  --color-stock-tint: var(--stock-tint);
+  --color-etf-ink: var(--etf-ink);
+  --color-etf-tint: var(--etf-tint);
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+
+  --font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.625rem;
+  --radius-lg: var(--radius);
+  --radius-xl: 1.125rem;
+  --radius-2xl: 1.375rem;
+  --radius-3xl: 1.75rem;
+
+  --shadow-paper: 0 24px 40px -32px rgb(43 33 24 / 0.5);
+  --shadow-float: 0 30px 60px -30px rgb(43 33 24 / 0.45);
+
+  --animate-marquee: marquee var(--marquee-duration, 40s) linear infinite;
+  --animate-step-in: step-in 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+  --animate-flash: flash 1.2s ease-out;
+
+  @keyframes marquee {
+    from { transform: translateX(0); }
+    to { transform: translateX(calc(-50% - var(--marquee-gap, 2rem) / 2)); }
+  }
+  @keyframes step-in {
+    from { opacity: 0; transform: translateX(1.5rem); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes flash {
+    from { background-color: var(--sage-tint); }
+    to { background-color: transparent; }
+  }
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums slashed-zero;
+}
+
+@utility kicker {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+  h1, h2, h3 {
+    @apply font-display;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

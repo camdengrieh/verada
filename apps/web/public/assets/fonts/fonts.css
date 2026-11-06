@@ -1,0 +1,23 @@
+/* Self-hosted variable fonts (latin subset, SIL OFL 1.1; licences beside each file).
+   URLs are relative to this stylesheet, so they resolve under any Swarm or ENS prefix. */
+@font-face {
+  font-family: "Fraunces Variable";
+  src: url("fraunces.woff2") format("woff2-variations"), url("fraunces.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Instrument Sans Variable";
+  src: url("instrument-sans.woff2") format("woff2-variations"), url("instrument-sans.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  src: url("jetbrains-mono.woff2") format("woff2-variations"), url("jetbrains-mono.woff2") format("woff2");
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
