@@ -43,25 +43,6 @@ export const tokenProfileRegistryAbi = [
   },
   {
     "type": "function",
-    "name": "contenthashOf",
-    "inputs": [
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "controllerOf",
     "inputs": [
       {
@@ -198,11 +179,6 @@ export const tokenProfileRegistryAbi = [
             "name": "label",
             "type": "string",
             "internalType": "string"
-          },
-          {
-            "name": "contenthash",
-            "type": "bytes",
-            "internalType": "bytes"
           }
         ]
       }
@@ -500,24 +476,6 @@ export const tokenProfileRegistryAbi = [
   },
   {
     "type": "function",
-    "name": "setContenthash",
-    "inputs": [
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "hash",
-        "type": "bytes",
-        "internalType": "bytes"
-      }
-    ],
-    "outputs": [],
-    "stateMutability": "nonpayable"
-  },
-  {
-    "type": "function",
     "name": "setController",
     "inputs": [
       {
@@ -788,25 +746,6 @@ export const tokenProfileRegistryAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
-  },
-  {
-    "type": "event",
-    "name": "ContenthashChanged",
-    "inputs": [
-      {
-        "name": "token",
-        "type": "address",
-        "indexed": true,
-        "internalType": "address"
-      },
-      {
-        "name": "hash",
-        "type": "bytes",
-        "indexed": false,
-        "internalType": "bytes"
-      }
-    ],
-    "anonymous": false
   },
   {
     "type": "event",
