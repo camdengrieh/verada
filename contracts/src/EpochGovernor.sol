@@ -53,6 +53,9 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     uint256 public constant LAUNCH_SNAPSHOT_DELAY = 1 days;
 
     /// @inheritdoc IEpochGovernor
+    uint256 public constant CURATION_GRACE = 6 hours;
+
+    /// @inheritdoc IEpochGovernor
     uint256 public immutable epochZeroStart;
 
     /// @notice Cause registry: blocked causes are skipped, winners are materialized into it.
@@ -212,7 +215,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     /// @inheritdoc IEpochGovernor
     function prepareBallot(address token, uint256 epoch, Draw[] calldata draws) external {
         _checkPreparable(token, epoch);
-        _prepare(token, epoch, new CuratedDraw[](0), draws);
+        _prepare(token, epoch, new CuratedDraw[](0), draws, _curationRequired(epoch));
     }
 
     /// @inheritdoc IEpochGovernor
@@ -223,7 +226,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         Draw[] calldata draws
     ) external {
         _checkPreparable(token, epoch);
-        _prepare(token, epoch, curated, draws);
+        _prepare(token, epoch, curated, draws, true);
     }
 
     /// @inheritdoc IEpochGovernor
@@ -237,7 +240,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     /// @inheritdoc IEpochGovernor
     function openEpoch(address token, uint256 epoch) external {
         _checkPreparable(token, epoch);
-        _prepare(token, epoch, new CuratedDraw[](0), new Draw[](0));
+        _prepare(token, epoch, new CuratedDraw[](0), new Draw[](0), _curationRequired(epoch));
     }
 
     /// @inheritdoc IBallotGovernor
@@ -518,6 +521,13 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
 
     // ------------------------------------------------------------------ internals
 
+    /// @dev Until `CURATION_GRACE` into the epoch, a ballot with usable curations needs its curated
+    ///      draws. After it, ballots without them skip the curated phase, so picks that were never
+    ///      published cannot keep an epoch closed.
+    function _curationRequired(uint256 epoch) private view returns (bool) {
+        return block.timestamp < epochStart(epoch) + CURATION_GRACE;
+    }
+
     function _checkPreparable(address token, uint256 epoch) private view {
         if (!isRegistered[token]) revert TokenNotRegistered(token);
         if (epoch != currentEpoch()) revert EpochNotCurrent(epoch);
@@ -532,7 +542,8 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         address token,
         uint256 epoch,
         CuratedDraw[] memory curated,
-        Draw[] memory draws
+        Draw[] memory draws,
+        bool curate
     ) private {
         EpochState storage s = _epochs[token][epoch];
         uint32 version = _catalog.versionAt(epochStart(epoch));
@@ -549,7 +560,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
             (buckets, sizes, pool) =
                 CatalogBallotLib.focusPool(_catalog, version, categoryMask, regionMask);
             bytes32 root = _catalog.rootOf(version);
-            if (address(curators) != address(0) && b.n < b.size && buckets.length != 0) {
+            if (curate && address(curators) != address(0) && b.n < b.size && buckets.length != 0) {
                 ICuratorRegistry.Curation[] memory cs =
                     curators.curationsFor(epoch, version, buckets);
                 uint256 included;

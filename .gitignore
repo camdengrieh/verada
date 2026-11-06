@@ -12,23 +12,7 @@ coverage/
 *.log
 .DS_Store
 .ponder/
-# Never commit binary assets (images, fonts, audio, video)
 /scripts
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.svg
-*.webp
-*.avif
-*.ico
-*.woff
-*.woff2
-*.ttf
-*.otf
-*.mp4
-*.webm
-*.mp3
 .githooks/commit-msg
 .githooks/pre-commit
 docs/SPEC.md
@@ -37,3 +21,6 @@ contracts/deployments/
 
 # Cause catalogue harvest and build output (published to Swarm, not tracked)
 .catalog/
+
+# Asset packs built by apps/web/scripts/optimize-assets.mjs (published to Swarm separately, not tracked)
+apps/web/packs/

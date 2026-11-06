@@ -11,6 +11,7 @@ import {
   swarmReferenceToContenthash,
   validateExport,
   estimateStamp,
+  validatePack,
 } from "../src/index.js";
 
 // Fixed vector from ENSIP-7 (Swarm example).
@@ -67,6 +68,27 @@ describe("validateExport", () => {
     expect(e).toMatch(/no index\.html/);
     expect(e).toMatch(/NUL/);
   });
+  it("allows budgeted assets under assets/ only", () => {
+    const base = { "index.html": "x", "404.html": "x" };
+    const ok = mk({ ...base, "assets/scenes/a.avif": Buffer.alloc(300 * 1024, 1), "assets/logo/l.svg": "<svg/>", "assets/c/i.png": Buffer.alloc(50 * 1024, 1), "assets/f/x.woff2": Buffer.alloc(10, 0) });
+    expect(validateExport(ok).errors).toEqual([]);
+    const bad = mk({
+      ...base,
+      "assets/big.webp": Buffer.alloc(401 * 1024, 1),
+      "assets/orig.png": Buffer.alloc(101 * 1024, 1),
+      "assets/photo.jpg": Buffer.alloc(10, 1),
+      "logo.svg": "<svg/>",
+    });
+    expect(validateExport(bad).errors.sort()).toEqual([
+      "asset over 400 KB: assets/big.webp",
+      "asset type not allowed: assets/photo.jpg",
+      "binary asset not allowed: logo.svg",
+      "png over 100 KB: assets/orig.png",
+    ]);
+    const files: Record<string, Buffer | string> = { ...base };
+    for (let i = 0; i < 14; i++) files[`assets/s${i}.avif`] = Buffer.alloc(390 * 1024, 1);
+    expect(validateExport(mk(files)).errors).toEqual(["assets/ totals 5460 KB, over the 5120 KB budget"]);
+  });
 });
 
 describe("estimateStamp", () => {
@@ -103,5 +125,23 @@ describe("ENSv2 and feeds", () => {
     expect(id.topic).toBe(SITE_FEED_TOPIC);
     expect(id.topicHex).toBe(keccak256(stringToBytes(SITE_FEED_TOPIC)));
     expect(() => feedIdentity("0x1234")).toThrow(/32 bytes/);
+  });
+});
+
+describe("validatePack", () => {
+  it("accepts images and the index within the per-file budget, with no total cap", () => {
+    const files: Record<string, Buffer | string> = { "index.json": "{}", "SPYon.svg": "<svg/>" };
+    for (let i = 0; i < 20; i++) files[`S${i}-128.webp`] = Buffer.alloc(390 * 1024, 1);
+    expect(validatePack(mk(files)).errors).toEqual([]);
+  });
+  it("rejects a missing index, non-images and oversized files", () => {
+    expect(validatePack(mk({ "a-64.webp": "x" })).errors).toEqual(["no index.json at the pack root"]);
+    const bad = mk({ "index.json": "{}", "a.js": "1", "f.woff2": "x", "big-128.webp": Buffer.alloc(401 * 1024, 1), "o.png": Buffer.alloc(101 * 1024, 1) });
+    expect(validatePack(bad).errors.sort()).toEqual([
+      "asset over 400 KB: big-128.webp",
+      "not an image in an asset format: a.js",
+      "not an image in an asset format: f.woff2",
+      "png over 100 KB: o.png",
+    ]);
   });
 });

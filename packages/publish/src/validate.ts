@@ -9,6 +9,20 @@ const BINARY_EXT = new Set([
   ".mp3", ".mp4", ".webm", ".ogg", ".wav", ".mov", ".pdf", ".zip", ".wasm", ".gz", ".br",
 ]);
 
+/**
+ * Binary files are allowed only under assets/ (the web app's optimised copies), only in these
+ * formats and within a size budget. Mirrors apps/web/scripts/verify-export.mjs ASSET_RULES.
+ */
+export const ASSET_RULES = {
+  dir: "assets",
+  extensions: new Set([".webp", ".avif", ".svg", ".woff2", ".png"]),
+  maxFileBytes: 400 * 1024,
+  maxPngBytes: 100 * 1024,
+  maxTotalBytes: 5 * 1024 * 1024,
+} as const;
+
+const kib = (n: number) => `${Math.round(n / 1024)} KB`;
+
 export interface FileEntry { path: string; bytes: number }
 export interface ValidationReport {
   root: string;
@@ -63,8 +77,21 @@ export function validateExport(root: string): ValidationReport {
     if (!paths.has(idx)) errors.push(`directory "${d}" has html but no index.html`);
   }
 
+  let assetBytes = 0;
   for (const f of files) {
     const ext = extname(f.path).toLowerCase();
+    if (f.path.split("/")[0] === ASSET_RULES.dir) {
+      assetBytes += f.bytes;
+      if (ASSET_RULES.extensions.has(ext)) {
+        if (f.bytes > ASSET_RULES.maxFileBytes) errors.push(`asset over ${kib(ASSET_RULES.maxFileBytes)}: ${f.path}`);
+        if (ext === ".png" && f.bytes > ASSET_RULES.maxPngBytes) errors.push(`png over ${kib(ASSET_RULES.maxPngBytes)}: ${f.path}`);
+        continue;
+      }
+      if (BINARY_EXT.has(ext)) {
+        errors.push(`asset type not allowed: ${f.path}`);
+        continue;
+      }
+    }
     if (BINARY_EXT.has(ext)) {
       errors.push(`binary asset not allowed: ${f.path}`);
       continue;
@@ -88,6 +115,35 @@ export function validateExport(root: string): ValidationReport {
     }
   }
 
+  if (assetBytes > ASSET_RULES.maxTotalBytes) {
+    errors.push(`assets/ totals ${kib(assetBytes)}, over the ${kib(ASSET_RULES.maxTotalBytes)} budget`);
+  }
+  const totalBytes = files.reduce((n, f) => n + f.bytes, 0);
+  return { root, files, totalBytes, errors, warnings };
+}
+
+/**
+ * An asset pack (art published as its own Swarm collection, e.g. stock logos; built by
+ * apps/web/scripts/optimize-assets.mjs into apps/web/packs/<name>/). Only images in the asset
+ * formats plus the pack's index.json, each within the per-file budget. There is no total budget:
+ * the site loads one image at a time from the pack, and the pack is uploaded once, not per release.
+ */
+export function validatePack(root: string): ValidationReport {
+  const files = walk(root);
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  if (files.length === 0) errors.push("pack is empty (run pnpm --filter @verada/web assets)");
+  else if (!files.some((f) => f.path === "index.json")) errors.push("no index.json at the pack root");
+  for (const f of files) {
+    if (f.path === "index.json") continue;
+    const ext = extname(f.path).toLowerCase();
+    if (!ASSET_RULES.extensions.has(ext) || ext === ".woff2") {
+      errors.push(`not an image in an asset format: ${f.path}`);
+      continue;
+    }
+    if (f.bytes > ASSET_RULES.maxFileBytes) errors.push(`asset over ${kib(ASSET_RULES.maxFileBytes)}: ${f.path}`);
+    if (ext === ".png" && f.bytes > ASSET_RULES.maxPngBytes) errors.push(`png over ${kib(ASSET_RULES.maxPngBytes)}: ${f.path}`);
+  }
   const totalBytes = files.reduce((n, f) => n + f.bytes, 0);
   return { root, files, totalBytes, errors, warnings };
 }
