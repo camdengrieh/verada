@@ -19,7 +19,7 @@ import {DnsNameLib} from "../../src/libraries/DnsNameLib.sol";
 import {OffchainLookup} from "../../src/vendor/unruggable/GatewayFetchTarget.sol";
 import {IGatewayProtocol} from "../../src/vendor/unruggable/IGatewayProtocol.sol";
 import {IGatewayVerifier} from "../../src/vendor/unruggable/IGatewayVerifier.sol";
-import {OrgNamesTree} from "../VaradaOrgResolver.t.sol";
+import {ShardTree} from "../VaradaOrgResolver.t.sol";
 
 interface IUniversalResolverV2Lite {
     function resolve(bytes calldata name, bytes calldata data)
@@ -76,14 +76,12 @@ contract OrgNamesForkTest is Test {
         script = new SetupOrgNames();
         nameOwner = ETH_REGISTRY.ownerOf(ETH_REGISTRY.getTokenId(script.parentId()));
         (parentResolverBefore,,) = UR.findResolver(DnsNameLib.encode("varada.eth"));
-        root = OrgNamesTree.pair(
-            OrgNamesTree.leaf(lhRed, redCross), OrgNamesTree.leaf(lhNpr, npr, npr, nprBase)
-        );
+        root = ShardTree.root(_all(), BITS);
         string[] memory urls = new string[](1);
         urls[0] = "https://org-gateway.varada.example/ccip/{sender}/{data}.json";
         uint256 g = gasleft();
         r = script.execute(
-            nameOwner, address(0), root, urls, "https://varada.eth.limo/org/", l2Registry
+            nameOwner, address(0), root, BITS, urls, "https://varada.eth.limo/org/", l2Registry
         );
         // Names are fresh on Optimism: the verifier proves empty records (mocked here; the live
         // gateway run is in services/org-gateway). getLatestContext stays live.
@@ -107,6 +105,15 @@ contract OrgNamesForkTest is Test {
         );
     }
 
+    /// @dev One shard bit: two shards, so the test can build the tree (the catalogue uses 12).
+    uint8 internal constant BITS = 1;
+
+    function _all() internal view returns (VaradaOrgResolver.Entry[] memory all) {
+        all = new VaradaOrgResolver.Entry[](2);
+        all[0] = ShardTree.entry(lhRed, redCross);
+        all[1] = VaradaOrgResolver.Entry(lhNpr, npr, npr, nprBase);
+    }
+
     function _gateway(bytes memory callData) internal view returns (bytes memory) {
         if (bytes4(callData) == IGatewayProtocol.proveRequest.selector) return "";
         if (bytes4(callData) == BATCH_QUERY) {
@@ -119,17 +126,7 @@ contract OrgNamesForkTest is Test {
             }
             return abi.encode(failures, responses);
         }
-        bytes32 lh = abi.decode(callData, (bytes32));
-        bytes32[] memory proof = new bytes32[](1);
-        if (lh == lhRed) {
-            proof[0] = OrgNamesTree.leaf(lhNpr, npr, npr, nprBase);
-            return abi.encode(root, redCross, redCross, redCross, proof);
-        }
-        if (lh == lhNpr) {
-            proof[0] = OrgNamesTree.leaf(lhRed, redCross);
-            return abi.encode(root, npr, npr, nprBase, proof);
-        }
-        return abi.encode(root, bytes32(0), bytes32(0), bytes32(0), new bytes32[](0));
+        return ShardTree.answer(_all(), abi.decode(callData, (uint256)), BITS);
     }
 
     function _ccipCall(address target, bytes memory call) internal view returns (bytes memory) {
@@ -274,7 +271,7 @@ contract OrgNamesForkTest is Test {
     function test_fork_rerunIsANoOp() public {
         string[] memory urls = new string[](0);
         SetupOrgNames.Result memory again =
-            script.execute(nameOwner, r.resolver, bytes32(0), urls, "", address(0));
+            script.execute(nameOwner, r.resolver, bytes32(0), 0, urls, "", address(0));
         assertEq(again.varadaRegistry, r.varadaRegistry);
         assertEq(again.orgRegistry, r.orgRegistry);
         assertEq(again.resolver, r.resolver);
@@ -285,6 +282,6 @@ contract OrgNamesForkTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(SetupOrgNames.NotOwner.selector, nameOwner, stranger)
         );
-        script.execute(stranger, r.resolver, bytes32(0), new string[](0), "", address(0));
+        script.execute(stranger, r.resolver, bytes32(0), 0, new string[](0), "", address(0));
     }
 }

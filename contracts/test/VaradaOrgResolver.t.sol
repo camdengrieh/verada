@@ -54,23 +54,75 @@ contract MockGatewayVerifier is IGatewayVerifier {
     }
 }
 
-/// @notice OpenZeppelin standard tree helpers, shared with the fork test.
-library OrgNamesTree {
-    /// @dev Same org id on Ethereum, Optimism and Base.
-    function leaf(bytes32 labelhash, bytes32 orgId) internal pure returns (bytes32) {
-        return leaf(labelhash, orgId, orgId, orgId);
+/// @notice Sharded names tree helpers (OpenZeppelin standard tree, leaf `(uint256 shard,
+///         bytes32 keccak256(abi.encode(entries)))`), shared with the fork tests. Trees here use
+///         0 or 1 shard bits so they can be built in a test; the catalogue uses 12.
+library ShardTree {
+    function entry(bytes32 lh, bytes32 id) internal pure returns (VaradaOrgResolver.Entry memory) {
+        return VaradaOrgResolver.Entry(lh, id, id, id);
     }
 
-    function leaf(bytes32 labelhash, bytes32 idEth, bytes32 idOp, bytes32 idBase)
+    function shardOf(bytes32 lh, uint8 bits) internal pure returns (uint256) {
+        return bits == 0 ? 0 : uint256(lh) >> (256 - uint256(bits));
+    }
+
+    function entriesOf(VaradaOrgResolver.Entry[] memory all, uint256 shard, uint8 bits)
+        internal
+        pure
+        returns (VaradaOrgResolver.Entry[] memory out)
+    {
+        uint256 n;
+        for (uint256 i; i < all.length; ++i) {
+            if (shardOf(all[i].labelhash, bits) == shard) ++n;
+        }
+        out = new VaradaOrgResolver.Entry[](n);
+        n = 0;
+        for (uint256 i; i < all.length; ++i) {
+            if (shardOf(all[i].labelhash, bits) == shard) out[n++] = all[i];
+        }
+    }
+
+    function leaf(uint256 shard, VaradaOrgResolver.Entry[] memory es)
         internal
         pure
         returns (bytes32)
     {
-        return keccak256(bytes.concat(keccak256(abi.encode(labelhash, idEth, idOp, idBase))));
+        return keccak256(bytes.concat(keccak256(abi.encode(shard, keccak256(abi.encode(es))))));
     }
 
     function pair(bytes32 a, bytes32 b) internal pure returns (bytes32) {
         return a < b ? keccak256(abi.encode(a, b)) : keccak256(abi.encode(b, a));
+    }
+
+    /// @dev Root for `bits` 0 (one shard) or 1 (two shards).
+    function root(VaradaOrgResolver.Entry[] memory all, uint8 bits)
+        internal
+        pure
+        returns (bytes32)
+    {
+        if (bits == 0) return leaf(0, all);
+        return pair(leaf(0, entriesOf(all, 0, 1)), leaf(1, entriesOf(all, 1, 1)));
+    }
+
+    function proof(VaradaOrgResolver.Entry[] memory all, uint256 shard, uint8 bits)
+        internal
+        pure
+        returns (bytes32[] memory p)
+    {
+        if (bits == 0) return new bytes32[](0);
+        p = new bytes32[](1);
+        p[0] = leaf(1 - shard, entriesOf(all, 1 - shard, 1));
+    }
+
+    /// @dev The gateway's answer for `shard`: what the static Swarm file holds.
+    function answer(VaradaOrgResolver.Entry[] memory all, uint256 shard, uint8 bits)
+        internal
+        pure
+        returns (bytes memory)
+    {
+        return abi.encode(
+            root(all, bits), shard, entriesOf(all, shard, bits), proof(all, shard, bits)
+        );
     }
 }
 
@@ -84,8 +136,8 @@ abstract contract CcipHarness is Test {
     }
 
     mapping(bytes32 => L2Record) internal l2;
-    mapping(bytes32 => bytes32[4]) internal merkleIds; // labelhash => ids + marker
-    mapping(bytes32 => bytes32[]) internal merkleProof;
+    VaradaOrgResolver.Entry[] internal mEntries;
+    uint8 internal constant BITS = 1;
     bytes32 internal merkleRoot;
     uint256 internal l2Lookups;
     uint256 internal merkleLookups;
@@ -121,12 +173,8 @@ abstract contract CcipHarness is Test {
             return abi.encode(keccak256(r.ops), values);
         }
         ++merkleLookups;
-        bytes32 lh2 = abi.decode(req, (bytes32));
-        bytes32[4] storage ids = merkleIds[lh2];
-        if (ids[3] == bytes32(0)) {
-            return abi.encode(merkleRoot, bytes32(0), bytes32(0), bytes32(0), new bytes32[](0));
-        }
-        return abi.encode(merkleRoot, ids[0], ids[1], ids[2], merkleProof[lh2]);
+        uint256 shard = abi.decode(req, (uint256));
+        return ShardTree.answer(mEntries, shard, BITS);
     }
 
     /// @dev Tests know every labelhash they ask about; find the one whose request matches.
@@ -163,21 +211,21 @@ contract VaradaOrgResolverTest is CcipHarness {
     function setUp() public {
         factory = new StubOrgFactory();
         mockVerifier = new MockGatewayVerifier();
-        merkleRoot = OrgNamesTree.pair(
-            OrgNamesTree.leaf(lhRed, redCross), OrgNamesTree.leaf(lhCross, crossroads)
-        );
-        merkleIds[lhRed] = [redCross, redCross, redCross, bytes32(uint256(1))];
-        merkleProof[lhRed].push(OrgNamesTree.leaf(lhCross, crossroads));
-        merkleIds[lhCross] = [crossroads, crossroads, crossroads, bytes32(uint256(1))];
-        merkleProof[lhCross].push(OrgNamesTree.leaf(lhRed, redCross));
+        mEntries.push(ShardTree.entry(lhRed, redCross));
+        mEntries.push(ShardTree.entry(lhCross, crossroads));
+        merkleRoot = ShardTree.root(mEntries, BITS);
         known.push(lhRed);
         known.push(lhCross);
         known.push(lhNpr);
         known.push(keccak256("nobody"));
-        resolver = _deploy(merkleRoot);
+        resolver = _deploy(merkleRoot, BITS);
     }
 
-    function _deploy(bytes32 root_) internal returns (VaradaOrgResolver) {
+    function _answerFor(bytes32 lh) internal view returns (bytes memory) {
+        return ShardTree.answer(mEntries, ShardTree.shardOf(lh, BITS), BITS);
+    }
+
+    function _deploy(bytes32 root_, uint8 bits) internal returns (VaradaOrgResolver) {
         string[] memory urls = new string[](1);
         urls[0] = "https://gw.example/ccip/{sender}/{data}.json";
         string[] memory l2Urls = new string[](1);
@@ -187,6 +235,7 @@ contract VaradaOrgResolverTest is CcipHarness {
             IEndaomentOrgFundFactory(address(factory)),
             NS,
             root_,
+            bits,
             urls,
             "https://varada.eth.limo/org/",
             l2Registry,
@@ -313,9 +362,7 @@ contract VaradaOrgResolverTest is CcipHarness {
             _expectMerkleLookup(err);
             (,,,, bytes memory carry) =
                 abi.decode(_tail(err), (address, string[], bytes, bytes4, bytes));
-            bytes memory out = resolver.resolveCallback(
-                abi.encode(merkleRoot, redCross, redCross, redCross, merkleProof[lhRed]), carry
-            );
+            bytes memory out = resolver.resolveCallback(_answerFor(lhRed), carry);
             assertEq(abi.decode(out, (address)), factory.computeOrgAddress(redCross));
         }
     }
@@ -431,64 +478,91 @@ contract VaradaOrgResolverTest is CcipHarness {
         return abi.encode(lh, bytes(label), data);
     }
 
-    function test_merkle_rejectsAProofForAnotherOrg() public {
+    function test_merkle_rejectsATamperedShard() public {
         bytes memory carry = _carry(lhRed, "american-red-cross", "");
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                VaradaOrgResolver.InvalidProof.selector, lhRed, crossroads, crossroads, crossroads
-            )
+        uint256 shard = ShardTree.shardOf(lhRed, BITS);
+        VaradaOrgResolver.Entry[] memory es = ShardTree.entriesOf(mEntries, shard, BITS);
+        bytes32[] memory p = ShardTree.proof(mEntries, shard, BITS);
+        // The gateway repoints red cross at crossroads' org id, keeping the real proof.
+        for (uint256 i; i < es.length; ++i) {
+            if (es[i].labelhash == lhRed) es[i] = ShardTree.entry(lhRed, crossroads);
+        }
+        vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.InvalidProof.selector, shard));
+        resolver.resolveCallback(abi.encode(merkleRoot, shard, es, p), carry);
+        // Dropping red cross from its shard (to deny it exists) fails the same way.
+        VaradaOrgResolver.Entry[] memory none = new VaradaOrgResolver.Entry[](0);
+        vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.InvalidProof.selector, shard));
+        resolver.resolveCallback(abi.encode(merkleRoot, shard, none, p), carry);
+    }
+
+    function test_merkle_rejectsTheWrongShard() public {
+        bytes memory carry = _carry(lhRed, "american-red-cross", "");
+        uint256 shard = ShardTree.shardOf(lhRed, BITS);
+        uint256 other = 1 - shard;
+        vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.WrongShard.selector, shard, other));
+        resolver.resolveCallback(ShardTree.answer(mEntries, other, BITS), carry);
+    }
+
+    function test_merkle_absentLabelIsProvablyEmpty() public view {
+        bytes32 lh = keccak256("nobody");
+        bytes memory out = resolver.resolveCallback(
+            _answerFor(lh), _carry(lh, "nobody", abi.encodeCall(IAddrResolver.addr, (bytes32(0))))
         );
-        resolver.resolveCallback(
-            abi.encode(merkleRoot, crossroads, crossroads, crossroads, merkleProof[lhRed]), carry
-        );
+        assertEq(abi.decode(out, (address)), address(0));
     }
 
     function test_merkle_perChainIdsCannotBeDropped() public {
-        // Single-leaf tree holding NPR with its Base override.
-        VaradaOrgResolver single = _deploy(OrgNamesTree.leaf(lhNpr, npr, npr, nprBase));
+        // One-shard tree holding NPR with its Base override.
+        VaradaOrgResolver.Entry[] memory all = new VaradaOrgResolver.Entry[](1);
+        all[0] = VaradaOrgResolver.Entry(lhNpr, npr, npr, nprBase);
+        VaradaOrgResolver single = _deploy(ShardTree.root(all, 0), 0);
         bytes32 node = _node("national-public-radio.org.varada.eth");
-        bytes32 sr = single.root();
         bytes memory carry = _carry(
             lhNpr, "national-public-radio", abi.encodeCall(IAddressResolver.addr, (node, BASE))
         );
-        bytes memory out =
-            single.resolveCallback(abi.encode(sr, npr, npr, nprBase, new bytes32[](0)), carry);
+        bytes memory out = single.resolveCallback(ShardTree.answer(all, 0, 0), carry);
         assertEq(abi.decode(out, (bytes)), abi.encodePacked(factory.computeOrgAddress(nprBase)));
-        vm.expectRevert(
-            abi.encodeWithSelector(VaradaOrgResolver.InvalidProof.selector, lhNpr, npr, npr, npr)
-        );
-        single.resolveCallback(abi.encode(sr, npr, npr, npr, new bytes32[](0)), carry);
+        VaradaOrgResolver.Entry[] memory dropped = new VaradaOrgResolver.Entry[](1);
+        dropped[0] = ShardTree.entry(lhNpr, npr);
+        bytes32 sr = single.root();
+        vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.InvalidProof.selector, 0));
+        single.resolveCallback(abi.encode(sr, uint256(0), dropped, new bytes32[](0)), carry);
     }
 
     function test_merkle_rejectsUnknownRoots() public {
         bytes memory carry = _carry(lhRed, "american-red-cross", "");
         bytes32 fake = keccak256("fake");
+        uint256 shard = ShardTree.shardOf(lhRed, BITS);
+        VaradaOrgResolver.Entry[] memory es = ShardTree.entriesOf(mEntries, shard, BITS);
+        bytes32[] memory p = ShardTree.proof(mEntries, shard, BITS);
         vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.UnknownRoot.selector, fake));
-        resolver.resolveCallback(
-            abi.encode(fake, redCross, redCross, redCross, merkleProof[lhRed]), carry
-        );
+        resolver.resolveCallback(abi.encode(fake, shard, es, p), carry);
         vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.UnknownRoot.selector, bytes32(0)));
-        resolver.resolveCallback(
-            abi.encode(bytes32(0), bytes32(0), bytes32(0), bytes32(0), new bytes32[](0)), carry
-        );
+        resolver.resolveCallback(abi.encode(bytes32(0), shard, es, p), carry);
     }
 
     function test_merkle_acceptsThePreviousRootAfterRotation() public {
         bytes32 old = merkleRoot;
         vm.prank(owner);
-        resolver.setRoot(keccak256("next"));
+        resolver.setRoot(keccak256("next"), BITS);
         assertEq(resolver.previousRoot(), old);
         assertEq(
             _addr("american-red-cross.org.varada.eth", 60),
             abi.encodePacked(factory.computeOrgAddress(redCross))
         );
         vm.prank(owner);
-        resolver.setRoot(keccak256("third"));
+        resolver.setRoot(keccak256("third"), BITS);
         vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.UnknownRoot.selector, old));
-        resolver.resolveCallback(
-            abi.encode(old, redCross, redCross, redCross, merkleProof[lhRed]),
-            _carry(lhRed, "american-red-cross", "")
-        );
+        resolver.resolveCallback(_answerFor(lhRed), _carry(lhRed, "american-red-cross", ""));
+    }
+
+    function test_shardBitsAreBounded() public {
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(VaradaOrgResolver.InvalidShardBits.selector, 17));
+        resolver.setRoot(keccak256("x"), 17);
+        assertEq(resolver.shardBitsOf(merkleRoot), BITS);
+        assertEq(resolver.shardOf(bytes32(type(uint256).max), 12), 4095);
+        assertEq(resolver.shardOf(bytes32(type(uint256).max), 0), 0);
     }
 
     // ------------------------------------------------------------------ names and admin
@@ -533,7 +607,7 @@ contract VaradaOrgResolverTest is CcipHarness {
         vm.expectRevert(
             abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger)
         );
-        resolver.setRoot(bytes32(uint256(1)));
+        resolver.setRoot(bytes32(uint256(1)), BITS);
         vm.expectRevert(
             abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger)
         );

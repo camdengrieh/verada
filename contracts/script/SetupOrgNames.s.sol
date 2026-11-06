@@ -27,6 +27,8 @@ import {console} from "forge-std/console.sol";
 ///        ORG_NAMES_ROOT    names Merkle root (required when deploying the resolver)
 ///        ORG_GATEWAY_URLS  comma-separated EIP-3668 URL templates (required when deploying)
 ///        ORG_SITE_PREFIX   prefix for the `url` text record (default https://varada.eth.limo/causes?org=)
+///        ORG_NAMES_SHARD_BITS  shard bits the names root was built with (default 12, the
+///                          catalogue's `namesShardBits`)
 ///        ORG_L2_REGISTRY   VaradaOrgNames on Optimism (required when deploying the resolver)
 ///        ORG_L2_GATEWAY_URLS  comma-separated Optimism proof gateways. Put our gateway's
 ///                          `https://<host>/l2/{sender}/{data}.json` first: it proxies the public
@@ -54,6 +56,7 @@ contract SetupOrgNames is Script {
     /// @dev DNS wire format of `org.varada.eth`.
     bytes internal constant NAMESPACE_DNS_NAME = hex"036f7267067661726164610365746800";
     /// @dev No per-charity page yet: the causes explorer, with the label as a hint for later pages.
+    uint8 internal constant DEFAULT_SHARD_BITS = 12;
     string internal constant DEFAULT_SITE_PREFIX = "https://varada.eth.limo/causes?org=";
 
     /// @dev VerifiableFactory salts. The proxy address depends on the signer and the salt.
@@ -94,7 +97,8 @@ contract SetupOrgNames is Script {
         for (uint256 i; i < l2Urls.length; ++i) {
             _l2UrlsEnv.push(l2Urls[i]);
         }
-        return execute(signer, resolver, root, urls, prefix, l2Registry);
+        uint8 bits = uint8(vm.envOr("ORG_NAMES_SHARD_BITS", uint256(DEFAULT_SHARD_BITS)));
+        return execute(signer, resolver, root, bits, urls, prefix, l2Registry);
     }
 
     /// @notice Unruggable Optimism gateways (ENS's reverse resolver lists the last two).
@@ -141,6 +145,7 @@ contract SetupOrgNames is Script {
         address signer,
         address resolver,
         bytes32 root,
+        uint8 shardBits,
         string[] memory urls,
         string memory prefix,
         address l2Registry
@@ -162,6 +167,7 @@ contract SetupOrgNames is Script {
                     ENDAOMENT_FACTORY,
                     NAMESPACE_DNS_NAME,
                     root,
+                    shardBits,
                     urls,
                     prefix,
                     l2Registry,

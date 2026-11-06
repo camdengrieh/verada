@@ -45,9 +45,14 @@ import {IGatewayVerifier} from "./vendor/unruggable/IGatewayVerifier.sol";
 ///
 ///      Merkle fallback: the label-to-org mapping is also published off-chain in a Merkle tree (OpenZeppelin standard tree,
 ///      leaf `(bytes32 labelhash, bytes32 orgIdEth, bytes32 orgIdOptimism, bytes32 orgIdBase)`),
-///      and the owner publishes its root here. `resolve` reverts with an EIP-3668
-///      `OffchainLookup`. The gateway answers with the root, the three ids and a proof, and
-///      `resolveCallback` checks the proof against the current or previous root before computing
+///      and the owner publishes its root here. The tree is sharded so the answers can be static
+///      files (Swarm): a label's shard is the top `shardBits` bits of its labelhash, a shard lists
+///      every `(labelhash, idEth, idOp, idBase)` entry in it, and a leaf is
+///      `(uint256 shard, bytes32 keccak256(abi.encode(entries)))` for every shard, empty ones
+///      included, so a label's absence is provable too. The lookup's callData is
+///      `abi.encode(uint256 shard)`; the gateway answers with the root, the shard, its entries and
+///      a proof, and `resolveCallback` checks the proof against the current or previous root
+///      before computing
 ///      the addresses. A dishonest gateway therefore cannot map a name to another address. It can only
 ///      refuse to answer, or claim the label is unknown, which resolves to empty records.
 ///
@@ -87,6 +92,9 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
     ///         resolution keeps working while gateways switch to a new build.
     bytes32 public root;
     bytes32 public previousRoot;
+    /// @notice Shard bits each published root was built with.
+    mapping(bytes32 root => uint8) public shardBitsOf;
+    uint8 public constant MAX_SHARD_BITS = 16;
 
     string[] internal _urls;
     /// @notice Prefix of the `url` text record; the label is appended.
@@ -99,7 +107,17 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
     error UnsupportedResolverProfile(bytes4 selector);
     error InvalidDnsName(bytes name);
     error UnknownRoot(bytes32 root);
-    error InvalidProof(bytes32 labelhash, bytes32 idEth, bytes32 idOp, bytes32 idBase);
+    error InvalidProof(uint256 shard);
+    error WrongShard(uint256 expected, uint256 got);
+    error InvalidShardBits(uint8 bits);
+
+    /// @dev One shard entry: a label and its org id per chain (zero: no record on that chain).
+    struct Entry {
+        bytes32 labelhash;
+        bytes32 idEth;
+        bytes32 idOp;
+        bytes32 idBase;
+    }
 
     /// @dev Per-chain org ids and their addresses, indexed Ethereum, Optimism, Base.
     struct Org {
@@ -124,6 +142,7 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
         IEndaomentOrgFundFactory factory_,
         bytes memory namespaceDnsName,
         bytes32 root_,
+        uint8 shardBits_,
         string[] memory urls_,
         string memory siteUrlPrefix_,
         address l2Registry_,
@@ -135,7 +154,9 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
         _setVerifier(verifier_, l2Urls);
         _namespaceDnsHash = keccak256(namespaceDnsName);
         _namespaceDnsLength = namespaceDnsName.length;
+        if (shardBits_ > MAX_SHARD_BITS) revert InvalidShardBits(shardBits_);
         root = root_;
+        shardBitsOf[root_] = shardBits_;
         emit RootUpdated(root_, bytes32(0));
         _setGateways(urls_);
         siteUrlPrefix = siteUrlPrefix_;
@@ -144,8 +165,11 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
 
     // ------------------------------------------------------------------ admin
 
-    /// @notice Publishes a new names root; the current one becomes `previousRoot`.
-    function setRoot(bytes32 newRoot) external onlyOwner {
+    /// @notice Publishes a new names root built with `bits` shard bits; the current one becomes
+    ///         `previousRoot`.
+    function setRoot(bytes32 newRoot, uint8 bits) external onlyOwner {
+        if (bits > MAX_SHARD_BITS) revert InvalidShardBits(bits);
+        shardBitsOf[newRoot] = bits;
         bytes32 old = root;
         previousRoot = old;
         root = newRoot;
@@ -250,15 +274,24 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
         return _answer(org, label, data);
     }
 
+    /// @notice The shard of `labelhash` in a tree built with `bits` shard bits.
+    function shardOf(bytes32 labelhash, uint8 bits) public pure returns (uint256) {
+        return bits == 0 ? 0 : uint256(labelhash) >> (256 - uint256(bits));
+    }
+
     function _merkleLookup(bytes32 labelhash, bytes memory carry) internal view {
         revert OffchainLookup(
-            address(this), _urls, abi.encode(labelhash), this.resolveCallback.selector, carry
+            address(this),
+            _urls,
+            abi.encode(shardOf(labelhash, shardBitsOf[root])),
+            this.resolveCallback.selector,
+            carry
         );
     }
 
-    /// @notice EIP-3668 callback. `response` is `abi.encode(bytes32 root, bytes32 orgIdEth,
-    ///         bytes32 orgIdOptimism, bytes32 orgIdBase, bytes32[] proof)`. A zero org id means
-    ///         no record on that chain; all three zero means the gateway does not know the label.
+    /// @notice EIP-3668 callback for the Merkle fallback. `response` is `abi.encode(bytes32 root,
+    ///         uint256 shard, Entry[] entries, bytes32[] proof)`. A label not among the shard's
+    ///         entries is provably not in the catalogue and resolves to empty records.
     function resolveCallback(bytes calldata response, bytes calldata extraData)
         external
         view
@@ -266,34 +299,34 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
     {
         (bytes32 labelhash, bytes memory label, bytes memory data) =
             abi.decode(extraData, (bytes32, bytes, bytes));
-        (bytes32 r, bytes32 idEth, bytes32 idOp, bytes32 idBase, bytes32[] memory proof) =
-            abi.decode(response, (bytes32, bytes32, bytes32, bytes32, bytes32[]));
+        (bytes32 r, uint256 shard, Entry[] memory entries, bytes32[] memory proof) =
+            abi.decode(response, (bytes32, uint256, Entry[], bytes32[]));
         if (r == bytes32(0) || (r != root && r != previousRoot)) revert UnknownRoot(r);
+        uint256 expected = shardOf(labelhash, shardBitsOf[r]);
+        if (shard != expected) revert WrongShard(expected, shard);
+        if (!verifyShard(r, shard, entries, proof)) revert InvalidProof(shard);
         Org memory org;
-        if (idEth != bytes32(0) || idOp != bytes32(0) || idBase != bytes32(0)) {
-            if (!verifyName(r, labelhash, idEth, idOp, idBase, proof)) {
-                revert InvalidProof(labelhash, idEth, idOp, idBase);
-            }
-            org.ids = [idEth, idOp, idBase];
-            for (uint256 i; i < 3; ++i) {
-                if (org.ids[i] != bytes32(0)) org.addrs[i] = factory.computeOrgAddress(org.ids[i]);
+        for (uint256 i; i < entries.length; ++i) {
+            if (entries[i].labelhash != labelhash) continue;
+            org.ids = [entries[i].idEth, entries[i].idOp, entries[i].idBase];
+            for (uint256 c; c < 3; ++c) {
+                if (org.ids[c] != bytes32(0)) org.addrs[c] = factory.computeOrgAddress(org.ids[c]);
             }
             org.exists = true;
+            break;
         }
         return _answer(org, label, data);
     }
 
-    /// @notice Whether `proof` places `(labelhash, idEth, idOp, idBase)` under `root_`.
-    function verifyName(
+    /// @notice Whether `proof` places shard `shard` with exactly `entries` under `root_`.
+    function verifyShard(
         bytes32 root_,
-        bytes32 labelhash,
-        bytes32 idEth,
-        bytes32 idOp,
-        bytes32 idBase,
+        uint256 shard,
+        Entry[] memory entries,
         bytes32[] memory proof
     ) public pure returns (bool) {
         bytes32 leaf = keccak256(
-            bytes.concat(keccak256(abi.encode(labelhash, idEth, idOp, idBase)))
+            bytes.concat(keccak256(abi.encode(shard, keccak256(abi.encode(entries)))))
         );
         return MerkleProof.verify(proof, root_, leaf);
     }

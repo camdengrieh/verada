@@ -40,6 +40,7 @@ contract VaradaNamesV2ForkTest is EnsResolutionForkTest {
             nameOwner,
             address(0),
             keccak256("names root"),
+            12,
             urls,
             "https://varada.eth.limo/causes?org=",
             address(uint160(uint256(keccak256("VaradaOrgNames on OP"))))
