@@ -68,7 +68,7 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
     <div role="group" aria-label="Open ballot">
       <p>
         Nobody has opened this week&apos;s ballot yet. Anyone can: the ballot is drawn on chain exactly as the platform keeper would draw
-        it, and you pay the gas (about 2M gas for a full 32-option ballot).
+        it, and you pay the gas (about 2M gas for a full 32-option ballot, less for a smaller one).
       </p>
       <button type="button" onClick={() => void open()} disabled={planning || tx.isPending || Boolean(tx.hash && !tx.receipt)}>
         {planning ? "Preparing the ballot" : "Open this week's ballot"}

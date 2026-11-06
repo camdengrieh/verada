@@ -1,7 +1,7 @@
 /** Direct chain reads (viem), used when every indexer URL is unreachable. */
 import { createPublicClient, getAbiItem, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
-import { categorySlugs, causeIdOfOrg, getTokenAddressByLabel, getTokenTextRecord, isValidLabel, regionSlugs, TOKEN_TEXT_KEYS, tokenLabelhash } from "@verada/sdk";
+import { categorySlugs, causeIdOfOrg, effectiveBallotSize, getTokenAddressByLabel, getTokenTextRecord, isValidLabel, regionSlugs, TOKEN_TEXT_KEYS, tokenLabelhash } from "@verada/sdk";
 import {
   epochGovernorAbi,
   feeVaultAbi,
@@ -12,7 +12,7 @@ import {
   zamaVotingSchemeAbi,
 } from "@verada/sdk/abis";
 import type { AppConfig } from "./config";
-import { TAKEOVER_STATES, type EpochDetail, type TakeoverItem, type TokenDetail, type TokenFocus, type TokenProfile, type TokenSummary } from "./indexer";
+import { TAKEOVER_STATES, type EpochDetail, type TakeoverItem, type TokenBallotSize, type TokenDetail, type TokenFocus, type TokenProfile, type TokenSummary } from "./indexer";
 import type { PrivateRpc } from "./private-rpc";
 
 /** Public-scope client: global data only. For anything keyed by a user's address use createAccountClient. */
@@ -116,6 +116,17 @@ async function chainPins(client: PublicClient, cfg: AppConfig, token: Address): 
   return pins.length ? [...pins] : null;
 }
 
+/** The platform's ballot size cap and the token's own choice (`ballotSizeCap`, `ballotSizeChoiceOf`). */
+async function chainBallotSize(client: PublicClient, cfg: AppConfig, token: Address): Promise<TokenBallotSize | null> {
+  if (!cfg.governorAddress) return null;
+  const g = { address: cfg.governorAddress, abi: epochGovernorAbi } as const;
+  const [cap, choice] = await Promise.all([
+    client.readContract({ ...g, functionName: "ballotSizeCap" }),
+    client.readContract({ ...g, functionName: "ballotSizeChoiceOf", args: [token] }),
+  ]);
+  return { cap, choice, size: effectiveBallotSize({ cap, choice }), choiceEffectiveFrom: null };
+}
+
 async function chainFocus(client: PublicClient, cfg: AppConfig, token: Address): Promise<TokenFocus | null> {
   if (!cfg.profileRegistryAddress) return null;
   const [categoryMask, regionMask] = await client.readContract({
@@ -130,15 +141,16 @@ async function chainFocus(client: PublicClient, cfg: AppConfig, token: Address):
 
 /** Token, profile, pinned causes and focus from the chain. Null when the token is neither in factory logs nor the registry. */
 export async function chainTokenDetail(client: PublicClient, cfg: AppConfig, token: Address): Promise<TokenDetail | null> {
-  const [summary, profile, shortlist, focus] = await Promise.all([
+  const [summary, profile, shortlist, focus, ballotSize] = await Promise.all([
     chainToken(client, cfg, token).catch(() => null),
     chainProfile(client, cfg, token).catch(() => null),
     chainPins(client, cfg, token).catch(() => null),
     chainFocus(client, cfg, token).catch(() => null),
+    chainBallotSize(client, cfg, token).catch(() => null),
   ]);
   if (!summary && !profile) return null;
   const base = summary ?? { address: token, ...(await nameAndSymbol(client, token).catch(() => ({ name: "", symbol: "" }))) };
-  return { ...base, label: profile?.label ?? undefined, profile, shortlist, focus };
+  return { ...base, label: profile?.label ?? undefined, profile, shortlist, focus, ballotSize };
 }
 
 /** Resolves a label: ENS first (Universal Resolver), then the profile registry. */
