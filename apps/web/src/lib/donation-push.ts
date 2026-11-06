@@ -7,7 +7,7 @@
  *
  * The tally decryption is the one step this page does not do. On mainnet, Zama's relayer serves a
  * public decryption only with an API key, which the keeper holds server side and a static bundle
- * cannot; the card waits for the keeper there (see `docs/ARCHITECTURE.md`, weekly payout).
+ * cannot; the card waits for the keeper there (see `docs/ARCHITECTURE.md`, "Weekly payout").
  */
 import {
   createDonationReader,

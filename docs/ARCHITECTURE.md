@@ -249,6 +249,19 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   Endaoment factory's `computeOrgAddress`. If no verified tally arrives within two weeks of the epoch's end, the
   epoch also falls back to the default cause, so a cause pool can never be stranded. The fee vault
   settles that epoch's cause pool to `DonationDistributor`.
+- Weekly payout. Every step from an ended week to its donation is permissionless: `closeEpoch`, the
+  tally decryption plus `submitTally`, `finalizeEpoch`, `FeeVault.settle(token, epoch)` (which first
+  brings the week's outstanding LP and consolidator fees in, reverts `FeesPending` until they are in
+  or `SETTLE_GRACE` (7 days) after the week's end, and `NothingToSettle` when the week's pool is
+  empty, which means that week has no donation), then `DonationDistributor.distribute(token, epoch)`
+  to the winning Endaoment org (`OrgNotActive` and `OrgAddressMismatch` need the owner or Endaoment
+  to act). The SDK's `planDonation` (`packages/sdk/src/donation.ts`) picks the next step from chain
+  state, including a simulated settle or distribute. The publisher's keeper runs it after
+  finalizing, so with `FEE_VAULT_ADDRESS` and `DONATION_DISTRIBUTOR_ADDRESS` set it now settles and
+  distributes every finalized week itself. The token page runs the same plan in the "Send this
+  week's donation" card, so any visitor can push a week through and pay the gas; the money can only
+  go to the week's winner. The card leaves the decryption to the keeper, because Zama's mainnet
+  relayer serves public decryption only with the keeper's API key.
 - The scheme is pluggable per governor. Interfold (CRISP) or a self-hosted Noir/Barretenberg scheme
   can replace Zama without changing the governors.
 
