@@ -6,8 +6,9 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState, type R
 import { useAccount, WagmiProvider } from "wagmi";
 import { loadRuntimeConfig, type AppConfig } from "@/lib/config";
 import { createDeps, type DataDeps } from "@/lib/data";
+import { effectivePrivateRpcConfig } from "@/lib/effective-rpc-config";
 import { PrivateRpc } from "@/lib/private-rpc";
-import { readPrivacyPrefs, writePrivacyPrefs, type PrivacyPrefs } from "@/lib/privacy-prefs";
+import { directModeActive, normalizePrivacyPrefs, readPrivacyPrefs, writePrivacyPrefs, type PrivacyPrefs } from "@/lib/privacy-prefs";
 import { createWagmiConfig } from "@/lib/wagmi";
 
 interface Runtime {
@@ -50,6 +51,14 @@ function AccountIsolation({ rpc }: { rpc: PrivateRpc }) {
   return null;
 }
 
+/** The settings that shape the chain-read path. A change to any of them rebuilds the PrivateRpc. */
+type ConnectionPrefs = Pick<PrivacyPrefs, "rpcUrls" | "network" | "directMode">;
+
+function connectionKey(p: PrivacyPrefs): string {
+  const c: ConnectionPrefs = { rpcUrls: p.rpcUrls ?? [], network: p.network, directMode: directModeActive(p) };
+  return JSON.stringify(c);
+}
+
 /** Loads /config.json once at startup, then mounts wagmi and react-query with it. */
 export function Providers({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<AppConfig | null>(null);
@@ -67,7 +76,15 @@ export function Providers({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const rpc = useMemo(() => (config ? new PrivateRpc(config.privateRpc) : null), [config]);
+  // The user's RPCs, network and direct mode apply live: a change builds a new PrivateRpc (the old
+  // worker closes) and a new wagmi config, which reconnects the wallet from wagmi's own storage.
+  const connKey = connectionKey(prefs);
+  const rpc = useMemo(() => {
+    if (!config) return null;
+    const conn = JSON.parse(connKey) as ConnectionPrefs;
+    const prefsForRpc: PrivacyPrefs = { routeIndexer: false, introSeen: false, ...conn };
+    return new PrivateRpc(effectivePrivateRpcConfig(config.privateRpc, prefsForRpc), { directMode: conn.directMode === true });
+  }, [config, connKey]);
   useEffect(() => () => rpc?.close(), [rpc]);
 
   const base = useMemo(
@@ -81,8 +98,9 @@ export function Providers({ children }: { children: ReactNode }) {
         ...base,
         prefs,
         setPrefs: (p) => {
-          writePrivacyPrefs(p);
-          setPrefsState(p);
+          const next = normalizePrivacyPrefs(p);
+          writePrivacyPrefs(next);
+          setPrefsState(next);
         },
       },
     [base, prefs],

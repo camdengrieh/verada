@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrivateRpcConfig } from "@/lib/config";
+import { effectivePrivateRpcConfig } from "@/lib/effective-rpc-config";
 import { jsonRpcProvider, PrivateRpc, PrivateRpcUnavailableError, type WorkerLike } from "@/lib/private-rpc";
 
 const cfg: PrivateRpcConfig = { network: "nym", rpcUrls: ["https://rpc.example"] };
@@ -148,6 +149,76 @@ describe("PrivateRpc", () => {
     expect(await client.getBlockNumber({ cacheTime: 0 })).toBe(1n);
     expect(String(calls[0]!.input)).toMatch(/^https:\/\/rpc\.example\/?$/);
     expect(calls[0]!.init).not.toHaveProperty("url");
+  });
+});
+
+describe("PrivateRpc direct mode", () => {
+  it("sends account-scoped reads straight to the RPC and never starts a worker", async () => {
+    const factory = vi.fn();
+    const direct = vi.fn().mockResolvedValue(new Response("{}"));
+    const rpc = new PrivateRpc(cfg, { factory, directFetch: direct as unknown as typeof fetch, directMode: true });
+    expect(rpc.directMode).toBe(true);
+    expect(rpc.getStatus()).toEqual({ state: "direct" });
+    await rpc.fetch("https://rpc.example", { method: "POST" }, { kind: "account", address: alice });
+    await rpc.fetch("https://rpc.example", { method: "POST" }, { kind: "public" });
+    await expect(rpc.start()).rejects.toBeInstanceOf(PrivateRpcUnavailableError);
+    expect(factory).not.toHaveBeenCalled();
+    expect(direct).toHaveBeenCalledTimes(2);
+    expect(direct.mock.calls[0]![1]).toMatchObject({ method: "POST", credentials: "omit", referrerPolicy: "no-referrer" });
+    expect(rpc.getStatus()).toEqual({ state: "direct" });
+  });
+
+  it("is off unless asked for, and turning it off restores fail-closed account reads", async () => {
+    const direct = vi.fn().mockResolvedValue(new Response("{}"));
+    const factory = vi.fn(async () => fakeWorker(new Error("mixnet down")).worker);
+    const rpc = new PrivateRpc(cfg, { factory, directFetch: direct as unknown as typeof fetch });
+    expect(rpc.directMode).toBe(false);
+
+    rpc.setDirectMode(true);
+    await rpc.fetch("https://rpc.example", {}, { kind: "account", address: alice });
+    expect(factory).not.toHaveBeenCalled();
+
+    rpc.setDirectMode(false);
+    expect(rpc.getStatus()).toEqual({ state: "idle" });
+    await expect(rpc.fetch("u", {}, { kind: "account", address: alice })).rejects.toBeInstanceOf(PrivateRpcUnavailableError);
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(rpc.getStatus()).toMatchObject({ state: "failed", message: "mixnet down" });
+  });
+
+  it("stops a running worker when switched on", async () => {
+    const { worker } = fakeWorker();
+    const rpc = new PrivateRpc(cfg, { factory: async () => worker, directFetch: bootFetch().f });
+    await rpc.fetch("u");
+    expect(rpc.getStatus()).toEqual({ state: "ready" });
+    rpc.setDirectMode(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(worker.close).toHaveBeenCalled();
+    expect(rpc.getStatus()).toEqual({ state: "direct" });
+  });
+
+  it("fails over across the user's RPCs first, then the configured ones", async () => {
+    const seen: string[] = [];
+    const direct = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      seen.push(url);
+      if (url.startsWith("https://mine-a.example")) return new Response("down", { status: 503 });
+      const req = JSON.parse(String(init?.body)) as { id: number } | { id: number }[];
+      const answer = (b: { id: number }) => ({ jsonrpc: "2.0", id: b.id, result: "0x2" });
+      return new Response(JSON.stringify(Array.isArray(req) ? req.map(answer) : answer(req)));
+    });
+    const effective = effectivePrivateRpcConfig(
+      { network: "nym", rpcUrls: ["https://configured.example"] },
+      { routeIndexer: false, introSeen: false, rpcUrls: ["https://mine-a.example", "https://mine-b.example"] },
+    );
+    expect(effective.rpcUrls).toEqual(["https://mine-a.example", "https://mine-b.example", "https://configured.example"]);
+    const rpc = new PrivateRpc(effective, { directFetch: direct as unknown as typeof fetch, directMode: true });
+    const { createPublicClient } = await import("viem");
+    const { mainnet } = await import("viem/chains");
+    const client = createPublicClient({ chain: mainnet, transport: rpc.transport({ kind: "account", address: alice }) });
+    expect(await client.getBlockNumber({ cacheTime: 0 })).toBe(2n);
+    expect(seen[0]).toMatch(/^https:\/\/mine-a\.example\/?$/);
+    expect(seen.at(-1)).toMatch(/^https:\/\/mine-b\.example\/?$/);
   });
 });
 

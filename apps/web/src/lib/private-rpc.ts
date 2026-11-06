@@ -13,6 +13,10 @@
  * Every account gets its own random isolation key, so the anon network is asked
  * to keep different accounts' traffic unlinkable. Keys live in memory only and
  * are regenerated on every page load.
+ *
+ * Direct mode ("Direct to my RPC", a user setting) is the way to keep going when the anon
+ * network is unavailable: every read, account reads included, goes straight to the user's own
+ * RPC and no worker is ever started. It is not private, and it is only entered through that setting.
  */
 import { fallback, http, type Address, type Transport } from "viem";
 import type { AnonFetch, AnonRpcWorker, RpcProvider, WorkerInit } from "@anon-rpc/browser-harness";
@@ -23,7 +27,9 @@ export type PrivateRpcStatus =
   | { state: "idle" }
   | { state: "connecting" }
   | { state: "ready" }
-  | { state: "failed"; code?: string; message: string };
+  | { state: "failed"; code?: string; message: string }
+  /** Direct mode: reads go straight to the user's own RPC, with no anon worker. */
+  | { state: "direct" };
 
 export type Scope = { kind: "public" } | { kind: "account"; address: Address };
 
@@ -100,8 +106,13 @@ export function jsonRpcProvider(urls: string | readonly string[], fetchImpl: typ
 
 export interface PrivateRpcOptions {
   factory?: WorkerFactory;
-  /** Used only for the bootstrap read and for public-scope requests the user explicitly allowed. */
+  /**
+   * Used only for the bootstrap read, for public-scope requests the user explicitly allowed, and
+   * for every request in direct mode.
+   */
   directFetch?: typeof fetch;
+  /** Start in direct mode (the user's "Direct to my RPC" setting). Off unless passed. */
+  directMode?: boolean;
 }
 
 export class PrivateRpc {
@@ -111,6 +122,7 @@ export class PrivateRpc {
   private readonly accountKeys = new Map<string, string>();
   private readonly publicKey = randomKey();
   private directForPublic = false;
+  private direct = false;
   private account?: Address;
   private readonly factory: WorkerFactory;
   private readonly directFetch: typeof fetch;
@@ -121,6 +133,7 @@ export class PrivateRpc {
   ) {
     this.factory = opts.factory ?? defaultFactory;
     this.directFetch = opts.directFetch ?? ((...a) => fetch(...a));
+    if (opts.directMode) this.setDirectMode(true);
   }
 
   get network(): AnonNetwork {
@@ -138,6 +151,21 @@ export class PrivateRpc {
   /** True when the user has opted to send public (non-account) reads directly. */
   get directPublicAllowed(): boolean {
     return this.directForPublic;
+  }
+
+  /** True in direct mode: every read goes straight to `cfg.rpcUrls`, nothing through the anon network. */
+  get directMode(): boolean {
+    return this.direct;
+  }
+
+  /**
+   * Turn direct mode on or off. On stops any running worker; off returns to the private default,
+   * where account reads fail closed while the anon network is unavailable.
+   */
+  setDirectMode(on: boolean) {
+    if (on === this.direct) return;
+    this.direct = on;
+    this.close();
   }
 
   subscribe(listener: () => void): () => void {
@@ -204,6 +232,7 @@ export class PrivateRpc {
 
   /** Start the worker if it isn't running. Safe to call repeatedly. */
   start(): Promise<WorkerLike> {
+    if (this.direct) return Promise.reject(new PrivateRpcUnavailableError("Direct mode is on: no private network is used", "direct-mode"));
     if (this.worker) return this.worker;
     this.setStatus({ state: "connecting" });
     const boot = this.bootstrapRpcUrls();
@@ -250,11 +279,15 @@ export class PrivateRpc {
     const w = this.worker;
     this.worker = undefined;
     void w?.then((x) => x.close()).catch(() => {});
-    this.setStatus({ state: "idle" });
+    this.setStatus(this.direct ? { state: "direct" } : { state: "idle" });
   }
 
-  /** fetch through the anon network. Account scope fails closed; public scope honours the direct opt-in. */
+  /**
+   * fetch through the anon network. Account scope fails closed; public scope honours the direct
+   * opt-in. In direct mode every scope goes straight to the RPC, without cookies or referrer.
+   */
   async fetch(input: string | URL | Request, init: RequestInit = {}, scope: Scope = { kind: "public" }): Promise<Response> {
+    if (this.direct) return this.directFetch(input, { ...init, credentials: "omit", referrerPolicy: "no-referrer" });
     if (scope.kind === "public" && this.directForPublic && this.status.state !== "ready") {
       return this.directFetch(input, init);
     }
@@ -280,7 +313,7 @@ export class PrivateRpc {
     };
   }
 
-  /** viem transport over the private fetch, failing over across `rpcUrls` (all anonymized). */
+  /** viem transport over the private fetch, failing over across `rpcUrls` (anonymized unless in direct mode). */
   transport(scope?: Scope): Transport {
     const fetchFn = this.fetchFor(scope);
     const transports = this.cfg.rpcUrls.map((url) => http(url, { fetchFn, timeout: PRIVATE_RPC_TIMEOUT_MS, batch: { wait: 20 } }));
