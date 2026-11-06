@@ -7,6 +7,19 @@ import { MarketStatus, formatTimeUntil, newYorkParts, usMarketSession } from "@v
 import { PriceImpactLadder, ladderSeverity } from "@verada/ui/components/varada/price-impact-ladder";
 import { StockMarketCard, launchability, type OndoAsset } from "@verada/ui/components/varada/stock-market-card";
 import { StockMarketList, filterStockAssets, stockKindCounts } from "@verada/ui/components/varada/stock-market-list";
+import { AssetKindBadge } from "@verada/ui/components/varada/asset-kind-badge";
+import { PairPicker } from "@verada/ui/components/varada/pair-picker";
+import {
+  QuoteAssetIdentity,
+  feeRouteHops,
+  feeRouteText,
+  followsUsSession,
+  isDirectUsdc,
+  quoteMetaLine,
+  type QuoteAsset,
+} from "@verada/ui/components/varada/quote-asset";
+import { QuoteAssetCard } from "@verada/ui/components/varada/quote-asset-card";
+import { QuoteAssetList, filterQuoteAssets, quoteKindCounts } from "@verada/ui/components/varada/quote-asset-list";
 import {
   TradePanel,
   defaultBuyPresets,
@@ -260,7 +273,7 @@ describe("filterStockAssets", () => {
     expect(filterStockAssets(ASSETS, { sort: "change" })[0]?.symbol).toBe("PLTRon");
     expect(filterStockAssets(ASSETS, { sort: "name" }).map((a) => a.symbol)).toEqual(["AMDon", "GLDon", "NVDAon", "PLTRon", "SPYon", "TSLAon"]);
     expect(filterStockAssets(ASSETS, { launchableOnly: true }).map((a) => a.symbol)).toEqual(["NVDAon", "SPYon", "TSLAon", "GLDon"]);
-    expect(stockKindCounts(ASSETS, { launchableOnly: true })).toEqual({ all: 4, stock: 2, etf: 2 });
+    expect(stockKindCounts(ASSETS, { launchableOnly: true })).toEqual({ all: 4, crypto: 0, stock: 2, etf: 2 });
     expect(launchability(ASSETS[2]!)).toEqual({ ok: false, reason: "Route depth $4.1K is under the $10K minimum" });
     expect(launchability(ASSETS[3]!)).toEqual({ ok: false, reason: "No route to USDC" });
   });
@@ -269,8 +282,8 @@ describe("filterStockAssets", () => {
 describe("StockMarketList", () => {
   it("filters rows by search, kind chip and the launchable toggle", () => {
     render(<StockMarketList assets={ASSETS} now={NOW} getHref={(a) => `/stocks/${a.symbol}/`} />);
-    const table = screen.getByRole("table", { name: "Stocks & RWA" });
-    const bodyRows = () => within(table).getAllByRole("row").filter((r) => within(r).queryAllByRole("cell").length > 0);
+    const table = () => screen.getByRole("table", { name: "Stocks & RWA" });
+    const bodyRows = () => within(table()).getAllByRole("row").filter((r) => within(r).queryAllByRole("cell").length > 0);
     expect(bodyRows()).toHaveLength(6);
     expect(screen.getByRole("link", { name: "NVDAon, NVIDIA" })).toHaveAttribute("href", "/stocks/NVDAon/");
 
@@ -326,5 +339,115 @@ describe("StockMarketCard", () => {
     expect(within(screen.getByRole("list", { name: "Fee route to USDC" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["$HARAMBE", "NVDAon", "USDC"]);
     expect(screen.getByRole("img", { name: /52% NVDAon/ })).toBeInTheDocument();
     expect(screen.getByText("Launchable.")).toBeInTheDocument();
+  });
+});
+
+const QUOTES: QuoteAsset[] = [
+  ...ASSETS,
+  { symbol: "WETH", name: "Wrapped Ether", kind: "crypto", price: 3412.5, change24h: 1.8, routeDepthUsd: 48_000_000, poolLiquidityUsd: 19_000_000, route: ["WETH", "USDC"], coinsPaired: 212 },
+  { symbol: "USDC", name: "USD Coin", kind: "crypto", price: 1, change24h: 0, poolLiquidityUsd: 22_000_000, route: ["USDC"], coinsPaired: 64 },
+  { symbol: "LINK", name: "Chainlink", kind: "crypto", price: 18.42, change24h: -2.3, routeDepthUsd: 3_100_000, route: ["LINK", "WETH", "USDC"], coinsPaired: 9 },
+];
+const quote = (s: string) => QUOTES.find((q) => q.symbol === s)!;
+
+describe("quote asset model", () => {
+  it("writes the quiet meta line and the fee route for every kind", () => {
+    expect(quoteMetaLine(ASSETS[0]!)).toBe("NVIDIA · Tokenized stock · Ondo");
+    expect(quoteMetaLine({ name: "Wrapped Bitcoin", kind: "crypto" })).toBe("Wrapped Bitcoin · Crypto");
+    expect(quoteMetaLine(ASSETS[4]!, true)).toBe("SPDR S&P 500 ETF Trust · ETF · Ondo");
+    expect(feeRouteText(quote("LINK"), "HARAMBE")).toBe("$HARAMBE → LINK → WETH → USDC");
+    expect(feeRouteHops(quote("WETH"), "$MOG")).toEqual(["$MOG", "WETH", "USDC"]);
+    expect(feeRouteText(quote("USDC"), "TIGR")).toBe("$TIGR → USDC");
+    expect(feeRouteText(ASSETS[3]!)).toBe("No route to USDC");
+    expect(isDirectUsdc({ symbol: "USDC" })).toBe(true);
+    expect(launchability(quote("USDC"))).toEqual({ ok: true });
+    expect(followsUsSession("crypto")).toBe(false);
+    expect(followsUsSession("etf")).toBe(true);
+  });
+
+  it("puts crypto first and counts every kind", () => {
+    expect(filterQuoteAssets(QUOTES).map((a) => a.symbol).slice(0, 4)).toEqual(["WETH", "USDC", "LINK", "NVDAon"]);
+    expect(filterQuoteAssets(QUOTES, { kind: "crypto", sort: "name" }).map((a) => a.symbol)).toEqual(["LINK", "USDC", "WETH"]);
+    expect(quoteKindCounts(QUOTES)).toEqual({ all: 9, crypto: 3, stock: 4, etf: 2 });
+  });
+});
+
+describe("QuoteAssetIdentity and AssetKindBadge", () => {
+  it("shows logo, symbol and a sentence-case meta line, no uppercase chip", () => {
+    render(<QuoteAssetIdentity asset={{ symbol: "WBTC", name: "Wrapped Bitcoin", kind: "crypto", logo: { src: "/assets/tokens/WBTC.svg" } }} />);
+    expect(screen.getByRole("heading", { name: "WBTC" })).toBeInTheDocument();
+    expect(screen.getByText("Wrapped Bitcoin · Crypto")).toBeInTheDocument();
+    expect(document.querySelector("img")).toHaveAttribute("src", "/assets/tokens/WBTC.svg");
+    expect(document.querySelector('[data-slot="quote-kind-mark"]')).toHaveAttribute("data-kind", "crypto");
+  });
+
+  it("badges in sentence case by default", () => {
+    const { rerender } = render(<AssetKindBadge kind="stock" />);
+    expect(screen.getByText("Stock")).toHaveAttribute("title", "Tokenized stock");
+    rerender(<AssetKindBadge kind="crypto" variant="tag" />);
+    expect(screen.getByText("Crypto")).toHaveAttribute("data-slot", "badge");
+  });
+});
+
+describe("QuoteAssetList", () => {
+  it("filters by All / Crypto / Stocks / ETFs and marks WETH as the default", () => {
+    render(<QuoteAssetList assets={QUOTES} now={NOW} coinSymbol="HARAMBE" getHref={(a) => `/pairs/${a.symbol}/`} />);
+    const group = screen.getByRole("radiogroup", { name: "Asset kind" });
+    expect(within(group).getAllByRole("radio").map((r) => r.getAttribute("aria-label"))).toEqual(["All, 9", "Crypto, 3", "Stocks, 4", "ETFs, 2"]);
+    const links = () => screen.getAllByRole("link").map((l) => l.textContent);
+    expect(links().slice(0, 3)).toEqual(["WETH", "USDC", "LINK"]);
+    expect(screen.getByText("Default")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: "Crypto, 3" }));
+    expect(links()).toEqual(["WETH", "USDC", "LINK"]);
+    expect(screen.getAllByText("Trades 24/7")).toHaveLength(3);
+    expect(screen.getByText("Direct USDC")).toBeInTheDocument();
+    expect(screen.getByText("LINK → WETH → USDC")).toBeInTheDocument();
+  });
+
+  it("lays out by container queries, not the viewport", () => {
+    const { container } = render(<QuoteAssetList assets={QUOTES} now={NOW} getHref={() => "#"} />);
+    expect(container.querySelector('[data-slot="quote-asset-list"]')!.className).toMatch(/@container/);
+    const row = within(screen.getByRole("table")).getAllByRole("row")[1]!;
+    expect(row.className).toMatch(/@xl:grid-cols-/);
+    expect(row.className).toMatch(/@5xl:grid-cols-/);
+    expect(row.className).not.toMatch(/(^|\s)md:grid-cols-/);
+  });
+});
+
+describe("PairPicker", () => {
+  it("preselects WETH, summarises the pair and follows the choice", () => {
+    const onValueChange = vi.fn();
+    render(<PairPicker assets={QUOTES} now={NOW} coinSymbol="HARAMBE" onValueChange={onValueChange} />);
+    const group = screen.getByRole("radiogroup", { name: "Quote asset for $HARAMBE" });
+    const weth = within(group).getByRole("radio", { name: "WETH, Wrapped Ether" });
+    expect(weth).toBeChecked();
+    expect(weth).toHaveAccessibleDescription(/trades 24\/7/);
+    expect(screen.getByText("$HARAMBE / WETH")).toBeInTheDocument();
+    expect(screen.getByText("Launchable")).toBeInTheDocument();
+    fireEvent.click(within(group).getByRole("radio", { name: "NVDAon, NVIDIA" }));
+    expect(onValueChange).toHaveBeenLastCalledWith("NVDAon");
+    expect(screen.getByText("$HARAMBE / NVDAon")).toBeInTheDocument();
+    expect(within(group).getByRole("radio", { name: "PLTRon, Palantir" })).toBeDisabled();
+  });
+});
+
+describe("QuoteAssetCard", () => {
+  it("shows a crypto quote as always open, with no stale note even overnight", () => {
+    render(<QuoteAssetCard asset={quote("WETH")} now={at("2026-01-14T02:00:00Z")} coinSymbol="HARAMBE" />);
+    expect(screen.getByText("Trades 24/7")).toBeInTheDocument();
+    expect(screen.queryByText("Market closed")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
+    expect(screen.getByText("Wrapped Ether · Crypto")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Fee route to USDC" })).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["$HARAMBE", "WETH", "USDC"]);
+  });
+
+  it("treats USDC as direct: no route meter, launchable", () => {
+    render(<QuoteAssetCard asset={quote("USDC")} now={NOW} coinSymbol="TIGR" />);
+    expect(screen.queryByRole("meter")).toBeNull();
+    expect(screen.getByText(/Fees are USDC already/)).toBeInTheDocument();
+  });
+
+  it("keeps the old StockMarketCard name working", () => {
+    expect(StockMarketCard).toBe(QuoteAssetCard);
   });
 });
