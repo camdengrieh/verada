@@ -73,9 +73,11 @@ export function isUserRejection(e: unknown): boolean {
 /** The wallet is on a different network than the app. */
 export function isWrongChain(e: unknown): boolean {
   return chain(e).some((c) => {
-    if (c.name === "ChainMismatchError" || c.name === "SwitchChainError") return true;
+    // viem's ChainMismatchError, wagmi's ConnectorChainMismatchError (what a write raises when the
+    // wallet sits on another network than `chainId`) and ChainNotConfiguredError.
+    if (c.name === "ChainMismatchError" || c.name === "ConnectorChainMismatchError" || c.name === "ChainNotConfiguredError" || c.name === "SwitchChainError") return true;
     const text = typeof c.message === "string" ? c.message : "";
-    return /does not match the target chain|chain mismatch|wrong network/i.test(text);
+    return /does not match the (target|connection's) chain|chain mismatch|wrong network|chain not configured/i.test(text);
   });
 }
 

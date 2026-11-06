@@ -1,3 +1,4 @@
+import { ChainNotConfiguredError, ConnectorChainMismatchError } from "wagmi";
 import { describe, expect, it } from "vitest";
 import { friendlyTxError, isUserRejection, isWrongChain, revertName } from "@/lib/tx-errors";
 import { txUrl } from "@/lib/explorer";
@@ -15,6 +16,16 @@ describe("friendlyTxError", () => {
     const e = Object.assign(new Error("x"), { name: "ChainMismatchError" });
     expect(isWrongChain(e)).toBe(true);
     expect(friendlyTxError(e)).toMatch(/different network/);
+  });
+
+  it("recognises wagmi's own wrong-chain errors", () => {
+    const mismatch = new ConnectorChainMismatchError({ connectionChainId: 137, connectorChainId: 1 });
+    expect(isWrongChain(mismatch)).toBe(true);
+    expect(friendlyTxError(mismatch)).toMatch(/different network/);
+    // Wrapped the way a hook rethrows it.
+    expect(isWrongChain(Object.assign(new Error("write failed"), { cause: mismatch }))).toBe(true);
+    expect(isWrongChain(new ChainNotConfiguredError())).toBe(true);
+    expect(isWrongChain(new Error("rpc down"))).toBe(false);
   });
 
   it("maps insufficient funds and contract reverts", () => {
