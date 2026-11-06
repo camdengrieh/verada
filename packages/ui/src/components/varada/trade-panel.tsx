@@ -3,7 +3,7 @@
 
 import { ChevronDown, Settings2 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { useId, useState, type ComponentProps, type ReactNode } from "react";
+import { useId, useState, type ComponentProps, type KeyboardEvent, type ReactNode } from "react";
 import { Popover, RadioGroup } from "radix-ui";
 import { Button } from "@verada/ui/components/ui/button";
 import { cn } from "@verada/ui/lib/utils";
@@ -16,6 +16,10 @@ import { StockLogo, type QuoteKind } from "./stock-logo";
  * impact and fees back in. Following the Swap Ticket, the primary button's label IS the validation
  * state: it names whatever blocks the trade ("Connect wallet", "Enter an amount", "Insufficient
  * NVDAon balance") and only reads "Review buy" when the trade can go ahead.
+ *
+ * Under the pay input sit preset chips: amounts in the pay asset when buying (WETH sizes, or USD
+ * sizes converted at `payPriceUsd`) and shares of the coin balance when selling, each showing the
+ * amount it fills. A chip fills the input and stays pressed until the amount is edited.
  */
 
 export type TradeSide = "buy" | "sell";
@@ -53,8 +57,28 @@ export interface TradePanelProps extends Omit<ComponentProps<"section">, "childr
   receiveAmount: string;
   /** Fiat value of the pay amount ("$1,249.50"). */
   payFiat?: string;
-  /** Percent chips under the pay input; 100 is "Max". */
-  onPercent?: (percent: 25 | 50 | 100) => void;
+  /**
+   * Buy-side amount chips in the pay asset. Defaults: WETH 0.01 / 0.05 / 0.1 / 0.5; any asset with a
+   * `payPriceUsd` (stablecoins assume $1) gets `buyPresetUsd` sizes converted into it; otherwise 25% /
+   * 50% of the balance. A Max chip follows. `false` hides the chips.
+   */
+  buyPresets?: readonly TradePreset[] | false;
+  /** USD per pay token, for the default USD-sized buy presets ("$50 = 0.3862 NVDAon"). */
+  payPriceUsd?: number;
+  /** USD sizes for the default buy presets (default 50 / 100 / 250 / 500). */
+  buyPresetUsd?: readonly number[];
+  /** Sell-side chips as percents of the coin balance (default 10 / 25 / 50 / 75 / 100; 100 is "Max"). `false` hides them. */
+  sellPercents?: readonly number[] | false;
+  /** Plain balance used to compute chip amounts ("3402.18"); defaults to `pay.balance` without commas. */
+  payBalanceRaw?: string;
+  /** What Max fills (default the whole balance; pass less for WETH to leave gas). */
+  maxAmount?: string;
+  /** Why the chips are disabled; defaults to "No <symbol> balance" when the balance is missing or zero. */
+  presetsDisabledReason?: string;
+  /** Called after a chip fills the pay input. */
+  onPreset?: (preset: TradePresetChoice) => void;
+  /** Percent chips call this too (kept for older callers; the chips now fill the input themselves). */
+  onPercent?: (percent: number) => void;
   onPickPayToken?: () => void;
   /** Slippage tolerance in percent. */
   slippage: number;
@@ -78,6 +102,103 @@ export interface TradePanelProps extends Omit<ComponentProps<"section">, "childr
   onSubmit: () => void;
   /** Slot above the action (e.g. a market-closed note). */
   notice?: ReactNode;
+}
+
+/** A buy-side amount chip. */
+export interface TradePreset {
+  /** Stable id; also what `onPreset` reports. */
+  key: string;
+  /** Chip text ("0.05", "$100"). */
+  label: string;
+  /** Plain amount written into the pay input ("0.05", "0.7723"). */
+  amount: string;
+  /** Second line, e.g. the amount in the pay asset when the label is in USD. */
+  detail?: string;
+  /** Spoken name; defaults to "Pay <label> <symbol>". */
+  ariaLabel?: string;
+}
+
+export interface TradePresetChoice {
+  key: string;
+  amount: string;
+  /** Set for percent and Max chips. */
+  percent?: number;
+}
+
+const STABLES = /^(USDC|USDT|DAI|USDS|PYUSD|USDON)$/i;
+const ETHLIKE = /^W?ETH$/i;
+export const WETH_BUY_PRESETS = ["0.01", "0.05", "0.1", "0.5"] as const;
+export const DEFAULT_BUY_PRESET_USD = [50, 100, 250, 500] as const;
+export const DEFAULT_SELL_PERCENTS = [10, 25, 50, 75, 100] as const;
+
+/** "3,402.18" → 3402.18; null when it isn't a number. */
+export function parseBalance(balance: string | undefined): number | null {
+  if (!balance) return null;
+  const n = Number(balance.replace(/[,\s_]/g, ""));
+  return Number.isFinite(n) ? n : null;
+}
+
+function trimFixed(n: number, decimals: number): string {
+  const f = 10 ** decimals;
+  const s = (Math.floor(n * f + 1e-9) / f).toFixed(decimals);
+  return s.includes(".") ? s.replace(/0+$/, "").replace(/\.$/, "") : s;
+}
+
+/**
+ * A percent of a plain balance string, rounded down so it never exceeds the balance. 100 returns the
+ * balance itself.
+ */
+export function percentOfBalance(raw: string, percent: number): string {
+  const clean = raw.replace(/[,\s_]/g, "");
+  if (percent >= 100) return clean;
+  const n = Number(clean);
+  if (!Number.isFinite(n) || n <= 0) return "0";
+  const decimals = Math.min(8, Math.max(clean.split(".")[1]?.length ?? 0, 4));
+  return trimFixed((n * percent) / 100, decimals);
+}
+
+/** USD converted into a token amount at `priceUsd`, rounded down with enough precision for small amounts. */
+export function usdToTokenAmount(usd: number, priceUsd: number): string {
+  if (!(priceUsd > 0)) return "0";
+  const amount = usd / priceUsd;
+  return trimFixed(amount, amount >= 100 ? 2 : amount >= 1 ? 4 : 6);
+}
+
+const compactAmount = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
+const sigAmount = new Intl.NumberFormat("en-US", { maximumSignificantDigits: 4 });
+const fmtChipAmount = (s: string) => {
+  const n = Number(s);
+  return n >= 10_000 ? compactAmount.format(n) : sigAmount.format(n);
+};
+
+/** The default buy chips for a pay asset (see `TradePanelProps.buyPresets`). Empty when none apply. */
+export function defaultBuyPresets(symbol: string, priceUsd?: number, sizesUsd: readonly number[] = DEFAULT_BUY_PRESET_USD): TradePreset[] {
+  const sym = symbol.replace(/^\$/, "");
+  if (ETHLIKE.test(sym)) return WETH_BUY_PRESETS.map((a) => ({ key: a, label: a, amount: a, ariaLabel: `Pay ${a} ${symbol}` }));
+  const price = priceUsd ?? (STABLES.test(sym) ? 1 : undefined);
+  if (!price) return [];
+  return sizesUsd.map((usd) => {
+    const amount = usdToTokenAmount(usd, price);
+    const label = `$${usd.toLocaleString("en-US")}`;
+    return {
+      key: `usd-${usd}`,
+      label,
+      amount,
+      detail: STABLES.test(sym) ? undefined : `${fmtChipAmount(amount)} ${symbol}`,
+      ariaLabel: `Pay ${label} in ${symbol}, ${amount} ${symbol}`,
+    };
+  });
+}
+
+interface Chip {
+  key: string;
+  label: string;
+  amount: string | null;
+  percent?: number;
+  detail?: string;
+  ariaLabel: string;
+  /** Read after the name (e.g. the resulting amount). */
+  description?: string;
 }
 
 export type ImpactSeverity = "low" | "medium" | "high";
@@ -110,6 +231,14 @@ export function TradePanel({
   onPayAmountChange,
   receiveAmount,
   payFiat,
+  buyPresets,
+  payPriceUsd,
+  buyPresetUsd,
+  sellPercents,
+  payBalanceRaw,
+  maxAmount,
+  presetsDisabledReason,
+  onPreset,
   onPercent,
   onPickPayToken,
   slippage,
@@ -135,6 +264,26 @@ export function TradePanel({
   const payId = `${id}-pay`;
   const receiveId = `${id}-receive`;
   const balanceId = `${id}-balance`;
+  const reasonId = `${id}-preset-reason`;
+
+  // Which chip filled the input; cleared by typing, switching side or the amount being emptied.
+  const [picked, setPicked] = useState<{ side: TradeSide; key: string } | null>(null);
+  const pressedKey = picked && picked.side === side && payAmount !== "" ? picked.key : null;
+
+  const rawBalance = payBalanceRaw ?? pay.balance?.replace(/[,\s_]/g, "");
+  const balance = parseBalance(rawBalance);
+  const hasBalance = balance !== null && balance > 0;
+  const chips = buildChips({ side, pay, rawBalance, hasBalance, buyPresets, payPriceUsd, buyPresetUsd, sellPercents, maxAmount });
+  const chipsDisabled = !hasBalance;
+  const disabledReason = chipsDisabled ? (presetsDisabledReason ?? `No ${pay.symbol} balance`) : null;
+
+  const pick = (chip: Chip) => {
+    const amount = chip.amount ?? "";
+    setPicked({ side, key: chip.key });
+    if (chip.amount !== null) onPayAmountChange(chip.amount);
+    if (chip.percent !== undefined) onPercent?.(chip.percent);
+    onPreset?.({ key: chip.key, amount, percent: chip.percent });
+  };
 
   const empty = !(parseFloat(payAmount) > 0);
   const effective: TradeBlocker | null = blocker ?? (empty ? { label: "Enter an amount" } : null);
@@ -184,7 +333,9 @@ export function TradePanel({
             value={payAmount}
             onChange={(e) => {
               const v = sanitizeAmount(e.target.value);
-              if (v !== null) onPayAmountChange(v);
+              if (v === null) return;
+              setPicked(null);
+              onPayAmountChange(v);
             }}
             inputMode="decimal"
             autoComplete="off"
@@ -203,22 +354,23 @@ export function TradePanel({
             ) : null}
             {payFiat ? <span className="num"> · {payFiat}</span> : null}
           </span>
-          {onPercent ? (
-            <span className="flex gap-1.5" role="group" aria-label="Amount presets">
-              {([25, 50, 100] as const).map((p) => (
-                <button
-                  key={p}
-                  type="button"
-                  onClick={() => onPercent(p)}
-                  aria-label={p === 100 ? `Use your whole ${pay.symbol} balance` : `Use ${p}% of your ${pay.symbol} balance`}
-                  className={cn(HIT_AREA, "min-h-9 rounded-full border border-line px-3 text-xs font-medium text-ink transition-colors hover:bg-sand")}
-                >
-                  {p === 100 ? "Max" : `${p}%`}
-                </button>
-              ))}
-            </span>
-          ) : null}
         </div>
+        {chips.length ? (
+          <PresetChips
+            chips={chips}
+            label={side === "buy" ? `Amount presets in ${pay.symbol}` : `Sell a share of your ${pay.symbol} balance`}
+            pressedKey={pressedKey}
+            disabled={chipsDisabled}
+            reasonId={disabledReason ? reasonId : undefined}
+            idPrefix={id}
+            onPick={pick}
+          />
+        ) : null}
+        {disabledReason && chips.length ? (
+          <p id={reasonId} className="m-0 text-xs text-ink-muted">
+            {disabledReason}
+          </p>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-1.5">
@@ -309,6 +461,122 @@ export function TradePanel({
         </AnimatePresence>
       </Button>
     </section>
+  );
+}
+
+function buildChips({
+  side,
+  pay,
+  rawBalance,
+  hasBalance,
+  buyPresets,
+  payPriceUsd,
+  buyPresetUsd,
+  sellPercents,
+  maxAmount,
+}: {
+  side: TradeSide;
+  pay: TradeToken;
+  rawBalance: string | undefined;
+  hasBalance: boolean;
+  buyPresets: readonly TradePreset[] | false | undefined;
+  payPriceUsd: number | undefined;
+  buyPresetUsd: readonly number[] | undefined;
+  sellPercents: readonly number[] | false | undefined;
+  maxAmount: string | undefined;
+}): Chip[] {
+  const sym = pay.symbol;
+  const percentChip = (p: number): Chip => {
+    const amount = rawBalance && hasBalance ? (p >= 100 && maxAmount ? maxAmount : percentOfBalance(rawBalance, p)) : null;
+    return {
+      key: `pct-${p}`,
+      label: p >= 100 ? "Max" : `${p}%`,
+      amount,
+      percent: p,
+      detail: amount ? fmtChipAmount(amount) : undefined,
+      ariaLabel: p >= 100 ? `Use your whole ${sym} balance` : `Use ${p}% of your ${sym} balance`,
+      description: amount ? `${amount} ${sym}` : undefined,
+    };
+  };
+  if (side === "sell") return sellPercents === false ? [] : (sellPercents ?? DEFAULT_SELL_PERCENTS).map(percentChip);
+  if (buyPresets === false) return [];
+  const presets = buyPresets ?? defaultBuyPresets(sym, payPriceUsd, buyPresetUsd);
+  if (!presets.length) return [25, 50, 100].map(percentChip);
+  return [
+    ...presets.map<Chip>((p) => ({ key: p.key, label: p.label, amount: p.amount, detail: p.detail, ariaLabel: p.ariaLabel ?? `Pay ${p.label} ${sym}` })),
+    percentChip(100),
+  ];
+}
+
+const CHIP_NAV_KEYS = ["ArrowLeft", "ArrowRight", "Home", "End"];
+
+/** Toggle buttons (aria-pressed) in a group; arrow keys, Home and End move between them. */
+function PresetChips({
+  chips,
+  label,
+  pressedKey,
+  disabled,
+  reasonId,
+  idPrefix,
+  onPick,
+}: {
+  chips: Chip[];
+  label: string;
+  pressedKey: string | null;
+  disabled: boolean;
+  reasonId?: string;
+  idPrefix: string;
+  onPick: (chip: Chip) => void;
+}) {
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    if (!CHIP_NAV_KEYS.includes(e.key)) return;
+    const buttons = Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+    const i = buttons.indexOf(e.target as HTMLButtonElement);
+    if (i < 0) return;
+    e.preventDefault();
+    const n = buttons.length;
+    const next = e.key === "Home" ? 0 : e.key === "End" ? n - 1 : (i + (e.key === "ArrowRight" ? 1 : -1) + n) % n;
+    buttons[next]?.focus();
+  };
+  return (
+    <div
+      role="group"
+      aria-label={label}
+      aria-describedby={reasonId}
+      onKeyDown={onKeyDown}
+      className="grid gap-1.5"
+      style={{ gridTemplateColumns: `repeat(${chips.length}, minmax(0, 1fr))` }}
+    >
+      {chips.map((c) => {
+        const pressed = c.key === pressedKey;
+        const descId = c.description ? `${idPrefix}-chip-${c.key}` : undefined;
+        const describedBy = [descId, reasonId].filter(Boolean).join(" ") || undefined;
+        return (
+          <button
+            key={c.key}
+            type="button"
+            aria-pressed={pressed}
+            aria-label={c.ariaLabel}
+            aria-describedby={describedBy}
+            disabled={disabled}
+            onClick={() => onPick(c)}
+            className={cn(
+              "group flex min-h-11 min-w-0 flex-col items-center justify-center rounded-xl border border-line-strong bg-paper-card px-1 py-1 text-ink transition-colors",
+              "hover:bg-sand aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-paper aria-pressed:hover:bg-ink-soft",
+              "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-paper-card",
+            )}
+          >
+            <span className="num text-[13px] font-semibold leading-tight">{c.label}</span>
+            {c.detail ? <span className="num max-w-full truncate text-[11px] leading-tight text-ink-muted group-aria-pressed:text-paper/85">{c.detail}</span> : null}
+            {descId ? (
+              <span id={descId} className="sr-only">
+                {c.description}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 

@@ -34,8 +34,8 @@ import { AssetProvider } from "@verada/ui/lib/assets";
 | `src/styles.css` | Tokens (shadcn names plus Varada ones), Tailwind v4 theme, `num` and `kicker` utilities, animations, an evening-paper dark variant (`.dark`) |
 | `src/components/ui/` | Primitives and overlays: button, badge, card, input, field, select, checkbox, radio-group, switch, slider, toggle-group, tabs, tooltip, popover, hover-card, dropdown-menu, dialog, sheet, drawer, command, toaster, skeleton, progress, accordion, table, avatar, separator, scroll-area, kbd, icons |
 | `src/components/data/` | Data and flow: data-table, stat-card, sparkline, price-chart, countdown, stepper, file-dropzone, copy-button, empty-state, activity-list |
-| `src/components/motion/` | marquee, number-ticker, step-transition |
-| `src/components/varada/` | Varada-only: site-header, logo-mark, token-card, token-row, pair-chip, stock-logo, cause-icon, cause-chip, asset-kind-badge, mode-badge, price-change, fee-split-bar, trade-panel, liquidity-panel, cause-pool-card, ballot-option, ballot-list, vote-flow-dialog, curator-agent-card, takeover-card, activity-ticker, activity-feed, privacy-pill, watercolour (Wash, PaperGrain, BrushUnderline), painted-image |
+| `src/components/motion/` | marquee, number-ticker, step-transition, confetti (launch / vote / donation presets), loading-screen and PageLoader, ink-button (the Button `effect` hovers: wash, brush, shine, magnetic) |
+| `src/components/varada/` | Varada-only: site-header, logo-mark, token-card, token-row, pair-chip, stock-logo, cause-icon, cause-chip, asset-kind-badge, mode-badge, price-change, fee-split-bar, trade-panel, liquidity-panel, cause-pool-card, ballot-option, ballot-list, vote-flow-dialog, curator-agent-card, takeover-card, activity-ticker, activity-feed, privacy-pill, tx-toast (pending → success/error transaction toasts), market-status (US session from New York time), liquidity-meter, price-impact-ladder, stock-market-card, stock-market-list (Ondo explorer and launch pair picker), watercolour (Wash, PaperGrain, BrushUnderline), painted-image |
 | `src/lib/` | `cn`, `AssetProvider` / `useAssetUrl` |
 
 Each component file starts with a comment naming its source (`Adapted from 21st.dev @author/name (id N)`,
@@ -59,6 +59,8 @@ Each component file starts with a comment naming its source (`Adapted from 21st.
 - `PriceChart` uses TradingView Lightweight Charts with its logo turned off, because the logo links
   off-site. The licence then requires the NOTICE text and a link to tradingview.com on a page users can
   see. The `/design` page has it; the site footer must carry the same credit once pages use the chart.
+- Confetti, the loading screen, hover effects and drawer scaling all switch off under `prefers-reduced-motion`.
+- The trade panel shows buy presets (asset amounts, or USD amounts converted when `payPriceUsd` is given) and sell percentages by default; pass `buyPresets={false}` / `sellPercents={false}` to hide them.
 - Tailwind is pinned to 4.3.2: later releases need Node 20.19+ for their PostCSS plugin.
 
 ## Checks

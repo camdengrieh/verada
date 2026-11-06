@@ -1,7 +1,10 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import { Slot } from "radix-ui";
 import type { ComponentProps } from "react";
+import { EffectButton, type ButtonEffect } from "@verada/ui/components/motion/ink-button";
 import { cn } from "@verada/ui/lib/utils";
+
+export type { ButtonEffect };
 
 /**
  * Pill buttons from Direction A. `primary` is terracotta (trade, launch), `cause` is sage (voting,
@@ -37,9 +40,29 @@ export const buttonVariants = cva(
 export interface ButtonProps extends ComponentProps<"button">, VariantProps<typeof buttonVariants> {
   /** Render the child element (e.g. an anchor) with button styling. */
   asChild?: boolean;
+  /**
+   * Signature hover effect (see motion/ink-button): `wash` soaks the hover pigment in from the
+   * pointer, `brush` paints a stroke under the label, `shine` sweeps a paper sheen across,
+   * `magnetic` leans toward the pointer. Decoration only; off under reduced motion. Default `none`
+   * renders exactly the plain button.
+   */
+  effect?: ButtonEffect;
 }
 
-export function Button({ className, variant, size, asChild = false, type, ...props }: ButtonProps) {
+export function Button({ className, variant, size, asChild = false, type, effect = "none", ...props }: ButtonProps) {
+  if (effect !== "none") {
+    return (
+      <EffectButton
+        effect={effect}
+        variant={variant ?? "primary"}
+        baseClassName={buttonVariants({ variant, size })}
+        className={className}
+        asChild={asChild}
+        type={type}
+        {...props}
+      />
+    );
+  }
   const Comp = asChild ? Slot.Root : "button";
   return (
     <Comp

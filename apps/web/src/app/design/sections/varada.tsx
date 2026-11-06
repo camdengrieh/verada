@@ -175,7 +175,7 @@ function TradeDemo() {
       onPayAmountChange={setAmount}
       payFiat={n ? `$${(nvda * NVDA_PRICE).toLocaleString("en-US", { maximumFractionDigits: 2 })}` : undefined}
       receiveAmount={n ? fmtOut(out) : ""}
-      onPercent={(p) => setAmount(buying ? ((NVDA_BALANCE * p) / 100).toFixed(2) : String((38_900_000 * p) / 100))}
+      payPriceUsd={buying ? NVDA_PRICE : undefined}
       onPickPayToken={noop}
       slippage={slippage}
       onSlippageChange={setSlippage}
@@ -445,18 +445,22 @@ export function VaradaSection() {
       </Specimen>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Specimen label="Trade panel · interactive" source="21st.dev @ssychui/swap-ticket (id 27122) + @ravikatiyar162/swap-card (id 7804)">
+        <Specimen
+          label="Trade panel · interactive: buy presets in USD, sell percentages"
+          source="21st.dev @ssychui/swap-ticket (id 27122) + @ravikatiyar162/swap-card (id 7804)"
+        >
           <TradeDemo />
         </Specimen>
         <div className="flex flex-col gap-4">
-          <Specimen label="Trade panel · wallet blocker, sniper fee, high impact" source="The button label names what's in the way">
+          <Specimen label="Trade panel · WETH presets disabled until a wallet connects, sniper fee, high impact" source="The button label names what's in the way">
             <TradePanel
               side="buy"
               onSideChange={noop}
-              pay={{ symbol: "NVDAon", kind: "stock" }}
+              pay={{ symbol: "WETH", kind: "crypto" }}
               receive={{ symbol: "$HARAMBE" }}
-              payAmount="9.65"
+              payAmount="0.5"
               onPayAmountChange={noop}
+              presetsDisabledReason="Connect a wallet to use the presets."
               receiveAmount="295,820,000"
               slippage={1}
               fee="2.5%"

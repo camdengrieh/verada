@@ -8,7 +8,9 @@ export { toast };
 
 /**
  * Mount once near the root. Then call `toast("Vote cast", { description })`, `toast.success`,
- * `toast.error` or `toast.promise`. Toasts are announced politely and pause on hover and focus.
+ * `toast.error` or `toast.promise`, or the transaction toasts in varada/tx-toast (`txToast`).
+ * Toasts are announced politely and pause on hover and focus. The house styling applies to Sonner's
+ * own toasts only (`data-styled`), so custom cards such as `txToast` bring their own.
  */
 export function Toaster({ style, toastOptions, ...props }: ComponentProps<typeof Sonner>) {
   return (
@@ -21,7 +23,7 @@ export function Toaster({ style, toastOptions, ...props }: ComponentProps<typeof
         {
           "--normal-bg": "var(--popover)",
           "--normal-text": "var(--popover-foreground)",
-          "--normal-border": "var(--border)",
+          "--normal-border": "var(--line-strong)",
           "--success-bg": "var(--sage-tint)",
           "--success-text": "var(--sage-ink)",
           "--success-border": "var(--sage-tint)",
@@ -41,7 +43,7 @@ export function Toaster({ style, toastOptions, ...props }: ComponentProps<typeof
       toastOptions={{
         ...toastOptions,
         classNames: {
-          toast: "group toast font-sans! gap-3! px-4! py-3.5! shadow-float!",
+          toast: "group toast font-sans! data-[styled=true]:gap-3! data-[styled=true]:px-4! data-[styled=true]:py-3.5! data-[styled=true]:shadow-float!",
           title: "text-[15px]! font-semibold!",
           description: "text-sm! text-ink-soft!",
           actionButton: "h-9! rounded-full! bg-primary! px-3.5! text-sm! font-semibold! text-primary-foreground!",
