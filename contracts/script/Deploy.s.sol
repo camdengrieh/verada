@@ -57,10 +57,14 @@ import {DnsNameLib} from "../src/libraries/DnsNameLib.sol";
 ///               uint256(keccak256("varada")), <resolver>)`:
 ///           `forge script script/SetParentResolver.s.sol --rpc-url $ETH_RPC_URL --broadcast
 ///           --ledger` (reads the resolver from deployments/1.json and checks everything first).
-///        2. The owner accepts ownership of every admin contract, adds causes, sets the default
-///           shortlist (`EpochGovernor.setDefaultShortlist`) and the default cause, and, after the
-///           first site publish, `TokenProfileRegistry.setDefaultContenthash` if SITE_SWARM_REF was
-///           not known at deploy time.
+///        2. The owner accepts ownership of every admin contract (every address in the written
+///           file except the factory, hook, locker and resolver), publishes the cause catalogue
+///           (`CauseCatalog.setVersion`, calldata from `varada-catalog calldata`), adds the quote
+///           assets with their routes (`QuoteRegistry.addQuoteAssetWithRoute`), adds a fallback
+///           cause and sets it (`CauseRegistry.addCause`, `EpochGovernor.setDefaultCause`),
+///           registers the curator agents in `CuratorRegistry` and, after the first site publish,
+///           `TokenProfileRegistry.setDefaultContenthash` if SITE_SWARM_REF was not known at
+///           deploy time.
 ///        3. Fund the Zama fee account used by the tally keeper (see services/publisher).
 contract Deploy is Script {
     // Official Ethereum mainnet deployments (Uniswap v4 deployments page, canonical WETH9).
@@ -384,12 +388,14 @@ contract Deploy is Script {
         vm.serializeAddress(k, "feeConsolidator", d.feeConsolidator);
         vm.serializeAddress(k, "quoteRegistry", d.quoteRegistry);
         vm.serializeAddress(k, "causeRegistry", d.causeRegistry);
+        vm.serializeAddress(k, "causeCatalog", d.causeCatalog);
         vm.serializeAddress(k, "epochGovernor", d.epochGovernor);
         vm.serializeAddress(k, "donationDistributor", d.donationDistributor);
         vm.serializeAddress(k, "profileRegistry", d.profileRegistry);
         vm.serializeAddress(k, "resolver", d.resolver);
         vm.serializeAddress(k, "takeoverGovernor", d.takeoverGovernor);
-        string memory json = vm.serializeAddress(k, "votingScheme", d.votingScheme);
+        vm.serializeAddress(k, "votingScheme", d.votingScheme);
+        string memory json = vm.serializeAddress(k, "curatorRegistry", d.curatorRegistry);
 
         vm.createDir("deployments", true);
         vm.writeJson(json, string.concat("deployments/", vm.toString(block.chainid), ".json"));
@@ -403,11 +409,13 @@ contract Deploy is Script {
         console2.log("feeConsolidator", d.feeConsolidator);
         console2.log("quoteRegistry", d.quoteRegistry);
         console2.log("causeRegistry", d.causeRegistry);
+        console2.log("causeCatalog", d.causeCatalog);
         console2.log("epochGovernor", d.epochGovernor);
         console2.log("donationDistributor", d.donationDistributor);
         console2.log("profileRegistry", d.profileRegistry);
         console2.log("resolver", d.resolver);
         console2.log("takeoverGovernor", d.takeoverGovernor);
         console2.log("votingScheme", d.votingScheme);
+        console2.log("curatorRegistry", d.curatorRegistry);
     }
 }
