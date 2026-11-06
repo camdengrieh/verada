@@ -275,7 +275,7 @@ export function buildMetadataDocument(
   return { ok: true, doc };
 }
 
-function randomSalt(): Hex {
+export function randomSalt(): Hex {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
   return toHex(bytes);
