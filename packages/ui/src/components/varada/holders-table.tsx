@@ -46,6 +46,9 @@ export function rankHolders(holders: readonly HolderItem[], hideContracts: boole
   return holders.filter((h) => !(hideContracts && h.label && CONTRACT_LABELS.includes(h.label))).sort((a, b) => b.share - a.share || a.address.localeCompare(b.address));
 }
 
+const USD_COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 });
+const usdShort = (n: number) => (n >= 100_000 ? "$" + USD_COMPACT.format(n) : formatUsd(n));
+
 const pct = (n: number) => `${n < 0.01 && n > 0 ? "<0.01" : n < 10 ? n.toFixed(2) : n.toFixed(1)}%`;
 
 function Change({ value }: { value?: number }) {
@@ -180,10 +183,10 @@ export function HoldersTable({
               <th scope="col" className="pb-2 font-medium">
                 Holder
               </th>
-              <th scope="col" className="hidden w-[30%] pb-2 font-medium @lg:table-cell">
+              <th scope="col" className="hidden w-[26%] pb-2 font-medium @lg:table-cell">
                 Share of supply
               </th>
-              <th scope="col" className="hidden w-[17%] pb-2 text-right font-medium @xl:table-cell">
+              <th scope="col" className="hidden w-[12%] pb-2 text-right font-medium @xl:table-cell">
                 Balance
               </th>
               <th scope="col" className="hidden w-[13%] pb-2 text-right font-medium @xl:table-cell">
@@ -216,6 +219,7 @@ export function HoldersTable({
                             name={h.ens}
                             direction="reverse"
                             noCopy
+                            nameOnly
                             className="pointer-events-none min-h-9 border-0 bg-transparent py-0 pl-0 [&>img]:size-6 [&>span:first-child]:size-6"
                           />
                         </a>
@@ -232,7 +236,7 @@ export function HoldersTable({
                       </span>
                       <span className="num text-xs text-ink-muted @xl:hidden">
                         {formatTokenAmount(h.balance)} {symbol}
-                        {h.usd !== undefined ? ` · ${formatUsd(h.usd)}` : ""}
+                        {h.usd !== undefined ? ` · ${usdShort(h.usd)}` : ""}
                       </span>
                     </span>
                   </td>
@@ -246,7 +250,7 @@ export function HoldersTable({
                     {formatTokenAmount(h.balance)}
                     {symbol ? <span className="sr-only"> {symbol}</span> : null}
                   </td>
-                  <td className="num hidden py-2.5 text-right text-ink-soft @xl:table-cell">{h.usd !== undefined ? formatUsd(h.usd) : "—"}</td>
+                  <td className="num hidden py-2.5 text-right text-ink-soft @xl:table-cell">{h.usd !== undefined ? usdShort(h.usd) : "—"}</td>
                   <td className="hidden py-2.5 text-right text-[13px] @md:table-cell">
                     <Change value={h.change24h} />
                   </td>

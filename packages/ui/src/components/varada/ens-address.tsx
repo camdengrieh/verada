@@ -27,6 +27,8 @@ export interface EnsAddressProps extends Omit<ComponentProps<"div">, "children">
   copyValue?: "address" | "name";
   /** Drop the copy button. */
   noCopy?: boolean;
+  /** With a name, show only the name (the address stays in the tooltip and for screen readers). */
+  nameOnly?: boolean;
 }
 
 function Avatar({ seed, avatar, label }: { seed: string; avatar?: ImageSource; label?: string }) {
@@ -65,6 +67,7 @@ export function EnsAddress({
   direction = "forward",
   copyValue = "address",
   noCopy,
+  nameOnly,
   className,
   ...props
 }: EnsAddressProps) {
@@ -91,6 +94,7 @@ export function EnsAddress({
         <motion.span
           key={name}
           className="min-w-0 truncate text-sm font-semibold text-ink"
+          title={nameOnly ? address : undefined}
           initial={reduced ? false : { opacity: 0, x: -4 }}
           animate={{ opacity: 1, x: 0 }}
         >
@@ -98,15 +102,24 @@ export function EnsAddress({
           <span className="font-normal text-ink-muted">.{parts.parent}</span>
         </motion.span>
       ) : null}
-      {parts && !resolving ? (
+      {parts && !resolving && nameOnly ? (
+        <span className="sr-only">
+          {" "}
+          {relation} {short}
+        </span>
+      ) : (
         <>
-          <Arrow aria-hidden="true" className="size-3.5 shrink-0 text-ink-muted" />
-          <span className="sr-only"> {relation} </span>
+          {parts && !resolving ? (
+            <>
+              <Arrow aria-hidden="true" className="size-3.5 shrink-0 text-ink-muted" />
+              <span className="sr-only"> {relation} </span>
+            </>
+          ) : null}
+          <span className="num shrink-0 text-[13px] text-ink-soft" title={address}>
+            {short}
+          </span>
         </>
-      ) : null}
-      <span className="num shrink-0 text-[13px] text-ink-soft" title={address}>
-        {short}
-      </span>
+      )}
       {noCopy ? null : (
         <CopyButton
           value={copyText}

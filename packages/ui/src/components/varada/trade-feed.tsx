@@ -131,18 +131,18 @@ export function CauseChip({ usd, label = "to cause", className }: { usd: number;
 const ROW_GRID = cn(
   // Phone: three short lines. Side · amount · value / time · quote / trader · tx.
   "grid grid-cols-[4.25rem_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1",
-  // From 42rem: one ruled line per trade, columns as in the head.
-  "@2xl:grid-cols-[5rem_4.5rem_minmax(0,1.1fr)_minmax(0,1fr)_7rem_minmax(0,1.4fr)_2.75rem] @2xl:gap-y-0",
+  // From 36rem: one ruled line per trade, columns as in the head.
+  "@xl:grid-cols-[4.25rem_4.25rem_minmax(0,0.8fr)_minmax(0,1fr)_6.25rem_minmax(0,1.4fr)_2.75rem] @xl:gap-y-0",
 );
 
 const CELL = {
-  time: "col-start-1 row-start-2 @2xl:row-start-1",
-  side: "col-start-1 row-start-1 @2xl:col-start-2",
-  amount: "col-start-2 row-start-1 @2xl:col-start-3",
-  quote: "col-start-2 row-start-2 @2xl:col-start-4 @2xl:row-start-1",
-  value: "col-start-3 row-span-2 row-start-1 @2xl:col-start-5 @2xl:row-span-1",
-  trader: "col-span-2 col-start-1 row-start-3 @2xl:col-span-1 @2xl:col-start-6 @2xl:row-start-1",
-  tx: "col-start-3 row-start-3 @2xl:col-start-7 @2xl:row-start-1",
+  time: "col-start-1 row-start-2 @xl:row-start-1",
+  side: "col-start-1 row-start-1 @xl:col-start-2",
+  amount: "col-start-2 row-start-1 @xl:col-start-3",
+  quote: "col-start-2 row-start-2 @xl:col-start-4 @xl:row-start-1",
+  value: "col-start-3 row-span-2 row-start-1 @xl:col-start-5 @xl:row-span-1",
+  trader: "col-span-2 col-start-1 row-start-3 @xl:col-span-1 @xl:col-start-6 @xl:row-start-1",
+  tx: "col-start-3 row-start-3 @xl:col-start-7 @xl:row-start-1",
 };
 
 function TradeRow({ trade, fresh, now, reduced }: { trade: TradeItem; fresh: boolean; now: number; reduced: boolean }) {
@@ -160,7 +160,7 @@ function TradeRow({ trade, fresh, now, reduced }: { trade: TradeItem; fresh: boo
       transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
         ROW_GRID,
-        "rounded-xl border-b border-dashed border-line px-2 py-2.5 last:border-b-0 @2xl:rounded-lg @2xl:border-solid @2xl:py-2",
+        "rounded-xl border-b border-dashed border-line px-2 py-2.5 last:border-b-0 @xl:rounded-lg @xl:border-solid @xl:py-2",
         flash && (buy ? "animate-flash" : "animate-flash-loss"),
         "motion-reduce:animate-none",
       )}
@@ -170,10 +170,10 @@ function TradeRow({ trade, fresh, now, reduced }: { trade: TradeItem; fresh: boo
       </time>
       <TradeSideBadge side={trade.side} className={CELL.side} />
       <span className={cn(CELL.amount, "min-w-0 truncate text-sm")}>
-        <span className="num font-semibold text-ink">{formatTokenAmount(trade.tokenAmount)}</span> <span className="text-ink-soft">{trade.tokenSymbol}</span>
+        <span className="num font-semibold text-ink">{formatTokenAmount(trade.tokenAmount)}</span> <span className="text-ink-soft @xl:sr-only">{trade.tokenSymbol}</span>
       </span>
-      <span className={cn(CELL.quote, "min-w-0 truncate text-[13px] text-ink-soft @2xl:text-sm")}>
-        <span className="@2xl:sr-only">for </span>
+      <span className={cn(CELL.quote, "min-w-0 truncate text-[13px] text-ink-soft @xl:text-sm")}>
+        <span className="@xl:sr-only">for </span>
         <span className="num text-ink">{formatTokenAmount(trade.quoteAmount)}</span> {trade.quoteSymbol}
       </span>
       <span className={cn(CELL.value, "flex flex-col items-end gap-1 text-right")}>
@@ -185,9 +185,9 @@ function TradeRow({ trade, fresh, now, reduced }: { trade: TradeItem; fresh: boo
             <span className="sr-only">no USD price</span>
           </span>
         )}
-        {trade.causeUsd ? <CauseChip usd={trade.causeUsd} className="@2xl:sr-only" /> : null}
+        {trade.causeUsd ? <CauseChip usd={trade.causeUsd} className="@xl:sr-only" /> : null}
         {trade.causeUsd ? (
-          <span aria-hidden="true" className="hidden text-[11px] font-semibold text-sage-ink @2xl:inline">
+          <span aria-hidden="true" className="hidden text-[11px] font-semibold text-sage-ink @xl:inline">
             +{formatUsd(trade.causeUsd)} to cause
           </span>
         ) : null}
@@ -199,6 +199,7 @@ function TradeRow({ trade, fresh, now, reduced }: { trade: TradeItem; fresh: boo
           name={trade.trader.ens}
           direction="reverse"
           noCopy
+          nameOnly
           className="min-h-9 max-w-full border-0 bg-transparent py-0 pl-0 [&_img]:size-6 [&>span:first-child]:size-6"
         />
       </span>
@@ -256,7 +257,7 @@ const FILTERS: { value: TradeFilter; label: string }[] = [
 
 /**
  * The coin's live trade tape. A size container: stacked three-line rows on a phone, one ruled
- * row per trade with a column head from 42rem. New trades slide in at the top and flash once
+ * row per trade with a column head from 36rem. New trades slide in at the top and flash once
  * (static with reduced motion). While the pointer or keyboard focus is inside, the list holds
  * still and a pill counts what arrived; the pill (or leaving) catches up.
  */
@@ -338,6 +339,7 @@ export function TradeFeed({
   useEffect(() => () => void (flushTimer.current && clearTimeout(flushTimer.current)), []);
 
   const buys = matching.filter((t) => t.side === "buy").length;
+  const symbol = sorted[0]?.tokenSymbol;
 
   return (
     <section
@@ -387,10 +389,10 @@ export function TradeFeed({
         )}
       </div>
 
-      <div aria-hidden="true" className={cn(ROW_GRID, "hidden border-b border-line px-2 pb-2 text-[11px] font-medium text-ink-muted @2xl:grid")}>
+      <div aria-hidden="true" className={cn(ROW_GRID, "hidden border-b border-line px-2 pb-2 text-[11px] font-medium text-ink-muted @xl:grid")}>
         <span className={CELL.time}>Time</span>
         <span className={CELL.side}>Side</span>
-        <span className={CELL.amount}>Amount</span>
+        <span className={CELL.amount}>Amount{symbol ? ` (${symbol})` : ""}</span>
         <span className={CELL.quote}>Paid / received</span>
         <span className={cn(CELL.value, "text-right")}>Value</span>
         <span className={CELL.trader}>Trader</span>
