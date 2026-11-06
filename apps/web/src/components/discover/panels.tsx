@@ -132,6 +132,7 @@ export function PairsPanel({ assets, selected, onPick, loading, marketsLoading }
         holidays={US_MARKET_HOLIDAYS}
         earlyCloses={US_MARKET_EARLY_CLOSES}
         recommendedSymbol={null}
+        defaultSort="liquidity"
         searchPlaceholder="Search NVDAon, Tesla, SPY…"
         getHref={(a) => `?tab=stocks&pair=${encodeURIComponent(a.symbol)}`}
         LinkComponent={Link}

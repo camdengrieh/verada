@@ -9,10 +9,12 @@ import { toFeedItem, toTickerItem, type ActivityContext } from "@/lib/activity";
 import type { ActivityItem, Stats } from "@/lib/indexer";
 import { platformTotals } from "@/lib/platform-stats";
 import { findQuote, type AppQuoteAsset } from "@/lib/quote-assets";
+import { useUsdQuotes } from "@/hooks/use-usd-quotes";
 import { useCauseLookup, useNow, useRel, useTokenSymbols, type LiveActivity } from "./hooks";
 
 /** Lookups the ticker and feed need, built from the activity itself. */
 export function useActivityContext(items: readonly ActivityItem[], assets: readonly AppQuoteAsset[], nowSeconds: number): ActivityContext {
+  const { quoteFor } = useUsdQuotes();
   const symbols = useTokenSymbols(useMemo(() => items.map((i) => i.token), [items]));
   const causeOf = useCauseLookup(useMemo(() => items.filter((i) => i.kind === "donation" || i.kind === "live_donation").map((i) => (typeof i.data.causeId === "string" ? i.data.causeId : undefined)), [items]));
   return useMemo(
@@ -22,10 +24,11 @@ export function useActivityContext(items: readonly ActivityItem[], assets: reado
         const q = a ? findQuote(assets, a) : undefined;
         return q ? { symbol: q.symbol, decimals: q.decimals } : undefined;
       },
+      usdOf: (a) => (a ? quoteFor(a) : undefined),
       causeOf,
       nowSeconds,
     }),
-    [symbols, assets, causeOf, nowSeconds],
+    [symbols, assets, causeOf, nowSeconds, quoteFor],
   );
 }
 

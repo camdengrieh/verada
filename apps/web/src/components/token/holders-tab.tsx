@@ -13,16 +13,26 @@ import type { useHolders, useHolderSummary } from "./use-token-data";
 const LABELS: Record<NonNullable<TokenHolder["label"]>, UiHolderLabel> = { pool: "pool", creator: "creator", burn: "burn", vault: "vault" };
 
 /** Indexer holder rows as the library's table items. */
-export function holderItems(rows: readonly TokenHolder[]): HolderItem[] {
-  return rows.map((h) => ({
-    address: h.account as `0x${string}`,
-    label: h.label ? LABELS[h.label] : undefined,
-    balance: toUnits(h.balance, TOKEN_DECIMALS),
-    share: h.share,
-  }));
+export function holderItems(rows: readonly TokenHolder[], tokenUsd?: TokenUsd | null): HolderItem[] {
+  return rows.map((h) => {
+    const balance = toUnits(h.balance, TOKEN_DECIMALS);
+    return {
+      address: h.account as `0x${string}`,
+      label: h.label ? LABELS[h.label] : undefined,
+      balance,
+      share: h.share,
+      ...(tokenUsd ? { usd: balance * tokenUsd.priceUsd, ...(tokenUsd.approx ? { usdApprox: true } : {}) } : {}),
+    };
+  });
 }
 
-export function HoldersTab({ symbol, holders, summary }: { symbol: string; holders: ReturnType<typeof useHolders>; summary: ReturnType<typeof useHolderSummary> }) {
+/** One whole token in dollars, from its pool price and the quote asset's USD price. */
+export interface TokenUsd {
+  priceUsd: number;
+  approx: boolean;
+}
+
+export function HoldersTab({ symbol, holders, summary, tokenUsd }: { symbol: string; holders: ReturnType<typeof useHolders>; summary: ReturnType<typeof useHolderSummary>; tokenUsd?: TokenUsd | null }) {
   if (holders.isLoading || summary.isLoading) {
     return (
       <div role="status" aria-label="Loading holders" className="flex flex-col gap-4">
@@ -38,7 +48,7 @@ export function HoldersTab({ symbol, holders, summary }: { symbol: string; holde
       </div>
     );
   }
-  const items = holderItems(holders.data?.items ?? []);
+  const items = holderItems(holders.data?.items ?? [], tokenUsd);
   if (items.length === 0) {
     return (
       <div className="rounded-2xl border border-line bg-card">

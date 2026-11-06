@@ -23,6 +23,8 @@ import { REGIONS } from "@varada/sdk";
 export interface HeroStatsInput {
   /** Formatted price in the quote asset ("0.00004213 WETH"), or null before the first trade. */
   price: string | null;
+  /** Small print after the price: the price in the quote asset and any thin-liquidity or closed-market note. */
+  priceNote?: string;
   change24h: number | undefined;
   /** Market cap text in the quote asset, or null when price or supply is unknown. */
   marketCap: string | null;
@@ -125,6 +127,7 @@ export function TokenHero({
         siteHref={label && ensName ? ensLimoUrl(ensName) : undefined}
         art={<TokenLogo url={logoUrl} symbol={symbol} size={256} />}
         price={stats.price ?? "No trades yet"}
+        priceNote={stats.price ? stats.priceNote : undefined}
         change24h={stats.price ? stats.change24h : undefined}
         cause={main}
         causeRegions={regions}

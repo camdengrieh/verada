@@ -13,3 +13,5 @@ export * from "./registry.js";
 export * from "./engine.js";
 export * from "./transaction.js";
 export * from "./market-math.js";
+export * from "./usd.js";
+export * from "./usd-discover.js";

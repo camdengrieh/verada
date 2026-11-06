@@ -8,6 +8,9 @@ import { ModeBadge, type LiveCadence } from "@varada/ui/components/varada/mode-b
 import { QuoteAssetIdentity } from "@varada/ui/components/varada/quote-asset";
 import { ConnectButton } from "@/components/connect-button";
 import { useAppConfig } from "@/components/providers";
+import { UsdEquiv } from "@/components/usd-equiv";
+import { useUsdQuotes } from "@/hooks/use-usd-quotes";
+import { usdNotes, type UsdQuote } from "@varada/sdk";
 import { formatDuration, formatEth, formatGwei, formatQuoteAmount } from "@/lib/launch-format";
 import { marketCapFromTick, priceFromTick, ROTATIONS, startTickFromMarketCap } from "@/lib/launch";
 import { launchErrorHelp } from "@/lib/launch-errors";
@@ -35,6 +38,12 @@ function Row({ label, children, editStep, onEdit }: { label: string; children: R
   );
 }
 
+/** Why a dollar figure is approximate, when it is. */
+function UsdNotes({ usd }: { usd: UsdQuote }) {
+  const notes = usdNotes(usd);
+  return notes.length > 0 ? <span className="mt-1 block text-xs text-ink-muted">{notes.join(" ")}</span> : null;
+}
+
 export function ReviewStep({
   state,
   quote,
@@ -55,6 +64,8 @@ export function ReviewStep({
   onRerollSalt(): void;
 }) {
   const config = useAppConfig();
+  const { quoteFor } = useUsdQuotes([quote?.address]);
+  const usd = quoteFor(quote?.address);
   const { input, fields } = state;
   const label = input.label.trim();
   const live = input.mode === "live";
@@ -97,8 +108,16 @@ export function ReviewStep({
           {quote ? <QuoteAssetIdentity asset={quote} size={32} plain compactMeta /> : <span className="font-mono text-xs">{input.quoteAsset}</span>}
           {tick !== null ? (
             <span className="mt-1 block text-sm font-normal text-ink-soft">
-              Starts at <span className="num">{formatQuoteAmount(marketCapFromTick(tick))}</span> {symbol} market cap (<span className="num">{formatQuoteAmount(priceFromTick(tick))}</span> {symbol} per token, tick{" "}
+              Starts at <span className="num">{formatQuoteAmount(marketCapFromTick(tick))}</span> {symbol} market cap
+              {usd ? (
+                <>
+                  {" "}
+                  (<UsdEquiv units={marketCapFromTick(tick)} usd={usd} />)
+                </>
+              ) : null}{" "}
+              (<span className="num">{formatQuoteAmount(priceFromTick(tick))}</span> {symbol} per token, tick{" "}
               <span className="num">{tick.toLocaleString("en-US")}</span>)
+              {usd ? <UsdNotes usd={usd} /> : null}
             </span>
           ) : null}
         </Row>

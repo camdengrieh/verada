@@ -8,6 +8,7 @@ import { Button } from "@varada/ui/components/ui/button";
 import { Switch } from "@varada/ui/components/ui/switch";
 import { TradeFeed } from "@varada/ui/components/varada/trade-feed";
 import { errorText } from "@/components/use-tx";
+import type { UsdQuote } from "@varada/sdk";
 import type { MarketTrade } from "@/lib/indexer";
 import type { QuoteInfo } from "@/lib/quote-info";
 import { mine, tradeItems } from "@/lib/token-market";
@@ -15,7 +16,7 @@ import type { useTradeTape } from "./use-token-data";
 
 const ROWS = 15;
 
-export function TradesTab({ symbol, quote, quoteDecimals, tape, onTrade }: { symbol: string; quote: QuoteInfo | null; quoteDecimals: number | null; tape: ReturnType<typeof useTradeTape>; onTrade?: () => void }) {
+export function TradesTab({ symbol, quote, quoteDecimals, tape, onTrade, usd }: { symbol: string; quote: QuoteInfo | null; quoteDecimals: number | null; tape: ReturnType<typeof useTradeTape>; onTrade?: () => void; /** USD per quote asset. */ usd?: UsdQuote | null }) {
   const { address: account } = useAccount();
   const [onlyMine, setOnlyMine] = useState(false);
   const [rows, setRows] = useState(ROWS);
@@ -26,7 +27,7 @@ export function TradesTab({ symbol, quote, quoteDecimals, tape, onTrade }: { sym
 
   // "My trades" is a filter over what the browser already has: the address never reaches a server.
   const source: readonly MarketTrade[] = useMemo(() => (onlyMine ? mine(tape.trades, account) : tape.trades), [onlyMine, tape.trades, account]);
-  const items = useMemo(() => tradeItems(source, { tokenSymbol: `$${symbol}`, quoteSymbol: quote?.symbol ?? "", quoteDecimals, usdQuote: Boolean(quote?.usd) }), [source, symbol, quote, quoteDecimals]);
+  const items = useMemo(() => tradeItems(source, { tokenSymbol: `$${symbol}`, quoteSymbol: quote?.symbol ?? "", quoteDecimals, usdQuote: Boolean(quote?.usd), usd: quote?.usd ? null : usd }), [source, symbol, quote, quoteDecimals, usd]);
 
   if (tape.error && tape.trades.length === 0) {
     return (

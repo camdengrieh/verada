@@ -11,6 +11,8 @@ import { QuoteAssetList } from "@varada/ui/components/varada/quote-asset-list";
 import { formatQuoteAmount } from "@/lib/launch-format";
 import { marketCapFromTick, priceFromTick, startTickFromMarketCap, TOKEN_SUPPLY } from "@/lib/launch";
 import { findQuote, type AppQuoteAsset } from "@/lib/quote-assets";
+import { UsdEquiv } from "@/components/usd-equiv";
+import { useUsdQuotes } from "@/hooks/use-usd-quotes";
 import type { StepProps } from "./types";
 
 /** The current time, refreshed every minute (market sessions depend on it). */
@@ -39,6 +41,8 @@ export function PairStep({
 }: StepProps & { assets: AppQuoteAsset[]; loading: boolean; failed: boolean; retry(): void }) {
   const now = useNow();
   const selected = findQuote(assets, state.input.quoteAsset);
+  const { quoteFor } = useUsdQuotes([selected?.address]);
+  const usd = quoteFor(selected?.address);
   const [tab, setTab] = useState<"crypto" | "stock">(selected && selected.kind !== "crypto" ? "stock" : "crypto");
   const crypto = useMemo(() => assets.filter((a) => a.kind === "crypto"), [assets]);
   const tokenized = useMemo(() => assets.filter((a) => a.kind !== "crypto"), [assets]);
@@ -107,6 +111,7 @@ export function PairStep({
                 headingLevel={3}
                 hideControls={tokenized.length < 6}
                 recommendedSymbol={null}
+                defaultSort="liquidity"
                 coinSymbol={state.input.symbol || undefined}
                 searchPlaceholder="Search NVDAon, Tesla, SPY…"
               />
@@ -148,12 +153,14 @@ export function PairStep({
               <dt className="text-ink-muted">Start price</dt>
               <dd className="num m-0 font-semibold">
                 {formatQuoteAmount(price)} {symbol}
+                <UsdEquiv units={price} usd={usd} className="block text-xs font-normal text-ink-muted" />
               </dd>
             </div>
             <div>
               <dt className="text-ink-muted">Start market cap</dt>
               <dd className="num m-0 font-semibold">
                 {formatQuoteAmount(cap)} {symbol}
+                <UsdEquiv units={cap} usd={usd} notes className="block text-xs font-normal text-ink-muted" />
               </dd>
             </div>
             <div>

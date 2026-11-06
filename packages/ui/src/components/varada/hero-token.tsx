@@ -38,6 +38,8 @@ export interface HeroTokenProps extends Omit<ComponentProps<"section">, "childre
   art: ReactNode;
   /** Formatted price ("$0.000412"). */
   price: string;
+  /** Small print after the price: the price in the quote asset, a thin-liquidity note. */
+  priceNote?: ReactNode;
   /** 24h change in percent; omitted, no change is shown (a coin with no trades yet). */
   change24h?: number;
   /** The coin's cause focus; omitted when it is open to every cause. */
@@ -64,6 +66,7 @@ export function HeroToken({
   siteHref,
   art,
   price,
+  priceNote,
   change24h,
   cause,
   extraChips,
@@ -130,6 +133,7 @@ export function HeroToken({
               {price}
             </span>
             {change24h !== undefined ? <PriceChange value={change24h} showPeriod className="text-base" /> : null}
+            {priceNote ? <span className="text-sm text-ink-muted">{priceNote}</span> : null}
           </motion.div>
           {actions.length ? (
             <motion.div {...item}>

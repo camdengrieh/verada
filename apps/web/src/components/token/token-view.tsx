@@ -20,7 +20,9 @@ import type { Source } from "@/lib/data";
 import type { TokenDetail } from "@/lib/indexer";
 import { quoteInfo } from "@/lib/quote-info";
 import { loadLive } from "@/lib/token-data";
-import { formatQuotePrice } from "@/lib/token-market";
+import { formatQuotePrice, formatUsdPrice } from "@/lib/token-market";
+import { usdNotes } from "@varada/sdk";
+import { useQuoteUsd } from "@/hooks/use-usd-quotes";
 import { usdText } from "@/lib/token-view";
 import { usdcToUsd } from "@/lib/token-data";
 import { factoryAbi } from "@/lib/abis";
@@ -136,15 +138,29 @@ export function TokenView({ address, token, source }: { address: Address; token:
   const isLive = Boolean(live.data);
   const raisedUsd = isLive ? usdcToUsd(live.data!.totals.credited) : feeTotals ? usdcToUsd(BigInt(feeTotals.causeAmount)) : source === "indexer" ? 0 : null;
   const sym = quote?.symbol ?? "";
+  // USD per quote asset: USDC is $1, WETH and the Ondo assets come from their pools (shared pricing layer).
+  const { quote: usdQuote } = useQuoteUsd(quote?.address);
+  const perQuote = quote?.usd ? 1 : (usdQuote?.priceUsd ?? null);
+  const approx = !quote?.usd && perQuote !== null && Boolean(usdQuote && (usdQuote.confidence !== "high" || usdQuote.marketClosed));
+  const heroPrice = figures?.stats.price ?? null;
+  const priceNotes = perQuote !== null && !quote?.usd ? usdNotes(usdQuote) : [];
   const heroStats = {
-    price: figures?.stats.price != null ? (quote?.usd ? usdText(figures.stats.price) : formatQuotePrice(figures.stats.price, sym)) : null,
+    price: heroPrice != null ? (perQuote !== null ? formatUsdPrice(heroPrice * perQuote, approx) : formatQuotePrice(heroPrice, sym)) : null,
+    priceNote: heroPrice != null && perQuote !== null && !quote?.usd ? [formatQuotePrice(heroPrice, sym), ...priceNotes].join(" · ") : undefined,
     change24h: figures?.stats.change24h ?? undefined,
-    marketCap: figures?.marketCap != null ? (quote?.usd ? usdText(figures.marketCap, true) : `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(figures.marketCap)} ${sym}`.trim()) : null,
+    marketCap:
+      figures?.marketCap != null
+        ? perQuote !== null
+          ? `${approx ? "~" : ""}${usdText(figures.marketCap * perQuote, true)}`
+          : `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(figures.marketCap)} ${sym}`.trim()
+        : null,
     holders: summary.data?.holders ?? null,
     raisedUsd,
   };
 
   const liquidity = useLiquidityMetric(address, symbol);
+  // One token in dollars (price in the quote asset times the quote's USD price), for the holders' values.
+  const tokenUsd = heroPrice != null && perQuote !== null ? { priceUsd: heroPrice * perQuote, approx } : null;
   const causes = focusCauseNames(token.focus);
   const causeIcon = causes.length === 1 ? causes[0] : undefined;
   const designated = live.data?.designatedCause?.toLowerCase();
@@ -214,6 +230,7 @@ export function TokenView({ address, token, source }: { address: Address; token:
             nowSec={nowSec}
             onTrade={openTrade}
             extraMetrics={liquidity}
+            usd={usdQuote}
           />
         </div>
 
@@ -237,13 +254,13 @@ export function TokenView({ address, token, source }: { address: Address; token:
               {canManage ? <TabsTrigger value="manage">Manage</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="trades">
-              <TradesTab symbol={symbol} quote={quote} quoteDecimals={quoteDecimals} tape={tape} onTrade={openTrade} />
+              <TradesTab symbol={symbol} quote={quote} quoteDecimals={quoteDecimals} tape={tape} onTrade={openTrade} usd={usdQuote} />
             </TabsContent>
             <TabsContent value="activity">
               <LiveActivityFeed token={address} symbol={symbol} title="Activity" />
             </TabsContent>
             <TabsContent value="holders">
-              <HoldersTab symbol={symbol} holders={holders} summary={summary} />
+              <HoldersTab symbol={symbol} holders={holders} summary={summary} tokenUsd={tokenUsd} />
             </TabsContent>
             <TabsContent value="impact">
               <ImpactTab token={address} symbol={symbol} live={live.data ?? null} feeTotals={feeTotals} epoch={epochView.data?.epoch} />

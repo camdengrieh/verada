@@ -59,6 +59,20 @@ export function formatQuote(n: number, symbol: string): string {
   return `${n >= 1 ? compact(n) : formatSmallNumber(n)} ${symbol}`;
 }
 
+/** A dollar figure; thin or closed-market prices get a leading "~": "~$1.2K". */
+export function formatUsdValue(usd: number, approx: boolean): string {
+  return `${approx ? "~" : ""}${formatUsd(usd)}`;
+}
+
+/**
+ * An amount of a quote asset as dollars when the asset has a price ("~$1.2K"), otherwise in its own
+ * units ("0.4 WETH"). `quoteUnits` is the amount in whole units of the asset.
+ */
+export function formatQuoteAsUsd(quoteUnits: number, symbol: string, q: { priceUsd: number | null; confidence: string; marketClosed?: boolean } | null | undefined): string {
+  if (!q || q.priceUsd === null) return formatQuote(quoteUnits, symbol);
+  return formatUsdValue(quoteUnits * q.priceUsd, q.confidence !== "high" || Boolean(q.marketClosed));
+}
+
 /** "just now", "4 min ago", "3 h ago", "2 d ago". */
 export function timeAgo(seconds: number | undefined, nowSeconds: number): string {
   if (seconds === undefined) return "";
