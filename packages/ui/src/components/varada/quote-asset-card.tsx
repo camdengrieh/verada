@@ -77,9 +77,9 @@ export function QuoteAssetCard({
       className={cn("@container flex flex-col gap-4 rounded-[26px] border border-line bg-card p-5", className)}
       {...props}
     >
-      <header className="flex items-start justify-between gap-3">
-        <QuoteAssetIdentity asset={asset} size={44} headingLevel={headingLevel} className="flex-1" />
-        <div className="flex shrink-0 flex-col items-end gap-0.5 text-right">
+      <header className="flex flex-col gap-3 @xs:flex-row @xs:items-start @xs:justify-between">
+        <QuoteAssetIdentity asset={asset} size={44} headingLevel={headingLevel} wrapMeta className="flex-1" />
+        <div className="flex shrink-0 flex-wrap items-baseline gap-x-2 gap-y-0.5 @xs:flex-col @xs:items-end @xs:text-right">
           {asset.price !== undefined ? <span className="num text-lg font-semibold">{formatAssetPrice(asset.price)}</span> : <span className="text-sm text-ink-muted">No price</span>}
           {asset.change24h !== undefined ? <PriceChange value={asset.change24h} decimals={2} showPeriod className="text-[13px]" /> : null}
         </div>

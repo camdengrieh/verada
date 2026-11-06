@@ -251,8 +251,8 @@ export function QuoteAssetList(props: QuoteAssetListProps) {
         </Heading>
         <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-ink-muted">
           {hasSessioned ? (
-            <span className="flex items-center gap-2">
-              US market <MarketStatus now={now} info={session} size="sm" />
+            <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+              <span className="whitespace-nowrap">US market</span> <MarketStatus now={now} info={session} size="sm" />
             </span>
           ) : null}
           {hasCrypto ? <span className="hidden @md:inline">Crypto trades 24/7</span> : null}
@@ -271,7 +271,7 @@ export function QuoteAssetList(props: QuoteAssetListProps) {
             <ToggleGroup type="single" value={kind} onValueChange={(v) => setKind(v as QuoteKindFilter)} aria-label="Asset kind" className="w-full max-w-full overflow-x-auto @xl:w-fit">
               {kindFilters.map(([k, label]) => (
                 <ToggleGroupItem key={k} value={k} aria-label={`${label}, ${counts[k]}`} className="flex-1 gap-1 px-2.5 @xl:flex-none @xl:px-4">
-                  {label} <span className="num text-xs font-medium text-ink-muted">{counts[k]}</span>
+                  {label} <span className="num hidden text-xs font-medium text-ink-muted @sm:inline">{counts[k]}</span>
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
@@ -362,13 +362,13 @@ function ListBody(props: QuoteAssetListProps & BodyProps) {
           ) : null}
           <QuoteAssetLogo asset={a} size={36} />
           <span className="flex min-w-0 flex-col">
-            <span className="flex min-w-0 items-center gap-2">
+            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
               {as === "cell" && props.mode !== "select" ? (
                 <AssetLink asset={a} href={props.getHref(a)} Link={props.LinkComponent ?? DefaultLink} />
               ) : (
                 <span className="font-semibold text-ink">{a.symbol}</span>
               )}
-              {recommendedSymbol === a.symbol ? <span className="rounded-full bg-sage-tint px-2 py-px text-[11px] font-semibold text-sage-ink">Default</span> : null}
+              {recommendedSymbol === a.symbol ? <span className="shrink-0 rounded-full bg-sage-tint px-2 py-px text-[11px] font-semibold text-sage-ink">Default</span> : null}
             </span>
             <span className="truncate text-[13px] text-ink-muted">
               {a.name} · {ASSET_KIND_SHORT[a.kind]}

@@ -221,6 +221,8 @@ export interface QuoteAssetIdentityProps extends Omit<ComponentProps<"div">, "ch
   headingLevel?: 2 | 3 | 4;
   /** Render the symbol as a plain span instead of a heading. */
   plain?: boolean;
+  /** Let the meta line wrap instead of truncating (cards, where the full line matters). */
+  wrapMeta?: boolean;
 }
 
 /**
@@ -236,6 +238,7 @@ export function QuoteAssetIdentity({
   adornment,
   headingLevel = 3,
   plain,
+  wrapMeta,
   className,
   ...props
 }: QuoteAssetIdentityProps) {
@@ -248,7 +251,7 @@ export function QuoteAssetIdentity({
           <Heading className="m-0 truncate font-sans text-base leading-tight font-semibold text-ink">{title ?? asset.symbol}</Heading>
           {adornment}
         </span>
-        <span className="truncate text-[13px] text-ink-muted">
+        <span className={cn("text-[13px] text-ink-muted", wrapMeta ? "text-pretty" : "truncate")}>
           {quoteMetaLine(asset, compactMeta)}
           {metaExtra ? <> · {metaExtra}</> : null}
         </span>

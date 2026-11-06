@@ -35,19 +35,28 @@ export function Demo({ label, source, note, children, className }: { label: stri
 }
 
 /**
- * A container you can drag wider or narrower (bottom-right handle), labelled with its width class, so
- * container-query components can be seen switching layout.
+ * A labelled container for container-query demos. `resizable` adds a drag handle (bottom-right);
+ * `overflow` lets a fixed width exceed the gallery column, which then scrolls sideways (the page never does).
  */
-export function Frame({ label, width, resizable, children }: { label: string; width?: string; resizable?: boolean; children: ReactNode }) {
+export function Frame({ label, width, resizable, overflow, children }: { label: string; width?: string; resizable?: boolean; overflow?: boolean; children: ReactNode }) {
+  const box = (
+    <div
+      className={`rounded-2xl border border-dashed border-line-strong bg-paper p-3 ${overflow ? "" : "max-w-full"} ${resizable ? "min-w-[260px] resize-x overflow-auto" : ""}`}
+      style={width ? { width } : undefined}
+    >
+      {children}
+    </div>
+  );
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <span className="text-xs font-medium text-muted-foreground">{label}</span>
-      <div
-        className={`max-w-full rounded-2xl border border-dashed border-line-strong bg-paper p-3 ${resizable ? "min-w-[260px] resize-x overflow-auto" : ""}`}
-        style={width ? { width } : undefined}
-      >
-        {children}
-      </div>
+      {overflow ? (
+        <div tabIndex={0} role="region" aria-label={`${label}, scrolls sideways`} className="max-w-full overflow-x-auto rounded-2xl pb-2 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/35">
+          {box}
+        </div>
+      ) : (
+        box
+      )}
     </div>
   );
 }
@@ -333,7 +342,7 @@ export function MarketsSection() {
             <QuoteAssetList {...listProps} title="Pair with" defaultKind="crypto" />
           </Frame>
         </div>
-        <Frame label="Wide, full width (drag the corner to resize)" resizable>
+        <Frame label="Wide, 1100px: every column (drag the corner to narrow it; scrolls sideways in this gallery column)" width="1100px" resizable overflow>
           <QuoteAssetList {...listProps} title="Discover pairs" />
         </Frame>
       </Demo>

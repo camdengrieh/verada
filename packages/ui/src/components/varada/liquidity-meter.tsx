@@ -110,7 +110,7 @@ export function LiquidityMeter({
       aria-valuemax={100}
       aria-valuenow={Math.round(fraction * 100)}
       aria-valuetext={spoken}
-      className={cn("flex min-w-0 flex-1 gap-[3px]", variant === "card" ? "h-3" : "h-2")}
+      className={cn("flex min-w-0 gap-[3px]", variant === "card" ? "h-3 w-full flex-none" : "h-2 flex-1")}
     >
       {Array.from({ length: count }, (_, i) => (
         <span
@@ -142,8 +142,8 @@ export function LiquidityMeter({
 
   const tick = (usd: number) => `${liquidityFraction(usd, scale) * 100}%`;
   return (
-    <div data-slot="liquidity-meter" data-tier={tier} className={cn("flex flex-col gap-2", className)} {...props}>
-      <div className="flex items-baseline justify-between gap-3">
+    <div data-slot="liquidity-meter" data-tier={tier} className={cn("@container flex flex-col gap-2", className)} {...props}>
+      <div className="flex flex-col gap-0.5 @[16rem]:flex-row @[16rem]:items-baseline @[16rem]:justify-between @[16rem]:gap-3">
         <span className="text-[13px] text-ink-muted">{label}</span>
         <span className={cn("text-sm", tone.text)}>
           <span className="num font-semibold text-ink">{tier === "none" ? "$0" : formatted}</span>
@@ -159,7 +159,8 @@ export function LiquidityMeter({
         ].map(({ key, usd, text }) => (
           <span key={key} className="absolute -translate-x-1/2 whitespace-nowrap" style={{ left: tick(usd) }}>
             <span className="mx-auto mb-0.5 block h-1 w-px bg-ink-muted" />
-            <span className="num">{formatUsdCompact(usd)}</span> {text}
+            <span className="num">{formatUsdCompact(usd)}</span>
+            <span className="hidden @[20rem]:inline"> {text}</span>
           </span>
         ))}
       </div>
