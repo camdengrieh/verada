@@ -135,6 +135,37 @@ The wallet's own RPC sees the signed transaction (docs/PRIVACY.md).
   were burned. 24 h change and volume come from the indexer and are absent when it is unreachable.
 - USD prices are mid prices of the shortest route to USDC (no oracle); an asset without a route has none.
 
+## Verified on a mainnet fork
+
+Numbers from `swap.fork.test.ts` on an anvil fork of mainnet at block 26,356,950 (all 15 cases pass; quoted
+and executed amounts are read from balances after real Universal Router transactions):
+
+| Case | Result |
+| --- | --- |
+| ETH to USDC, real v4 pools | quoted 2217.555665 USDC, executed 2217.555665, mid price 2219.75, impact 0.049%, gas 131k |
+| USDC to ETH with a signed Permit2 permit | quoted 0.499465787495791574 ETH, executed the same |
+| Weekly token (WETH quote) buy 1 ETH, ETH > WETH > token | 578.555514552473150508 tokens quoted and executed, fee 42.87% (300 bp base plus a 39.87% launch surcharge), gas 471k |
+| Same token, sell half back to ETH | quoted 0.170096698 ETH, executed 0.170045648 (the difference is the approve transaction's gas in the balance) , gas 387k |
+| Pay 1000 USDC, USDC > USDT > ETH > WETH > token | 260.876509191973835309 tokens quoted and executed, four routes quoted, gas 468k |
+| Exact-out 100 tokens with WETH | cost 0.145368646630517442 WETH quoted and executed |
+| Exact-out 100 tokens paid in ETH (wrap, swap, refund) | 0.14535825 ETH spent against 0.14536865 quoted (the surcharge fell one basis point between blocks); the unused ETH came back |
+| Weekly token with an AMZNon quote, 0.003 ETH, ETH > AMZNon > token | 585.988303593675845094 tokens quoted and executed, impact 0.49%, gas 333k; selling half to USDC (SOND > AMZNon > USDC) quoted 3.157288 USDC |
+| Same token, 1 ETH | the best route has a 99.95% price impact (the AMZNon / USDC pool is about $10k): blocked with `price-impact` |
+| Live-hook token (WETH quote), buy 1 ETH | 764.680729637915728061 tokens quoted and executed, fee 22.91%, gas 610k; selling a third quoted 0.1981 ETH, gas 533k |
+| Ondo pause of AMZNon | the quote is blocked with `paused`; `AMZNon.transfer` reverts; the ETH-paid swap through it still succeeds on chain because its flow nets to zero in the pool manager |
+| Launch surcharge over two days | fee 42.81% to 3.00%, tokens per 0.1 WETH 57.91 to 96.22 |
+| Reverts | a minimum above the quote maps to `slippage`, a past deadline to `deadline-expired` |
+
+Equality is exact when no time-dependent fee is involved. While a launch surcharge decays, the next block can
+price one basis point lower (live hook: 766.367 quoted against 766.466 executed in one run), so the
+execution can only be better and the slippage limit covers it.
+
+Findings that shaped the code: the anvil dev accounts are EIP-7702 delegated on mainnet, so Permit2 verifies
+their signatures through ERC-1271 and refunds of ETH to them revert (the tests use a fresh key); the real
+mainnet routers accept the original v4 struct layout (no `minHopPriceX36`); the quoter wraps pool errors
+in `UnexpectedRevertBytes`; and thin Ondo pools run out of liquidity inside their tick range, which is why a
+failed route is retried with the next candidates.
+
 ## Tests
 
 Unit tests (always run): `pnpm --filter @varada/sdk test` (pool keys, routing, calldata decoded
