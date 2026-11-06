@@ -13,3 +13,4 @@ export * from "./registry.js";
 export * from "./engine.js";
 export * from "./transaction.js";
 export * from "./market-math.js";
+export * from "./community-v3.js";
