@@ -35,6 +35,7 @@ const {
   takeoverProposal,
   takeoverToken,
   causePoolAttribution,
+  trade,
 } = schema;
 
 /** Byte-wise collation so SQL ordering matches the JS string comparison used for cursors. */
@@ -272,6 +273,27 @@ const SPECS: Record<ActivityKind, Spec> = {
         optionCount: r.optionCount,
         ballotCount: r.ballotCount,
         counts: r.counts,
+      },
+    }),
+  },
+  trade: {
+    table: trade,
+    ts: trade.timestamp,
+    key: trade.id,
+    token: trade.token,
+    toItem: (r) => ({
+      id: `trade:${r.id}`,
+      kind: "trade",
+      timestamp: r.timestamp,
+      token: r.token,
+      txHash: r.txHash,
+      data: {
+        side: r.side,
+        trader: r.trader,
+        tokenAmount: r.tokenAmount,
+        quote: r.quote,
+        quoteAmount: r.quoteAmount,
+        tick: r.tick,
       },
     }),
   },

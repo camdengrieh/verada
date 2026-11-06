@@ -33,6 +33,16 @@ import {
 import { currentEpochAt, resolveSchedule } from "./shortlist";
 import { toProposal } from "./takeover";
 import { type LiveRepo, toLiveView } from "./live";
+import {
+  type HolderLabel,
+  type MarketRepo,
+  fillDays,
+  priceFromSqrt,
+  shareOf,
+  toHolderViews,
+  toTradeView,
+  windowOf,
+} from "./market";
 import type { FacilitatorClient } from "@x402/core/server";
 import { mountX402 } from "./x402";
 import {
@@ -57,6 +67,8 @@ export interface ApiDeps {
   agents?: AgentsRepo;
   /** Live-donation tokens; `/api/live/*` answers 503 without it. */
   live?: LiveRepo;
+  /** Trades and holders; `/api/tokens/:address/{trades,holders,market}` answer 503 without it. */
+  market?: MarketRepo;
   /** Weekly reports on Swarm. */
   reports?: ReportFetcher;
   bus?: ActivityBus;
@@ -820,6 +832,143 @@ export function createApi(deps: ApiDeps): Hono {
     if (!row || row.token !== t.data) return send(c, { error: "not_found" }, CACHE.none, 404);
     const executions = await repo.takeoverExecutions(row.token);
     return send(c, toProposal(row, nowSeconds(), executions), CACHE.detail);
+  });
+
+  // ---- market data: trades, holders, hourly volume
+
+  const marketUnavailable = (c: Context) => {
+    c.header("Cache-Control", CACHE.none);
+    return c.json({ error: "market_unavailable" }, 503);
+  };
+  // No trader filter: no route takes a viewer's address (docs/PRIVACY.md); "my trades" filter in
+  // the browser or read the account through the account client.
+  const TradesQuery = ListQuery.extend({
+    side: z.preprocess(blank, z.enum(["buy", "sell"]).optional()),
+  });
+  const HoldersQuery = z.object({
+    limit: limitSchema,
+    /** `contracts` leaves out the pool, burn address and platform vaults (the creator stays). */
+    exclude: z.preprocess(blank, z.enum(["none", "contracts"]).default("none")),
+  });
+  const MarketQuery = z.object({
+    hours: z.preprocess(blank, z.coerce.number().int().min(1).max(168).default(24)),
+  });
+  const CONTRACT_LABELS = new Set<HolderLabel>(["pool", "burn", "vault"]);
+  const contractsOf = (labels: Map<string, HolderLabel>) =>
+    [...labels].filter(([, l]) => CONTRACT_LABELS.has(l)).map(([a]) => a as `0x${string}`);
+
+  app.get("/api/tokens/:address/trades", async (c) => {
+    if (!deps.market) return marketUnavailable(c);
+    const a = parse(c, addressSchema, c.req.param("address"));
+    if (!a.ok) return a.res;
+    const p = parse(c, TradesQuery, c.req.query());
+    if (!p.ok) return p.res;
+    let before: { t: bigint; k: string } | undefined;
+    if (p.data.cursor) {
+      const cur = decodeCursor(p.data.cursor);
+      if (!cur) return bad(c, [{ path: "cursor", message: "invalid cursor" }]);
+      before = { t: BigInt(cur.t), k: cur.k };
+    }
+    const [rows, m] = await Promise.all([
+      deps.market.trades(a.data, { before, side: p.data.side, limit: p.data.limit + 1 }),
+      deps.market.market(a.data),
+    ]);
+    const page = paginate(rows, p.data.limit, (r) => encodeCursor({ t: r.timestamp.toString(), k: r.id }));
+    return send(
+      c,
+      {
+        quote: m?.quote ?? null,
+        quoteDecimals: m?.quoteDecimals ?? null,
+        items: page.items.map((r) => toTradeView(r, m)),
+        nextCursor: page.nextCursor,
+      },
+      CACHE.list,
+    );
+  });
+
+  app.get("/api/tokens/:address/holders", async (c) => {
+    if (!deps.market) return marketUnavailable(c);
+    const a = parse(c, addressSchema, c.req.param("address"));
+    if (!a.ok) return a.res;
+    const p = parse(c, HoldersQuery, c.req.query());
+    if (!p.ok) return p.res;
+    const [stat, labels] = await Promise.all([deps.market.holderStat(a.data), deps.market.labels(a.data)]);
+    if (!stat) return send(c, { holders: 0, supply: 0n, items: [] }, CACHE.detail);
+    const exclude = p.data.exclude === "contracts" ? contractsOf(labels) : [];
+    const rows = await deps.market.topHolders(a.data, p.data.limit, exclude);
+    return send(
+      c,
+      { holders: stat.holders, supply: stat.supply, items: toHolderViews(rows, stat.supply, labels) },
+      CACHE.detail,
+    );
+  });
+
+  app.get("/api/tokens/:address/holders/summary", async (c) => {
+    if (!deps.market) return marketUnavailable(c);
+    const a = parse(c, addressSchema, c.req.param("address"));
+    if (!a.ok) return a.res;
+    const [stat, labels] = await Promise.all([deps.market.holderStat(a.data), deps.market.labels(a.data)]);
+    if (!stat) return send(c, { error: "not_found" }, CACHE.none, 404);
+    const now = BigInt(nowSeconds());
+    const contracts = contractsOf(labels);
+    const creator = [...labels].find(([, l]) => l === "creator")?.[0] as `0x${string}` | undefined;
+    const [top, buckets, known, newHolders24h, days] = await Promise.all([
+      deps.market.topHolders(a.data, 10, contracts),
+      deps.market.buckets(a.data, stat.supply, contracts),
+      deps.market.balancesOf(a.data, creator ? [...contracts, creator] : contracts),
+      deps.market.newHolders(a.data, now - 86_400n),
+      deps.market.holderDays(a.data, now - 30n * 86_400n),
+    ]);
+    const balanceOf = (pred: (l: HolderLabel | undefined) => boolean) =>
+      known.filter((k) => pred(labels.get(k.account.toLowerCase()))).reduce((s, k) => s + k.balance, 0n);
+    return send(
+      c,
+      {
+        holders: stat.holders,
+        newHolders24h,
+        supply: stat.supply,
+        transfers: stat.transfers,
+        poolShare: shareOf(balanceOf((l) => l === "pool"), stat.supply),
+        creatorShare: shareOf(balanceOf((l) => l === "creator"), stat.supply),
+        contractShare: shareOf(balanceOf((l) => l !== undefined && CONTRACT_LABELS.has(l)), stat.supply),
+        top10Share: shareOf(top.reduce((s, r) => s + r.balance, 0n), stat.supply),
+        buckets: buckets.map((b) => ({ label: b.label, holders: b.holders, share: shareOf(b.balance, stat.supply) })),
+        history: days.length ? fillDays(days, days[0]!.day, now) : [],
+      },
+      CACHE.detail,
+    );
+  });
+
+  app.get("/api/tokens/:address/market", async (c) => {
+    if (!deps.market) return marketUnavailable(c);
+    const a = parse(c, addressSchema, c.req.param("address"));
+    if (!a.ok) return a.res;
+    const p = parse(c, MarketQuery, c.req.query());
+    if (!p.ok) return p.res;
+    const now = BigInt(nowSeconds());
+    const since = now - (now % 3_600n) - BigInt(p.data.hours - 1) * 3_600n;
+    const [m, stat, hours] = await Promise.all([
+      deps.market.market(a.data),
+      deps.market.tradeStat(a.data),
+      deps.market.hours(a.data, since),
+    ]);
+    const price = (sqrt: bigint) =>
+      m && m.quoteDecimals !== null ? priceFromSqrt(sqrt, m.tokenIsCurrency0, m.quoteDecimals) : null;
+    return send(
+      c,
+      {
+        quote: m?.quote ?? null,
+        quoteDecimals: m?.quoteDecimals ?? null,
+        price: stat ? price(stat.lastSqrtPriceX96) : null,
+        lastTradeAt: stat?.lastTradeAt ?? null,
+        lifetime: stat
+          ? { trades: stat.trades, buys: stat.buys, sells: stat.sells, volumeQuote: stat.volumeQuote, volumeToken: stat.volumeToken }
+          : null,
+        window: { hours: p.data.hours, ...windowOf(hours) },
+        hourly: hours.map((h) => ({ ...h, closePrice: price(h.closeSqrtPriceX96) })),
+      },
+      CACHE.list,
+    );
   });
 
   // ---- live-donation tokens

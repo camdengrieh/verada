@@ -68,6 +68,11 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 | `vote` | event id | `VoteCast` |
 | `live_mode` | `id` | Factory `LiveModeConfigured`: the live hook and vault |
 | `live_token` | `token` | Live-donation token: hook `TokenConfigured` (fee config), vault `LiveTokenRegistered` (`threshold`, `initialCause`, `initialPeriod`), hook `PoolRegistered` (`quote`, `poolId`); all emitted before `TokenCreated` |
+| `holder` | `token, account` | `VeradaToken` `Transfer`: running balance, `firstSeenAt`, `lastActiveAt`. Rows that reach zero are kept; mints and burns only move `holder_stat.supply` |
+| `holder_stat`, `holder_day` | `token`; `token, day` | Nonzero holders, supply and transfer count; holder count at the end of each UTC day with a transfer |
+| `token_market` | `token` | Quote asset (`quoteAssetOf`) and whether the token is currency0, read on the first trade |
+| `trade` | `<txHash>-<logIndex>` | PoolManager `Swap` on the token's pool, from the receipt of a transfer into or out of the PoolManager (see below) |
+| `trade_hour`, `trade_stat` | `token, hour`; `token` | Per-hour buys, sells, volumes and tick range; lifetime totals and the latest price |
 | `live_cause_total` | `token, causeId` | Vault `Credited` (`gross`, `platform`, `causeShare`), `Donated` (`donated`), `DonationDeferred` (`deferrals`, `lastDeferReason`); hook `FeeTaken` not converted adds to `heldQuote`, `HeldRetried` subtracts. Undonated credit is `causeShare - donated` |
 | `live_fee`, `live_held_retry`, `live_donation` | event id | Hook `FeeTaken`, `HeldRetried`; vault `Donated` (`inSwap`, `orgDeployed`) |
 | `live_vault_total` | `id` | Platform share accrued (`Credited`) and withdrawn (`PlatformWithdrawn`), skim count |
@@ -121,6 +126,19 @@ per proposer). Executing one makes every other pending proposal of the token cre
 proposal; the indexer stores the same counter (`generation`, `takeover_token.executions`), which
 also covers a proposal with a higher id that was created before the execution.
 
+**Trades and holders.** Every Verada token is indexed as a child of `TokenCreated` twice:
+`VeradaToken` takes every `Transfer` and keeps `holder` balances, `holder_stat` (nonzero holders,
+supply, transfer count) and `holder_day`; `VeradaTokenPool` takes only transfers into or out of the
+Uniswap v4 PoolManager, reads that transaction's receipt and records each PoolManager `Swap` on the
+token's pool as a `trade` (keyed by the Swap log, so the several transfers of one swap record it
+once), with `trade_hour` and `trade_stat` totals. Swap amounts are the swapper's deltas (positive is
+paid out to the swapper, checked against mainnet transfers), so a positive token delta is a buy. The
+quote asset comes from `VeradaFactory.quoteAssetOf` on the first trade (`token_market`). Limits:
+amounts are before any hook fee taken as a delta; `trader` is the transaction sender, so a smart
+account shows its bundler; a route that passes through the token inside one PoolManager unlock
+without moving it in or out is not seen. Only Verada tokens are indexed, so the cost grows with
+their activity, not with Uniswap's.
+
 ## HTTP API
 
 All routes are `GET`, read-only, CORS-enabled and rate-limited per IP. Errors are
@@ -142,6 +160,10 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/takeovers/:token/:id` | `Proposal`; 404 if the id belongs to another token |
 | `/api/polls/:governor/:token/:scope` | Raw `poll` row |
 | `/api/live/:token` | Live-donation token: `rotation` (current index, period, `startedAt`, `nextRotationAt`, `pendingPeriodChange`), `designatedCause`, `nextCause`, `causes` (credited, donated, pending, held per cause), `totals`, `recentDonations`; computed at the server time. 404 for a token that is not live |
+| `/api/tokens/:address/trades?side&cursor&limit` | `{ quote, quoteDecimals, items: Trade[], nextCursor }`, newest first. Each trade: `side` (`buy`/`sell`), `trader` (transaction sender), `sender` (contract that called `swap`), raw `tokenAmount`/`quoteAmount`, `price` (quote per whole token after the swap, float), `feePips`, `timestamp`, `txHash` |
+| `/api/tokens/:address/holders?limit&exclude=contracts` | `{ holders, supply, items: [{ rank, account, balance, share, label, firstSeenAt }] }`, largest first; `share` is percent of supply; `label` is `pool`, `creator`, `burn` or `vault` for known accounts. `exclude=contracts` leaves out the pool, burn address and platform vaults |
+| `/api/tokens/:address/holders/summary` | `holders`, `newHolders24h`, `supply`, `transfers`, `poolShare`, `creatorShare`, `contractShare`, `top10Share` (excluding contracts), `buckets` (holders and share per band: ≥1%, 0.1–1%, 0.01–0.1%, under 0.01%), `history` (holders per UTC day, last 30 days). 404 before the first transfer |
+| `/api/tokens/:address/market?hours` | Last `hours` (1–168, default 24) of `hourly` rows (buys, sells, buy/sell volume in quote and token, open/high/low/close tick, `closePrice`), their `window` totals with `buyShare` (percent of trades that were buys), `lifetime` totals, latest `price` and `lastTradeAt` |
 | `/api/stats` | USDC totals (6 decimals) |
 | `/api/active-tokens?sinceEpoch=&sinceTime=` | Tokens with fees credited to a pool of epoch `sinceEpoch` or later, ballots or a curation-skip request in one of those epochs, a pin change or a launch at or after `sinceTime` (seconds), with the reasons as booleans (`fees`, `voters`, `curation`, `pins`, `launched`). Fees count once collected (`FeesAttributed`); the keeper checks uncollected LP fees on chain and reads `/status` to tell whether this listing is caught up. The keeper opens current epochs only for these. |
 | `/api/catalog` | Loaded catalogue: `root`, taxonomy version, org and entry counts, per-category and per-region org counts, `bucketSizes` |
@@ -235,6 +257,7 @@ expired after the deadline, else closing. An active, closing or succeeded propos
 | `takeover_proposed` | creation | `proposalId`, `proposer`, `newController`, `start`, `end`, `quorumWeight` |
 | `takeover_executed` | execution | `proposalId`, `newController`, `forWeight`, `againstWeight` |
 | `tally_submitted` | `finalAt` | `governor`, `scope`, `optionCount`, `ballotCount`, `counts` |
+| `trade` | block | `side`, `trader`, `tokenAmount`, `quote`, `quoteAmount`, `tick` |
 
 Item ids are `<kind>:<key>`; `kind` accepts a comma-separated list. `txHash` is null for the
 epoch, takeover-executed and tally kinds.

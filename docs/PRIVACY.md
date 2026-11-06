@@ -97,6 +97,15 @@ starts on the first chain read, or straight away once a wallet connects.
   a wallet address, and it keeps no access logs. Users can
   turn on "Also route Verada API requests" to hide their IP from Verada as well.
 
+## Trades and holders
+
+- **Public on chain regardless.** Every swap and token transfer names its addresses on chain.
+  The indexer keeps them so a token page can show its trade feed (`trader` is the transaction
+  sender) and its largest holders with their share of supply, as any block explorer does.
+- **No address lookups.** The trade and holder routes take a token address only. There is no
+  "trades of address X" or "balance of address X" route; a "my trades" view filters the public
+  feed in the browser, and a balance is read through `createAccountClient`.
+
 ## Curator agents and paid data
 
 ### Donations to agent vaults (opt-in credit)

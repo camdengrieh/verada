@@ -15,6 +15,7 @@ export const ACTIVITY_KINDS = [
   "takeover_proposed",
   "takeover_executed",
   "tally_submitted",
+  "trade",
 ] as const;
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 

@@ -7,6 +7,7 @@ import { repo } from "./repo";
 import { swarmReportFetcher } from "./agents";
 import { agentsRepo } from "./agents-repo";
 import { liveRepo } from "./live-repo";
+import { createMarketRepo } from "./market-repo";
 import { createCatalogStore } from "./catalog";
 import { createCauseSearch } from "./search";
 
@@ -41,6 +42,11 @@ const app = createApi({
   catalog: createCatalogStore(config.catalogSource, { log: (m) => console.info(m) }),
   agents: agentsRepo,
   live: liveRepo,
+  market: createMarketRepo(
+    [process.env.FEE_VAULT_ADDRESS, process.env.FEE_CONSOLIDATOR_ADDRESS].filter(
+      (a): a is string => !!a && /^0x[0-9a-fA-F]{40}$/.test(a),
+    ),
+  ),
   reports: swarmReportFetcher(config.swarmGatewayUrl),
 });
 
