@@ -149,7 +149,7 @@ contract MockVotingScheme is IOutcomeVotingScheme {
     }
 
     /// @inheritdoc IOutcomeVotingScheme
-    function requestOutcome(address token, uint256 scope, uint64 minWeight) external {
+    function requestOutcome(address token, uint256 scope, uint64 minWeight) public {
         if (!_governors[msg.sender]) revert NotGovernor(msg.sender);
         Poll storage p = _polls[msg.sender][token][scope];
         if (!p.opened) revert PollNotOpen(msg.sender, token, scope);
@@ -158,6 +158,14 @@ contract MockVotingScheme is IOutcomeVotingScheme {
         p.outcomeOnly = true;
         p.minWeight = minWeight;
         emit OutcomeRequested(msg.sender, token, scope, minWeight);
+    }
+
+    /// @inheritdoc IOutcomeVotingScheme
+    /// @dev Plaintext ballots are always valid, so `minBallots` is left to the governor.
+    function requestOutcome(address token, uint256 scope, uint64 minWeight, uint32)
+        external
+    {
+        requestOutcome(token, scope, minWeight);
     }
 
     /// @inheritdoc IOutcomeVotingScheme

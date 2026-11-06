@@ -231,6 +231,28 @@ contract ZamaSchemeForkTest is ColdGas, IBallotGovernor {
         }
     }
 
+    /// @notice `requestOutcome` with both minima (weight and valid ballots) on the live
+    ///         coprocessor, at the rotation cap of 10 options and at 17. Reverts if the close
+    ///         exceeds the per-transaction HCU or depth limit.
+    function test_fork_requestOutcomeWithMinBallotsCost() public {
+        ZamaSchemeHarness h = _coldHarness();
+        uint8[2] memory sizes = [10, 17];
+        for (uint256 i; i < sizes.length; ++i) {
+            uint256 scope = 400 + i;
+            h.open(token, scope, sizes[i]);
+            h.castTrivialAs(address(this), token, scope, sizes[i] - 1, address(1));
+            h.castTrivialAs(address(this), token, scope, 0, address(2));
+            h.castTrivialAs(address(this), token, scope, 200, address(3)); // out of range
+            _cool();
+            uint256 g = gasleft();
+            h.requestOutcome(token, scope, 2, 2);
+            emit log_named_uint("options", sizes[i]);
+            emit log_named_uint("  requestOutcome gas, minWeight 2 and minBallots 2", g - gasleft());
+            bytes32 out = h.outcomeHandle(address(this), token, scope);
+            assertTrue(acl.isAllowedForDecryption(out), "outcome not decryptable");
+        }
+    }
+
     /// @dev Steady-state accumulation (into existing words) of one ballot at each ballot size.
     function test_fork_ballotCost() public {
         ZamaSchemeHarness h = new ZamaSchemeHarness(address(this));

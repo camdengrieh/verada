@@ -118,6 +118,12 @@ interface IVotingScheme {
     function MAX_OPTIONS() external view returns (uint8);
 }
 
+/// @title IMinVotersGovernor
+/// @notice Optional view of a governor: the fewest ballots its outcome polls need.
+interface IMinVotersGovernor {
+    function minVoters() external view returns (uint32);
+}
+
 // Winner index an outcome poll reports when no option qualifies.
 uint8 constant NO_WINNER = type(uint8).max;
 
@@ -145,6 +151,12 @@ interface IOutcomeVotingScheme is IVotingScheme {
     /// @notice Closes the poll and asks for only its winner to be revealed. Governor only.
     /// @param minWeight Smallest winning tally; a lower best tally yields `NO_WINNER`.
     function requestOutcome(address token, uint256 scope, uint64 minWeight) external;
+
+    /// @notice `requestOutcome` that also yields `NO_WINNER` unless at least `minBallots`
+    ///         ballots chose a valid option. A scheme that hides the choice counts this under
+    ///         encryption, so ballots for a missing option cannot pad a poll to its minimum.
+    function requestOutcome(address token, uint256 scope, uint64 minWeight, uint32 minBallots)
+        external;
 
     /// @notice Publishes the verified winner of a poll closed with `requestOutcome`.
     ///         Permissionless; the scheme verifies `proof`.

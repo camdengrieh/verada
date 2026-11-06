@@ -40,6 +40,9 @@ contract WeeklyPlatformGasTest is BallotLog {
     uint256 internal constant BEFORE_FINALIZE_VOTED = 451_675;
     uint256 internal constant BEFORE_FIRST_BALLOT = 4_111_384;
     uint256 internal constant BEFORE_LATER_BALLOT = 3_846_784;
+    /// @dev Added since: each ballot's range check and count of valid ballots (`lt`, cast,
+    ///      `add`, allow) on the mock coprocessor, about 350k gas there.
+    uint256 internal constant VALID_COUNT_MOCK = 350_000;
     /// @dev Main's scheme `open` (eager words) and `requestTally` with ballots on the mock
     ///      coprocessor, execution only.
     uint256 internal constant BEFORE_MOCK_OPEN = 1_391_786;
@@ -274,7 +277,7 @@ contract WeeklyPlatformGasTest is BallotLog {
         assertLt(voted, _beforeVoted());
         // The first voter creates the tally words: at most one fresh slot per word plus the length.
         assertLt(w.firstBallot, BEFORE_FIRST_BALLOT + 12 * 22_100);
-        assertApproxEqRel(w.laterBallot, BEFORE_LATER_BALLOT, 0.02e18);
+        assertApproxEqRel(w.laterBallot, BEFORE_LATER_BALLOT + VALID_COUNT_MOCK, 0.02e18);
     }
 
     /// @dev The same weeks with the scheme's `open` and `requestTally` at live mainnet cost.

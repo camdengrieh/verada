@@ -38,6 +38,7 @@ contract MockFhevmExecutor {
     uint256 public selects;
     uint256 public adds;
     uint256 public comparisons;
+    uint256 public lts;
     uint256 public verifyInputs;
     uint256 public divs;
     uint256 public rems;
@@ -103,6 +104,14 @@ contract MockFhevmExecutor {
         if (scalarByte == 0x00) _requireOperand(rhs);
         result = _mint(abi.encode("ge", lhs, rhs, scalarByte), FheType.Bool);
         valueOf[result] = valueOf[lhs] >= _rhs(rhs, scalarByte) ? 1 : 0;
+    }
+
+    function fheLt(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
+        ++lts;
+        _requireOperand(lhs);
+        if (scalarByte == 0x00) _requireOperand(rhs);
+        result = _mint(abi.encode("lt", lhs, rhs, scalarByte), FheType.Bool);
+        valueOf[result] = valueOf[lhs] < _rhs(rhs, scalarByte) ? 1 : 0;
     }
 
     function fheAdd(bytes32 lhs, bytes32 rhs, bytes1 scalarByte) external returns (bytes32 result) {
@@ -337,6 +346,9 @@ contract MockBallotGovernor is IBallotGovernor {
     bool public lazyOpen;
     uint8 public lazyOptionCount;
     bool public rejectAll;
+    /// @dev Served by `minVoters()` when `hasMinVoters`; otherwise that call reverts.
+    uint32 public minVotersValue;
+    bool public hasMinVoters;
 
     uint256 public authorizations;
     address public lastToken;
@@ -363,6 +375,22 @@ contract MockBallotGovernor is IBallotGovernor {
 
     function setRejectAll(bool reject) external {
         rejectAll = reject;
+    }
+
+    function setMinVoters(bool enabled, uint32 value) external {
+        hasMinVoters = enabled;
+        minVotersValue = value;
+    }
+
+    function minVoters() external view returns (uint32) {
+        require(hasMinVoters, "no minVoters");
+        return minVotersValue;
+    }
+
+    function requestOutcome(address token, uint256 scope, uint64 minWeight, uint32 minBallots)
+        external
+    {
+        IOutcomeVotingScheme(address(scheme)).requestOutcome(token, scope, minWeight, minBallots);
     }
 
     function open(address token, uint256 scope, uint8 optionCount) external {

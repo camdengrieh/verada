@@ -200,7 +200,8 @@ contract ZamaVotingSchemeTest is Test {
         bytes32 second = bytes32(uint256(2));
         executor.setInputValue(second, 0);
         _cast(voter2, second);
-        assertEq(executor.adds(), 2);
+        // One add per word, plus one into the count of valid ballots.
+        assertEq(executor.adds(), 3);
         bytes32[] memory after_ = _handles();
         assertTrue(after_[0] != words[0] && after_[1] != words[1], "words not replaced");
         assertEq(executor.valueOf(after_[0]), WEIGHT);
@@ -276,6 +277,8 @@ contract ZamaVotingSchemeTest is Test {
         assertEq(executor.eqs(), 1);
         assertEq(executor.selects(), 1);
         assertEq(executor.adds(), 0);
+        // One range check for the count of valid ballots, created by this first ballot.
+        assertEq(executor.lts(), 1);
         bytes32[] memory after_ = _handles();
         assertEq(after_.length, 1);
         _assertUint128Words(after_);
@@ -289,8 +292,10 @@ contract ZamaVotingSchemeTest is Test {
         assertTrue(scheme.hasVoted(address(gov), token, SCOPE, voter));
         assertTrue(scheme.hasVoted(address(gov), token, SCOPE, voter2));
         assertEq(executor.verifyInputs(), 2);
-        // One word: the first ballot creates it, the second adds to it.
-        assertEq(executor.adds(), 1);
+        // One word: the first ballot creates it, the second adds to it; the same for the count
+        // of valid ballots.
+        assertEq(executor.adds(), 2);
+        assertEq(executor.lts(), 2, "one range check per ballot");
     }
 
     function test_castBallot_ballotRefDependsOnHandleAndVoter() public {
@@ -1027,5 +1032,193 @@ contract ZamaVotingSchemeTest is Test {
         for (uint256 i = 0; i < words.length; ++i) {
             assertFalse(acl.isAllowedForDecryption(words[i]));
         }
+    }
+
+    // ---- ballot quorum (audit regression: an out-of-range ballot counted as a voter)
+
+    /// @dev Casts `choices[i]` with `weights[i]` for distinct voters into a fresh poll.
+    function _castAll(uint8 n, uint8[] memory choices, uint64[] memory weights) internal {
+        gov.open(token, SCOPE, n);
+        for (uint256 i = 0; i < choices.length; ++i) {
+            bytes32 handle = bytes32(uint256(keccak256(abi.encode("ballot", i))));
+            executor.setInputValue(handle, choices[i]);
+            gov.setWeight(weights[i]);
+            _cast(address(uint160(0x1000 + i)), handle);
+        }
+    }
+
+    function _two(uint8 a, uint64 wa, uint8 b, uint64 wb)
+        internal
+        pure
+        returns (uint8[] memory choices, uint64[] memory weights)
+    {
+        choices = new uint8[](2);
+        weights = new uint64[](2);
+        (choices[0], weights[0], choices[1], weights[1]) = (a, wa, b, wb);
+    }
+
+    function _outcomePlain() internal view returns (uint256) {
+        return executor.valueOf(scheme.outcomeHandle(address(gov), token, SCOPE));
+    }
+
+    /// @notice A one-token ballot for a missing option brings the poll to the governor's two
+    ///         ballots; the decrypted winner must not then be the one honest voter's choice.
+    function test_requestOutcome_outOfRangeBallotDoesNotCountAsAVoter() public {
+        gov.setMinVoters(true, 2);
+        (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 7, 1);
+        _castAll(2, c, w);
+        assertEq(scheme.ballotCount(address(gov), token, SCOPE), 2);
+        gov.requestOutcome(token, SCOPE, 1);
+        assertEq(_outcomePlain(), NO_WINNER, "a lone vote was revealed");
+    }
+
+    function test_requestOutcome_outOfRangeBallotPastEveryWord() public {
+        gov.setMinVoters(true, 2);
+        (uint8[] memory c, uint64[] memory w) = _two(4, 50_000, 255, 1);
+        _castAll(5, c, w);
+        gov.requestOutcome(token, SCOPE, 1);
+        assertEq(_outcomePlain(), NO_WINNER);
+    }
+
+    function test_requestOutcome_enoughValidBallotsRevealTheWinner() public {
+        gov.setMinVoters(true, 2);
+        (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 0, 1);
+        _castAll(2, c, w);
+        uint256 before = executor.comparisons();
+        gov.requestOutcome(token, SCOPE, 1);
+        assertEq(_outcomePlain(), 1);
+        // Two options plus the ballot quorum.
+        assertEq(executor.comparisons() - before, 3);
+        assertEq(acl.decryptableCount(), 1, "only the outcome");
+    }
+
+    function test_requestOutcome_explicitMinBallots() public {
+        uint8[] memory c = new uint8[](3);
+        uint64[] memory w = new uint64[](3);
+        (c[0], w[0], c[1], w[1], c[2], w[2]) = (2, 900, 2, 100, 9, 1);
+        _castAll(3, c, w);
+        uint256 snap = vm.snapshotState();
+        gov.requestOutcome(token, SCOPE, 1, 2);
+        assertEq(_outcomePlain(), 2, "two valid ballots");
+        vm.revertToState(snap);
+        gov.requestOutcome(token, SCOPE, 1, 3);
+        assertEq(_outcomePlain(), NO_WINNER, "the third ballot is out of range");
+        vm.revertToState(snap);
+        // More ballots than were cast: final at once, nothing decrypted.
+        gov.requestOutcome(token, SCOPE, 1, 4);
+        (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, SCOPE);
+        assertTrue(isFinal);
+        assertEq(winner, NO_WINNER);
+        assertEq(scheme.outcomeHandle(address(gov), token, SCOPE), bytes32(0));
+        assertEq(acl.decryptableCount(), 0);
+    }
+
+    function test_requestOutcome_minWeightAndMinBallotsShareOneSelect() public {
+        uint8[] memory c = new uint8[](3);
+        uint64[] memory w = new uint64[](3);
+        (c[0], w[0], c[1], w[1], c[2], w[2]) = (1, 600, 1, 100, 9, 1);
+        _castAll(2, c, w);
+        uint256 snap = vm.snapshotState();
+        uint256 selects = executor.selects();
+        gov.requestOutcome(token, SCOPE, 700, 2);
+        assertEq(executor.selects() - selects, 2 * 2 + 1, "one select for both minima");
+        assertEq(executor.ands() > 0, true);
+        assertEq(_outcomePlain(), 1, "both met");
+        vm.revertToState(snap);
+        gov.requestOutcome(token, SCOPE, 701, 2);
+        assertEq(_outcomePlain(), NO_WINNER, "weight short");
+        vm.revertToState(snap);
+        gov.requestOutcome(token, SCOPE, 700, 3);
+        assertEq(_outcomePlain(), NO_WINNER, "ballots short");
+    }
+
+    /// @notice Without a `minVoters()` view the minimum is one ballot: no extra FHE work.
+    function test_requestOutcome_governorWithoutMinVotersNeedsOneBallot() public {
+        (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 7, 1);
+        _castAll(2, c, w);
+        uint256 before = executor.comparisons();
+        gov.requestOutcome(token, SCOPE, 1);
+        assertEq(_outcomePlain(), 1);
+        assertEq(executor.comparisons() - before, 2, "no quorum comparison");
+    }
+
+    function test_setMinCountedWeight_onlyOwner() public {
+        vm.prank(stranger);
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger)
+        );
+        scheme.setMinCountedWeight(100);
+        vm.expectEmit(address(scheme));
+        emit ZamaVotingScheme.MinCountedWeightSet(100);
+        vm.prank(owner);
+        scheme.setMinCountedWeight(100);
+        assertEq(scheme.minCountedWeight(), 100);
+    }
+
+    /// @notice A valid one-token ballot no longer pads a poll to its minimum once the scheme
+    ///         sets a counted weight: the poll is final at once with no winner, undecrypted.
+    function test_requestOutcome_lightBallotDoesNotCountAsAVoter() public {
+        vm.prank(owner);
+        scheme.setMinCountedWeight(100);
+        gov.setMinVoters(true, 2);
+        (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 0, 1);
+        _castAll(2, c, w);
+        gov.requestOutcome(token, SCOPE, 1);
+        (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, SCOPE);
+        assertTrue(isFinal);
+        assertEq(winner, NO_WINNER);
+        assertEq(scheme.outcomeHandle(address(gov), token, SCOPE), bytes32(0));
+        assertEq(acl.decryptableCount(), 0, "nothing decrypted");
+    }
+
+    function test_requestOutcome_lightBallotStillAddsWeight() public {
+        vm.prank(owner);
+        scheme.setMinCountedWeight(100);
+        gov.setMinVoters(true, 2);
+        uint8[] memory c = new uint8[](3);
+        uint64[] memory w = new uint64[](3);
+        // Option 0 wins only with the light ballot's weight.
+        (c[0], w[0], c[1], w[1], c[2], w[2]) = (0, 500, 1, 500, 0, 1);
+        _castAll(2, c, w);
+        uint256 lts = executor.lts();
+        assertEq(lts, 2, "the light ballot skips the range check");
+        gov.requestOutcome(token, SCOPE, 1);
+        assertEq(_outcomePlain(), 0);
+    }
+
+    function testFuzz_requestOutcome_needsMinValidBallots(uint8 n, uint256 seed, uint8 minB)
+        public
+    {
+        n = uint8(bound(n, 2, 12));
+        uint256 voters = bound(seed, 1, 10);
+        minB = uint8(bound(minB, 1, 11));
+        uint8[] memory choices = new uint8[](voters);
+        uint64[] memory weights = new uint64[](voters);
+        uint256[] memory sums = new uint256[](n);
+        uint256 valid;
+        for (uint256 i = 0; i < voters; ++i) {
+            uint256 r = uint256(keccak256(abi.encode(seed, i)));
+            choices[i] = uint8(r % (uint256(n) + 3));
+            weights[i] = uint64(bound(r >> 8, 1, 8_000_000_000));
+            if (choices[i] < n) {
+                sums[choices[i]] += weights[i];
+                ++valid;
+            }
+        }
+        uint256 expected = NO_WINNER;
+        uint256 best;
+        for (uint256 i = 0; i < n; ++i) {
+            if (sums[i] > best) {
+                best = sums[i];
+                expected = i;
+            }
+        }
+        if (valid < minB) expected = NO_WINNER;
+        gov.setMinVoters(true, minB);
+        _castAll(n, choices, weights);
+        gov.requestOutcome(token, SCOPE, 1);
+        (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, SCOPE);
+        uint256 got = isFinal ? winner : _outcomePlain();
+        assertEq(got, expected);
     }
 }

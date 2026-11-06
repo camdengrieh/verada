@@ -2,12 +2,13 @@
 pragma solidity ^0.8.26;
 
 import {ZamaConfig} from "@fhevm/solidity/config/ZamaConfig.sol";
-import {FHE, ebool, euint128, euint8, externalEuint8} from "@fhevm/solidity/lib/FHE.sol";
+import {FHE, ebool, euint128, euint32, euint8, externalEuint8} from "@fhevm/solidity/lib/FHE.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 import {
     IBallotGovernor,
+    IMinVotersGovernor,
     IOutcomeVotingScheme,
     IVotingScheme,
     NO_WINNER
@@ -40,6 +41,11 @@ import {
 ///      closed without ballots is final at once, with all-zero counts (`TallySubmitted` is emitted
 ///      in `requestTally`) or with `NO_WINNER` (`OutcomeSubmitted` is emitted in
 ///      `requestOutcome`), so it needs no public decryption either.
+///      Ballot quorum: an out-of-range option adds no weight, so it must not count as a voter
+///      either. Each ballot with a weight of at least `minCountedWeight` adds its encrypted
+///      validity (`choice < optionCount`) to `validBallots`, and `requestOutcome` reports
+///      `NO_WINNER` unless that count reaches the governor's minimum number of ballots. A poll
+///      with too few such ballots in plaintext is final at once with `NO_WINNER`.
 contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     /// @inheritdoc IVotingScheme
     uint8 public constant MAX_OPTIONS = 32;
@@ -58,11 +64,19 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
 
     error WeightTooLarge(uint64 weight);
 
+    event MinCountedWeightSet(uint64 weight);
+
+    /// @notice Smallest ballot weight that counts toward a poll's minimum number of ballots.
+    ///         Lighter ballots still add their weight. Applies to ballots cast after a change.
+    uint64 public minCountedWeight;
+
     struct Poll {
         uint8 optionCount;
         bool opened;
         bool closed;
         bool isFinal;
+        /// @dev Ballots with a weight of at least `minCountedWeight` (public, like the weights).
+        uint32 counted;
         uint256 ballotCount;
         /// @dev Packed tally words (`ceil(optionCount / 3)`), created by the first ballot. Empty
         ///      while `ballotCount == 0`.
@@ -75,6 +89,9 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
         bool outcomeOnly;
         uint8 winner;
         euint8 outcome;
+        /// @dev Encrypted number of counted ballots with an in-range option; set from the first
+        ///      counted ballot.
+        euint32 validBallots;
     }
 
     /// @inheritdoc IVotingScheme
@@ -96,6 +113,12 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     function setGovernor(address governor, bool allowed) external onlyOwner {
         isGovernor[governor] = allowed;
         emit GovernorSet(governor, allowed);
+    }
+
+    /// @notice Sets the smallest ballot weight that counts toward the minimum number of ballots.
+    function setMinCountedWeight(uint64 weight) external onlyOwner {
+        minCountedWeight = weight;
+        emit MinCountedWeightSet(weight);
     }
 
     // ---- governor
@@ -135,14 +158,30 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     }
 
     /// @inheritdoc IOutcomeVotingScheme
-    /// @dev Strict running argmax from a zero best, so ties go to the lowest index and an
-    ///      all-zero poll yields `NO_WINNER`; then a best below `minWeight` yields `NO_WINNER`.
-    ///      Each option's counter is unpacked from its tally word under FHE (`_counter`), then
-    ///      one comparison and two selects per option, plus one comparison for `minWeight`.
-    ///      Only the resulting `euint8` is made publicly decryptable; the tally words never are.
-    ///      Without ballots the poll becomes final here with `NO_WINNER` and `submitOutcome` is
-    ///      never needed.
+    /// @dev The minimum number of ballots is the caller's `minVoters()` when it has one, else 1.
     function requestOutcome(address token, uint256 scope, uint64 minWeight) external {
+        _requestOutcome(token, scope, minWeight, _minVotersOf(msg.sender));
+    }
+
+    /// @inheritdoc IOutcomeVotingScheme
+    function requestOutcome(address token, uint256 scope, uint64 minWeight, uint32 minBallots)
+        external
+    {
+        _requestOutcome(token, scope, minWeight, minBallots);
+    }
+
+    /// @dev Strict running argmax from a zero best, so ties go to the lowest index and an
+    ///      all-zero poll yields `NO_WINNER`; then a best below `minWeight`, or fewer than
+    ///      `minBallots` counted in-range ballots, yields `NO_WINNER`.
+    ///      Each option's counter is unpacked from its tally word under FHE (`_counter`), then
+    ///      one comparison and two selects per option, plus one comparison for each of
+    ///      `minWeight > 1` and `minBallots > 1` and one select (and an `and` with both).
+    ///      Only the resulting `euint8` is made publicly decryptable; the tally words never are.
+    ///      Without ballots, or with fewer than `minBallots` counted ballots, the poll becomes
+    ///      final here with `NO_WINNER` and `submitOutcome` is never needed.
+    function _requestOutcome(address token, uint256 scope, uint64 minWeight, uint32 minBallots)
+        private
+    {
         if (!isGovernor[msg.sender]) revert NotGovernor(msg.sender);
         Poll storage poll = _polls[msg.sender][token][scope];
         if (!poll.opened) revert PollNotOpen(msg.sender, token, scope);
@@ -150,17 +189,18 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
 
         poll.closed = true;
         poll.outcomeOnly = true;
-        if (poll.tallies.length == 0) {
-            // No ballots, so no tally words and nothing to decrypt: final at once with no winner.
+        emit OutcomeRequested(msg.sender, token, scope, minWeight);
+        if (poll.tallies.length == 0 || poll.counted < minBallots) {
+            // Nothing to decrypt, or too few counted ballots: final at once with no winner.
             poll.winner = NO_WINNER;
             poll.isFinal = true;
-            emit OutcomeRequested(msg.sender, token, scope, minWeight);
             emit OutcomeSubmitted(msg.sender, token, scope, NO_WINNER);
             return;
         }
         uint256 n = poll.optionCount;
         euint128 best = FHE.asEuint128(0);
-        euint8 index = FHE.asEuint8(NO_WINNER);
+        euint8 none = FHE.asEuint8(NO_WINNER);
+        euint8 index = none;
         for (uint256 i = 0; i < n; ++i) {
             euint128 tally = _counter(poll.tallies[i / COUNTERS_PER_WORD], i % COUNTERS_PER_WORD);
             ebool higher = FHE.gt(tally, best);
@@ -168,14 +208,18 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
             // forge-lint: disable-next-line(unsafe-typecast)
             index = FHE.select(higher, FHE.asEuint8(uint8(i)), index);
         }
-        if (minWeight > 1) {
-            ebool enough = FHE.ge(best, uint128(minWeight));
-            index = FHE.select(enough, index, FHE.asEuint8(NO_WINNER));
+        // One select at the end of the argmax chain, so both minima add little depth.
+        ebool ok;
+        if (minWeight > 1) ok = FHE.ge(best, uint128(minWeight));
+        if (minBallots > 1) {
+            // `counted >= minBallots > 1`, so `validBallots` is set.
+            ebool quorum = FHE.ge(poll.validBallots, minBallots);
+            ok = minWeight > 1 ? FHE.and(ok, quorum) : quorum;
         }
+        if (minWeight > 1 || minBallots > 1) index = FHE.select(ok, index, none);
         FHE.allowThis(index);
         FHE.makePubliclyDecryptable(index);
         poll.outcome = index;
-        emit OutcomeRequested(msg.sender, token, scope, minWeight);
     }
 
     // ---- voter
@@ -183,7 +227,8 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     /// @inheritdoc IVotingScheme
     /// @dev `ballot` is `abi.encode(bytes32 handle, bytes inputProof)` where `handle` is the
     ///      external `euint8` option index produced by the relayer SDK for this voter and this
-    ///      contract. An out-of-range option adds nothing to any counted option.
+    ///      contract. An out-of-range option adds nothing to any counted option and does not
+    ///      count toward the minimum number of ballots of an outcome poll.
     function castBallot(address governor, address token, uint256 scope, bytes calldata ballot)
         external
         returns (bytes32 ballotRef)
@@ -394,6 +439,8 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     ///      the words: each starts as that ballot's selected contribution, which is what adding it
     ///      to an encrypted zero would give. Every ballot touches every word whatever its choice, so
     ///      creating them lazily reveals nothing about it.
+    ///      A ballot of at least `minCountedWeight` also adds `choice < optionCount` to
+    ///      `validBallots`.
     function _accumulate(Poll storage poll, euint8 choice, uint64 weight) internal {
         euint8 word = FHE.div(choice, COUNTERS_PER_WORD);
         euint8 shift = FHE.mul(FHE.rem(choice, COUNTERS_PER_WORD), COUNTER_BITS);
@@ -415,6 +462,23 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
                 poll.tallies[j] = updated;
             }
         }
+        if (weight >= minCountedWeight) {
+            uint32 counted = ++poll.counted;
+            euint32 valid = FHE.asEuint32(FHE.lt(choice, poll.optionCount));
+            if (counted > 1) valid = FHE.add(poll.validBallots, valid);
+            FHE.allowThis(valid);
+            poll.validBallots = valid;
+        }
+    }
+
+    /// @dev `governor.minVoters()`, or 1 when it has none.
+    function _minVotersOf(address governor) private view returns (uint32) {
+        (bool ok, bytes memory ret) =
+            governor.staticcall(abi.encodeCall(IMinVotersGovernor.minVoters, ()));
+        if (!ok || ret.length < 32) return 1;
+        uint256 v = abi.decode(ret, (uint256));
+        // forge-lint: disable-next-line(unsafe-typecast)
+        return v > type(uint32).max ? type(uint32).max : uint32(v);
     }
 
     /// @dev Counter in `slot` of a packed tally word, as its own ciphertext. The top slot needs no
