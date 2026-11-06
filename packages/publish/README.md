@@ -40,6 +40,16 @@ Varada serves one site for `varada.eth` and every `<label>.varada.eth` through i
 3. The first time only, the registry owner submits `setDefaultContenthash(bytes)` with the printed contenthash. Later releases are just another `feed-update`; gateways resolve the manifest to the newest reference (eth.limo caches for about five minutes).
 4. `varada-publish feed-read --owner <feed owner>` shows what the feed currently points at; `verify --name varada.eth --ref <feed manifest>` checks the on-chain contenthash.
 
+### One-command release
+
+`pnpm --filter @varada/publish release` does steps 1-2 for a new release: it reads the deployed
+addresses from `contracts/deployments/1.json`, builds the export with them, uploads it to the Bee node
+and appends it to the site feed. It needs the node running (`docker start bee` for a local node), the
+site batch in `BEE_POSTAGE_BATCH_ID` and the feed key file (default `~/.varada/site-feed.key`). No
+transaction is sent: the contenthash already points at the feed manifest. Optional `INDEXER_URLS`,
+`PUBLISHER_URL` and `SWARM_GATEWAY_URL` are baked into the build. eth.limo picks the new release up
+within about five minutes.
+
 ENS lookups go through the ENSv2 Universal Resolver (`0xeEeEEEeE14D718C2B47D9923Deab1335E144EeEe`), which also finds names still on the v1 registry.
 
 ## Encoding
