@@ -82,7 +82,12 @@ async function ensureDeps(node22) {
   const libs = ["forge-std/src", "openzeppelin-contracts/contracts", "v4-core/src", "v4-core/lib/solmate/src", "v4-periphery/src", "v4-periphery/lib/permit2/src"];
   if (libs.some((l) => !existsSync(join(ROOT, "contracts", "lib", l)))) {
     say("fetching contract submodules...");
-    await run("submodules", "git", ["submodule", "update", "--init", "--recursive"], { cwd: ROOT });
+    // Only what the remappings need, not --recursive: the nested copies of OpenZeppelin and forge-std
+    // inside v4-core and v4-periphery are big and unused.
+    const lib = join(ROOT, "contracts", "lib");
+    await run("submodules", "git", ["submodule", "update", "--init", "--", "contracts/lib/forge-std", "contracts/lib/openzeppelin-contracts", "contracts/lib/v4-core", "contracts/lib/v4-periphery"], { cwd: ROOT, logName: "submodules.log" });
+    await run("submodules-nested", "git", ["submodule", "update", "--init", "--", "lib/solmate"], { cwd: join(lib, "v4-core"), logName: "submodules.log" });
+    await run("submodules-nested", "git", ["submodule", "update", "--init", "--", "lib/permit2"], { cwd: join(lib, "v4-periphery"), logName: "submodules.log" });
   }
   if (!existsSync(join(ROOT, "contracts", "node_modules", "@fhevm"))) {
     say("installing Solidity dependencies in contracts/...");
