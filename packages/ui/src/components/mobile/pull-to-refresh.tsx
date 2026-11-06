@@ -6,7 +6,7 @@
 "use client";
 
 import { LoaderCircle, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { usePrefersReducedMotion } from "@verada/ui/components/motion/marquee";
 import { cn } from "@verada/ui/lib/utils";
 
@@ -26,6 +26,8 @@ export interface PullToRefreshProps extends Omit<ComponentProps<"div">, "childre
   disabled?: boolean;
   /** Classes for the scroll area (give it a height, e.g. `h-full` or `max-h-[60dvh]`). */
   scrollClassName?: string;
+  /** Receives the scroll area, e.g. for a BottomTabBar's `scrollContainer`. */
+  scrollRef?: (el: HTMLDivElement | null) => void;
 }
 
 /** Past the threshold the pull gets heavier, so the edge feels elastic. */
@@ -50,10 +52,17 @@ export function PullToRefresh({
   disabled,
   className,
   scrollClassName,
+  scrollRef: onScrollRef,
   ...props
 }: PullToRefreshProps) {
   const reduced = usePrefersReducedMotion();
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const onScrollRefRef = useRef(onScrollRef);
+  onScrollRefRef.current = onScrollRef;
+  const setScrollEl = useCallback((el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    onScrollRefRef.current?.(el);
+  }, []);
   const start = useRef<number | null>(null);
   const pullRef = useRef(0);
   const [pull, setPull] = useState(0);
@@ -174,7 +183,7 @@ export function PullToRefresh({
           {stripHeight > 24 ? <span>{status}</span> : null}
         </div>
         <div
-          ref={scrollRef}
+          ref={setScrollEl}
           onPointerDown={(e) => {
             if (e.pointerType !== "mouse" || e.button !== 0 || disabled || busy.current || (scrollRef.current?.scrollTop ?? 0) > 0) return;
             start.current = e.clientY;

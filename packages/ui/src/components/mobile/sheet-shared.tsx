@@ -6,7 +6,8 @@ export interface MobileSheetBaseProps {
   onOpenChange: (open: boolean) => void;
   /**
    * Where the sheet portals to (default `document.body`). Pass a phone frame (an element with layout
-   * containment, e.g. `@container`) and the sheet, its overlay and its snap points fit that frame.
+   * containment, e.g. `@container`) and the sheet, its overlay and its snap points fit that frame;
+   * the sheet then also leaves the body's styles alone (no iOS scroll lock on the page).
    */
   container?: HTMLElement | null;
   /**

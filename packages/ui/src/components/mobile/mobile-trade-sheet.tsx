@@ -142,6 +142,7 @@ export function MobileTradeSheet({
       onOpenChange={onOpenChange}
       container={container}
       modal={modal}
+      noBodyStyles={!!container}
       snapPoints={snapPoints}
       activeSnapPoint={expanded ? 1 : compact}
       setActiveSnapPoint={(p) => setExpanded(p === 1)}

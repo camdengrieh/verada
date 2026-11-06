@@ -1,9 +1,8 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { Compass, LineChart, User, Vote } from "lucide-react";
 import { MotionGlobalConfig } from "motion/react";
 import { useState } from "react";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { BottomTabBar } from "@verada/ui/components/mobile/bottom-tab-bar";
+import { BottomTabBar, varadaTabs } from "@verada/ui/components/mobile/bottom-tab-bar";
 import { FilterButton, FilterSheet, countFilters, type FilterGroup, type FilterValue } from "@verada/ui/components/mobile/filter-sheet";
 import { MobileHeader } from "@verada/ui/components/mobile/mobile-header";
 import { MobilePairPicker } from "@verada/ui/components/mobile/mobile-pair-picker";
@@ -34,12 +33,7 @@ beforeAll(() => {
   MotionGlobalConfig.skipAnimations = true;
 });
 
-const TABS = [
-  { href: "/", label: "Discover", icon: Compass },
-  { href: "/trade/", label: "Trade", icon: LineChart },
-  { href: "/vote/", label: "Vote", icon: Vote, badge: 2, badgeLabel: "2 open ballots" },
-  { href: "/me/", label: "Me", icon: User },
-];
+const TABS = varadaTabs({ discover: "/", trade: "/trade/", vote: "/vote/", me: "/me/" }, { vote: { badge: 2, badgeLabel: "2 open ballots" } });
 
 describe("BottomTabBar", () => {
   it("marks the active tab with aria-current and puts Launch in the middle", () => {

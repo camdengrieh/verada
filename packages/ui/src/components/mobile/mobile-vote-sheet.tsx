@@ -73,7 +73,7 @@ export function MobileVoteSheet({
   const label = disabledReason ? "Voting unavailable" : pending ? "Sending your vote…" : selected ? voteLabel(selected) : "Choose a charity to vote";
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal}>
+    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal} noBodyStyles={!!container}>
       <DrawerContent data-slot="mobile-vote-sheet" className={cn("h-[88dvh]", container && "h-[88%]", container && CONTAINED_SHEET)}>
         <DrawerHeader className="gap-0.5 pb-3">
           {kicker ? <span className="kicker text-xs">{kicker}</span> : null}

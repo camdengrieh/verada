@@ -98,7 +98,7 @@ export function FilterSheet({
   const atReset = same(draft, resetValue);
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal}>
+    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal} noBodyStyles={!!container}>
       <DrawerContent data-slot="filter-sheet" className={cn(container && CONTAINED_SHEET)}>
         <DrawerHeader>
           <DrawerTitle>{title}</DrawerTitle>

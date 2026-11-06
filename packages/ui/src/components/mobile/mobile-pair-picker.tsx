@@ -87,7 +87,7 @@ export function MobilePairPicker({
   };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal}>
+    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal} noBodyStyles={!!container}>
       <DrawerContent data-slot="mobile-pair-picker" className={cn("h-[88dvh]", container && "h-[88%]", container && CONTAINED_SHEET)}>
         <DrawerHeader className="pb-3">
           <DrawerTitle className="text-2xl">{title}</DrawerTitle>

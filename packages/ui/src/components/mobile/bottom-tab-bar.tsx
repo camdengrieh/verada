@@ -4,7 +4,7 @@
 // hide while scrolling down.
 "use client";
 
-import { Plus, type LucideIcon } from "lucide-react";
+import { ChartLine, CircleUserRound, Compass, Plus, Vote, type LucideIcon } from "lucide-react";
 import { LayoutGroup, motion, useReducedMotion } from "motion/react";
 import { useEffect, useId, useRef, useState, type ComponentProps, type ComponentType } from "react";
 import { DefaultLink, type LinkComponent } from "@verada/ui/components/varada/shared";
@@ -53,6 +53,20 @@ export interface BottomTabBarProps extends Omit<ComponentProps<"nav">, "children
 
 /** Height of the bar without the safe-area inset, for padding content above it. */
 export const BOTTOM_TAB_BAR_HEIGHT = 72;
+
+export type VaradaTab = "discover" | "trade" | "vote" | "me";
+
+/** The icons for Varada's four tabs (lucide ships with this package, not the app). */
+export const TAB_ICONS: Record<VaradaTab, LucideIcon> = { discover: Compass, trade: ChartLine, vote: Vote, me: CircleUserRound };
+const TAB_LABELS: Record<VaradaTab, string> = { discover: "Discover", trade: "Trade", vote: "Vote", me: "Me" };
+
+/**
+ * Discover, Trade, Vote and Me with their icons and labels, from the app's hrefs. `extra` adds or
+ * overrides per tab, e.g. `{ vote: { badge: 2, badgeLabel: "2 open ballots" } }`.
+ */
+export function varadaTabs(hrefs: Record<VaradaTab, string>, extra: Partial<Record<VaradaTab, Partial<BottomTab>>> = {}): BottomTab[] {
+  return (["discover", "trade", "vote", "me"] as const).map((t) => ({ href: hrefs[t], label: TAB_LABELS[t], icon: TAB_ICONS[t], ...extra[t] }));
+}
 
 /**
  * Hidden while the user scrolls down past `offset`, shown again on any scroll up of `threshold` px
