@@ -15,6 +15,8 @@ export type DiscoverSort = (typeof DISCOVER_SORTS)[number];
 export interface DiscoverQuery {
   sort: DiscoverSort;
   mode?: "weekly" | "live";
+  /** Rotation periods (0 = 1h, 1 = 12h, 2 = 1d, 3 = 3d, 4 = 1w) of live tokens; weekly tokens never match. */
+  periods?: number[];
   /** Quote asset addresses (lowercase); a token matches when its pool quote is one of them. */
   quotes?: Hex[];
   /** Focus filters: a token matches when its cause focus overlaps (a token with no focus indexed counts as any). */
@@ -196,6 +198,7 @@ export function joinDiscover(src: DiscoverSource, nowSec: bigint): DiscoverItem[
 function matches(i: DiscoverItem, q: DiscoverQuery): boolean {
   if (q.tokens && !q.tokens.some((t) => lc(t) === lc(i.address))) return false;
   if (q.mode && i.mode.kind !== q.mode) return false;
+  if (q.periods?.length && !(i.mode.kind === "live" && q.periods.includes(i.mode.period))) return false;
   if (q.quotes?.length && !(i.market.quote && q.quotes.some((x) => lc(x) === lc(i.market.quote!)))) return false;
   if (q.categoryMask !== undefined && q.categoryMask !== ALL_CATEGORIES_MASK) {
     if (i.focus && (i.focus.categoryMask & q.categoryMask) === 0n) return false;

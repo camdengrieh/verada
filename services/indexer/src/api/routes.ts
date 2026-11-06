@@ -643,6 +643,22 @@ export function createApi(deps: ApiDeps): Hono {
   const DiscoverQuery = z.object({
     sort: z.preprocess(blank, z.enum(DISCOVER_SORTS).default("trending")),
     mode: z.preprocess(blank, z.enum(["weekly", "live"]).optional()),
+    periods: z.preprocess(
+      blank,
+      z
+        .string()
+        .max(20)
+        .optional()
+        .transform((s, ctx) => {
+          if (!s) return undefined;
+          const list = [...new Set(s.split(",").map((x) => x.trim()).filter(Boolean))];
+          if (list.some((x) => !/^[0-4]$/.test(x))) {
+            ctx.addIssue({ code: "custom", message: "must be rotation periods 0 to 4" });
+            return z.NEVER;
+          }
+          return list.map(Number);
+        }),
+    ),
     quotes: z.preprocess(
       blank,
       z
@@ -699,6 +715,7 @@ export function createApi(deps: ApiDeps): Hono {
     const r = filterAndPage(all, {
       sort: p.data.sort,
       mode: p.data.mode,
+      periods: p.data.periods,
       quotes: p.data.quotes,
       categoryMask: p.data.categories ? categoryMaskOf(p.data.categories) : undefined,
       regionMask: p.data.regions ? regionMaskOf(p.data.regions) : undefined,

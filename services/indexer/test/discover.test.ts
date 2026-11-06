@@ -160,6 +160,8 @@ describe("filterAndPage", () => {
   it("filters by mode and quote", () => {
     expect(addrs({ mode: "live" })).toEqual([C]);
     expect(addrs({ mode: "weekly" })).toHaveLength(3);
+    expect(addrs({ periods: [3] })).toEqual([C]);
+    expect(addrs({ periods: [0, 1] })).toEqual([]);
     expect(addrs({ quotes: [WETH] })).toEqual([A, B, D]);
     expect(addrs({ quotes: [NVDA] })).toEqual([C]);
   });
@@ -211,6 +213,10 @@ describe("GET /api/discover", () => {
     const r = await (await mk().request(`/api/discover?categories=cancer-research&regions=europe&mode=weekly&quotes=${WETH}`)).json();
     expect(r.items.map((i: { address: string }) => i.address)).toEqual([B, D]);
   });
+  it("filters live tokens by rotation period", async () => {
+    const r = await (await mk().request("/api/discover?mode=live&periods=3,4")).json();
+    expect(r.items.map((i: { address: string }) => i.address)).toEqual([C]);
+  });
   it("reads tokens in bulk", async () => {
     const r = await (await mk().request(`/api/discover?tokens=${A},${C}`)).json();
     expect(r.items.map((i: { address: string }) => i.address).sort()).toEqual([A, C]);
@@ -218,6 +224,7 @@ describe("GET /api/discover", () => {
   it("rejects bad input", async () => {
     const app = mk();
     expect((await app.request("/api/discover?sort=moon")).status).toBe(400);
+    expect((await app.request("/api/discover?periods=7")).status).toBe(400);
     expect((await app.request("/api/discover?categories=nope")).status).toBe(400);
     expect((await app.request("/api/discover?quotes=0x12")).status).toBe(400);
     expect((await app.request("/api/discover?tokens=abc")).status).toBe(400);
