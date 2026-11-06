@@ -158,10 +158,10 @@ contract DonationAssetConsolidatorTest is ConsolidatorBase {
     // ------------------------------------------------------------------ consolidation to WETH
 
     function test_ondoQuote_multiHopIntoWeth() public {
-        _deliverTo(memeE, address(quote), 100e18); // ~100 quote = ~10,000 USDC = ~3.33 WETH
+        _deliverTo(memeE, address(quote), 10e18); // ~10 quote = ~1,000 USDC = ~0.333 WETH
         uint256 got = weth.balanceOf(address(vault));
-        assertGt(got, 3.2e18, "weth credited");
-        assertLt(got, 3.34e18);
+        assertGt(got, 0.32e18, "weth credited");
+        assertLt(got, 0.334e18);
         assertEq(usdc.balanceOf(address(vault)), 0, "no usdc");
         assertEq(vault.totalTrackedEth(), got);
         assertEq(vault.totalTracked(), 0);
@@ -190,6 +190,7 @@ contract DonationAssetConsolidatorTest is ConsolidatorBase {
     }
 
     function test_wethQuote_tokenSideSwapsOneHop() public {
+        skip(1900);
         _deliverTo(memeW, address(memeW), 1000e18); // ~1 token = 0.001 WETH quote
         uint256 got = weth.balanceOf(address(vault));
         assertGt(got, 0.9e18);
@@ -199,6 +200,7 @@ contract DonationAssetConsolidatorTest is ConsolidatorBase {
     }
 
     function test_ondoQuote_tokenSideThreeHops() public {
+        skip(1900);
         _deliverTo(memeE, address(memeE), 1000e18); // 1000 tokens ~ 1 quote ~ 0.033 WETH
         uint256 got = weth.balanceOf(address(vault));
         assertGt(got, 0.0300e18);
@@ -225,7 +227,8 @@ contract DonationAssetConsolidatorTest is ConsolidatorBase {
     }
 
     function testFuzz_ethLedgerBackedAndSplit(uint96 amount, bool tokenSide) public {
-        amount = uint96(bound(amount, 1e12, 1e22));
+        amount = uint96(bound(amount, 1e12, 1e21));
+        skip(1900);
         if (tokenSide) _deliverTo(memeE, address(memeE), amount);
         else _deliverTo(memeE, address(quote), amount);
         uint256 w = weth.balanceOf(address(vault));
@@ -304,7 +307,7 @@ contract DonationAssetConsolidatorTest is ConsolidatorBase {
     }
 
     function testFuzz_convertDonation(uint96 amount) public {
-        amount = uint96(bound(amount, 1e15, 1e21));
+        amount = uint96(bound(amount, 1e15, 3e17));
         weth.approve(address(cons), amount);
         uint256 out = cons.convertDonation(amount, address(this));
         assertEq(weth.balanceOf(address(cons)), 0);

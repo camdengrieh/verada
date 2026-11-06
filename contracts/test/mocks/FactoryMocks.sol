@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 /// @dev Stand-in quote asset (WETH or Ondo-like) with configurable decimals and open mint.
 contract MockWeth is ERC20 {
@@ -63,9 +64,17 @@ contract MockFeeVault {
         factory = factory_;
     }
 
+    mapping(address token => uint8) public donationAssetOf;
+
     function registerToken(address token) external {
         if (msg.sender != factory) revert NotFactory();
         registered[token] = true;
+    }
+
+    function registerToken(address token, DonationAsset asset) external {
+        if (msg.sender != factory) revert NotFactory();
+        registered[token] = true;
+        donationAssetOf[token] = uint8(asset);
     }
 
     function depositFees(address token, uint256 amount) external {
@@ -129,6 +138,28 @@ contract MockQuoteRegistry {
 
     function isAllowed(address asset) external view returns (bool) {
         return _assets[asset].active;
+    }
+
+    /// @dev Routes exist for every asset and donation asset unless removed with `setNoRoute`.
+    mapping(address asset => mapping(uint8 da => bool)) internal _noRoute;
+    address public wethToken;
+    address public usdcToken;
+
+    function setNoRoute(address asset, DonationAsset da, bool v) external {
+        _noRoute[asset][uint8(da)] = v;
+    }
+
+    function setTokens(address weth_, address usdc_) external {
+        wethToken = weth_;
+        usdcToken = usdc_;
+    }
+
+    function hasRouteTo(address asset, DonationAsset da) external view returns (bool) {
+        return !_noRoute[asset][uint8(da)];
+    }
+
+    function donationToken(DonationAsset da) external view returns (address) {
+        return da == DonationAsset.Eth ? wethToken : usdcToken;
     }
 
     function getQuoteAsset(address asset) external view returns (QuoteAsset memory) {

@@ -8,6 +8,9 @@ import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
 import {TickMath} from "v4-core/libraries/TickMath.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
+import {StateLibrary} from "v4-core/libraries/StateLibrary.sol";
 import {PoolSwapTest} from "v4-core/test/PoolSwapTest.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol";
 
@@ -25,6 +28,9 @@ import {LiveDonationForkTest} from "./LiveDonationFork.t.sol";
 /// @dev Pools used: native ETH/USDC 0.05% (WETH unwrap hop; also the end of the Ondo route, where
 ///      native ETH is wrapped back), AMZNon/USDC 1% (the Ondo token only has a USDC pool).
 contract DonationAssetForkTest is LiveDonationForkTest {
+    using StateLibrary for IPoolManager;
+    using PoolIdLibrary for PoolKey;
+
     PoolKey internal ethUsdc;
     PoolKey internal amznUsdc;
     bool internal amznReady;
