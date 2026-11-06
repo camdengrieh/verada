@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
+import { SETTLEMENT_ASSET } from "@varada/sdk";
 import { toAgentDetail, toAgentReport, toAgentSummary, type AgentDetail as AgentInfo, type AgentReport, type AgentSummary } from "@/lib/agents";
 
 const VAULT = "0x00000000000000000000000000000000000000A9";
@@ -13,6 +14,7 @@ const ORG_B = `0x${"b1".repeat(32)}`;
 const ORG_C = `0x${"c1".repeat(32)}`;
 
 const REGISTRY = "0x00000000000000000000000000000000000000B7";
+const USDC_ADDR = SETTLEMENT_ASSET;
 const baseConfig: AppConfig = { ...envDefaults(), indexerUrls: ["https://idx.example"], curatorRegistryAddress: REGISTRY };
 let config: AppConfig = baseConfig;
 
@@ -121,7 +123,8 @@ async function defaultAccountRead({ functionName }: { functionName: string }): P
 const accountRead = vi.fn(defaultAccountRead);
 let txCount = 0;
 const writeContractAsync = vi.fn<(req: unknown) => Promise<string>>(async () => `0x${(++txCount).toString(16).padStart(64, "0")}`);
-const account = { address: undefined as string | undefined };
+const account = { address: undefined as string | undefined, chainId: 1 as number | undefined };
+const switchChain = vi.fn();
 /** Receipts by hash (stable objects, like wagmi's cache). With `autoConfirm`, every sent tx confirms at once. */
 const chainTxs = { autoConfirm: false, receipts: new Map<string, { status: "success"; blockNumber: bigint; transactionHash: string }>() };
 function receiptOf(hash: string | undefined) {
@@ -139,7 +142,8 @@ vi.mock("@/lib/account-reads", () => ({ createAccountClient: (_rpc: unknown, add
 vi.mock("wagmi", async () => {
   const { useCallback, useState } = await import("react");
   return {
-    useAccount: () => ({ address: account.address }),
+    useAccount: () => ({ address: account.address, isConnected: Boolean(account.address), chainId: account.chainId }),
+    useSwitchChain: () => ({ switchChain: switchChain, isPending: false }),
     // Like wagmi: `data` is the hash of the last write once the wallet returns it.
     useWriteContract: () => {
       const [hash, setHash] = useState<string>();
@@ -162,6 +166,9 @@ function wrap(node: ReactNode) {
   return render(<QueryClientProvider client={qc}>{node}</QueryClientProvider>);
 }
 
+/** Radix tabs select on mouse down (and focus), not on click. */
+const pickTab = (tab: HTMLElement) => fireEvent.mouseDown(tab, { button: 0, ctrlKey: false });
+
 describe("agent page", () => {
   beforeEach(() => {
     account.address = undefined;
@@ -181,10 +188,11 @@ describe("agent page", () => {
     wrap(<AgentDetail label="homeless" root="../../" />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Homelessness");
     await waitFor(() => expect(screen.getByText("ERC-8004 #17")).toBeInTheDocument());
-    expect(screen.getByText("homeless.agent.varada.eth", { exact: false })).toBeInTheDocument();
+    expect(screen.getAllByText("homeless.agent.varada.eth", { exact: false }).length).toBeGreaterThan(0);
     expect(screen.getByText(VAULT)).toBeInTheDocument();
     expect(screen.getByText("Active")).toBeInTheDocument();
     expect(screen.getByText("1,234.56 USDC in 3 donations")).toBeInTheDocument();
+    expect(screen.getByText("500 USDC in 1 gift")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "All agents" })).toHaveAttribute("href", "../../agent/");
 
     await waitFor(() => expect(screen.getByRole("heading", { name: "Week 12: winter shelters" })).toBeInTheDocument());
@@ -200,19 +208,24 @@ describe("agent page", () => {
     expect(items[0]).toHaveTextContent("score 92/100");
     expect(items[1]).toHaveTextContent("#2 Beta Housing");
     expect(screen.getByText("Verified on-chain")).toBeInTheDocument();
+    // A verified region offers each pick's Merkle proof.
+    expect(within(items[0]!).getByRole("button", { name: "Merkle proof" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the Africa page" })).toHaveAttribute("href", "../../agent/homeless/africa/");
 
-    fireEvent.click(tabs[1]!);
-    expect(screen.getByRole("list", { name: "Europe ranked picks" })).toHaveTextContent("Gamma Shelter");
+    pickTab(tabs[1]!);
+    expect(await screen.findByRole("list", { name: "Europe ranked picks" })).toHaveTextContent("Gamma Shelter");
     expect(screen.getByText("Not verified on-chain")).toBeInTheDocument();
     expect(screen.queryByRole("list", { name: "Africa ranked picks" })).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Europe picks" })).queryByRole("button", { name: "Merkle proof" })).toBeNull();
   });
 
   it("renders untrusted report text, newsletter, sources and events safely", async () => {
     const { container } = wrap(<AgentDetail label="homeless" />);
     await waitFor(() => expect(screen.getByRole("heading", { name: "Africa this week" })).toBeInTheDocument());
     // No raw HTML from the report reaches the DOM.
-    expect(container.querySelector("script, iframe, img")).toBeNull();
+    expect(container.querySelector("script, iframe")).toBeNull();
+    // The only images are the library's own cause art, never anything the report names.
+    for (const img of container.querySelectorAll("img")) expect(img.getAttribute("src")).toMatch(/assets\/causes\//);
     expect(screen.getByText(/<script>alert\(1\)<\/script>/)).toBeInTheDocument();
     expect(screen.getByText("early").tagName).toBe("STRONG");
     expect(screen.getByText(/Emergency beds <img/)).toBeInTheDocument();
@@ -235,10 +248,13 @@ describe("agent page", () => {
   it("lists credited donors only and never shows an anonymous donor's address", async () => {
     wrap(<AgentDetail label="homeless" />);
     const donors = await screen.findByRole("region", { name: "Credited donors" });
-    expect(within(donors).getByText(new RegExp(CREDITED))).toHaveTextContent("250 USDC");
+    expect(within(donors).getByText("0x0000...00C1")).toHaveAttribute("title", CREDITED);
+    expect(within(donors).getByText("250 USDC")).toBeInTheDocument();
     expect(document.body.textContent).not.toContain(ANON);
     expect(document.body.textContent?.toLowerCase()).not.toContain(ANON.slice(2).toLowerCase());
-    expect(within(screen.getByRole("region", { name: "Recent gifts" })).getByText(/500 USDC to 0x0000/)).toBeInTheDocument();
+    const gifts = screen.getByRole("region", { name: "Recent gifts" });
+    expect(within(gifts).getByText("500 USDC")).toBeInTheDocument();
+    expect(within(gifts).getByText("0x0000...00F0")).toBeInTheDocument();
   });
 
   it("loads an archived epoch's report", async () => {
@@ -256,7 +272,7 @@ describe("agent page", () => {
     wrap(<AgentDetail label="homeless" region="europe" root="../../../" />);
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Homelessness: Europe");
     await waitFor(() => expect(screen.getByRole("list", { name: "Europe ranked picks" })).toBeInTheDocument());
-    expect(screen.queryByText("Alpha Shelter")).toBeNull();
+    expect(within(screen.getByRole("region", { name: "Europe picks" })).queryByText("Alpha Shelter")).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
     const regions = screen.getByRole("navigation", { name: "Regions" });
     expect(within(regions).getByText("Europe")).toHaveAttribute("aria-current", "page");
@@ -273,29 +289,29 @@ describe("agent page", () => {
     wrap(<AgentDetail label="homeless" />);
     await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
     const [africa, europe] = screen.getAllByRole("tab") as [HTMLElement, HTMLElement];
-    // Roving tabIndex: only the selected tab is in the tab order.
-    expect(africa).toHaveAttribute("tabindex", "0");
-    expect(europe).toHaveAttribute("tabindex", "-1");
+    expect(africa).toHaveAttribute("aria-selected", "true");
 
+    // Roving tabIndex: once the list has focus, only one tab is in the tab order.
     africa.focus();
+    await waitFor(() => expect(africa).toHaveAttribute("tabindex", "0"));
+    expect(europe).toHaveAttribute("tabindex", "-1");
     fireEvent.keyDown(africa, { key: "ArrowRight" });
-    expect(europe).toHaveFocus();
-    expect(europe).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(europe).toHaveFocus());
+    await waitFor(() => expect(europe).toHaveAttribute("aria-selected", "true"));
     expect(europe).toHaveAttribute("tabindex", "0");
     expect(africa).toHaveAttribute("tabindex", "-1");
-    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", "region-tab-europe");
+    expect(screen.getByRole("tabpanel")).toHaveAttribute("aria-labelledby", europe.id);
 
     fireEvent.keyDown(europe, { key: "ArrowRight" });
-    expect(africa).toHaveFocus();
-    expect(africa).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(africa).toHaveFocus());
+    await waitFor(() => expect(africa).toHaveAttribute("aria-selected", "true"));
     fireEvent.keyDown(africa, { key: "ArrowLeft" });
-    expect(europe).toHaveFocus();
+    await waitFor(() => expect(europe).toHaveFocus());
     fireEvent.keyDown(europe, { key: "Home" });
-    expect(africa).toHaveFocus();
-    expect(africa).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(africa).toHaveFocus());
     fireEvent.keyDown(africa, { key: "End" });
-    expect(europe).toHaveFocus();
-    expect(europe).toHaveAttribute("aria-selected", "true");
+    await waitFor(() => expect(europe).toHaveFocus());
+    await waitFor(() => expect(europe).toHaveAttribute("aria-selected", "true"));
     // Other keys do nothing.
     fireEvent.keyDown(europe, { key: "a" });
     expect(europe).toHaveAttribute("aria-selected", "true");
@@ -353,6 +369,8 @@ describe("agent page", () => {
 describe("donate panel", () => {
   beforeEach(() => {
     account.address = undefined;
+    account.chainId = 1;
+    switchChain.mockClear();
     getAgent.mockReset().mockImplementation(async () => detail());
     getAgentReport.mockReset().mockImplementation(async (_c, _l, e) => report(String(e)));
     writeContractAsync.mockClear();
@@ -370,9 +388,13 @@ describe("donate panel", () => {
       p,
       amount: within(p).getByLabelText("Amount (USDC)"),
       credit: within(p).getByRole("checkbox", { name: /Credit me publicly/ }),
-      submit: within(p).getByRole("button"),
+      // The form's one submit button: the presets are named "<n> USDC".
+      submit: within(p).getByRole("button", { name: /^(Approve|Donate)/ }),
     };
   }
+
+  /** The dialog the transactions run in. */
+  const dialog = async () => within(await screen.findByRole("dialog"));
 
   it("is disabled until a wallet connects, and credit defaults to off", async () => {
     wrap(<AgentDetail label="homeless" />);
@@ -384,6 +406,18 @@ describe("donate panel", () => {
     // The vault is read from the registry by the agent's SDK category bit, through the public chain client.
     expect(chainRead).toHaveBeenCalledWith(expect.objectContaining({ address: REGISTRY, functionName: "agentOf", args: [1] }));
     expect(within(p).getByText(/anonymous on this site/)).toHaveTextContent("still visible on chain");
+  });
+
+  it("asks to switch network when the wallet is on another chain", async () => {
+    account.address = CREDITED;
+    account.chainId = 137;
+    wrap(<AgentDetail label="homeless" />);
+    const { p, submit } = await panel();
+    expect(await within(p).findByText(/different network than Varada/)).toBeInTheDocument();
+    expect(submit).toBeDisabled();
+    fireEvent.click(within(p).getByRole("button", { name: "Switch network" }));
+    expect(switchChain).toHaveBeenCalledWith({ chainId: config.chainId });
+    expect(writeContractAsync).not.toHaveBeenCalled();
   });
 
   it("is disabled while the agent is paused", async () => {
@@ -401,12 +435,12 @@ describe("donate panel", () => {
     account.address = CREDITED;
     chainRead.mockImplementation(async (req) => (req.functionName === "paused" ? true : defaultChainRead(req)));
     wrap(<AgentDetail label="homeless" />);
-    const { p } = await panel();
+    const { p, submit } = await panel();
     await waitFor(() => expect(within(p).getByText(/is paused, so donations are closed/)).toBeInTheDocument());
-    expect(within(p).getByRole("button")).toBeDisabled();
+    expect(submit).toBeDisabled();
   });
 
-  it("validates the amount and the balance before sending anything", async () => {
+  it("validates the amount and the balance before opening the dialog", async () => {
     account.address = CREDITED;
     wrap(<AgentDetail label="homeless" />);
     const { p, amount, submit } = await panel();
@@ -414,29 +448,44 @@ describe("donate panel", () => {
     expect(submit).toBeEnabled();
 
     fireEvent.click(submit);
-    expect(within(p).getByRole("alert")).toHaveTextContent("Enter an amount");
+    expect(within(p).getByText("Enter an amount")).toBeInTheDocument();
     fireEvent.change(amount, { target: { value: "1.1234567" } });
     fireEvent.click(submit);
-    expect(within(p).getByRole("alert")).toHaveTextContent("at most 6 decimal places");
+    expect(within(p).getByText(/at most 6 decimal places/)).toBeInTheDocument();
     fireEvent.change(amount, { target: { value: "-5" } });
     fireEvent.click(submit);
-    expect(within(p).getByRole("alert")).toHaveTextContent("Enter a number");
+    expect(within(p).getByText(/Enter a number/)).toBeInTheDocument();
     fireEvent.change(amount, { target: { value: "0" } });
     fireEvent.click(submit);
-    expect(within(p).getByRole("alert")).toHaveTextContent("more than 0");
+    expect(within(p).getByText(/more than 0/)).toBeInTheDocument();
     fireEvent.change(amount, { target: { value: "150" } });
     fireEvent.click(submit);
-    expect(within(p).getByRole("alert")).toHaveTextContent("less than 150 USDC");
+    expect(within(p).getByText(/less than 150 USDC/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(writeContractAsync).not.toHaveBeenCalled();
   });
 
-  it("approves first when the allowance is short", async () => {
+  it("fills the amount from a preset", async () => {
+    account.address = CREDITED;
+    wrap(<AgentDetail label="homeless" />);
+    const { p, amount } = await panel();
+    await waitFor(() => expect(within(p).getByText("Your USDC balance: 100 USDC")).toBeInTheDocument());
+    fireEvent.click(within(p).getByRole("button", { name: "25 USDC" }));
+    expect(amount).toHaveValue("25");
+    expect(within(p).getByRole("button", { name: "Approve 25 USDC" })).toBeEnabled();
+  });
+
+  it("approves first when the allowance is short, in the dialog's first step", async () => {
     account.address = CREDITED;
     wrap(<AgentDetail label="homeless" />);
     const { p, amount } = await panel();
     await waitFor(() => expect(within(p).getByText("Your USDC balance: 100 USDC")).toBeInTheDocument());
     fireEvent.change(amount, { target: { value: "25.5" } });
     fireEvent.click(within(p).getByRole("button", { name: "Approve 25.5 USDC" }));
+    const d = await dialog();
+    expect(d.getByRole("heading", { name: "Approve USDC" })).toBeInTheDocument();
+    expect(writeContractAsync).not.toHaveBeenCalled();
+    fireEvent.click(d.getByRole("button", { name: "Approve 25.5 USDC" }));
     await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(1));
     expect(writeContractAsync.mock.calls[0]![0]).toMatchObject({ functionName: "approve", args: [VAULT, 25_500_000n], chainId: config.chainId });
     // The donor's reads go through their own isolated client, never the indexer.
@@ -448,21 +497,29 @@ describe("donate panel", () => {
     chainTxs.autoConfirm = true;
     accountRead.mockImplementation(async ({ functionName }) => (functionName === "allowance" ? 25_500_000n : 100_000_000n));
     wrap(<AgentDetail label="homeless" />);
-    const { p, amount, credit } = await panel();
+    const { p, amount, credit, submit } = await panel();
     await waitFor(() => expect(within(p).getByText("Your USDC balance: 100 USDC")).toBeInTheDocument());
     fireEvent.change(amount, { target: { value: "25.5" } });
-    const donate = within(p).getByRole("button", { name: "Donate 25.5 USDC" });
-    fireEvent.click(donate);
+    fireEvent.click(within(p).getByRole("button", { name: "Donate 25.5 USDC" }));
+    let d = await dialog();
+    // The allowance is enough, so the dialog starts on the donation itself.
+    expect(d.getByRole("heading", { name: "Donate" })).toBeInTheDocument();
+    fireEvent.click(d.getByRole("button", { name: "Donate 25.5 USDC" }));
     await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(1));
     expect(writeContractAsync.mock.calls[0]![0]).toMatchObject({ functionName: "donate", address: VAULT, args: [25_500_000n, false] });
-    await within(p).findByText("Thank you. Your donation is anonymous on this site.");
-    await waitFor(() => expect(donate).toBeEnabled());
+    await d.findByText("Thank you. Your donation is anonymous on this site.");
+    fireEvent.click(d.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    await waitFor(() => expect(submit).toBeEnabled());
 
     fireEvent.click(credit);
     expect(credit).toBeChecked();
-    fireEvent.click(donate);
+    fireEvent.click(submit);
+    d = await dialog();
+    fireEvent.click(d.getByRole("button", { name: "Donate 25.5 USDC" }));
     await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(2));
     expect(writeContractAsync.mock.calls[1]![0]).toMatchObject({ functionName: "donate", args: [25_500_000n, true] });
+    await d.findByText(/Your address will be listed as a credited donor/);
   });
 
   it("stays disabled, and reads nothing, when no curator registry is configured", async () => {
@@ -473,7 +530,9 @@ describe("donate panel", () => {
     expect(within(p).getByRole("note")).toHaveTextContent("no curator registry is configured");
     expect(submit).toBeDisabled();
     expect(amount).toBeDisabled();
-    expect(chainRead).not.toHaveBeenCalled();
+    // Only the page's own vault-balance read (public data) happens: no registry or pause check.
+    expect(chainRead).not.toHaveBeenCalledWith(expect.objectContaining({ functionName: "agentOf" }));
+    expect(chainRead).not.toHaveBeenCalledWith(expect.objectContaining({ functionName: "paused" }));
     expect(accountRead).not.toHaveBeenCalled();
   });
 
@@ -529,6 +588,7 @@ describe("donate panel", () => {
     expect(submit).toBeDisabled();
     expect(submit).toHaveTextContent("Donate 5 USDC");
     fireEvent.submit(submit.closest("form")!);
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(writeContractAsync).not.toHaveBeenCalled();
 
     accountRead.mockImplementation(async ({ functionName }) => (functionName === "allowance" ? 5_000_000n : 100_000_000n));
@@ -546,7 +606,7 @@ describe("donate panel", () => {
     expect(submit).toBeDisabled();
   });
 
-  it("donates on the next click after a confirmed approval, even if the allowance reads stale", async () => {
+  it("moves to the donation step after a confirmed approval, even if the allowance reads stale", async () => {
     account.address = CREDITED;
     chainTxs.autoConfirm = true;
     // The RPC keeps answering 0: the refetch after the approval is stale.
@@ -555,15 +615,18 @@ describe("donate panel", () => {
     await waitFor(() => expect(within(p).getByText("Your USDC balance: 100 USDC")).toBeInTheDocument());
     fireEvent.change(amount, { target: { value: "10" } });
     fireEvent.click(within(p).getByRole("button", { name: "Approve 10 USDC" }));
-    await within(p).findByText("Approved. Now donate to complete the gift.");
-    const donate = await within(p).findByRole("button", { name: "Donate 10 USDC" });
+    const d = await dialog();
+    fireEvent.click(d.getByRole("button", { name: "Approve 10 USDC" }));
+    await d.findByText("Approved. Now donate to complete the gift.");
+    const donate = await d.findByRole("button", { name: "Donate 10 USDC" });
     await waitFor(() => expect(donate).toBeEnabled());
     fireEvent.click(donate);
     await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(2));
     expect(writeContractAsync.mock.calls[1]![0]).toMatchObject({ functionName: "donate", address: VAULT, args: [10_000_000n, false] });
 
     // The donation spent the approval: a larger amount needs a new one.
-    await within(p).findByText("Thank you. Your donation is anonymous on this site.");
+    await d.findByText("Thank you. Your donation is anonymous on this site.");
+    fireEvent.click(d.getByRole("button", { name: "Done" }));
     fireEvent.change(amount, { target: { value: "20" } });
     expect(await within(p).findByRole("button", { name: "Approve 20 USDC" })).toBeEnabled();
   });
@@ -572,14 +635,17 @@ describe("donate panel", () => {
     account.address = CREDITED;
     accountRead.mockImplementation(async ({ functionName }) => (functionName === "allowance" ? 50_000_000n : 100_000_000n));
     wrap(<AgentDetail label="homeless" />);
-    const { p, amount } = await panel();
+    const { p, amount, submit } = await panel();
     await waitFor(() => expect(within(p).getByText("Your USDC balance: 100 USDC")).toBeInTheDocument());
     fireEvent.change(amount, { target: { value: "5" } });
-    const donate = within(p).getByRole("button", { name: "Donate 5 USDC" });
+    fireEvent.click(submit);
+    const d = await dialog();
+    const donate = d.getByRole("button", { name: "Donate 5 USDC" });
     fireEvent.click(donate);
-    await within(p).findByText(/Donation submitted: 0x/);
+    await d.findByText(/Donation submitted: 0x/);
     expect(donate).toBeDisabled();
-    fireEvent.submit(donate.closest("form")!);
+    expect(submit).toBeDisabled();
+    fireEvent.submit(submit.closest("form")!);
     expect(writeContractAsync).toHaveBeenCalledTimes(1);
   });
 });
@@ -588,9 +654,13 @@ describe("agents index", () => {
   // A block body: beforeEach treats a returned function as a cleanup hook.
   beforeEach(() => {
     listAgents.mockReset();
+    chainRead.mockReset().mockImplementation(async ({ functionName, address }: { functionName: string; address: string }) => {
+      if (functionName === "balanceOf") return address === USDC_ADDR ? 42_000_000n : 0n;
+      throw new Error(`unexpected public read ${functionName}`);
+    });
   });
 
-  it("lists every agent with state, latest epoch and totals, linking to its page", async () => {
+  it("lists every agent with state, latest epoch, totals and vault balance, linking to its page", async () => {
     listAgents.mockImplementation(async () => [
       toAgentSummary({ ...agentRow, latest: { epoch: "12", reportRef: `0x${"12".repeat(32)}`, catalogVersion: 3 } })!,
       toAgentSummary({ ...agentRow, categoryBit: 2, category: "hunger", name: "Hunger", label: "hunger", ensName: "hunger.agent.varada.eth", active: false, totals: null })!,
@@ -603,11 +673,33 @@ describe("agents index", () => {
     expect(items[0]).toHaveTextContent("homeless.agent.varada.eth");
     expect(items[0]).toHaveTextContent("Active");
     expect(items[0]).toHaveTextContent("epoch 12");
-    expect(items[0]).toHaveTextContent("Donated: 1,234.56 USDC");
-    expect(items[0]).toHaveTextContent("Given: 500 USDC");
+    expect(items[0]).toHaveTextContent("Donated1,234.56 USDC");
+    expect(items[0]).toHaveTextContent("Given500 USDC");
     expect(items[1]).toHaveTextContent("Paused");
     expect(items[1]).toHaveTextContent("none yet");
-    expect(items[1]).toHaveTextContent("Donated: 0 USDC");
+    expect(items[1]).toHaveTextContent("Donated0 USDC");
+    // The vault's balance is read from the chain (the vaults share an address in this fixture).
+    await waitFor(() => expect(items[0]).toHaveTextContent("Vault holds"));
+    await waitFor(() => expect(items[0]).toHaveTextContent("42 USDC"));
+    expect(chainRead).toHaveBeenCalledWith(expect.objectContaining({ functionName: "balanceOf", args: [VAULT.toLowerCase()] }));
+  });
+
+  it("points each card at a region's picks once a region is chosen", async () => {
+    listAgents.mockImplementation(async () => [toAgentSummary(agentRow)!]);
+    wrap(<AgentIndex root="../" />);
+    await screen.findByRole("list", { name: "Agents" });
+    pickTab(screen.getByRole("tab", { name: "Africa" }));
+    expect(await screen.findByRole("link", { name: "See Africa picks" })).toHaveAttribute("href", "../agent/homeless/africa/");
+  });
+
+  it("filters by cause name", async () => {
+    listAgents.mockImplementation(async () => [toAgentSummary(agentRow)!, toAgentSummary({ ...agentRow, categoryBit: 2, category: "hunger", name: "Hunger", label: "hunger", ensName: "hunger.agent.varada.eth" })!]);
+    wrap(<AgentIndex />);
+    await screen.findByRole("list", { name: "Agents" });
+    fireEvent.change(screen.getByLabelText("Search agents by cause"), { target: { value: "hung" } });
+    const items = within(screen.getByRole("list", { name: "Agents" })).getAllByRole("listitem");
+    expect(items).toHaveLength(1);
+    expect(items[0]).toHaveTextContent("Hunger");
   });
 
   it("falls back to the SDK's agent list when the indexer fails", async () => {

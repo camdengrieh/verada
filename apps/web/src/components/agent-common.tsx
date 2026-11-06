@@ -1,3 +1,5 @@
+import { isCauseName, type CauseName } from "@varada/ui/components/varada/cause-icon";
+import type { VaradaLinkProps } from "@varada/ui/components/varada/shared";
 import { CATEGORIES, REGIONS } from "@varada/sdk";
 import { agentPath, formatUsdc } from "@/lib/agents";
 import { safeHttpUrl, SafeLink } from "@/lib/markdown";
@@ -19,10 +21,22 @@ export function agentsIndexHref(root: string): string {
 export const regionName = (slug: string | null) => (slug ? (REGIONS.find((r) => r.slug === slug)?.label ?? slug) : "Unknown region");
 export const causeName = (slug: string | null) => (slug ? (CATEGORIES.find((c) => c.slug === slug)?.label ?? slug) : "Unknown cause");
 
+/** The library's cause art for an agent label (`homeless` is both the ENS label and the art's name). */
+export const agentCause = (label: string): CauseName => (isCauseName(label) ? label : "other");
+
 export const usdcText = (amount: bigint | string) => `${formatUsdc(amount)} USDC`;
 
 /** An untrusted source URL: linked (safely) by its hostname, or shown as text when it is not http(s). */
 export function SourceLink({ url }: { url: string }) {
   const safe = safeHttpUrl(url);
   return <SafeLink href={url}>{safe ? new URL(safe).hostname : url}</SafeLink>;
+}
+
+/** Plain anchor for library components that take a link component (`href` is already relative). */
+export function RelLink({ href, children, ...props }: VaradaLinkProps) {
+  return (
+    <a href={href} {...props}>
+      {children}
+    </a>
+  );
 }

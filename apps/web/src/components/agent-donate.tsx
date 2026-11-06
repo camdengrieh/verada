@@ -1,11 +1,19 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { Stepper, type StepperStep } from "@varada/ui/components/data/stepper";
+import { Button } from "@varada/ui/components/ui/button";
+import { Checkbox } from "@varada/ui/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@varada/ui/components/ui/dialog";
+import { Field, FieldControl, FieldError, FieldHint, FieldLabel } from "@varada/ui/components/ui/field";
+import { HandHeart } from "@varada/ui/components/ui/icons";
+import { Input, InputAddon, InputGroup } from "@varada/ui/components/ui/input";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 import { getAddress, isAddress, zeroAddress, type Address } from "viem";
 import { agentVaultAbi, curatorRegistryAbi } from "@varada/sdk/abis";
 import { usdcText } from "@/components/agent-common";
+import { useWalletGate } from "@/components/governance/use-wallet-gate";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
 import { errorText, sameAddress, TxStatus, useTx } from "@/components/use-tx";
 import { createAccountClient } from "@/lib/account-reads";
@@ -18,18 +26,21 @@ interface Blocker {
   retry?: () => void;
 }
 
+const PRESETS = [10, 25, 100] as const;
+
 /**
  * Donate USDC to an agent's vault: `USDC.approve(vault, amount)` when the allowance is short, then
  * `AgentVault.donate(amount, credit)`. The vault and its active flag come from
  * `CuratorRegistry.agentOf(categoryBit)` read on chain through the private RPC; the indexer's `vault`
  * only has to agree with it, and funds are never sent to an address the registry did not confirm.
  * Public credit is opt-in; the viewer's allowance and balance are read through their own isolated
- * RPC client, never through the indexer.
+ * RPC client, never through the indexer. The two transactions run in a dialog, one step each.
  */
 export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: number; vault: string; name: string }) {
   const config = useAppConfig();
   const deps = useDeps();
   const rpc = usePrivateRpc();
+  const gate = useWalletGate();
   const { address: account } = useAccount();
   const usdc = usdcAddress(config.chainId);
   const registryAddress = config.curatorRegistryAddress;
@@ -39,14 +50,15 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
   // What the sent donation asked for, so the confirmation does not follow later checkbox changes.
   const [sentCredit, setSentCredit] = useState(false);
   const [formError, setFormError] = useState<string>();
+  const [open, setOpen] = useState(false);
   // The approval sent (its hash and amount), and the allowance its confirmed receipt guarantees until
   // the next donation (an RPC can still answer the refetch with the pre-approval allowance). Both are
   // tied to the owner and vault they were sent for, so a wallet switch never inherits them.
   type Approval = { hash: string; amount: bigint; owner: string; vault: string };
   const [approving, setApproving] = useState<Approval | null>(null);
   const [approved, setApproved] = useState<Approval | null>(null);
-  const approveTx = useTx();
-  const donateTx = useTx();
+  const approveTx = useTx({ kind: "transaction", description: `Approve USDC for ${name}`, titles: { pending: "Approving USDC…", success: "USDC approved", error: "Approval failed" } });
+  const donateTx = useTx({ kind: "donation", description: `To ${name}`, confetti: "donation" });
 
   const registry = useQuery({
     queryKey: ["agent-registry-vault", registryAddress, categoryBit],
@@ -92,11 +104,12 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
     const r = approveTx.receipt;
     if (r?.status === "success" && approving && r.transactionHash === approving.hash) setApproved(approving);
   }, [approveTx.receipt, approving]);
+  const donated = donateTx.receipt?.status === "success";
   useEffect(() => {
-    if (donateTx.receipt?.status !== "success") return;
+    if (!donated) return;
     setApproving(null);
     setApproved(null);
-  }, [donateTx.receipt]);
+  }, [donated]);
   // Either changes the allowance (and the balance): read them again.
   useEffect(() => {
     if (approveTx.receipt?.status === "success" || donateTx.receipt?.status === "success") void refetch();
@@ -121,7 +134,9 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
                 ? { text: `USDC is not available on chain ${config.chainId}.` }
                 : !account
                   ? { text: "Connect a wallet to donate." }
-                  : null;
+                  : gate.wrongChain
+                    ? { text: "Your wallet is on a different network than Varada. Switch to Ethereum mainnet to donate." }
+                    : null;
 
   // Allowance and balance must be known before the form can pick approve or donate.
   const fundsBlocker: Blocker | null =
@@ -139,6 +154,7 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
   const awaiting = (tx: typeof approveTx) => Boolean(tx.hash && !tx.receipt && !tx.receiptError);
   const busy = approveTx.isPending || donateTx.isPending || awaiting(approveTx) || awaiting(donateTx);
 
+  /** Validates the form and opens the dialog where the transactions run. */
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setFormError(undefined);
@@ -147,81 +163,163 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
     if (!p.ok) return setFormError(p.error);
     const balance = funds.data.balance;
     if (balance < p.amount) return setFormError(`Your USDC balance (${usdcText(balance)}) is less than ${usdcText(p.amount)}`);
-    if (needsApproval(allowance, p.amount)) {
-      donateTx.reset();
-      const wanted = p.amount;
-      const owner = account!;
-      const spender = vaultAddress;
-      void approveTx
-        .send(approveRequest({ usdc, vault: spender, amount: wanted, chainId: config.chainId }))
-        .then((hash) => setApproving({ hash, amount: wanted, owner, vault: spender }))
-        .catch(() => {});
-      return;
-    }
+    approveTx.reset();
+    donateTx.reset();
+    setOpen(true);
+  }
+
+  function sendApproval() {
+    if (!usdc || !vaultAddress || !parsed.ok || !account) return;
+    const wanted = parsed.amount;
+    const owner = account;
+    const spender = vaultAddress;
+    donateTx.reset();
+    void approveTx
+      .send(approveRequest({ usdc, vault: spender, amount: wanted, chainId: config.chainId }))
+      .then((hash) => setApproving({ hash, amount: wanted, owner, vault: spender }))
+      .catch(() => {});
+  }
+
+  function sendDonation() {
+    if (!vaultAddress || !parsed.ok) return;
     setSentCredit(credit);
-    void donateTx.send(donateRequest({ vault: vaultAddress, amount: p.amount, credit, chainId: config.chainId })).catch(() => {});
+    void donateTx.send(donateRequest({ vault: vaultAddress, amount: parsed.amount, credit, chainId: config.chainId })).catch(() => {});
   }
 
   const shown = blocker ?? fundsBlocker;
+  const amountText = parsed.ok ? usdcText(parsed.amount) : "";
+  // Approve first only while the allowance is short; a covered allowance goes straight to the donation.
+  const step = donated ? 2 : approval ? 0 : 1;
+  const steps: StepperStep[] = [
+    {
+      id: "approve",
+      label: "Approve USDC",
+      description: "Lets the vault take this amount from your wallet. Nothing moves yet.",
+      content: (
+        <div className="grid gap-3">
+          <Button variant="cause" onClick={sendApproval} disabled={busy || !approval}>
+            {`Approve ${amountText}`}
+          </Button>
+          <TxStatus tx={approveTx} label="Approval" />
+        </div>
+      ),
+    },
+    {
+      id: "donate",
+      label: "Donate",
+      description: "Sends your USDC to the agent's vault.",
+      content: (
+        <div className="grid gap-3">
+          {approveTx.receipt?.status === "success" && (
+            <p role="status" className="m-0 text-sm text-sage-ink">
+              Approved. Now donate to complete the gift.
+            </p>
+          )}
+          <Button variant="cause" onClick={sendDonation} disabled={busy || approval || !parsed.ok}>
+            <HandHeart aria-hidden="true" />
+            {`Donate ${amountText}`}
+          </Button>
+          <TxStatus tx={donateTx} label="Donation" />
+        </div>
+      ),
+    },
+  ];
+
   return (
-    <section aria-label="Donate">
-      <h2>Donate</h2>
-      <p>
-        Donations go to the agent&apos;s vault in USDC, and the agent gives them to the charities it ranks. Two steps: approve the
-        vault to take the amount, then donate.
-      </p>
-      <form onSubmit={onSubmit} aria-label="Donate to the agent" noValidate>
-        <p>
-          <label>
-            Amount (USDC){" "}
-            <input
-              type="text"
-              inputMode="decimal"
-              autoComplete="off"
-              name="amount"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              disabled={Boolean(blocker)}
-            />
+    <section aria-label="Donate" className="@container grid gap-4 rounded-[26px] border border-line bg-card p-5">
+      <div className="grid gap-1">
+        <h2 className="m-0 font-display text-2xl font-semibold text-ink">Donate</h2>
+        <p className="m-0 text-sm text-ink-soft">
+          Donations go to the agent&apos;s vault in USDC, and the agent gives them to the charities it ranks. Two steps: approve the vault to take the amount,
+          then donate.
+        </p>
+      </div>
+      <form onSubmit={onSubmit} aria-label="Donate to the agent" noValidate className="grid gap-4">
+        <Field invalid={Boolean(formError)} disabled={Boolean(blocker)}>
+          <FieldLabel>Amount (USDC)</FieldLabel>
+          <InputGroup>
+            <InputAddon>$</InputAddon>
+            <FieldControl>
+              <Input
+                type="text"
+                inputMode="decimal"
+                autoComplete="off"
+                name="amount"
+                className="num"
+                placeholder="25"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                disabled={Boolean(blocker)}
+              />
+            </FieldControl>
+            <InputAddon>USDC</InputAddon>
+          </InputGroup>
+          {formError ? <FieldError>{formError}</FieldError> : <FieldHint>{funds.data ? `Your USDC balance: ${usdcText(funds.data.balance)}` : "Whole or decimal amounts, up to 6 decimals."}</FieldHint>}
+        </Field>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Amount presets">
+          {PRESETS.map((p) => (
+            <Button key={p} type="button" variant="soft" size="sm" disabled={Boolean(blocker)} onClick={() => setAmount(String(p))}>
+              {p} USDC
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-start gap-3">
+          <Checkbox id="donate-credit" name="credit" tone="cause" checked={credit} onCheckedChange={(v) => setCredit(v === true)} disabled={Boolean(blocker)} aria-label="Credit me publicly" />
+          <label htmlFor="donate-credit" className="text-sm text-ink">
+            Credit me publicly
+            <span className="block text-ink-soft">
+              Unchecked, the donation is anonymous on this site: your address is never listed here. It is still visible on chain, like any transaction.
+            </span>
           </label>
-        </p>
-        <p>
-          <label>
-            <input type="checkbox" name="credit" checked={credit} onChange={(e) => setCredit(e.target.checked)} disabled={Boolean(blocker)} /> Credit me
-            publicly
-          </label>
-        </p>
-        <p>
-          Unchecked, the donation is anonymous on this site: your address is never listed here. It is still visible on chain, like any
-          transaction.
-        </p>
-        {funds.data && <p>Your USDC balance: {usdcText(funds.data.balance)}</p>}
-        <button type="submit" disabled={Boolean(blocker) || Boolean(fundsBlocker) || busy}>
+        </div>
+        <Button type="submit" variant="cause" size="lg" disabled={Boolean(blocker) || Boolean(fundsBlocker) || busy} className="justify-self-start">
           {approval ? `Approve ${usdcText(parsed.amount)}` : parsed.ok ? `Donate ${usdcText(parsed.amount)}` : "Donate"}
-        </button>
+        </Button>
         {shown && (
-          <p role={shown.alert ? "alert" : "note"}>
-            {shown.text}
+          <div role={shown.alert ? "alert" : "note"} className={`flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-sm ${shown.alert ? "bg-terracotta-tint text-terracotta-strong" : "bg-sand text-ink-soft"}`}>
+            <span>{shown.text}</span>
             {shown.retry && (
-              <>
-                {" "}
-                <button type="button" onClick={shown.retry}>
-                  Retry
-                </button>
-              </>
+              <Button type="button" size="sm" variant="outline" onClick={shown.retry}>
+                Retry
+              </Button>
             )}
-          </p>
-        )}
-        {formError && <p role="alert">{formError}</p>}
-        <TxStatus tx={approveTx} label="Approval" />
-        {approveTx.receipt?.status === "success" && !donateTx.hash && <p role="status">Approved. Now donate to complete the gift.</p>}
-        <TxStatus tx={donateTx} label="Donation" />
-        {donateTx.receipt?.status === "success" && (
-          <p role="status">
-            Thank you. {sentCredit ? "Your address will be listed as a credited donor once the indexer sees the donation." : "Your donation is anonymous on this site."}
-          </p>
+            {gate.wrongChain && (
+              <Button type="button" size="sm" variant="outline" onClick={gate.switchToApp} disabled={gate.switching}>
+                Switch network
+              </Button>
+            )}
+          </div>
         )}
       </form>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent size="md" onInteractOutside={(e) => busy && e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle>Donate to {name}</DialogTitle>
+            <DialogDescription>
+              {amountText ? `${amountText} to the ${name} vault.` : "Your donation."} {credit ? "Your address will be credited on this site." : "Anonymous on this site."}
+            </DialogDescription>
+          </DialogHeader>
+          <Stepper
+            steps={steps}
+            index={step}
+            complete={donated}
+            label="Donation steps"
+            headingLevel={3}
+            footer={<></>}
+            completeContent={
+              <p role="status" className="m-0 text-[15px] text-ink-soft">
+                Thank you. {sentCredit ? "Your address will be listed as a credited donor once the indexer sees the donation." : "Your donation is anonymous on this site."}
+              </p>
+            }
+          />
+          {donated && (
+            <Button variant="ink" onClick={() => setOpen(false)} className="justify-self-end">
+              Done
+            </Button>
+          )}
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
