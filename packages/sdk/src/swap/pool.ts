@@ -47,7 +47,7 @@ export function isDynamicFee(fee: number): boolean {
  * Runs the same read for many inputs. Uses `multicall` (one round trip) when the client has it and
  * falls back to parallel `readContract` calls.
  */
-async function readSettled<T>(client: ReadClient, calls: readonly { address: Address; abi: readonly unknown[]; functionName: string; args?: readonly unknown[] }[]): Promise<({ ok: true; value: T } | { ok: false; error: unknown })[]> {
+export async function readSettled<T>(client: ReadClient, calls: readonly { address: Address; abi: readonly unknown[]; functionName: string; args?: readonly unknown[] }[]): Promise<({ ok: true; value: T } | { ok: false; error: unknown })[]> {
   if (calls.length === 0) return [];
   if (typeof client.multicall === "function") {
     try {
@@ -68,7 +68,7 @@ async function readSettled<T>(client: ReadClient, calls: readonly { address: Add
   );
 }
 
-/** Reads slot0 and liquidity of each pool through `StateView`. Pools that revert are reported as uninitialized. */
+/** Reads slot0 and liquidity of each v4 pool through `StateView`. Pools that revert are reported as uninitialized. */
 export async function readPoolStates(client: ReadClient, keys: readonly PoolKey[], env: SwapEnvironment = DEFAULT_ENVIRONMENT): Promise<PoolState[]> {
   const ids = keys.map(poolIdOf);
   const calls = ids.flatMap((id) => [

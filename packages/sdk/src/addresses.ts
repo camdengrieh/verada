@@ -11,6 +11,10 @@ export const EXTERNAL_ADDRESSES = {
   stateView: getAddress("0x7ffe42c4a5deea5b0fec41c94c136cf115597227"),
   quoter: getAddress("0x99bd42B2B22e531f283b7F8a86dFf631EB16A9D1"),
   universalRouter: getAddress("0x66a9893cc07d91d95644aedd05d03f95e1dba8af"),
+  uniswapV3Factory: getAddress("0x1F98431c8aD98523631AE4a59f267346ea31F984"),
+  uniswapV3QuoterV2: getAddress("0x5e55C9e631FAE526cd4B0526C4818D6e0a9eF0e3"),
+  uniswapV2Factory: getAddress("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"),
+  uniswapV2Router02: getAddress("0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"),
   endaomentRegistry: getAddress("0x94106ca9c7e567109a1d39413052887d1f412183"),
   endaomentOrgFundFactory: getAddress("0x10fd9348136dcea154f752fe0b6db45fc298a589"),
   /** Endaoment fee recipient, read from `registry.treasury()`. */

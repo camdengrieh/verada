@@ -100,6 +100,10 @@ export const KNOWN_ERROR_SELECTORS: Record<string, SwapReason> = {
   "0x8b063d73": "slippage", // V4TooLittleReceived(uint256,uint256)
   "0x12bacdd3": "slippage", // V4TooMuchRequested(uint256,uint256)
   "0x39d35496": "slippage", // V3TooLittleReceived()
+  "0x739dbe52": "slippage", // V3TooMuchRequested()
+  "0x849eaf98": "slippage", // V2TooLittleReceived()
+  "0x8ab0bc16": "slippage", // V2TooMuchRequested()
+  "0xae52ad0c": "no-route", // V2InvalidPath()
   "0x5bf6f916": "deadline-expired", // TransactionDeadlinePassed()
   "0x1c26714c": "hook-reverted", // InsufficientGas() of VaradaLiveHook: send more gas
   "0x7d617bb3": "hook-reverted", // PartialFillNotSupported() of VaradaLiveHook
@@ -200,6 +204,9 @@ export function mapSwapError(err: unknown): SwapError {
     return new SwapError("slippage", undefined, { cause: err });
   }
   if (lower.includes("poolnotinitialized") || lower.includes("pool not initialized")) return new SwapError("pool-not-initialized", undefined, { cause: err });
+  if (lower.includes("insufficient_liquidity") || lower.includes("insufficient_input_amount") || lower.includes("insufficient_output_amount") || lower.includes("uniswapv2library")) {
+    return new SwapError("insufficient-liquidity", undefined, { cause: err });
+  }
   if (lower.includes("notenoughliquidity") || lower.includes("not enough liquidity") || lower.includes("insufficient liquidity")) {
     return new SwapError("insufficient-liquidity", undefined, { cause: err });
   }

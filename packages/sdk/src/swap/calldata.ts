@@ -1,6 +1,11 @@
 /**
  * Universal Router calldata for a route: `execute(commands, inputs, deadline)`.
  *
+ * Each v3 segment becomes one `V3_SWAP_EXACT_IN` / `V3_SWAP_EXACT_OUT` (a packed path), each v2 segment one
+ * `V2_SWAP_EXACT_IN` / `V2_SWAP_EXACT_OUT`; between segments the output sits in the router
+ * (recipient `ADDRESS_THIS`) and the next segment spends `CONTRACT_BALANCE`. The slippage limit is the swap
+ * command's own minimum out / maximum in.
+ *
  * Each v4 segment of the route becomes one `V4_SWAP` command with the v4 router actions
  * `SWAP_EXACT_IN_SINGLE` / `SWAP_EXACT_IN` (or the exact-out forms) followed by `SETTLE_ALL` and
  * `TAKE_ALL`. ETH <-> WETH steps are `WRAP_ETH` / `UNWRAP_WETH` commands; value that stays inside
@@ -23,10 +28,12 @@ import {
 import { SwapError } from "./errors.js";
 import type { PermitSingle } from "./permit2.js";
 import { segmentRoute, type RouteSegment } from "./routing.js";
+import { v2Path, v3Path } from "./venues.js";
 import { NATIVE_CURRENCY, type PoolKey, type QuoteMode, type Route, type RouteStep, type SwapEnvironment } from "./types.js";
 
 type PoolStep = Extract<RouteStep, { kind: "pool" }>;
 type V4Segment = Extract<RouteSegment, { kind: "v4" }>;
+type PackedSegment = Extract<RouteSegment, { kind: "v3" | "v2" }>;
 
 const poolKeyParam = {
   type: "tuple",
@@ -107,6 +114,22 @@ function swapExactOut(a: Actions, seg: V4Segment, amountOut: bigint, amountInMax
   a.add(V4_ACTION.SWAP_EXACT_OUT, encodeAbiParameters(exactOutMulti, [{ currencyOut: seg.currencyOut, path, amountOut: u128(amountOut, "amountOut"), amountInMaximum: u128(amountInMaximum, "amountInMaximum") }]));
 }
 
+const v3InAbi = [{ type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "bytes" }, { type: "bool" }] as const;
+const v2InAbi = [{ type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "address[]" }, { type: "bool" }] as const;
+
+/**
+ * One v3 / v2 swap command. Exact-in: `a` is the amount in and `b` the minimum out. Exact-out: `a` is the
+ * amount out and `b` the maximum in. `payerIsUser` pulls the input from the user through Permit2, otherwise from
+ * the router's own balance.
+ */
+function packedSwap(cmds: Commands, seg: PackedSegment, mode: QuoteMode, recipient: Address, a: bigint, b: bigint, payerIsUser: boolean) {
+  if (seg.kind === "v3") {
+    cmds.add(mode === "exactIn" ? UR_COMMAND.V3_SWAP_EXACT_IN : UR_COMMAND.V3_SWAP_EXACT_OUT, encodeAbiParameters(v3InAbi, [recipient, a, b, v3Path(seg.steps, mode), payerIsUser]));
+  } else {
+    cmds.add(mode === "exactIn" ? UR_COMMAND.V2_SWAP_EXACT_IN : UR_COMMAND.V2_SWAP_EXACT_OUT, encodeAbiParameters(v2InAbi, [recipient, a, b, v2Path(seg.steps), payerIsUser]));
+  }
+}
+
 const settle = (currency: Address, amount: bigint, payerIsUser: boolean): Hex => encodeAbiParameters([{ type: "address" }, { type: "uint256" }, { type: "bool" }], [currency, amount, payerIsUser]);
 const take = (currency: Address, recipient: Address, amount: bigint): Hex => encodeAbiParameters([{ type: "address" }, { type: "address" }, { type: "uint256" }], [currency, recipient, amount]);
 
@@ -155,8 +178,9 @@ export interface BuiltTransaction {
 /**
  * Encodes the Universal Router call. For exact-in `amountIn` is spent and `amountOut` is the
  * minimum accepted; for exact-out `amountOut` is delivered and `amountIn` is the maximum paid.
- * Exact-out supports a single v4 segment, optionally after an ETH -> WETH wrap (the unused WETH is
- * unwrapped and returned); other shapes throw `exact-out-unsupported`.
+ * Exact-out supports a single segment of one venue (v4, v3 or v2; a v3 / v2 path may have several hops),
+ * optionally after an ETH -> WETH wrap (the unused WETH is unwrapped and returned); other shapes throw
+ * `exact-out-unsupported`.
  */
 export function buildSwapCalldata(p: SwapCalldataParams): BuiltTransaction {
   const env = p.env ?? DEFAULT_ENVIRONMENT;
@@ -203,6 +227,10 @@ function buildExactIn(cmds: Commands, segments: RouteSegment[], p: SwapCalldataP
       cmds.add(UR_COMMAND.UNWRAP_WETH, encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [isLast ? ROUTER_MSG_SENDER : ROUTER_ADDRESS_THIS, isLast ? p.amountOut : 0n]));
       return;
     }
+    if (seg.kind === "v3" || seg.kind === "v2") {
+      packedSwap(cmds, seg, "exactIn", isLast ? ROUTER_MSG_SENDER : ROUTER_ADDRESS_THIS, fromUser ? p.amountIn : CONTRACT_BALANCE, isLast ? p.amountOut : 0n, fromUser);
+      return;
+    }
     const a = new Actions();
     if (fromUser) {
       swapExactIn(a, seg, p.amountIn, isLast ? p.amountOut : 0n);
@@ -224,9 +252,20 @@ function sweep(token: Address, amountMin: bigint): Hex {
 
 function buildExactOut(cmds: Commands, segments: RouteSegment[], p: SwapCalldataParams, nativeIn: boolean) {
   const wrapFirst = segments[0]?.kind === "wrap";
-  const rest = wrapFirst ? segments.slice(1) : segments;
-  if (rest.length !== 1 || rest[0]!.kind !== "v4") {
-    throw new SwapError("exact-out-unsupported", "Exact-output works for one v4 swap, optionally paid in ETH through a wrap");
+  // a v3 / v2 swap can end in WETH that is unwrapped to ETH for the user
+  const lastSeg = segments[segments.length - 1];
+  const unwrapLast = segments.length === 2 && lastSeg?.kind === "unwrap" && (segments[0]!.kind === "v3" || segments[0]!.kind === "v2");
+  const rest = wrapFirst ? segments.slice(1) : unwrapLast ? segments.slice(0, 1) : segments;
+  if (rest.length !== 1 || rest[0]!.kind === "wrap" || rest[0]!.kind === "unwrap") {
+    throw new SwapError("exact-out-unsupported", "Exact-output works for one swap on one venue, optionally paid in ETH through a wrap");
+  }
+  if (rest[0]!.kind === "v3" || rest[0]!.kind === "v2") {
+    // the router pulls what the swap needs (at most amountIn) from the user, or spends the wrapped ETH it holds
+    if (wrapFirst) cmds.add(UR_COMMAND.WRAP_ETH, encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [ROUTER_ADDRESS_THIS, p.amountIn]));
+    packedSwap(cmds, rest[0] as PackedSegment, "exactOut", unwrapLast ? ROUTER_ADDRESS_THIS : ROUTER_MSG_SENDER, p.amountOut, p.amountIn, !wrapFirst);
+    if (unwrapLast) cmds.add(UR_COMMAND.UNWRAP_WETH, encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [ROUTER_MSG_SENDER, p.amountOut]));
+    if (wrapFirst) cmds.add(UR_COMMAND.UNWRAP_WETH, encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [ROUTER_MSG_SENDER, 0n]));
+    return;
   }
   const seg = rest[0] as V4Segment;
   const a = new Actions();
