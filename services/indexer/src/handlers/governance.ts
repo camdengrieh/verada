@@ -1,6 +1,7 @@
 import type { Context, Event } from "ponder:registry";
-import { EPOCH_LENGTH, alignToThursday, causeIdOfOrg } from "@verada/sdk";
+import { EPOCH_LENGTH, MAX_BALLOT_OPTIONS, alignToThursday, causeIdOfOrg, effectiveBallotSize } from "@verada/sdk";
 import {
+  ballotSizeCap,
   donation,
   epoch,
   epochClock,
@@ -8,6 +9,7 @@ import {
   orgDeployment,
   poll,
   shortlist,
+  tokenBallotSize,
   vote,
 } from "ponder:schema";
 
@@ -165,6 +167,9 @@ export async function onBallotPrepared({
 }) {
   const { token, epoch: epochNo, catalogVersion, poolSize, pinned, orgIds } = event.args;
   const row = await ensureEpoch(context.db, token, epochNo);
+  // The governor reads the cap and the token's choice in this same transaction.
+  const cap = (await context.db.find(ballotSizeCap, { id: BALLOT_SIZE_CAP_ID }))?.cap ?? MAX_BALLOT_OPTIONS;
+  const choice = (await context.db.find(tokenBallotSize, { token }))?.choice ?? 0;
   for (const [index, orgId] of orgIds.entries()) {
     await context.db
       .insert(epochOption)
@@ -177,6 +182,7 @@ export async function onBallotPrepared({
     catalogVersion: Number(catalogVersion),
     poolSize,
     pinnedCount: Number(pinned),
+    ballotSize: effectiveBallotSize({ cap, choice }),
     curatedDrawn: row.curatedDrawn ?? 0,
     curatedCount: row.curatedCount ?? 0,
   });
@@ -283,6 +289,34 @@ async function clockFromChain(
   } catch {
     // Derived later from the first EpochOpened or VoteCast.
   }
+}
+
+export const BALLOT_SIZE_CAP_ID = "epoch_governor";
+
+export async function onBallotSizeCapSet({
+  event,
+  context,
+}: {
+  event: Event<"EpochGovernor:BallotSizeCapSet">;
+  context: Context<"EpochGovernor:BallotSizeCapSet">;
+}) {
+  const key = { id: BALLOT_SIZE_CAP_ID };
+  const values = { cap: Number(event.args.cap), setAt: event.block.timestamp };
+  if (await context.db.find(ballotSizeCap, key)) await context.db.update(ballotSizeCap, key).set(values);
+  else await context.db.insert(ballotSizeCap).values({ ...key, ...values });
+}
+
+export async function onBallotSizeSet({
+  event,
+  context,
+}: {
+  event: Event<"EpochGovernor:BallotSizeSet">;
+  context: Context<"EpochGovernor:BallotSizeSet">;
+}) {
+  const { token, size, effectiveFrom } = event.args;
+  const values = { choice: Number(size), effectiveFrom, updatedAt: event.block.timestamp };
+  if (await context.db.find(tokenBallotSize, { token })) await context.db.update(tokenBallotSize, { token }).set(values);
+  else await context.db.insert(tokenBallotSize).values({ token, ...values });
 }
 
 /** Legacy event, emitted just before `ShortlistScheduled`; only used until that is seen. */

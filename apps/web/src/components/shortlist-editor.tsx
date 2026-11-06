@@ -3,17 +3,17 @@
 import { useEffect, useState } from "react";
 import { useAccount } from "wagmi";
 import type { Address, Hex } from "viem";
-import { PINNED_MAX } from "@verada/sdk";
 import { epochGovernorAbi } from "@verada/sdk/abis";
 import { CatalogBrowser } from "@/components/catalog-browser";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { sameAddress, TxStatus, useTx } from "@/components/use-tx";
 import type { CatalogOrg, TokenDetail } from "@/lib/indexer";
-import { addPin, entryInFocus, type PinDraft } from "@/lib/profile";
+import { addPin, entryInFocus, maxPins, type PinDraft } from "@/lib/profile";
 
 /**
- * The controller's pinned causes: up to PINNED_MAX catalogue orgs inside the token's focus that lead
- * every ballot from the next epoch. The rest of each ballot is drawn from the focus pool.
+ * The controller's pinned causes: up to PINNED_MAX catalogue orgs inside the token's focus (fewer
+ * when the token's ballot is smaller) that lead every ballot from the next epoch. The rest of each
+ * ballot is drawn from the focus pool.
  */
 export function ShortlistEditor({ token, detail }: { token: Address; detail: TokenDetail }) {
   const config = useAppConfig();
@@ -23,6 +23,7 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
   const [draft, setDraft] = useState<PinDraft[]>([]);
   const [error, setError] = useState<string>();
   const focus = detail.focus;
+  const max = maxPins(detail.ballotSize?.size);
 
   // Rebuild the draft from the pins on chain: each needs its in-focus entry and proof to be saved again.
   useEffect(() => {
@@ -55,7 +56,7 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
     const found = await deps.indexer.catalogOrg(org.orgId).catch(() => null);
     const entry = found && entryInFocus(found.entries, BigInt(focus.categoryMask), focus.regionMask);
     if (!found || !entry) return setError(`${org.name} is outside this token's focus`);
-    const next = addPin(draft, toDraft(found.org, entry));
+    const next = addPin(draft, toDraft(found.org, entry), max);
     if (typeof next === "string") return setError(next);
     setDraft(next);
   }
@@ -63,6 +64,7 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
   function save(list: PinDraft[]) {
     setError(undefined);
     if (!governor) return setError("governorAddress is not configured (config.json)");
+    if (list.length > max) return setError(`This token's ballot holds ${max} options: unpin ${list.length - max} first`);
     tx.reset();
     const pins = list.map((p) => ({ orgId: p.orgId, bucket: p.bucket, index: p.index, proof: p.proof }));
     void tx.send({ address: governor, abi: epochGovernorAbi, functionName: "setShortlist", args: [token, pins], chainId: config.chainId }).catch(() => {});
@@ -72,10 +74,15 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
     <section aria-label="Pinned causes">
       <h2>Pinned causes</h2>
       <p>
-        Up to {PINNED_MAX} causes from this token&apos;s focus that lead every ballot. The other options are drawn in rotation from the
+        Up to {max} causes from this token&apos;s focus that lead every ballot. The other options are drawn in rotation from the
         whole focus pool, so every charity in it gets its turn. Changes take effect from the next epoch once the current ballot is
         prepared.
       </p>
+      {draft.length > max && (
+        <p role="note">
+          This token&apos;s ballot now holds {max} options, so only the first {max} pinned causes make it onto the ballot.
+        </p>
+      )}
       {draft.length === 0 ? (
         <p>No causes pinned: every option is drawn from the focus pool.</p>
       ) : (

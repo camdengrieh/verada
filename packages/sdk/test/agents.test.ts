@@ -100,4 +100,35 @@ describe("planBallot", () => {
     expect(r.curated).toEqual([]);
     expect(r.options).toHaveLength(10);
   });
+
+  it("follows the token's ballot size: pins past it are dropped, zero free slots take no curated draw", async () => {
+    const curations = [{ bucket: HA, count: 32, weight: 6000 }, { bucket: HAS, count: 10, weight: 4000 }];
+    const pinned = [0, 1, 2].map((i) => causeIdOfOrg(org(HA, i)).toLowerCase() as `0x${string}`);
+    const full = await planBallot({ ...base, ballotSize: 2, pinned, curations }, deps);
+    expect(full.options).toEqual(pinned.slice(0, 2));
+    expect(full.curated).toEqual([]);
+    expect(full.draws).toEqual([]);
+    // One free slot of size 3 with two pins: floor shares are zero, the leftover goes to Africa.
+    const one = await planBallot({ ...base, ballotSize: 3, pinned: pinned.slice(0, 2), curations }, deps);
+    expect(one.curated.map((c) => `${c.bucket}:${c.rank}`)).toEqual([`${HA}:0`]);
+    expect(one.options).toHaveLength(3);
+    expect(one.draws).toEqual([]);
+    for (const size of [2, 3, 8, 16, 30, 32]) {
+      const r = await planBallot({ ...base, ballotSize: size, curations }, deps);
+      expect(r.options).toHaveLength(size);
+      expect(new Set(r.options).size).toBe(size);
+    }
+  });
+});
+
+describe("curatedQuotas at small ballot sizes", () => {
+  it("splits size minus pins, down to zero free slots", () => {
+    const two = [{ bucket: 1, count: 32, weight: 1 }, { bucket: 2, count: 32, weight: 1 }];
+    expect(curatedQuotas(0, two)).toEqual([0, 0]);
+    expect(curatedQuotas(1, two)).toEqual([1, 0]);
+    expect(curatedQuotas(2, two)).toEqual([1, 1]);
+    expect(curatedQuotas(3, two)).toEqual([2, 1]);
+    // A heavy bucket with one pick: the rest spills over.
+    expect(curatedQuotas(2, [{ bucket: 1, count: 1, weight: 9 }, { bucket: 2, count: 32, weight: 1 }])).toEqual([1, 1]);
+  });
 });

@@ -69,6 +69,36 @@ describe("ballot preparer", () => {
     expect(step.action.draws.every((d) => d.proof.length === 1)).toBe(true);
   });
 
+  it("plans each token at its own ballot size (ballotSizeFor), not a fixed 32", async () => {
+    const chain = new FakeChain();
+    const T2 = token(2);
+    const asked: string[] = [];
+    const ballotSize = async (t: Address, e: bigint) => {
+      asked.push(`${t}:${e}`);
+      return t === T1 ? 3 : 32;
+    };
+    const p = createBallotPreparer({ reader: reader(chain, { ballotSize }), entries: entries() });
+    for (const [t, size] of [
+      [T1, 3],
+      [T2, 32],
+    ] as const) {
+      const step = await p.plan(t, 10n);
+      if (step.type !== "send" || step.action.kind !== "prepareBallot") throw new Error("no prepare");
+      const expected = await planRotation(
+        { token: t, epoch: 10n, version: 1, bucketSizes: sizes, ...focus, pinned: [], ballotSize: size },
+        { entryAt: async (b, i) => orgAt(b, i), isBlocked: async () => false },
+      );
+      expect(expected.options).toHaveLength(size);
+      expect(step.action.draws.map((d) => d.orgId)).toEqual(expected.draws.map((d) => d.orgId));
+    }
+    expect(asked).toEqual([`${T1}:10`, `${T2}:10`]);
+
+    // Five pins on a ballot of three: the first three fill it, so it opens without draws.
+    const pins = Array.from({ length: 5 }, (_, i) => causeIdOfOrg(orgAt(HUNGER_AF, i)));
+    const full = createBallotPreparer({ reader: reader(chain, { pinned: async () => pins, ballotSize }), entries: entries() });
+    expect(await full.plan(T1, 10n)).toEqual({ type: "send", action: { kind: "openEpoch", token: T1, epoch: 10n } });
+  });
+
   it("opens ballots that need no draws with openEpoch, since nobody can vote before the epoch is opened", async () => {
     const chain = new FakeChain();
     const open = { type: "send", action: { kind: "openEpoch", token: T1, epoch: 10n } };

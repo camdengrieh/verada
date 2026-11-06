@@ -7,6 +7,8 @@ import {
   categoryMaskOf,
   categorySlugs,
   agentByLabel,
+  effectiveBallotSize,
+  MAX_BALLOT_OPTIONS,
   isValidLabel,
   regionBySlug,
   regionMaskOf,
@@ -35,6 +37,7 @@ import { mountX402 } from "./x402";
 import {
   ACTIVITY_KINDS,
   type ActivityKind,
+  type BallotSizeSettings,
   type CausePoolAttributionRow,
   type EpochClock,
   type EpochRow,
@@ -259,6 +262,18 @@ function epochTiming(clock: EpochClock | null, n: bigint, launchSnapshot: bigint
   if (!clock) return { start: null, end: null, snapshot: launchSnapshot };
   const start = clock.epochZeroStart + n * clock.epochLength;
   return { start, end: start + clock.epochLength, snapshot: launchSnapshot ?? start - 1n };
+}
+
+/**
+ * A token's ballot size: the protocol `cap`, the token's own `choice` (0 follows the cap) and the
+ * epoch it applies from, and `size`, what its next unprepared ballot gets (`ballotSizeFor`,
+ * assuming the scheme allows 32 options as `ZamaVotingScheme` does). A prepared epoch keeps the
+ * size it was prepared with (`ballotSize` on the epoch).
+ */
+export function ballotSizeOf(s: BallotSizeSettings) {
+  const cap = s.cap ?? MAX_BALLOT_OPTIONS;
+  const choice = s.choice ?? 0;
+  return { cap, choice, size: effectiveBallotSize({ cap, choice }), choiceEffectiveFrom: s.choiceEffectiveFrom };
 }
 
 export type OptionSource = "pinned" | "curated" | "rotation";
@@ -581,6 +596,7 @@ export function createApi(deps: ApiDeps): Hono {
         profile: profileOf(found.token, found.textRecords),
         shortlist: own.inEffect.length > 0 ? own.inEffect : null,
         shortlistPending: own.pending,
+        ballotSize: ballotSizeOf(found.ballotSize),
         focus: found.focus
           ? {
               categoryMask: found.focus.categoryMask,

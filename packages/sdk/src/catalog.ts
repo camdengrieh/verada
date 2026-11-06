@@ -443,7 +443,7 @@ export interface RotationInput {
   regionMask: number;
   /** The pins in effect for the epoch that are not blocked, in order (cause ids). */
   pinned: readonly Hex[];
-  /** `EpochGovernor.ballotSize()`. */
+  /** `EpochGovernor.ballotSizeFor(token, epoch)` (2..32; see `effectiveBallotSize`). */
   ballotSize: number;
 }
 

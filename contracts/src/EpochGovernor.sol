@@ -22,8 +22,9 @@ import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
 ///      token launches in, which predates the token and uses its launch snapshot instead.
 ///      Ballots come from the token's cause focus over `CauseCatalog`: the controller's pins plus
 ///      deterministic rotation draws (see `IEpochGovernor`). The catalogue version is the one in
-///      effect at the epoch's start and pins change from the next epoch, so nobody can reshape a
-///      running epoch's ballot. Ballots are accepted only once the epoch is opened, so a ballot's
+///      effect at the epoch's start; pins and the ballot size are read when the ballot is
+///      prepared, and a change made after that applies from the next epoch, so nobody can reshape
+///      a prepared epoch's ballot. Ballots are accepted only once the epoch is opened, so a ballot's
 ///      option index always refers to the list frozen by an earlier transaction. Catalogue orgs
 ///      reach `CauseRegistry` storage only when one wins.
 ///      An epoch whose tally never arrives (scheme outage, governor delisted) finalizes to the
@@ -74,16 +75,22 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
 
     IVotingScheme private _scheme;
 
+    /// @inheritdoc IEpochGovernor
+    /// @dev Packed with `_scheme`, which `_prepare` reads as well.
+    uint8 public ballotSizeCap;
+
     /// @notice Curator agents' weekly picks (unset: no curated phase).
     ICuratorRegistry public curators;
 
     /// @dev Pinned catalogue org ids in effect (`current`) and an optional replacement (`next`)
     ///      taking effect from epoch `nextFrom` (zero: none scheduled). Views and events report
-    ///      cause ids (`keccak256(orgId)`).
+    ///      cause ids (`keccak256(orgId)`). `sizeChoice` is the token's ballot size
+    ///      (`ballotSizeChoiceOf`), kept in the slot `_prepare` reads for the pins.
     struct Schedule {
         bytes32[] current;
         bytes32[] next;
-        uint256 nextFrom;
+        uint64 nextFrom;
+        uint8 sizeChoice;
     }
 
     /// @dev Outcome of reading an epoch's tally from its scheme.
@@ -103,6 +110,8 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         uint32 catalogVersion;
         /// @dev Number of options (at most MAX_OPTIONS), packed with the flags above.
         uint8 optionCount;
+        /// @dev Ballot size the epoch was prepared with (`ballotSizeFor`), in the same slot.
+        uint8 ballotSize;
         /// @dev When `prepareBallot` / `openEpoch` may skip the curated phase (0: not requested).
         uint64 curationSkipAt;
         bytes32 winner;
@@ -146,6 +155,8 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         _catalog = catalog_;
         _scheme = scheme_;
         profileRegistry = profileRegistry_;
+        ballotSizeCap = MAX_OPTIONS;
+        emit BallotSizeCapSet(MAX_OPTIONS);
         // Align epoch 0 to the Thursday 00:00 UTC at or before deployment (unix time 0 was a
         // Thursday), so the first epoch may be shorter than a full week.
         // forge-lint: disable-next-line(divide-before-multiply)
@@ -179,19 +190,38 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     }
 
     /// @inheritdoc IEpochGovernor
+    function setBallotSizeCap(uint8 cap) external onlyOwner {
+        if (cap < MIN_OPTIONS || cap > MAX_OPTIONS) revert BallotSizeOutOfRange(cap);
+        ballotSizeCap = cap;
+        emit BallotSizeCapSet(cap);
+    }
+
+    /// @inheritdoc IEpochGovernor
     function setShortlist(address token, Pin[] calldata pins) external {
-        if (!isRegistered[token]) revert TokenNotRegistered(token);
-        if (msg.sender != profileRegistry.controllerOf(token)) {
-            revert NotController(token, msg.sender);
-        }
+        _checkController(token);
         (uint64 categoryMask, uint16 regionMask) = profileRegistry.focusOf(token);
         (bytes32[] memory orgs, bytes32[] memory causes) =
             CatalogBallotLib.validatePins(_catalog, registry, categoryMask, regionMask, pins);
+        uint256 size = _sizeOf(token);
+        if (orgs.length > size) revert ShortlistTooLong(orgs.length, size);
         // Until the current epoch's ballot is prepared the new pins may still apply to it.
         uint256 effectiveFrom =
             _schedule(_shortlists[token], orgs, !_epochs[token][currentEpoch()].prepared);
         emit ShortlistSet(token, causes);
         emit ShortlistScheduled(token, effectiveFrom, causes);
+    }
+
+    /// @inheritdoc IEpochGovernor
+    function setBallotSize(address token, uint8 size) external {
+        _checkController(token);
+        if (size != 0 && (size < MIN_OPTIONS || size > MAX_OPTIONS)) {
+            revert BallotSizeOutOfRange(size);
+        }
+        _shortlists[token].sizeChoice = size;
+        // Like pins: the current epoch's ballot takes it unless it is already prepared.
+        uint256 epoch = currentEpoch();
+        if (_epochs[token][epoch].prepared) ++epoch;
+        emit BallotSizeSet(token, size, epoch);
     }
 
     /// @inheritdoc IEpochGovernor
@@ -460,9 +490,19 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     }
 
     /// @inheritdoc IEpochGovernor
-    function ballotSize() public view returns (uint256) {
-        uint256 cap = _scheme.MAX_OPTIONS();
-        return cap < MAX_OPTIONS ? cap : MAX_OPTIONS;
+    function ballotSize() external view returns (uint256) {
+        return _size(0);
+    }
+
+    /// @inheritdoc IEpochGovernor
+    function ballotSizeChoiceOf(address token) external view returns (uint8) {
+        return _shortlists[token].sizeChoice;
+    }
+
+    /// @inheritdoc IEpochGovernor
+    function ballotSizeFor(address token, uint256 epoch) external view returns (uint256) {
+        EpochState storage s = _epochs[token][epoch];
+        return s.prepared ? s.ballotSize : _sizeOf(token);
     }
 
     /// @inheritdoc IEpochGovernor
@@ -552,6 +592,28 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         return at == 0 || block.timestamp < at;
     }
 
+    /// @dev Pins and the ballot size are set by the token's profile controller.
+    function _checkController(address token) private view {
+        if (!isRegistered[token]) revert TokenNotRegistered(token);
+        if (msg.sender != profileRegistry.controllerOf(token)) {
+            revert NotController(token, msg.sender);
+        }
+    }
+
+    /// @dev Ballot size an epoch of `token` prepared now gets.
+    function _sizeOf(address token) private view returns (uint256) {
+        return _size(_shortlists[token].sizeChoice);
+    }
+
+    /// @dev `choice` (zero: `ballotSizeCap`), at most `ballotSizeCap` and the scheme's
+    ///      `MAX_OPTIONS`. `ballotSizeCap <= MAX_OPTIONS` always holds.
+    function _size(uint256 choice) private view returns (uint256 size) {
+        size = ballotSizeCap;
+        if (choice != 0 && choice < size) size = choice;
+        uint256 schemeMax = _scheme.MAX_OPTIONS();
+        if (schemeMax < size) size = schemeMax;
+    }
+
     function _checkPreparable(address token, uint256 epoch) private view {
         if (!isRegistered[token]) revert TokenNotRegistered(token);
         if (epoch != currentEpoch()) revert EpochNotCurrent(epoch);
@@ -571,7 +633,8 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     ) private {
         EpochState storage s = _epochs[token][epoch];
         uint32 version = _catalog.versionAt(epochStart(epoch));
-        CatalogBallotLib.Ballot memory b = CatalogBallotLib.create(ballotSize());
+        CatalogBallotLib.Ballot memory b = CatalogBallotLib.create(_sizeOf(token));
+        // Pins past the size (lowered after they were set) are dropped in order.
         uint8 pinned = b.addPins(_listAt(_shortlists[token], epoch), registry);
 
         uint256 pool;
@@ -610,6 +673,9 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         // Ballots are capped at MAX_OPTIONS, which fits a uint8.
         // forge-lint: disable-next-line(unsafe-typecast)
         s.optionCount = uint8(n);
+        // The size is at most ballotSizeCap, a uint8.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        s.ballotSize = uint8(b.size);
         s.poolSize = pool;
         s.ballotHash = keccak256(abi.encodePacked(orgs));
         emit BallotPrepared(token, epoch, version, pool, pinned, orgs);
@@ -696,7 +762,9 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
             return current;
         }
         s.next = causes;
-        s.nextFrom = current + 1;
+        // Epoch numbers fit 64 bits for longer than the chain will exist.
+        // forge-lint: disable-next-line(unsafe-typecast)
+        s.nextFrom = uint64(current + 1);
         return current + 1;
     }
 }

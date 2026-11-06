@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
@@ -42,6 +42,7 @@ const fixtures: Record<string, unknown> = {
     },
     shortlist: [CAUSE_A, CAUSE_B],
     focus: { categoryMask: "4", regionMask: 1, categories: ["hunger"], regions: ["africa"] },
+    ballotSize: { cap: 30, choice: 0, size: 30, choiceEffectiveFrom: null },
   },
   // The pinned causes' catalogue entries (hunger x Africa is bucket 32), so the editor can re-save them.
   [`/api/catalog/orgs/${CAUSE_A}`]: {
@@ -93,6 +94,7 @@ const chainRead = vi.fn(async ({ functionName }: { functionName: string }) => {
 });
 const accountRead = vi.fn(async ({ functionName }: { functionName: string }) => (functionName === "weightOf" ? 42n : false));
 const account = { address: undefined as string | undefined };
+const writeContract = vi.fn(async (_args: unknown) => "0x01");
 
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => config,
@@ -102,7 +104,7 @@ vi.mock("@/components/providers", () => ({
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: (_rpc: unknown, address: string) => ({ address, readContract: accountRead }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: account.address }),
-  useWriteContract: () => ({ writeContractAsync: vi.fn(), data: undefined, isPending: false, error: null, reset: vi.fn() }),
+  useWriteContract: () => ({ writeContractAsync: writeContract, data: undefined, isPending: false, error: null, reset: vi.fn() }),
   useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));
 
@@ -163,6 +165,38 @@ describe("token page", () => {
     expect(within(pinned).getByRole("button", { name: "Unpin Beta Trust" })).toBeInTheDocument();
     const focus = screen.getByRole("region", { name: "Cause focus" });
     expect(focus).toHaveTextContent("Causes: Hunger & famine. Regions: Africa.");
+  });
+
+  it("lets the controller choose the ballot size, with the gas hint", async () => {
+    account.address = CONTROLLER.toLowerCase();
+    writeContract.mockClear();
+    wrap(<TokenDetail />);
+    const panel = await screen.findByRole("region", { name: "Ballot size" });
+    expect(panel).toHaveTextContent("The platform allows up to 30; this token's ballot now holds up to 30");
+    expect(panel).toHaveTextContent("multiples of 3 are the most efficient");
+    expect(panel).toHaveTextContent("each 3 fewer options save each voter about 86k gas per ballot");
+    expect(panel).toHaveTextContent("30 options are counted in 10 encrypted tally words, with no space left over.");
+    const select = within(panel).getByRole("combobox", { name: /Options per ballot/ });
+    expect(select).toHaveValue("0");
+    // Sizes above the platform cap are offered but capped.
+    expect(within(select).getByRole("option", { name: "32 (capped at 30)" })).toBeInTheDocument();
+    const save = within(panel).getByRole("button", { name: "Save ballot size" });
+    expect(save).toBeDisabled();
+    fireEvent.change(select, { target: { value: "2" } });
+    expect(panel).toHaveTextContent("2 options are counted in 1 encrypted tally word, leaving room for 1 more at the same cost.");
+    expect(panel).toHaveTextContent("each voter saves about 860k gas per ballot");
+    fireEvent.click(save);
+    await waitFor(() => expect(writeContract).toHaveBeenCalledTimes(1));
+    expect(writeContract.mock.calls[0]![0]).toMatchObject({ address: config.governorAddress, functionName: "setBallotSize", args: [TOKEN, 2] });
+    // The pins editor sits next to it.
+    expect(screen.getByRole("region", { name: "Pinned causes" })).toHaveTextContent("Up to 8 causes");
+  });
+
+  it("hides the ballot size control from other viewers", async () => {
+    account.address = VIEWER;
+    wrap(<TokenDetail />);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Moon Cat (MCAT)"));
+    expect(screen.queryByRole("region", { name: "Ballot size" })).toBeNull();
   });
 
   it("lists the curator agents for the token's causes with relative links and their state", async () => {

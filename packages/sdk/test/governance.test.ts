@@ -79,3 +79,26 @@ describe("packed tallies", () => {
     expect(() => unpackTallyWords([1n], 4)).toThrow(RangeError);
   });
 });
+
+describe("ballot sizes", () => {
+  it("bounds a token's choice by the protocol cap and the scheme, as EpochGovernor._sizeOf", async () => {
+    const { effectiveBallotSize, isBallotSize, MIN_BALLOT_OPTIONS } = await import("../src/governance.js");
+    expect(MIN_BALLOT_OPTIONS).toBe(2);
+    expect(effectiveBallotSize({ cap: 32, choice: 0 })).toBe(32);
+    expect(effectiveBallotSize({ cap: 32, choice: 9 })).toBe(9);
+    // A choice above the cap gets the cap.
+    expect(effectiveBallotSize({ cap: 8, choice: 30 })).toBe(8);
+    expect(effectiveBallotSize({ cap: 8, choice: 0 })).toBe(8);
+    expect(effectiveBallotSize({ cap: 32, choice: 30, schemeMax: 10 })).toBe(10);
+    expect([1, 2, 3, 32, 33, 2.5, 0].map(isBallotSize)).toEqual([false, true, true, true, false, false, false]);
+  });
+
+  it("hints that multiples of 3 waste no tally counter and each 3 fewer options save ~86k gas", async () => {
+    const { ballotGasHint, BALLOT_GAS_PER_TALLY_WORD } = await import("../src/governance.js");
+    expect(BALLOT_GAS_PER_TALLY_WORD).toBe(86_000);
+    expect(ballotGasHint(32)).toEqual({ words: 11, unusedCounters: 1, savedPerVoter: 0 });
+    expect(ballotGasHint(30)).toEqual({ words: 10, unusedCounters: 0, savedPerVoter: 86_000 });
+    expect(ballotGasHint(3)).toEqual({ words: 1, unusedCounters: 0, savedPerVoter: 860_000 });
+    expect(ballotGasHint(2)).toEqual({ words: 1, unusedCounters: 1, savedPerVoter: 860_000 });
+  });
+});

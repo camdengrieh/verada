@@ -28,6 +28,8 @@ const {
   epochClock,
   epochOption,
   shortlist,
+  ballotSizeCap,
+  tokenBallotSize,
   tokenFocus,
   poll,
   takeoverProposal,
@@ -356,6 +358,16 @@ export const repo: Repo = {
       .from(epochClock)
       .where(eq(epochClock.id, "epoch_governor"))
       .limit(1);
+    const [cap] = await db
+      .select({ cap: ballotSizeCap.cap })
+      .from(ballotSizeCap)
+      .where(eq(ballotSizeCap.id, "epoch_governor"))
+      .limit(1);
+    const [choice] = await db
+      .select({ choice: tokenBallotSize.choice, effectiveFrom: tokenBallotSize.effectiveFrom })
+      .from(tokenBallotSize)
+      .where(eq(tokenBallotSize.token, address))
+      .limit(1);
     const schedule = (
       v: { causeIds: Hex[]; effectiveFrom: bigint | null; previousCauseIds: Hex[] } | undefined,
     ) =>
@@ -369,6 +381,11 @@ export const repo: Repo = {
       shortlist: schedule(own),
       focus: focus ?? null,
       clock: clock ?? null,
+      ballotSize: {
+        cap: cap?.cap ?? null,
+        choice: choice?.choice ?? null,
+        choiceEffectiveFrom: choice?.effectiveFrom ?? null,
+      },
     };
   },
   async findTokenByLabel(label) {

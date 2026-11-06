@@ -22,6 +22,8 @@ import {
 import { onCatalogVersionSet, onFocusSet } from "./handlers/catalog";
 import {
   onBallotPrepared,
+  onBallotSizeCapSet,
+  onBallotSizeSet,
   onCuratedPicksUsed,
   onCurationSkipRequested,
   onDonated,
@@ -109,6 +111,8 @@ ponder.on("EpochGovernor:ShortlistScheduled", onShortlistScheduled);
 ponder.on("EpochGovernor:CuratedPicksUsed", onCuratedPicksUsed);
 ponder.on("EpochGovernor:CurationSkipRequested", onCurationSkipRequested);
 ponder.on("EpochGovernor:BallotPrepared", onBallotPrepared);
+ponder.on("EpochGovernor:BallotSizeCapSet", onBallotSizeCapSet);
+ponder.on("EpochGovernor:BallotSizeSet", onBallotSizeSet);
 ponder.on("EpochGovernor:LaunchSnapshotSet", onLaunchSnapshotSet);
 ponder.on("CauseCatalog:CatalogVersionSet", onCatalogVersionSet);
 ponder.on("TokenProfileRegistry:FocusSet", onFocusSet);
