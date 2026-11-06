@@ -14,13 +14,15 @@ import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
 /// @notice Runner of `CatalogBallotLib` for the rotation governor, which deploys it in its
 ///         constructor (it keeps the governor under the contract size limit). It builds a
 ///         ballot exactly as the weekly epoch governor does: pins, curated picks, rotation draws,
-///         under the weekly epoch's catalogue version and with the same curation grace.
+///         under the weekly epoch's catalogue version. Published curations always need their
+///         curated draws, as in the weekly governor.
 /// @dev Views only, but for the governor's one-time `setCurators`. Ballot reverts carry
 ///      `IEpochGovernor`'s error signatures, which the rotation governor bubbles unchanged.
 contract CatalogBallotBuilder {
     using CatalogBallotLib for CatalogBallotLib.Ballot;
 
-    /// @notice Longest curation grace of a round, the weekly governor's `CURATION_GRACE`.
+    /// @notice Longest curation grace of a round, the weekly governor's `CURATION_GRACE`. Kept
+    ///         for compatibility: the grace no longer lets a round skip published curations.
     uint256 public constant CURATION_GRACE = 6 hours;
 
     ICauseCatalog public immutable catalog;
@@ -42,7 +44,7 @@ contract CatalogBallotBuilder {
     /// @param size Ballot slots.
     /// @param pins Pinned catalogue org ids, in order.
     /// @param voteStart The round's vote start (sets the version and curation epoch, `versionOf`).
-    /// @param voteEnd The round's vote end (sets its curation grace, `curationGraceEnd`).
+    /// @param voteEnd The round's vote end.
     struct Request {
         address token;
         uint256 round;
@@ -119,24 +121,13 @@ contract CatalogBallotBuilder {
         if (version == 0) version = catalog.versionAt(voteStart);
     }
 
-    /// @notice End of the curation grace of a round voting from `voteStart` to `voteEnd`.
-    ///         Until then a round with usable curations needs its curated draws; after it,
-    ///         ballots prepared without them skip the curated phase, while published curated
-    ///         draws still apply (`build` applies the curated phase whenever curated draws are
-    ///         given, as the weekly `prepareCuratedBallot`; the one difference is that an empty
-    ///         `prepareCuratedRound` after the grace builds as `prepareRound` instead of
-    ///         reverting).
-    /// @dev The weekly governor waits `CURATION_GRACE` (6 hours) into the epoch for a ballot's
-    ///      curated draws, so picks committed but never published cannot keep it closed. A round
-    ///      waits from its vote start, the first moment it can be prepared, for
-    ///      `min(CURATION_GRACE, (voteEnd - voteStart) / 3)`. The vote window is the period less
-    ///      its close buffer `min(6 hours, period / 4)`, so this is exactly that close buffer:
-    ///      the weekly 6 hours for daily and longer rotations, a quarter of the period for
-    ///      shorter ones. Grace and close buffer then never take more than half the period (an
-    ///      hourly round still votes for 30 minutes after a 15-minute grace), while every round
-    ///      gives the curator's keeper the same window as a weekly epoch where that fits. It runs
-    ///      from the round's own vote start, not the epoch's: a round voting late in the week
-    ///      still gets its window to receive the published picks.
+    /// @notice End of the curation grace of a round voting from `voteStart` to `voteEnd`:
+    ///         `voteStart + min(CURATION_GRACE, (voteEnd - voteStart) / 3)`. Kept for
+    ///         compatibility; `build` no longer reads it.
+    /// @dev A round with usable curations needs its curated draws for its whole vote window, so
+    ///      the first preparer cannot leave published picks off. A round without them needs
+    ///      none. Picks committed but never served are dropped by pausing their agent
+    ///      (`curationsFor` ignores an inactive agent).
     function curationGraceEnd(uint256 voteStart, uint256 voteEnd) public pure returns (uint256) {
         uint256 grace = (voteEnd - voteStart) / 3;
         return voteStart + (grace < CURATION_GRACE ? grace : CURATION_GRACE);
@@ -163,12 +154,10 @@ contract CatalogBallotBuilder {
         out.pinned = b.addPins(q.pins, registry);
         bool curatedPhase;
         (out.version, curatedPhase, out.curationEpoch) = versionOf(q.voteStart);
-        // Curated draws always apply (`prepareCuratedRound`); without them, the curated phase
-        // only during the grace.
-        uint256 graceEnd = curationGraceEnd(q.voteStart, q.voteEnd);
-        // forge-lint: disable-next-line(block-timestamp)
-        bool curate = curated.length != 0 || block.timestamp < graceEnd;
-        ICuratorRegistry cs = curatedPhase && curate ? curators : ICuratorRegistry(address(0));
+        // The curated phase always applies: usable curations of the round's epoch and version
+        // need their curated draws (`prepareCuratedRound`), whoever prepares the round and
+        // whenever. Without usable curations it consumes nothing.
+        ICuratorRegistry cs = curatedPhase ? curators : ICuratorRegistry(address(0));
         uint256 used;
         if (out.version != 0) {
             (out.pool, out.curatedDrawn, out.curatedIncluded, used) =

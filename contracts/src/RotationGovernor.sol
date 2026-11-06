@@ -59,9 +59,9 @@ interface ICuratorClock {
 ///      draws over the token's focus pool, skipping blocked causes. All of it uses the catalogue
 ///      version the weekly ballot of that epoch uses (in effect at the epoch's start; see
 ///      `CatalogBallotBuilder.versionOf`), so a round includes curated picks exactly when that
-///      weekly ballot does. Unpublished picks hold a round only for its curation grace
-///      (`CatalogBallotBuilder.curationGraceEnd`), as the weekly `CURATION_GRACE` holds an
-///      epoch. Anyone prepares it with the drawn entries
+///      weekly ballot does. A round with usable curations always needs its curated draws, as a
+///      weekly epoch does; picks never served are dropped by pausing their agent. Anyone
+///      prepares it with the drawn entries
 ///      and their proofs (`prepareRound`); it is frozen then and never built inside a ballot, so
 ///      a ballot's option index always refers to a list fixed by an earlier transaction. A
 ///      round never prepared, or prepared with fewer than `MIN_OPTIONS` options (`NoBallot`),
@@ -859,10 +859,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
 
     /// @dev Fixes round `target`'s ballot (pins, curated picks, rotation draws; see
     ///      `CatalogBallotLib`) and opens its poll when it has at least `MIN_OPTIONS` options.
-    ///
-    ///      Curated draws, when given, always apply; without them the curated phase applies only
-    ///      during the round's curation grace (`CatalogBallotBuilder.curationGraceEnd`), so picks
-    ///      committed but never published hold a round for that grace, not for the week.
+    ///      Usable curations always need their curated draws (`CatalogBallotBuilder.build`).
     function _prepare(
         address token,
         uint64 target,
@@ -911,7 +908,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     }
 
     /// @dev Builds and stores round `target`'s ballot (`CatalogBallotBuilder.build`: the
-    ///      catalogue version, curation epoch and curation grace of the round). Returns the
+    ///      catalogue version and curation epoch of the round). Returns the
     ///      options' cause ids.
     function _build(
         Round storage r,

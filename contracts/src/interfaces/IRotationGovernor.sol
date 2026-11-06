@@ -249,10 +249,8 @@ interface IRotationGovernor {
     /// @notice Prepares and opens the poll for rotation `target` of `token` (the next rotation)
     ///         from the pins and `draws`: exactly the rotation draws the governor derives, each
     ///         with its catalogue proof. Permissionless; once per round, during its vote window.
-    ///         During the round's curation grace (`min(6 hours, period / 4)` from its vote
-    ///         start) a round with usable curations reverts `IncompleteCuratedBallot` here and
-    ///         needs `prepareCuratedRound`; after it, the curated phase is skipped (also for
-    ///         `openRound`).
+    ///         A round with usable curations reverts `IncompleteCuratedBallot` here (and in
+    ///         `openRound`) for its whole vote window: it needs `prepareCuratedRound`.
     function prepareRound(address token, uint64 target, IEpochGovernor.Draw[] calldata draws)
         external;
 

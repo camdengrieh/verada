@@ -631,7 +631,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
         gov.registerToken(other, initialCause, RotationPeriod.OneDay);
     }
 
-    // ------------------------------------------------------------------ curation grace
+    // ------------------------------------------------------------------ published picks
 
     /// @dev Round `target`'s ballot is the rotation draws alone (repeats skipped, nothing
     ///      blocked here), as `prepareRound` builds it without a curated phase.
@@ -657,48 +657,114 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
         );
     }
 
-    /// @dev Committed but never published picks hold each round only for its grace (6 hours of
-    ///      a daily rotation), then rounds fall back to rotation: the cause is never stuck all
-    ///      week.
-    function test_curationGrace_unpublishedPicksFallBackToRotation() public {
+    /// @dev Regression (audit #8): published picks are needed for the whole vote window. After
+    ///      the old grace, a preparer could open each round without them and freeze them out.
+    function test_publishedPicks_requiredForTheWholeVoteWindow() public {
         _submitPicks();
         _start();
         for (uint64 target = 2; target <= 7; ++target) {
             uint256 voteStart = t0 + (target - 1) * 1 days;
-            vm.warp(voteStart + 6 hours - 1);
-            IEpochGovernor.Draw[] memory d = _draws(target);
-            vm.expectRevert(_incompleteCurated(target));
-            gov.prepareRound(token, target, d);
-            vm.expectRevert(_incompleteCurated(target));
-            gov.openRound(token);
-
-            vm.warp(voteStart + 6 hours);
-            if (target == 2) {
-                // `openRound` skips the curated phase too: it now needs the rotation draws.
-                vm.expectRevert(
-                    abi.encodeWithSelector(IEpochGovernor.IncompleteBallot.selector, token, 2, 0)
-                );
-                gov.openRound(token);
-            }
-            gov.prepareRound(token, target, d);
-            assertEq(uint8(_status(target)), uint8(IRotationGovernor.RoundStatus.Open));
-            _expectNoCuratedPhase(target);
+            _expectPicksRequired(target, voteStart);
+            _expectPicksRequired(target, voteStart + 6 hours);
+            _expectPicksRequired(target, voteStart + 1 days - 6 hours - 1);
+            gov.prepareCuratedRound(token, target, _curated(), _curatedDraws(target));
+            assertEq(gov.roundOptionOrgIds(token, target)[0], _org(29), "curated picks first");
         }
-        _weeklySkipFallsBackToRotation();
-    }
-
-    /// @dev The weekly governor behaves the same way CURATION_GRACE after a skip request.
-    function _weeklySkipFallsBackToRotation() internal {
-        vm.warp(weekly.epochStart(1));
+        // The weekly governor has no skip either.
+        vm.warp(weekly.epochStart(1) + weekly.CURATION_GRACE() + 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(IEpochGovernor.CurationSkipDisabled.selector, token, 1)
+        );
         weekly.requestCurationSkip(token, 1);
         IEpochGovernor.Draw[] memory wd = cat.draws(weekly, registry, token, 1, FOCUS_C, FOCUS_R);
-        vm.warp(weekly.epochStart(1) + weekly.CURATION_GRACE() - 1);
         vm.expectRevert(
             abi.encodeWithSelector(IEpochGovernor.IncompleteCuratedBallot.selector, token, 1, 0)
         );
         weekly.prepareBallot(token, 1, wd);
-        vm.warp(weekly.epochStart(1) + weekly.CURATION_GRACE());
-        weekly.prepareBallot(token, 1, wd);
+    }
+
+    /// @dev At `at`, round `target` cannot be prepared without its published picks.
+    function _expectPicksRequired(uint64 target, uint256 at) internal {
+        vm.warp(at);
+        IEpochGovernor.Draw[] memory d = _draws(target);
+        vm.prank(makeAddr("attacker"));
+        vm.expectRevert(_incompleteCurated(target));
+        gov.prepareRound(token, target, d);
+        vm.expectRevert(_incompleteCurated(target));
+        gov.openRound(token);
+    }
+
+    /// @dev Round 2's builder request (daily rotations).
+    function _request2() internal view returns (CatalogBallotBuilder.Request memory q) {
+        q.token = token;
+        q.round = 2;
+        q.size = gov.maxOptions();
+        q.voteStart = t0 + 1 days;
+        q.voteEnd = t0 + 2 days - 6 hours;
+    }
+
+    /// @dev Calls `build` without decoding its result (keeps the test's stack small).
+    function _build(
+        CatalogBallotBuilder.Request memory q,
+        IEpochGovernor.CuratedDraw[] memory curated,
+        IEpochGovernor.Draw[] memory draws
+    ) internal view returns (bool ok, bytes memory ret) {
+        CatalogBallotBuilder b = gov.ballotBuilder();
+        (ok, ret) = address(b).staticcall(abi.encodeCall(b.build, (q, curated, draws)));
+    }
+
+    function _buildWithoutPicks(CatalogBallotBuilder.Request memory q) internal view {
+        (bool ok, bytes memory ret) = _build(q, new IEpochGovernor.CuratedDraw[](0), _draws(2));
+        assertFalse(ok, "no ballot without the published picks");
+        assertEq(ret, _incompleteCurated(2));
+    }
+
+    function _buildWithPicks(CatalogBallotBuilder.Request memory q) internal view {
+        (bool ok, bytes memory ret) = _build(q, _curated(), _curatedDraws(2));
+        assertTrue(ok);
+        uint256 drawn;
+        // `Built.curatedDrawn`: fifth head word of the returned struct.
+        assembly ("memory-safe") {
+            drawn := mload(add(ret, 192))
+        }
+        assertEq(drawn, 3);
+    }
+
+    /// @dev Regression (audit #4): after the grace the builder still rejects a ballot without
+    ///      the published picks, so its caller cannot choose the ballot form.
+    function test_builder_publishedPicksStayRequiredAfterTheGrace() public {
+        _submitPicks();
+        _start();
+        CatalogBallotBuilder.Request memory q = _request2();
+        vm.warp(gov.ballotBuilder().curationGraceEnd(q.voteStart, q.voteEnd) + 1);
+        _buildWithoutPicks(q);
+        _buildWithPicks(q);
+    }
+
+    /// @dev Liveness: picks committed but never served are dropped by pausing the agent; rounds
+    ///      then prepare with rotation alone. Without usable curations no curated draws are needed.
+    function test_unservedPicks_pausedAgent_roundsFallBackToRotation() public {
+        _submitPicks();
+        _start();
+        vm.warp(t0 + 1 days);
+        IEpochGovernor.Draw[] memory d = _draws(2);
+        vm.expectRevert(_incompleteCurated(2));
+        gov.prepareRound(token, 2, d);
+        curators.setActive(HUNGER, false);
+        gov.prepareRound(token, 2, d);
+        assertEq(uint8(_status(2)), uint8(IRotationGovernor.RoundStatus.Open));
+        _expectNoCuratedPhase(2);
+        vm.warp(weekly.epochStart(1) + 1 hours);
+        weekly.prepareBallot(token, 1, cat.draws(weekly, registry, token, 1, FOCUS_C, FOCUS_R));
+    }
+
+    /// @dev Liveness: with no curations at all, a round prepares at its vote start.
+    function test_noCurations_roundPreparesAtOnce() public {
+        _start();
+        vm.warp(t0 + 1 days);
+        gov.prepareRound(token, 2, _draws(2));
+        assertEq(uint8(_status(2)), uint8(IRotationGovernor.RoundStatus.Open));
+        _expectNoCuratedPhase(2);
     }
 
     function _curatedDraws(uint64 target) internal view returns (IEpochGovernor.Draw[] memory) {
@@ -724,19 +790,18 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
         assertEq(orgs[2], _org(27));
     }
 
-    /// @dev Short rotations get a quarter of their period: 15 minutes for hourly rounds.
-    function test_curationGrace_isAQuarterOfShortPeriods() public {
+    /// @dev Hourly rounds need published picks past the old 15-minute grace too.
+    function test_publishedPicks_requiredInShortPeriods() public {
         _submitPicks();
         vm.warp(weekly.epochStart(1) + 1 hours);
         t0 = block.timestamp;
         gov.registerToken(token, initialCause, RotationPeriod.OneHour);
-        vm.warp(t0 + 1 hours + 15 minutes - 1);
+        vm.warp(t0 + 1 hours + 15 minutes);
         IEpochGovernor.Draw[] memory d = _draws(2);
         vm.expectRevert(_incompleteCurated(2));
         gov.prepareRound(token, 2, d);
-        vm.warp(t0 + 1 hours + 15 minutes);
-        gov.prepareRound(token, 2, d);
-        _expectNoCuratedPhase(2);
+        gov.prepareCuratedRound(token, 2, _curated(), _curatedDraws(2));
+        assertEq(gov.roundOptionOrgIds(token, 2)[0], _org(29));
         (,, uint40 voteEnd,,,,) = gov.roundOf(token, 2);
         assertEq(voteEnd, t0 + 2 hours - 15 minutes, "half the hour still votes");
     }
@@ -758,7 +823,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
         (uint32 wv,) = weekly.poolOf(token, 1);
         assertEq(v, 1, "the weekly epoch's version");
         assertEq(v, wv);
-        // The curated phase still applies: without the picks the round waits for its grace.
+        // The curated phase still applies: without the picks the round cannot be prepared.
         IEpochGovernor.Draw[] memory plain = _draws(2);
         vm.expectRevert(_incompleteCurated(2));
         gov.prepareRound(token, 2, plain);

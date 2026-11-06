@@ -112,8 +112,6 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         uint8 optionCount;
         /// @dev Ballot size the epoch was prepared with (`ballotSizeFor`), in the same slot.
         uint8 ballotSize;
-        /// @dev When `prepareBallot` / `openEpoch` may skip the curated phase (0: not requested).
-        uint64 curationSkipAt;
         bytes32 winner;
         uint256 voters;
         uint256 poolSize;
@@ -251,23 +249,18 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     /// @inheritdoc IEpochGovernor
     function prepareBallot(address token, uint256 epoch, Draw[] calldata draws) external {
         _checkPreparable(token, epoch);
-        _prepare(token, epoch, new CuratedDraw[](0), draws, _curationRequired(token, epoch));
+        _prepare(token, epoch, new CuratedDraw[](0), draws);
     }
 
     /// @inheritdoc IEpochGovernor
-    function requestCurationSkip(address token, uint256 epoch) external {
-        _checkPreparable(token, epoch);
-        EpochState storage s = _epochs[token][epoch];
-        if (s.curationSkipAt != 0) revert CurationSkipAlreadyRequested(token, epoch);
-        uint256 at = block.timestamp + CURATION_GRACE;
-        // forge-lint: disable-next-line(unsafe-typecast)
-        s.curationSkipAt = uint64(at);
-        emit CurationSkipRequested(token, epoch, at);
+    /// @dev Published curations can no longer be skipped, so this always reverts.
+    function requestCurationSkip(address token, uint256 epoch) external pure {
+        revert CurationSkipDisabled(token, epoch);
     }
 
     /// @inheritdoc IEpochGovernor
-    function curationSkipAt(address token, uint256 epoch) external view returns (uint256) {
-        return _epochs[token][epoch].curationSkipAt;
+    function curationSkipAt(address, uint256) external pure returns (uint256) {
+        return 0;
     }
 
     /// @inheritdoc IEpochGovernor
@@ -278,7 +271,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         Draw[] calldata draws
     ) external {
         _checkPreparable(token, epoch);
-        _prepare(token, epoch, curated, draws, true);
+        _prepare(token, epoch, curated, draws);
     }
 
     /// @inheritdoc IEpochGovernor
@@ -292,7 +285,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     /// @inheritdoc IEpochGovernor
     function openEpoch(address token, uint256 epoch) external {
         _checkPreparable(token, epoch);
-        _prepare(token, epoch, new CuratedDraw[](0), new Draw[](0), _curationRequired(token, epoch));
+        _prepare(token, epoch, new CuratedDraw[](0), new Draw[](0));
     }
 
     /// @inheritdoc IBallotGovernor
@@ -581,17 +574,6 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
 
     // ------------------------------------------------------------------ internals
 
-    /// @dev A ballot with usable curations needs its curated draws until `CURATION_GRACE` after
-    ///      someone called `requestCurationSkip` for it. Then ballots without them skip the curated
-    ///      phase, so picks that were never published cannot keep an epoch closed. The grace runs
-    ///      from the request, not from the epoch's start, so an epoch first opened late in the week
-    ///      still gives the curated phase a window: anyone holding the picks (the keeper watches
-    ///      `CurationSkipRequested`) can prepare the curated ballot before the skip applies.
-    function _curationRequired(address token, uint256 epoch) private view returns (bool) {
-        uint256 at = _epochs[token][epoch].curationSkipAt;
-        return at == 0 || block.timestamp < at;
-    }
-
     /// @dev Pins and the ballot size are set by the token's profile controller.
     function _checkController(address token) private view {
         if (!isRegistered[token]) revert TokenNotRegistered(token);
@@ -624,12 +606,14 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
 
     /// @dev Fixes the epoch's ballot (pins, then curated picks, then rotation draws; see
     ///      `CatalogBallotLib`) and opens its poll when it has at least `MIN_OPTIONS` options.
+    ///      The curated phase always applies: usable curations of the epoch and its catalogue
+    ///      version need their curated draws, whoever prepares the ballot and whenever. Without
+    ///      usable curations it consumes nothing.
     function _prepare(
         address token,
         uint256 epoch,
         CuratedDraw[] memory curated,
-        Draw[] memory draws,
-        bool curate
+        Draw[] memory draws
     ) private {
         EpochState storage s = _epochs[token][epoch];
         uint32 version = _catalog.versionAt(epochStart(epoch));
@@ -647,7 +631,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
             (buckets, sizes, pool) =
                 CatalogBallotLib.focusPool(_catalog, version, categoryMask, regionMask);
             bytes32 root = _catalog.rootOf(version);
-            if (curate && address(curators) != address(0) && b.n < b.size && buckets.length != 0) {
+            if (address(curators) != address(0) && b.n < b.size && buckets.length != 0) {
                 ICuratorRegistry.Curation[] memory cs =
                     curators.curationsFor(epoch, version, buckets);
                 uint256 included;

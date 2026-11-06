@@ -139,19 +139,15 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   blocked, or when it repeats an earlier option. A skipped pick still uses its rank, and its slot
   passes to rotation. `CuratedPicksUsed(token, epoch, drawn, included)` records how many picks were
   checked and how many reached the ballot.
-- A ballot whose focus buckets have usable curations can only be prepared with its curated draws
-  (`prepareCuratedBallot`): `prepareBallot` and `openEpoch` revert with `IncompleteCuratedBallot`
-  until `CURATION_GRACE` (6 hours) after someone calls `requestCurationSkip(token, epoch)`
-  (permissionless, once per unprepared current epoch; it records `curationSkipAt` and emits
-  `CurationSkipRequested`). From `curationSkipAt` they skip the curated phase, so rotation fills
-  the ballot, while `prepareCuratedBallot` still applies the picks. The grace runs from the
-  request, not from the epoch's start, so an epoch first opened late in the week (an idle token's)
-  still gives the picks a window: the indexer counts a skip request as activity, so the keeper
-  prepares the curated ballot when the picks exist, and nobody can drop published picks just by
-  opening late. An agent that submits a root but never publishes its picks makes the epoch
-  unpreparable without them until 6 hours after a request; the platform keeper requests the skip
-  as soon as it finds the picks missing and opens with rotation on its first run at least 30
-  seconds after `curationSkipAt` (see the keeper below).
+- A ballot whose focus buckets have usable curations (`curationsFor` for the epoch and its
+  catalogue version) can only be prepared with its curated draws (`prepareCuratedBallot`), all
+  week: `prepareBallot` and `openEpoch` revert with `IncompleteCuratedBallot`. So the first
+  preparer cannot choose whether published picks appear. A ballot without usable curations needs
+  no curated draws and can be prepared at any time. `requestCurationSkip` is disabled (it reverts
+  `CurationSkipDisabled`; `curationSkipAt` is always 0). An agent that submits a root but never
+  serves its picks keeps the epoch unpreparable until the curator registry owner pauses it
+  (`setActive(categoryBit, false)`); `curationsFor` then ignores its curations and rotation
+  fills the ballot.
 - Anyone may fix the ballot with `prepareBallot(token, epoch, draws)`, supplying each drawn entry
   and its proof, or with `prepareCuratedBallot(token, epoch, curated, draws)` when the curated phase
   takes slots. A ballot that needs no draws opens with `openEpoch(token, epoch)`. Ballots are
@@ -215,7 +211,8 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   (every `KEEPER_INTERVAL_SECONDS`, 300 by default) prepares the whole ballot with rotation only.
   With picks missing from the start of the epoch, that is a few minutes after 6 hours in, as
   before. The web app's button does the same: it sends the skip request, then explains when the
-  ballot can be opened in rotation.
+  ballot can be opened in rotation. Since `requestCurationSkip` now reverts, that skip step fails
+  on chain: missing picks wait for the report or for the agent to be paused.
 - Voting weight is the holder's `VaradaToken.getPastVotes` one second before the epoch start,
   counted in whole tokens. In the epoch a token launches in, that time predates the token, so its
   weights are read at a launch snapshot one day after registration instead (halfway to the
@@ -449,17 +446,11 @@ options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens
   previous version stays in use for the rest of the week: after a mid-week `setVersion` the
   indexer serves both (`CATALOG_SOURCE=<new>,<previous>`), and the keeper asks for a round's
   entries by its version's root (`/api/catalog/entries?root=`).
-- **Curation grace.** A round whose buckets have usable curations needs its curated draws only
-  until `CatalogBallotBuilder.curationGraceEnd(voteStart, voteEnd)`: `min(6 hours, vote window /
-  3)` from the round's own vote start, not the epoch's. The vote window is the period less its
-  close buffer `min(6 hours, period / 4)`, so the grace equals the close buffer: 15 minutes for
-  hourly rotations, 3 hours for 12-hour rotations, 6 hours for longer ones. Grace and close buffer
-  never take more than half the period. During the grace, `openRound` and `prepareRound` revert
-  `IncompleteCuratedBallot`; after it they skip the curated phase and rotation fills the ballot.
-  Curated draws that are supplied always apply, and an empty `prepareCuratedRound` after the grace
-  builds as `prepareRound`. Picks committed but never published therefore hold a round for its
-  grace, not for the week. Unlike the weekly epoch, there is no skip request: the grace is fixed by
-  the schedule.
+- **Published picks.** A round whose buckets have usable curations needs its curated draws for
+  its whole vote window, as a weekly epoch does: `openRound` and `prepareRound` revert
+  `IncompleteCuratedBallot`, so the first preparer cannot leave the picks off. A round without
+  them prepares at any time. `CatalogBallotBuilder.curationGraceEnd` is kept as a view but no
+  longer gates the build. Picks committed but never served hold rounds until the agent is paused.
 - **Round size.** `maxOptions()` is `min(RotationGovernor.MAX_OPTIONS, scheme.MAX_OPTIONS())`, so
   at most 10 options against the weekly ballot's 32. The pin limit is the same, but with fewer free
   slots the curated quotas can split differently from the weekly ballot of the same epoch, so a
@@ -472,8 +463,8 @@ options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens
   the next rotation's round with the SDK's `planRoundOpening`, the weekly planner run over the
   rotation governor's views (pins, then the curated picks of `curationEpochOf`, then draws seeded by
   the target rotation). When a usable curation's picks are not served yet it backs off, never past
-  `curationGraceEnd` plus 30 seconds, and its first attempt after the grace prepares the round
-  with rotation only. It then closes each ended round that got ballots, relays the public
+  `curationGraceEnd` plus 30 seconds; that attempt now fails until the picks are served or the
+  agent is paused. It then closes each ended round that got ballots, relays the public
   decryption of the winner only (`outcomeHandle`, `submitOutcome`) and calls `finalizeRound`.
   Rounds that ended without ballots are left open: nothing would change. A round still unfinished
   when it leaves the keeper's lookback is followed until it is final, since a late finalize is
