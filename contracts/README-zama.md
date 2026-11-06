@@ -92,14 +92,19 @@ installed `@fhevm/solidity/config/ZamaConfig.sol`; re-verify them on every libra
   cast and `shl` to place the weight, and then one `eq`, `select` and `add` per word: 11 words at
   32 options instead of 32 per-option triples. The first ballot skips the `add` and creates the
   word instead.
-- Ballot quorum: each ballot of at least `minCountedWeight` (owner-set, 0 by default) also adds
-  `choice < optionCount` to an encrypted count of valid ballots (`lt`, cast, `euint32` `add`:
-  about 0.18M HCU, beside the tally chain, so the depth does not grow). `requestOutcome` yields
-  `NO_WINNER` when that count is below the governor's `minVoters()` (or the explicit
-  `minBallots`), so a ballot for a missing option cannot pad a poll to its minimum. Ballots below
-  `minCountedWeight` still add weight but do not count; with too few counted ballots the poll is
-  final at once with `NO_WINNER`. The check adds one `euint32` `ge` and one select (about 0.14M
-  HCU, about 55k depth) to the close.
+- Ballot quorum: the owner sets a counted weight per governor (`setMinCountedWeight`;
+  `DeployLive` sets 10,000,000 whole tokens, 0.01% of the supply, for the rotation governor and
+  none for the weekly and takeover governors). A poll copies it when it opens, so a later change
+  never applies to an open poll. In a poll with a counted weight, each ballot of at least that
+  weight also adds `choice < optionCount` to an encrypted count of valid ballots (`lt`, cast,
+  `euint32` `add`: about 0.18M HCU, beside the tally chain, so the depth does not grow).
+  `requestOutcome` yields `NO_WINNER` when that count is below the governor's `minVoters()` (or
+  the explicit `minBallots`), so neither a ballot for a missing option nor a one-token ballot can
+  pad a poll to its minimum and reveal a lone voter's choice. Lighter ballots still add weight;
+  with too few counted ballots the poll is final at once with `NO_WINNER`. The check adds one
+  `euint32` `ge` and one select (about 0.14M HCU, about 55k depth) to the close. Polls without a
+  counted weight (the weekly tally polls) do none of this work and compare the minimum with the
+  plain ballot count.
 - Lazy tallies, measured on a mainnet fork against the live coprocessor
   (`test_fork_lazyVsEagerTallyCost`, 2026-11-06, every step from cold accounts and slots,
   execution gas): `open` went from 140k / 256k / 526k gas at 2 / 10 / 32 options to 30k, saved

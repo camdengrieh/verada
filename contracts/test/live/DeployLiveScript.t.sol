@@ -177,6 +177,13 @@ contract DeployLiveScriptTest is Test, DeployLive {
         assertTrue(ZamaVotingScheme(d.votingScheme).isGovernor(d.epochGovernor), "weekly kept");
         assertEq(RotationGovernor(l.rotationGovernor).vault(), l.liveVault);
         assertEq(RotationGovernor(l.rotationGovernor).minVoters(), 2, "outcome needs two ballots");
+        // Only ballots of at least 0.01% of the supply count toward those two ballots; the
+        // weekly governor's tally polls do no counting.
+        assertEq(
+            ZamaVotingScheme(d.votingScheme).minCountedWeightOf(l.rotationGovernor), 10_000_000
+        );
+        assertEq(ZamaVotingScheme(d.votingScheme).minCountedWeightOf(d.epochGovernor), 0);
+        assertEq(ZamaVotingScheme(d.votingScheme).minCountedWeightOf(d.takeoverGovernor), 0);
         // Ballots come from the weekly catalogue and curator registry; winners are materialized.
         assertEq(RotationGovernor(l.rotationGovernor).catalog(), d.causeCatalog);
         assertEq(address(RotationGovernor(l.rotationGovernor).curators()), d.curatorRegistry);

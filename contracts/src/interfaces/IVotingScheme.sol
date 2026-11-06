@@ -154,7 +154,8 @@ interface IOutcomeVotingScheme is IVotingScheme {
 
     /// @notice `requestOutcome` that also yields `NO_WINNER` unless at least `minBallots`
     ///         ballots chose a valid option. A scheme that hides the choice counts this under
-    ///         encryption, so ballots for a missing option cannot pad a poll to its minimum.
+    ///         encryption, so ballots for a missing option cannot pad a poll to its minimum. A
+    ///         scheme may also leave out ballots below a minimum weight.
     function requestOutcome(address token, uint256 scope, uint64 minWeight, uint32 minBallots)
         external;
 

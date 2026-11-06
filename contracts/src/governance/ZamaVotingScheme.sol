@@ -41,11 +41,15 @@ import {
 ///      closed without ballots is final at once, with all-zero counts (`TallySubmitted` is emitted
 ///      in `requestTally`) or with `NO_WINNER` (`OutcomeSubmitted` is emitted in
 ///      `requestOutcome`), so it needs no public decryption either.
-///      Ballot quorum: an out-of-range option adds no weight, so it must not count as a voter
-///      either. Each ballot with a weight of at least `minCountedWeight` adds its encrypted
-///      validity (`choice < optionCount`) to `validBallots`, and `requestOutcome` reports
-///      `NO_WINNER` unless that count reaches the governor's minimum number of ballots. A poll
-///      with too few such ballots in plaintext is final at once with `NO_WINNER`.
+///      Ballot quorum: a ballot for a missing option, or one with a tiny weight, must not
+///      count as a voter. The owner sets a counted weight per governor
+///      (`minCountedWeightOf`), and each poll copies it when it opens. In a poll with a nonzero
+///      counted weight, each ballot of at least that weight adds its encrypted validity
+///      (`choice < optionCount`) to `validBallots`, and `requestOutcome` reports `NO_WINNER`
+///      unless that count reaches the minimum number of ballots. A poll with too few such
+///      ballots in plaintext is final at once with `NO_WINNER`. A poll opened with a zero
+///      counted weight (tally polls) does no counting work and checks the minimum against its
+///      plain ballot count.
 contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     /// @inheritdoc IVotingScheme
     uint8 public constant MAX_OPTIONS = 32;
@@ -64,19 +68,17 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
 
     error WeightTooLarge(uint64 weight);
 
-    event MinCountedWeightSet(uint64 weight);
-
-    /// @notice Smallest ballot weight that counts toward a poll's minimum number of ballots.
-    ///         Lighter ballots still add their weight. Applies to ballots cast after a change.
-    uint64 public minCountedWeight;
+    event MinCountedWeightSet(address indexed governor, uint64 weight);
 
     struct Poll {
         uint8 optionCount;
         bool opened;
         bool closed;
         bool isFinal;
-        /// @dev Ballots with a weight of at least `minCountedWeight` (public, like the weights).
+        /// @dev Ballots of at least `minCounted` (public, like the weights).
         uint32 counted;
+        /// @dev `minCountedWeightOf[governor]` when the poll opened; 0 turns counting off.
+        uint64 minCounted;
         uint256 ballotCount;
         /// @dev Packed tally words (`ceil(optionCount / 3)`), created by the first ballot. Empty
         ///      while `ballotCount == 0`.
@@ -97,6 +99,11 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     /// @inheritdoc IVotingScheme
     mapping(address governor => bool) public isGovernor;
 
+    /// @notice Smallest ballot weight that counts toward the minimum number of ballots of the
+    ///         governor's polls (0: no counting). Lighter ballots still add their weight. A
+    ///         change applies to polls opened after it.
+    mapping(address governor => uint64) public minCountedWeightOf;
+
     mapping(address governor => mapping(address token => mapping(uint256 scope => Poll))) private
         _polls;
 
@@ -115,10 +122,11 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
         emit GovernorSet(governor, allowed);
     }
 
-    /// @notice Sets the smallest ballot weight that counts toward the minimum number of ballots.
-    function setMinCountedWeight(uint64 weight) external onlyOwner {
-        minCountedWeight = weight;
-        emit MinCountedWeightSet(weight);
+    /// @notice Sets the smallest ballot weight that counts toward the minimum number of ballots
+    ///         of `governor`'s polls opened from now on (0 turns counting off).
+    function setMinCountedWeight(address governor, uint64 weight) external onlyOwner {
+        minCountedWeightOf[governor] = weight;
+        emit MinCountedWeightSet(governor, weight);
     }
 
     // ---- governor
@@ -133,6 +141,7 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
 
         poll.opened = true;
         poll.optionCount = optionCount;
+        poll.minCounted = minCountedWeightOf[msg.sender];
         emit PollOpened(msg.sender, token, scope, optionCount);
     }
 
@@ -175,10 +184,12 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     ///      `minBallots` counted in-range ballots, yields `NO_WINNER`.
     ///      Each option's counter is unpacked from its tally word under FHE (`_counter`), then
     ///      one comparison and two selects per option, plus one comparison for each of
-    ///      `minWeight > 1` and `minBallots > 1` and one select (and an `and` with both).
+    ///      `minWeight > 1` and `minBallots > 1` (counting polls only) and one select (and an
+    ///      `and` with both).
     ///      Only the resulting `euint8` is made publicly decryptable; the tally words never are.
-    ///      Without ballots, or with fewer than `minBallots` counted ballots, the poll becomes
-    ///      final here with `NO_WINNER` and `submitOutcome` is never needed.
+    ///      Without ballots, or with fewer than `minBallots` counted ballots (all ballots when
+    ///      counting is off), the poll becomes final here with `NO_WINNER` and `submitOutcome` is
+    ///      never needed. With counting off there is no encrypted quorum check.
     function _requestOutcome(address token, uint256 scope, uint64 minWeight, uint32 minBallots)
         private
     {
@@ -190,7 +201,8 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
         poll.closed = true;
         poll.outcomeOnly = true;
         emit OutcomeRequested(msg.sender, token, scope, minWeight);
-        if (poll.tallies.length == 0 || poll.counted < minBallots) {
+        bool counting = poll.minCounted != 0;
+        if (poll.tallies.length == 0 || (counting ? poll.counted : poll.ballotCount) < minBallots) {
             // Nothing to decrypt, or too few counted ballots: final at once with no winner.
             poll.winner = NO_WINNER;
             poll.isFinal = true;
@@ -209,14 +221,16 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
             index = FHE.select(higher, FHE.asEuint8(uint8(i)), index);
         }
         // One select at the end of the argmax chain, so both minima add little depth.
+        bool byWeight = minWeight > 1;
+        bool byBallots = counting && minBallots > 1;
         ebool ok;
-        if (minWeight > 1) ok = FHE.ge(best, uint128(minWeight));
-        if (minBallots > 1) {
+        if (byWeight) ok = FHE.ge(best, uint128(minWeight));
+        if (byBallots) {
             // `counted >= minBallots > 1`, so `validBallots` is set.
             ebool quorum = FHE.ge(poll.validBallots, minBallots);
-            ok = minWeight > 1 ? FHE.and(ok, quorum) : quorum;
+            ok = byWeight ? FHE.and(ok, quorum) : quorum;
         }
-        if (minWeight > 1 || minBallots > 1) index = FHE.select(ok, index, none);
+        if (byWeight || byBallots) index = FHE.select(ok, index, none);
         FHE.allowThis(index);
         FHE.makePubliclyDecryptable(index);
         poll.outcome = index;
@@ -439,8 +453,8 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
     ///      the words: each starts as that ballot's selected contribution, which is what adding it
     ///      to an encrypted zero would give. Every ballot touches every word whatever its choice, so
     ///      creating them lazily reveals nothing about it.
-    ///      A ballot of at least `minCountedWeight` also adds `choice < optionCount` to
-    ///      `validBallots`.
+    ///      In a counting poll, a ballot of at least `minCounted` also adds
+    ///      `choice < optionCount` to `validBallots`.
     function _accumulate(Poll storage poll, euint8 choice, uint64 weight) internal {
         euint8 word = FHE.div(choice, COUNTERS_PER_WORD);
         euint8 shift = FHE.mul(FHE.rem(choice, COUNTERS_PER_WORD), COUNTER_BITS);
@@ -462,7 +476,8 @@ contract ZamaVotingScheme is IOutcomeVotingScheme, Ownable2Step {
                 poll.tallies[j] = updated;
             }
         }
-        if (weight >= minCountedWeight) {
+        uint64 minCounted = poll.minCounted;
+        if (minCounted != 0 && weight >= minCounted) {
             uint32 counted = ++poll.counted;
             euint32 valid = FHE.asEuint32(FHE.lt(choice, poll.optionCount));
             if (counted > 1) valid = FHE.add(poll.validBallots, valid);

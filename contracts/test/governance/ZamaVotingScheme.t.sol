@@ -200,8 +200,8 @@ contract ZamaVotingSchemeTest is Test {
         bytes32 second = bytes32(uint256(2));
         executor.setInputValue(second, 0);
         _cast(voter2, second);
-        // One add per word, plus one into the count of valid ballots.
-        assertEq(executor.adds(), 3);
+        // One add per word; no count of valid ballots without a counted weight.
+        assertEq(executor.adds(), 2);
         bytes32[] memory after_ = _handles();
         assertTrue(after_[0] != words[0] && after_[1] != words[1], "words not replaced");
         assertEq(executor.valueOf(after_[0]), WEIGHT);
@@ -277,8 +277,8 @@ contract ZamaVotingSchemeTest is Test {
         assertEq(executor.eqs(), 1);
         assertEq(executor.selects(), 1);
         assertEq(executor.adds(), 0);
-        // One range check for the count of valid ballots, created by this first ballot.
-        assertEq(executor.lts(), 1);
+        // No counted weight for this governor: no range check.
+        assertEq(executor.lts(), 0);
         bytes32[] memory after_ = _handles();
         assertEq(after_.length, 1);
         _assertUint128Words(after_);
@@ -292,10 +292,9 @@ contract ZamaVotingSchemeTest is Test {
         assertTrue(scheme.hasVoted(address(gov), token, SCOPE, voter));
         assertTrue(scheme.hasVoted(address(gov), token, SCOPE, voter2));
         assertEq(executor.verifyInputs(), 2);
-        // One word: the first ballot creates it, the second adds to it; the same for the count
-        // of valid ballots.
-        assertEq(executor.adds(), 2);
-        assertEq(executor.lts(), 2, "one range check per ballot");
+        // One word: the first ballot creates it, the second adds to it.
+        assertEq(executor.adds(), 1);
+        assertEq(executor.lts(), 0, "no range check without a counted weight");
     }
 
     function test_castBallot_ballotRefDependsOnHandleAndVoter() public {
@@ -1057,6 +1056,12 @@ contract ZamaVotingSchemeTest is Test {
         (choices[0], weights[0], choices[1], weights[1]) = (a, wa, b, wb);
     }
 
+    /// @dev Counted weight of `gov`'s polls opened from now on.
+    function _counting(uint64 weight) internal {
+        vm.prank(owner);
+        scheme.setMinCountedWeight(address(gov), weight);
+    }
+
     function _outcomePlain() internal view returns (uint256) {
         return executor.valueOf(scheme.outcomeHandle(address(gov), token, SCOPE));
     }
@@ -1064,6 +1069,7 @@ contract ZamaVotingSchemeTest is Test {
     /// @notice A one-token ballot for a missing option brings the poll to the governor's two
     ///         ballots; the decrypted winner must not then be the one honest voter's choice.
     function test_requestOutcome_outOfRangeBallotDoesNotCountAsAVoter() public {
+        _counting(1);
         gov.setMinVoters(true, 2);
         (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 7, 1);
         _castAll(2, c, w);
@@ -1073,6 +1079,7 @@ contract ZamaVotingSchemeTest is Test {
     }
 
     function test_requestOutcome_outOfRangeBallotPastEveryWord() public {
+        _counting(1);
         gov.setMinVoters(true, 2);
         (uint8[] memory c, uint64[] memory w) = _two(4, 50_000, 255, 1);
         _castAll(5, c, w);
@@ -1081,6 +1088,7 @@ contract ZamaVotingSchemeTest is Test {
     }
 
     function test_requestOutcome_enoughValidBallotsRevealTheWinner() public {
+        _counting(1);
         gov.setMinVoters(true, 2);
         (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 0, 1);
         _castAll(2, c, w);
@@ -1093,6 +1101,7 @@ contract ZamaVotingSchemeTest is Test {
     }
 
     function test_requestOutcome_explicitMinBallots() public {
+        _counting(1);
         uint8[] memory c = new uint8[](3);
         uint64[] memory w = new uint64[](3);
         (c[0], w[0], c[1], w[1], c[2], w[2]) = (2, 900, 2, 100, 9, 1);
@@ -1114,6 +1123,7 @@ contract ZamaVotingSchemeTest is Test {
     }
 
     function test_requestOutcome_minWeightAndMinBallotsShareOneSelect() public {
+        _counting(1);
         uint8[] memory c = new uint8[](3);
         uint64[] memory w = new uint64[](3);
         (c[0], w[0], c[1], w[1], c[2], w[2]) = (1, 600, 1, 100, 9, 1);
@@ -1147,19 +1157,20 @@ contract ZamaVotingSchemeTest is Test {
         vm.expectRevert(
             abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger)
         );
-        scheme.setMinCountedWeight(100);
+        scheme.setMinCountedWeight(address(gov), 100);
+        assertEq(scheme.minCountedWeightOf(address(gov)), 0, "off by default");
         vm.expectEmit(address(scheme));
-        emit ZamaVotingScheme.MinCountedWeightSet(100);
+        emit ZamaVotingScheme.MinCountedWeightSet(address(gov), 100);
         vm.prank(owner);
-        scheme.setMinCountedWeight(100);
-        assertEq(scheme.minCountedWeight(), 100);
+        scheme.setMinCountedWeight(address(gov), 100);
+        assertEq(scheme.minCountedWeightOf(address(gov)), 100);
+        assertEq(scheme.minCountedWeightOf(stranger), 0, "per governor");
     }
 
     /// @notice A valid one-token ballot no longer pads a poll to its minimum once the scheme
     ///         sets a counted weight: the poll is final at once with no winner, undecrypted.
     function test_requestOutcome_lightBallotDoesNotCountAsAVoter() public {
-        vm.prank(owner);
-        scheme.setMinCountedWeight(100);
+        _counting(100);
         gov.setMinVoters(true, 2);
         (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 0, 1);
         _castAll(2, c, w);
@@ -1172,8 +1183,7 @@ contract ZamaVotingSchemeTest is Test {
     }
 
     function test_requestOutcome_lightBallotStillAddsWeight() public {
-        vm.prank(owner);
-        scheme.setMinCountedWeight(100);
+        _counting(100);
         gov.setMinVoters(true, 2);
         uint8[] memory c = new uint8[](3);
         uint64[] memory w = new uint64[](3);
@@ -1214,11 +1224,84 @@ contract ZamaVotingSchemeTest is Test {
             }
         }
         if (valid < minB) expected = NO_WINNER;
+        _counting(1);
         gov.setMinVoters(true, minB);
         _castAll(n, choices, weights);
         gov.requestOutcome(token, SCOPE, 1);
         (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, SCOPE);
         uint256 got = isFinal ? winner : _outcomePlain();
         assertEq(got, expected);
+    }
+
+    /// @notice A poll copies its governor's counted weight when it opens: an owner change while
+    ///         it is open does not apply to it, and the next poll uses the new value.
+    function test_minCountedWeight_isFixedWhenThePollOpens() public {
+        _counting(100);
+        gov.setMinVoters(true, 2);
+        (uint8[] memory c, uint64[] memory w) = _two(1, 50_000, 0, 500);
+        gov.open(token, SCOPE, 2);
+        _counting(1_000_000);
+        for (uint256 i = 0; i < 2; ++i) {
+            bytes32 handle = bytes32(uint256(keccak256(abi.encode("ballot", i))));
+            executor.setInputValue(handle, c[i]);
+            gov.setWeight(w[i]);
+            _cast(address(uint160(0x1000 + i)), handle);
+        }
+        gov.requestOutcome(token, SCOPE, 1);
+        assertEq(_outcomePlain(), 1, "both ballots counted at the opening weight");
+
+        // A later poll opens with the new weight: the 500-token ballot no longer counts.
+        gov.open(token, SCOPE + 1, 2);
+        for (uint256 i = 0; i < 2; ++i) {
+            bytes32 handle = bytes32(uint256(keccak256(abi.encode("later", i))));
+            executor.setInputValue(handle, c[i]);
+            gov.setWeight(i == 0 ? 2_000_000 : w[i]);
+            vm.prank(address(uint160(0x1000 + i)));
+            scheme.castBallot(address(gov), token, SCOPE + 1, _ballot(handle));
+        }
+        gov.requestOutcome(token, SCOPE + 1, 1);
+        (bool isFinal, uint8 winner) = scheme.outcomeOf(address(gov), token, SCOPE + 1);
+        assertTrue(isFinal);
+        assertEq(winner, NO_WINNER);
+    }
+
+    /// @notice One governor's counted weight leaves another governor's polls alone.
+    function test_minCountedWeight_isPerGovernor() public {
+        MockBallotGovernor other = new MockBallotGovernor(scheme, 1);
+        vm.startPrank(owner);
+        scheme.setGovernor(address(other), true);
+        scheme.setMinCountedWeight(address(gov), 100);
+        vm.stopPrank();
+        other.open(token, SCOPE, 2);
+        vm.prank(voter);
+        scheme.castBallot(address(other), token, SCOPE, _ballot(HANDLE));
+        assertEq(executor.lts(), 0, "the other governor's poll does not count");
+    }
+
+    /// @notice A governor without a counted weight (the weekly tally polls) pays nothing for the
+    ///         ballot quorum: no range check, cast or count per ballot.
+    function test_castBallot_noCountingWorkWithoutACountedWeight() public {
+        gov.open(token, SCOPE, 10);
+        uint256 casts = executor.casts();
+        uint256 adds = executor.adds();
+        _cast(voter, HANDLE);
+        _cast(voter2, bytes32(uint256(1)));
+        uint256 plainCasts = executor.casts() - casts;
+        uint256 plainAdds = executor.adds() - adds;
+        assertEq(executor.lts(), 0, "no range check");
+
+        // The same ballots in a counting poll: one range check and one cast each, one add for
+        // the second.
+        _counting(1);
+        gov.open(token, SCOPE + 1, 10);
+        casts = executor.casts();
+        adds = executor.adds();
+        vm.prank(voter);
+        scheme.castBallot(address(gov), token, SCOPE + 1, _ballot(HANDLE));
+        vm.prank(voter2);
+        scheme.castBallot(address(gov), token, SCOPE + 1, _ballot(bytes32(uint256(1))));
+        assertEq(executor.lts(), 2);
+        assertEq(executor.casts() - casts, plainCasts + 2);
+        assertEq(executor.adds() - adds, plainAdds + 1);
     }
 }

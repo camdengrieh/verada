@@ -246,6 +246,25 @@ export const zamaVotingSchemeAbi = [
   },
   {
     "type": "function",
+    "name": "minCountedWeightOf",
+    "inputs": [
+      {
+        "name": "governor",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint64",
+        "internalType": "uint64"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "open",
     "inputs": [
       {
@@ -417,6 +436,34 @@ export const zamaVotingSchemeAbi = [
   },
   {
     "type": "function",
+    "name": "requestOutcome",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "scope",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "minWeight",
+        "type": "uint64",
+        "internalType": "uint64"
+      },
+      {
+        "name": "minBallots",
+        "type": "uint32",
+        "internalType": "uint32"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "requestTally",
     "inputs": [
       {
@@ -446,6 +493,24 @@ export const zamaVotingSchemeAbi = [
         "name": "allowed",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setMinCountedWeight",
+    "inputs": [
+      {
+        "name": "governor",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "weight",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
     "outputs": [],
@@ -670,6 +735,25 @@ export const zamaVotingSchemeAbi = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "MinCountedWeightSet",
+    "inputs": [
+      {
+        "name": "governor",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "weight",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
       }
     ],
     "anonymous": false

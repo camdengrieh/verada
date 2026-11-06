@@ -233,11 +233,17 @@ contract ZamaSchemeForkTest is ColdGas, IBallotGovernor {
 
     /// @notice `requestOutcome` with both minima (weight and valid ballots) on the live
     ///         coprocessor, at the rotation cap of 10 options and at 17. Reverts if the close
-    ///         exceeds the per-transaction HCU or depth limit.
+    ///         exceeds the per-transaction HCU or depth limit. The coprocessor meters HCU and
+    ///         depth per transaction, so every call here runs as its own transaction (`isolate`),
+    ///         as the ballots and the close do on chain, and each size starts from the same state.
+    /// forge-config: default.isolate = true
     function test_fork_requestOutcomeWithMinBallotsCost() public {
         ZamaSchemeHarness h = _coldHarness();
+        h.setMinCountedWeight(address(this), 1);
         uint8[2] memory sizes = [10, 17];
+        uint256 snap = vm.snapshotState();
         for (uint256 i; i < sizes.length; ++i) {
+            vm.revertToState(snap);
             uint256 scope = 400 + i;
             h.open(token, scope, sizes[i]);
             h.castTrivialAs(address(this), token, scope, sizes[i] - 1, address(1));

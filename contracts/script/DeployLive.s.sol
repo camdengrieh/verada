@@ -60,6 +60,10 @@ contract DeployLive is Deploy {
     /// @dev Fewest ballots a rotation poll or period proposal needs to be decrypted: a poll with
     ///      a single ballot would reveal that voter's choice through its outcome.
     uint32 internal constant ROTATION_MIN_VOTERS = 2;
+    /// @dev Smallest ballot weight (whole tokens) that counts toward `ROTATION_MIN_VOTERS`:
+    ///      0.01% of the 1e11 tokens minted at launch. A lighter ballot still adds its weight, but
+    ///      cannot pad a poll to the minimum and reveal a lone voter's choice.
+    uint64 internal constant ROTATION_MIN_COUNTED_WEIGHT = 10_000_000;
 
     struct LiveDeployment {
         address rotationGovernor;
@@ -160,17 +164,25 @@ contract DeployLive is Deploy {
         _deployHook(hookSalt, hookInit, hookAddr);
 
         gov.setVault(address(vault));
-        gov.setMinVoters(ROTATION_MIN_VOTERS);
         gov.setCuratorRegistry(ICuratorRegistry(d.curatorRegistry));
         CauseRegistry(d.causeRegistry).setMaterializer(address(gov), true);
         vault.setHook(hookAddr);
         FeeConsolidator(payable(d.feeConsolidator)).setSource(hookAddr, true);
-        ZamaVotingScheme(d.votingScheme).setGovernor(address(gov), true);
+        _configureRotationVoting(ZamaVotingScheme(d.votingScheme), gov);
         VaradaFactory(d.factory).configureLiveMode(hookAddr, address(vault));
 
         l = LiveDeployment({
             rotationGovernor: address(gov), liveVault: address(vault), liveHook: hookAddr
         });
+    }
+
+    /// @dev The rotation governor's voting settings: allowlisted on the scheme, two ballots per
+    ///      decrypted poll, and only ballots of at least `ROTATION_MIN_COUNTED_WEIGHT` count
+    ///      toward them. The caller must own both contracts.
+    function _configureRotationVoting(ZamaVotingScheme scheme, RotationGovernor gov) internal {
+        gov.setMinVoters(ROTATION_MIN_VOTERS);
+        scheme.setGovernor(address(gov), true);
+        scheme.setMinCountedWeight(address(gov), ROTATION_MIN_COUNTED_WEIGHT);
     }
 
     // ------------------------------------------------------------------ hook mining
