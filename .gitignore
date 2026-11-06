@@ -26,3 +26,6 @@ contracts/deployments/
 
 # Asset packs built by apps/web/scripts/optimize-assets.mjs (published to Swarm separately, not tracked)
 apps/web/packs/
+
+# Claude Code agent worktrees (local copies of the repo)
+.claude/worktrees/
