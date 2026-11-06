@@ -13,6 +13,7 @@ import { Input } from "@varada/ui/components/ui/input";
 import { Skeleton } from "@varada/ui/components/ui/skeleton";
 import { TakeoverCard, type TakeoverStatus } from "@varada/ui/components/varada/takeover-card";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
+import { useWalletGate } from "@/components/governance/use-wallet-gate";
 import { useCastBallot } from "@/components/use-cast-ballot";
 import { errorText, formatTime, sameAddress, shortAddress, TxStatus, useTx } from "@/components/use-tx";
 import { createAccountClient } from "@/lib/account-reads";
@@ -127,6 +128,7 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
   const config = useAppConfig();
   const rpc = usePrivateRpc();
   const { address: account } = useAccount();
+  const gate = useWalletGate();
   const ballot = useCastBallot();
   const tx = useTx();
   const id = BigInt(p.proposalId);
@@ -158,6 +160,22 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
   const pct = (w: string) => (total > 0n ? Number(((BigInt(w) * 10_000n) / total)) / 100 : undefined);
   const tallyKnown = p.tallied && circulating !== undefined && /^\d+$/.test(circulating) && BigInt(circulating) > 0n;
   const busy = ballot.phase === "encrypting" || ballot.tx.isPending;
+  // Why the vote buttons are off, most basic reason first (voting that ended while the tally is
+  // pending cannot take a ballot either: the contract would revert it).
+  const disabledReason =
+    p.state === "Closing"
+      ? "Voting has ended. The tally is being counted."
+      : !account
+        ? "Connect a wallet to vote."
+        : gate.wrongChain
+          ? "Switch your wallet to Ethereum mainnet to vote."
+          : voted
+            ? "You have voted on this proposal."
+            : mine.data && mine.data.weight === 0n
+              ? "You held none of this token at the snapshot, so you have no weight in this vote."
+              : busy
+                ? "Your ballot is being sent."
+                : undefined;
 
   return (
     <div className="flex flex-col gap-3">
@@ -175,7 +193,7 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
         againstPct={p.tallied ? pct(p.againstWeight) : undefined}
         endsIn={p.end !== undefined && p.state === "Active" ? `ends in ${untilText(p.end, Date.now()) || "moments"}` : undefined}
         onVote={account ? (v) => void ballot.cast({ governor, token, scope: id, choice: v === "for" ? TAKEOVER_FOR : TAKEOVER_AGAINST }) : undefined}
-        disabledReason={!account ? "Connect a wallet to vote." : voted ? "You have voted on this proposal." : busy ? "Your ballot is being sent." : undefined}
+        disabledReason={disabledReason}
       />
       <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         <div>
@@ -228,6 +246,11 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
       {mine.error && <p role="alert" className="m-0 text-sm text-destructive">Could not read your weight: {errorText(mine.error)}</p>}
       {ballot.phase === "encrypting" && <p role="status" className="m-0 text-sm">Encrypting your ballot</p>}
       {ballot.error && <p role="alert" className="m-0 text-sm text-destructive">{ballot.error}</p>}
+      {gate.wrongChain && (
+        <Button type="button" variant="outline" className="self-start" onClick={gate.switchToApp} disabled={gate.switching}>
+          Switch network
+        </Button>
+      )}
       <TxStatus tx={ballot.tx} label="Ballot" />
 
       <div className="flex flex-wrap gap-2">
