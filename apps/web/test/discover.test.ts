@@ -72,6 +72,7 @@ describe("toDiscoverToken", () => {
     expect(discoverParams({ sort: "new", quotes: ["0xa", "0xb"], categories: ["hunger"], q: " rock ", limit: 24 })).toEqual({
       sort: "new",
       mode: undefined,
+      periods: undefined,
       quotes: "0xa,0xb",
       categories: "hunger",
       regions: undefined,
@@ -86,7 +87,7 @@ describe("toDiscoverToken", () => {
 describe("URL state", () => {
   it("round-trips and omits defaults", () => {
     expect(stateToSearch(DEFAULT_STATE)).toBe("");
-    const s = { tab: "stocks" as const, pair: "NVDAon", category: "hunger", region: "africa", mode: "weekly" as const, q: " moon " };
+    const s = { tab: "stocks" as const, pair: "NVDAon", category: "hunger", region: "africa", mode: "weekly" as const, cadence: null, q: " moon " };
     expect(parseState(stateToSearch(s))).toEqual({ ...s, q: "moon" });
   });
   it("ignores unknown values", () => {
@@ -94,6 +95,8 @@ describe("URL state", () => {
   });
   it("leaves mode out for the live tab, which implies it", () => {
     expect(stateToSearch({ ...DEFAULT_STATE, tab: "live", mode: "live" })).toBe("?tab=live");
+    expect(parseState("?tab=live&cadence=12h").cadence).toBe("12h");
+    expect(stateToSearch({ ...DEFAULT_STATE, tab: "live", cadence: "72h" })).toBe("?tab=live&cadence=72h");
   });
 });
 
@@ -115,6 +118,7 @@ describe("buildQuery", () => {
     expect(buildQuery({ ...DEFAULT_STATE, tab: "cause" }, assets).sort).toBe("raised");
     expect(buildQuery({ ...DEFAULT_STATE, tab: "cause", category: "hunger", region: "asia" }, assets)).toMatchObject({ sort: "trending", categories: ["hunger"], regions: ["asia"] });
     expect(buildQuery({ ...DEFAULT_STATE, tab: "live" }, assets).mode).toBe("live");
+    expect(buildQuery({ ...DEFAULT_STATE, tab: "live", cadence: "24h" }, assets).periods).toEqual([2]);
     expect(buildQuery({ ...DEFAULT_STATE, mode: "weekly" }, assets).mode).toBe("weekly");
   });
   it("passes the page cursor", () => {

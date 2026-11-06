@@ -54,6 +54,8 @@ export interface DiscoverToken {
 export interface DiscoverQuery {
   sort?: DiscoverSort;
   mode?: "weekly" | "live";
+  /** Live rotation periods: 0 = 1h, 1 = 12h, 2 = 1d, 3 = 3d, 4 = 1w. */
+  periods?: readonly number[];
   quotes?: readonly string[];
   categories?: readonly string[];
   regions?: readonly string[];
@@ -142,6 +144,7 @@ export function discoverParams(q: DiscoverQuery): Record<string, string | number
   return {
     sort: q.sort,
     mode: q.mode,
+    periods: q.periods && q.periods.length ? q.periods.join(",") : undefined,
     quotes: list(q.quotes),
     categories: list(q.categories),
     regions: list(q.regions),

@@ -37,11 +37,15 @@ export interface DiscoverState {
   region: string | null;
   /** Launch mode filter; the Live tab implies `live`. */
   mode: LaunchMode | null;
+  /** Live tab: only this rotation cadence. */
+  cadence: LiveCadence | null;
   /** Free-text search (name, symbol or ENS label). */
   q: string;
 }
 
-export const DEFAULT_STATE: DiscoverState = { tab: "trending", pair: null, category: null, region: null, mode: null, q: "" };
+export const CADENCES = ["1h", "12h", "24h", "72h", "week"] as const satisfies readonly LiveCadence[];
+
+export const DEFAULT_STATE: DiscoverState = { tab: "trending", pair: null, category: null, region: null, mode: null, cadence: null, q: "" };
 
 const CATEGORY_SLUGS: ReadonlySet<string> = new Set(CATEGORIES.map((c) => c.slug));
 const REGION_SLUGS: ReadonlySet<string> = new Set(REGIONS.map((r) => r.slug));
@@ -53,12 +57,14 @@ export function parseState(search: string): DiscoverState {
   const category = p.get("category");
   const region = p.get("region");
   const mode = p.get("mode");
+  const cadence = p.get("cadence");
   return {
     tab: (TABS as readonly string[]).includes(tab ?? "") ? (tab as DiscoverTab) : "trending",
     pair: p.get("pair")?.slice(0, 32) || null,
     category: category && CATEGORY_SLUGS.has(category) ? category : null,
     region: region && REGION_SLUGS.has(region) ? region : null,
     mode: mode === "weekly" || mode === "live" ? mode : null,
+    cadence: (CADENCES as readonly string[]).includes(cadence ?? "") ? (cadence as LiveCadence) : null,
     q: (p.get("q") ?? "").slice(0, 100),
   };
 }
@@ -71,6 +77,7 @@ export function stateToSearch(s: DiscoverState): string {
   if (s.category) p.set("category", s.category);
   if (s.region) p.set("region", s.region);
   if (s.mode && s.tab !== "live") p.set("mode", s.mode);
+  if (s.cadence && s.tab === "live") p.set("cadence", s.cadence);
   if (s.q.trim()) p.set("q", s.q.trim());
   const out = p.toString();
   return out ? `?${out}` : "";
@@ -90,6 +97,7 @@ export function buildQuery(s: DiscoverState, assets: readonly Pick<AppQuoteAsset
   return {
     sort: s.tab === "new" ? "new" : s.tab === "cause" && !s.category ? "raised" : "trending",
     mode: s.tab === "live" ? "live" : (s.mode ?? undefined),
+    periods: s.tab === "live" && s.cadence ? [CADENCES.indexOf(s.cadence)] : undefined,
     quotes,
     categories: s.category ? [s.category] : undefined,
     regions: s.region ? [s.region] : undefined,
