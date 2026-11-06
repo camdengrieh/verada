@@ -8,6 +8,23 @@ Source: [`contracts/src/hooks`](../../contracts/src/hooks). Tests:
 [`contracts/test/hooks`](../../contracts/test/hooks) (over 200 tests against the real v4
 `PoolManager` and routers, including fuzz and invariant checks).
 
+## Hooks at a glance
+
+| Hook | What it does | Flags | Extra gas per swap | Standalone example |
+| --- | --- | --- | --: | --- |
+| [`DecayingFeeHook`](DecayingFeeHook.md) | Dynamic LP fee that decays linearly from a launch fee to a base fee | `beforeInitialize`, `beforeSwap` | ~6,900 | `DecayingFeeExample` |
+| [`SwapFeeHook`](SwapFeeHook.md) | Hook fee in bps of the unspecified side of every swap, paid to a recipient | `beforeInitialize`, `afterSwap`, `afterSwapReturnDelta` | ~21,700 (claims), ~22,100 (tokens) | `SwapFeeExample` |
+| [`TwapOracleHook`](TwapOracleHook.md) | Per pool time-weighted average tick, `twapTick(poolId, window)` | `afterInitialize`, `beforeSwap` | ~12,900, ~35,700 when it writes a checkpoint | `TwapOracleExample` |
+| [`PoolInitGateHook`](AccessGates.md#poolinitgatehook) | Only allowed initializers create pools, plus an overridable pool key rule | `beforeInitialize` | 0 | `PoolInitGateExample` |
+| [`LiquidityGateHook`](AccessGates.md#liquiditygatehook) | Per pool allowlist for adding and removing liquidity (locked liquidity) | `beforeInitialize`, `beforeAddLiquidity`, `beforeRemoveLiquidity` | 0 | `LiquidityGateExample` |
+| [`FeeConversionHook`](FeeConversionHook.md) | Converts fee claims to one currency inside the swap; holds and retries on failure | `beforeSwap`, `afterSwap` | route dependent | `ConvertingSwapFeeExample` (with `SwapFeeHook`) |
+| [`BondingCurveHook`](BondingCurveHook.md) | Reference custom curve through `beforeSwap` return deltas, then graduates | `beforeInitialize`, `beforeAddLiquidity`, `beforeSwap`, `beforeSwapReturnDelta` | not measured | `BondingCurveHook` itself (reference only) |
+
+Flags are what the standalone example's address must encode; `beforeInitialize` on the per pool
+features comes from `PoolAdminHook`. Gas is measured against a hookless swap (see [Gas](#gas)).
+All examples live in `contracts/src/hooks/examples/`. `LaunchpadHook` there combines the first
+five into one hook (~62,300 gas on a checkpoint swap).
+
 ## Why a library of features
 
 A v4 pool has exactly one hook address, so most v4 hooks are written as one bespoke contract that
@@ -20,18 +37,15 @@ return deltas, LP fee overrides and the reentrancy lock merge by fixed rules, so
 not depend on the order of the features. Every feature also ships as a minimal deployable
 example, so a single feature can be used as is.
 
-The library was extracted from Verada, a charity token launchpad, whose two hooks bundled all of
-these behaviours into bespoke contracts. Both are now built from it: the weekly launch hook is
-`PoolInitGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook` and the live donation hook is
-`PoolInitGateHook, FeeConversionHook`, each with a thin layer of Verada glue (factory rules,
-charity fee routing, the vault credit). See [Verada.md](Verada.md).
+For a production protocol rebuilt on these features, see the case study in
+[Verada.md](Verada.md).
 
 ## The hooks
 
 | Hook | What it does | Use it when | Per pool config | Swap reverts it can add |
 | --- | --- | --- | --- | --- |
 | [`DecayingFeeHook`](DecayingFeeHook.md) | Dynamic LP fee that starts high and decays linearly to a base fee | Anti-sniper launch fee that pays LPs; or a plain admin-set dynamic fee (`startFee == endFee`) | yes, pool admin | none |
-| [`SwapFeeHook`](SwapFeeHook.md) | Hook fee in bps of the unspecified side of every swap, paid to a recipient as ERC-6909 claims or tokens | Protocol, creator, treasury or referral fee on top of the LP fee | yes, pool admin | only with token settlement (a reverting recipient), or from your `_swapFeeBps` / `_onSwapFeeTaken` overrides |
+| [`SwapFeeHook`](SwapFeeHook.md) | Hook fee in bps of the unspecified side of every swap, paid to a recipient as ERC-6909 claims or tokens (input-side fees of exact-output swaps are always claims) | Protocol, creator, treasury or referral fee on top of the LP fee | yes, pool admin | only with token settlement (a reverting recipient), or from your `_swapFeeBps` / `_onSwapFeeTaken` overrides |
 | [`TwapOracleHook`](TwapOracleHook.md) | Per pool tick accumulator with a ring buffer of checkpoints; `twapTick(poolId, window)` | A manipulation-resistant price for lending, guards, conversions, dashboards | none (constructor: interval, capacity) | none |
 | [`PoolInitGateHook`](AccessGates.md#poolinitgatehook) | Only allowed initializers may create pools with this hook, plus an overridable pool key rule | Factory-only pools, allowed quote lists, one pool per token | hook level (your access control) | none (initialization only) |
 | [`LiquidityGateHook`](AccessGates.md#liquiditygatehook) | Per pool allowlist for adding and/or removing liquidity | Locked launch liquidity, permissioned or KYC'd LP vaults | yes, pool admin | none (liquidity only) |
@@ -58,7 +72,7 @@ Deployable examples in `contracts/src/hooks/examples/`:
 | `LiquidityGateExample` | `LiquidityGateHook` |
 | `ConvertingSwapFeeExample` | `SwapFeeHook, FeeConversionHook, Ownable` |
 | `LaunchpadHook` | `PoolInitGateHook, LiquidityGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook, Ownable` |
-| `BondingCurveHook` | `PoolAdminHook` plus its own curve (reference only) |
+| `BondingCurveHook` | `PoolAdminHook, IUnlockCallback` plus its own curve (reference only) |
 
 ## Permission flags
 
@@ -109,10 +123,16 @@ The feature hooks depend only on Uniswap v4 core. The examples that pick an acce
 scheme (`PoolInitGateExample`, `ConvertingSwapFeeExample`, `LaunchpadHook`) and the bonding curve
 also use OpenZeppelin Contracts (`Ownable`, `SafeERC20`).
 
+There are two ways in. `forge install` clones the GitHub repository, so it only works while the
+repository is **public** (or you have git credentials for it) and only for a ref that contains
+`contracts/src/hooks`. If either is not true for you, copy the folder (Option B): the hooks are
+plain Solidity files with relative imports and need nothing from the rest of the repository
+besides v4 core (and OpenZeppelin for the examples).
+
 ### Option A: forge install
 
 ```sh
-forge install camdengrieh/verada          # pin a commit or tag: camdengrieh/verada@<ref>
+forge install camdengrieh/verada@<commit-or-tag>   # pin the ref you reviewed
 ```
 
 The hooks live in a subfolder of this monorepo, so add remappings yourself (in `foundry.toml` or
@@ -143,10 +163,30 @@ storage for the lock). `via_ir` is not required.
 
 ### Option B: copy the folder
 
-Copy `contracts/src/hooks/` into your project (for example as `src/hooks/`) and, if you want the
-miner, `contracts/script/HookMiner.sol`. The files import each other with relative paths and v4
-core as `v4-core/...`, so only the `v4-core/` remapping (and `@openzeppelin/contracts/` for the
-examples) is needed. Keep the `SPDX-License-Identifier: MIT` headers.
+Works with a private repository, a download of the sources or a review copy:
+
+```sh
+cp -R verada/contracts/src/hooks        my-project/src/hooks
+cp    verada/contracts/script/HookMiner.sol my-project/script/   # optional, the address miner
+cd my-project
+forge install uniswap/v4-core@bea7f6d1c11cd5dc4f0d5151ffa37a1c239feee6   # the tested commit
+forge install OpenZeppelin/openzeppelin-contracts                          # examples only
+```
+
+The v4 core commit above is the one the library is built and tested against; other commits are
+untested.
+
+```toml
+remappings = [
+  "v4-core/=lib/v4-core/src/",
+  "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/", # examples only
+]
+```
+
+The files import each other with relative paths and v4 core as `v4-core/...`, so these two
+remappings are all they need; import them from your own path (`import {SwapFeeHook} from
+"./hooks/fee/SwapFeeHook.sol";` or a `v4-hooks/=src/hooks/` remapping). `HookMiner.sol` imports
+nothing. Keep the `SPDX-License-Identifier: MIT` headers.
 
 ### Build and test the library itself
 
@@ -169,7 +209,7 @@ fresh transaction. Baseline: the same swap on a hookless pool, 91,681 gas.
 | `TwapOracleHook`, no new checkpoint | ~12,900 | accrues the tick into one state slot |
 | `TwapOracleHook`, writes a checkpoint | ~35,700 | at most once per `observationInterval`; cheaper once the ring buffer wraps (overwrites a used slot) |
 | `SwapFeeHook`, fee as claims | ~21,700 | `mint` of ERC-6909 claims, return delta, event |
-| `SwapFeeHook`, fee as tokens | ~22,100 | `take` (ERC-20 transfer) instead of `mint` |
+| `SwapFeeHook`, fee as tokens | ~22,100 | `take` (ERC-20 transfer) instead of `mint`; exact-output swaps mint claims instead |
 | `LaunchpadHook` (five features, checkpoint swap) | ~62,300 | one hook call per callback for all features |
 | `FeeConversionHook` | route dependent | a converted fee runs one v4 swap per hop (1 to 3) inside the swap; the swap needs `conversionGasRequired()` (770,317 by default) left at `afterSwap`, else it reverts `InsufficientGas`, so wallets must estimate gas rather than use a fixed limit |
 | Access gates | 0 on swaps | they only run on initialize and modify liquidity |
@@ -218,5 +258,5 @@ unaudited code that holds value.
 - [Composition.md](Composition.md): composition reference on `LaunchpadHook`, protocol glue,
   deployment checklist
 - [BondingCurveHook.md](BondingCurveHook.md): the custom curve reference and a numeric walkthrough
-- [Verada.md](Verada.md): how Verada's two production hooks map onto the library
-- [DESIGN.md](DESIGN.md): the design spec the modules were built against
+- [Verada.md](Verada.md): case study, a production launchpad's two hooks rebuilt on the library
+- [DESIGN.md](DESIGN.md): the design spec: composition rules and every module's API

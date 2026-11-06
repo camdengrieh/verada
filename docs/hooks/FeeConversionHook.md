@@ -93,8 +93,9 @@ Anyone can call it. It is `hookNonReentrant` and accepts chunks.
 - If the conversion fails, the whole retry reverts and the held amounts are unchanged.
 - The body is `_retryHeld(bucket, currency, amount)` (internal). A concrete hook that wants its
   own retry entry point (a different key, different errors) holds the lock in `LOCK_CALL` itself
-  and calls `_retryHeld`; see `VeradaLiveHook.retryHeld(token, causeId, amount)` in
-  [Verada.md](Verada.md).
+  and calls `_retryHeld`. For example, a hook that keys held fees by `(token, recipient)` can
+  expose `retryHeld(token, recipient, amount)`, derive the bucket as
+  `keccak256(abi.encode(token, recipient))` and pass it on.
 - Emits `HeldFeeRetried(bucket, currency, caller, amountIn, amountOut)`.
 
 ## Price guard
@@ -164,13 +165,14 @@ the merged set adds `beforeInitialize`, `afterSwap` and `afterSwapReturnDelta`.
   `_beforeInitialize` `override(BaseHook, PoolAdminHook)` and `_afterSwap` `override(BaseHook,
   SwapFeeHook)`, each with body `return super._x(...)`.
 - Buckets are opaque. The example uses the pool id. A protocol can use any key: a recipient,
-  an epoch, a cause.
+  an epoch, a `(pool, recipient)` pair.
 - Customize the payout through `_settleConverted` (for example, mint claims to a vault instead of
   taking tokens) and `_onFeeConverted` (for example, credit a ledger). Both run inside the try
   frame, so if either reverts, the fee is held.
 - Replace the converter with `_executeConversion` (an aggregator or a protocol router instead of
   the stored route), react to holds with `_onFeeHeld`, and expose your own retry with
-  `_retryHeld`. Verada's live hook uses all three ([Verada.md](Verada.md)).
+  `_retryHeld`. A hook can use all three together: an external converter, a held-fee event in its
+  own schema, and a retry keyed by its own identifiers.
 - `unlockCallback` is `virtual`. A concrete hook that also inherits another feature implementing
   `IUnlockCallback` must override it and dispatch on its own data.
 - The feature does not read `hookData`.
@@ -229,7 +231,14 @@ spec) and this feature. It covers:
 `SwapFeeHook`. It covers conversion, hold and retry, a different recipient and token settlement
 (no conversion), owner gating, guard validation and payout changes.
 
+`contracts/test/hooks/conversion/FeeConversionExtensions.t.sol` covers the extension points on
+their own: `_executeConversion` (default route, target currency, revert and zero output held, an
+external converter override, `inSwap == false` on retry), `_onFeeHeld` (held amounts already
+updated, the synced-currency and no-route reasons, not called on success) and a custom retry
+entry point over `_retryHeld` (chunks, failure keeps the hold, the lock is required, validation,
+re-entry from a conversion blocked).
+
 ```
 cd contracts
-FOUNDRY_PROFILE=hooks forge test --match-contract 'FeeConversionHookTest|ConvertingSwapFeeExampleTest'
+FOUNDRY_PROFILE=hooks forge test --match-contract 'FeeConversionHookTest|FeeConversionExtensionsTest|ConvertingSwapFeeExampleTest'
 ```

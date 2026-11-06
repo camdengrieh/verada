@@ -231,12 +231,3 @@ contract GatedLaunchHook is PoolInitGateHook, LiquidityGateHook /*, other featur
 - Gating removal also gates fee collection (zero-delta modify).
 - Donations are not gated. A protocol that refuses donations adds a one-line `_beforeDonate`
   revert in its concrete hook.
-
-## Where this comes from
-
-The launchpad's production hooks accept a pool only when the factory initializes it, with a
-dynamic fee, an allowed and routable quote asset, and one pool per token; launch liquidity is held
-by a locker that never removes it. Here the factory check is `PoolInitGateHook` with the factory
-as the only initializer, the quote and one-pool-per-token checks are a `_validatePoolKey` override
-(plus the recording pattern above), the dynamic fee check lives in `DecayingFeeHook`, and the
-locked position is the recipe above.

@@ -1,8 +1,8 @@
 # BondingCurveHook (reference implementation)
 
 > **Reference only.** `BondingCurveHook` shows how a Uniswap v4 hook can price a pool with its
-> own curve instead of concentrated liquidity. It is not used by Verada in production, has not
-> been audited, and is not deployed by any script. Treat it as an example to learn from and to
+> own curve instead of concentrated liquidity. It is not used in production, has not been
+> audited, and is not deployed by any script. Treat it as an example to learn from and to
 > fork.
 
 - Source: `contracts/src/hooks/examples/BondingCurveHook.sol`
@@ -87,7 +87,7 @@ Reverts a trader's swap can hit (wrapped by the pool manager in `WrappedError`):
 | `InsufficientReserve()` | the output exceeds the reserve that pays it |
 | `SafeCastOverflow()` | an amount above `int128` / a reserve above `uint128` |
 
-Adding liquidity reverts `LiquidityNotAllowed()` (in `beforeAddLiquidity`).
+Adding liquidity reverts `CurveLiquidityDisabled()` (in `beforeAddLiquidity`).
 
 ## Walkthrough
 
@@ -184,9 +184,9 @@ counter). Notes:
 - Because `BondingCurveHook` is concrete, a derived hook must re-declare every internal function
   that two of its bases define, including `_beforeInitialize` (`override(BaseHook,
   PoolAdminHook)`) and `_beforeAddLiquidity` (`override(BaseHook, BondingCurveHook)`).
-- The error name `LiquidityNotAllowed()` is also used (with arguments) by `LiquidityGateHook`;
-  both cannot be inherited together (they also make no sense together: the curve blocks all
-  liquidity).
+- The liquidity error is `CurveLiquidityDisabled()`, so its name does not clash with
+  `LiquidityGateHook`'s `LiquidityNotAllowed(poolId, sender)`. The two compile together, but they
+  make no sense together: the curve already blocks all liquidity.
 - It implements `IUnlockCallback`; a composition with another unlock-based feature must merge the
   two callbacks in the concrete hook.
 

@@ -21,8 +21,12 @@ The reference version of the same rules, worked on the five-feature `LaunchpadHo
 ## 1. Install
 
 ```sh
-forge install camdengrieh/verada
+forge install camdengrieh/verada@<commit-or-tag>
 ```
+
+`forge install` needs the repository to be public and the ref to contain `contracts/src/hooks`.
+Otherwise copy the folder instead ([README.md, Option B](README.md#option-b-copy-the-folder)) and
+point the `v4-hooks/` remappings below at your copy.
 
 ```toml
 # foundry.toml
@@ -139,8 +143,9 @@ and the list must name each base whose definition is still "open" from here:
 | `_afterSwap` | `SwapFeeHook` | `SwapFeeHook`, `BaseHook` |
 
 You do not have to work this out by hand: write the list you expect and compile. The compiler
-names each missing base ("Derived contract must override function") and each extra one
-("Invalid contracts specified in override list").
+names each function you have not re-declared (error 6480, "Derived contract must override
+function"), each missing base (error 4327, "Function needs to specify overridden contract") and
+each extra one (error 2353, "Invalid contract specified in override list").
 
 ### What runs, in order
 

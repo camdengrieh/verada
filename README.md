@@ -37,8 +37,8 @@ a single hook by inheritance (a v4 pool has one hook address):
 | `BondingCurveHook` | reference custom-curve example (not used in production) |
 
 `VeradaHook` and `VeradaLiveHook` are compositions of these plus Verada glue. Docs, install
-(`forge install` plus a remapping, or copy the folder; MIT), gas and trust assumptions:
-[`docs/hooks/README.md`](docs/hooks/README.md). Tutorial:
+(`forge install` plus a remapping while the repository is public, or copy the folder; MIT), gas
+and trust assumptions: [`docs/hooks/README.md`](docs/hooks/README.md). Tutorial:
 [`docs/hooks/ComposeYourOwn.md`](docs/hooks/ComposeYourOwn.md). Case study:
 [`docs/hooks/Verada.md`](docs/hooks/Verada.md).
 

@@ -25,6 +25,22 @@ The fee goes to a per-pool recipient, either as **ERC-6909 claims** minted by th
 `PoolManager.burn` inside its own unlock) or as **tokens** (`PoolManager.take`). Any LP, launchpad
 or protocol can use it: as is (`SwapFeeExample`) or composed with other features into one hook.
 
+### Settlement modes
+
+| Pool config | Exact input (fee on the output side) | Exact output (fee on the input side) |
+| --- | --- | --- |
+| `asClaims = true` | claims | claims |
+| `asClaims = false` (token mode) | tokens | **claims** |
+
+Token mode pays tokens only for output-side fees. On an exact-output swap the fee is in the input
+currency, which the trader pays only after the swap returns; taking it as tokens inside the swap
+needs the pool manager to already hold that currency, which it does not on a fresh single-sided
+pool (the swap would revert). So that fee is minted to the recipient as claims, redeemable in any
+later unlock (`burn`, then `take`). `SwapFeeTaken.asClaims` and the `asClaims` argument of
+`_onSwapFeeTaken` report the form actually paid, not the configured one. A recipient that must
+receive tokens either redeems its claims or, where the pool manager is known to hold the input
+currency, the concrete hook overrides `_swapFeeAsClaims` (see below).
+
 ## Configuration
 
 Per pool, by the pool admin (`PoolAdminHook`: the caller of `PoolManager.initialize` for that
@@ -50,7 +66,18 @@ renounces (`transferPoolAdmin(key, address(0))`) the config is frozen and keeps 
 
 Events: `SwapFeeSet(PoolId indexed poolId, uint16 feeBps, address recipient, bool asClaims)` on
 every config change, `SwapFeeTaken(PoolId indexed poolId, Currency indexed currency, address
-indexed recipient, uint256 amount)` on every charged swap.
+indexed recipient, uint256 amount, bool asClaims)` on every charged swap (`asClaims` is the form
+paid, see [Settlement modes](#settlement-modes)).
+
+Protocol glue that derives a pool's fee from its own rules, with no admin call, uses the internal
+setter, which applies the same validation and emits the same event:
+
+```solidity
+function _setSwapFee(PoolId id, uint16 feeBps, address recipient, bool asClaims) internal;
+```
+
+For example, a hook whose pools have no admin (`_initialPoolAdmin` returns zero) writes each
+pool's fee in its `_beforeInitialize`, after `super`, with `_setSwapFee(key.toId(), ...)`.
 
 ## Fee math
 
@@ -65,8 +92,9 @@ fee = ceil(amount * bps / 10_000)                       // FullMath.mulDivRoundi
 - Rounded up (the side the feature protects). `fee <= amount` for any `bps <= 10_000`.
 - A fee of zero (no recipient, zero rate, or a zero unspecified amount) does nothing: no mint, no
   take, no event, zero delta.
-- Settlement: `poolManager.mint(recipient, currency.toId(), fee)` when `asClaims`, else
-  `poolManager.take(currency, recipient, fee)`. The hook returns `+fee` as its unspecified delta,
+- Settlement: `poolManager.mint(recipient, currency.toId(), fee)` when the fee is paid as claims
+  (`_swapFeeAsClaims(key, params, cfg.asClaims)`), else `poolManager.take(currency, recipient,
+  fee)`. The hook returns `+fee` as its unspecified delta,
   so the hook's own balance in the pool manager nets to zero and the trader's delta carries the fee.
 
 ## Customization points
@@ -77,7 +105,8 @@ All `internal virtual`, override in the concrete hook:
 | --- | --- | --- |
 | `_swapFeeBps(address sender, PoolKey calldata key, SwapParams calldata params) view returns (uint16)` | the stored `feeBps` | exemptions (`return 0` for a keeper or a fee collector's own swaps), a launch surcharge that decays (e.g. `LinearDecay`), volume or direction tiers. Must not exceed 10_000 or the swap reverts `InvalidSwapFee`. Only consulted when the pool has a non-zero recipient, so set a recipient (with `feeBps == 0` if the override supplies the whole rate). |
 | `_maxSwapFeeBps() pure returns (uint16)` | `1_000` (10%) | raise or lower the setter cap (never above 10_000) |
-| `_onSwapFeeTaken(address sender, PoolKey calldata key, Currency currency, uint256 amount, address recipient, bool asClaims)` | no-op | runs after settlement, inside the swap: account for claims the hook itself holds, convert them (`FeeConversionHook`), notify a collector |
+| `_swapFeeAsClaims(PoolKey calldata key, SwapParams calldata params, bool configuredAsClaims) view returns (bool)` | `configuredAsClaims \|\| params.amountSpecified > 0` (claims when configured, and for every input-side fee) | force tokens for a recipient that cannot use claims, only where the pool manager is known to hold the input currency (otherwise exact-output swaps revert) |
+| `_onSwapFeeTaken(address sender, PoolKey calldata key, Currency currency, uint256 amount, address recipient, bool asClaims)` | no-op | runs after settlement, inside the swap, with the form actually paid: account for claims the hook itself holds, convert them (`FeeConversionHook`), notify a collector |
 
 `sender` is the caller of `PoolManager.swap` (a router, an aggregator or a contract), not the end
 user.
@@ -138,9 +167,9 @@ just received.
   - `InvalidSwapFee(bps)` when an override of `_swapFeeBps` returns more than 10_000;
   - `SafeCastOverflow` / checked-arithmetic overflow when the fee (plus other features' deltas)
     does not fit `int128` (unreachable for real token amounts);
-  - anything the token or the recipient does on `take` (token settlement only): a token that
-    reverts on transfer to the recipient, or a native-currency recipient that rejects ETH, blocks
-    every swap on the pool until the admin changes the config;
+  - anything the token or the recipient does on `take` (token settlement of an output-side fee
+    only): a token that reverts on transfer to the recipient, or a native-currency recipient that
+    rejects ETH, blocks every exact-input swap on the pool until the admin changes the config;
   - anything an `_onSwapFeeTaken` override reverts with.
 - Prefer `asClaims`: minting claims runs no external code inside the swap. With token settlement a
   native-currency recipient (or a token with transfer callbacks) receives control in the middle of
@@ -166,6 +195,11 @@ just received.
 - permissions and address check, pool-manager-only callback;
 - all four swap shapes, claims and tokens: only the unspecified side changes, by exactly the
   rounded-up fee; recipient balances; nothing left on the hook; event fields and accumulation;
+- token mode: exact-output fees paid as claims (`test_exactOutZeroForOne_tokensModePaysClaims`,
+  `test_exactOutOneForZero_tokensModePaysClaims`), all four shapes on a fresh single-sided pool
+  (`test_freshPool_tokens_*`), the fallback claims redeemable, the paid form reported to
+  `_onSwapFeeTaken`, and an override of `_swapFeeAsClaims` forcing tokens;
+- `_setSwapFee` skips the admin check but validates like the setter;
 - hook as its own claims recipient; unconfigured pool, zero rate, zero unspecified amount and a
   disabled fee charge nothing;
 - fuzz over amount, rate, direction and exact-in/out: `fee == ceil(gross * bps / 10_000)`,

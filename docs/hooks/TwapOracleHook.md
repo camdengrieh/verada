@@ -16,7 +16,8 @@ static or dynamic fee.
 Each pool has a tick accumulator, the sum of `tick * seconds` since the pool was initialized, and a
 ring buffer of checkpoints of that accumulator.
 
-- `afterInitialize` seeds checkpoint 0 at `block.timestamp` with accumulator 0.
+- `afterInitialize` seeds checkpoint 0 at `block.timestamp` with accumulator 0
+  (`_seedOracle(poolId)`).
 - `beforeSwap` reads the pool's current `slot0` tick **before the swap moves it**, adds
   `tick * (now - lastTimestamp)` to the accumulator, and stores a new checkpoint when the newest one
   is at least `observationInterval` seconds old. When the ring is full, the oldest checkpoint is
@@ -71,6 +72,21 @@ constructor(IPoolManager m) BaseHook(m) TwapOracleHook(observationInterval, obse
 - Storage per pool: one slot of state plus up to `observationCapacity` checkpoint slots. Gas per
   swap: one state slot read and written, plus a checkpoint write at most once per interval.
 
+### Seeding without `afterInitialize`
+
+The seed is an internal function:
+
+```solidity
+function _seedOracle(PoolId id) internal; // checkpoint 0 at block.timestamp, accumulator 0
+```
+
+It does not depend on the pool's tick (the first accrual reads `slot0`), so a concrete hook that
+must keep the `afterInitialize` flag off (for example to keep an address it already deployed
+with) can clear that flag in its `_hookPermissions` and call `_seedOracle(key.toId())` from its
+`_beforeInitialize` instead. Call it exactly once per pool, at initialization: seeding again
+restarts the accumulator and drops the history. A pool that was never seeded has no oracle
+(`observationCount == 0`, `ok == false`) and accrual is a no-op.
+
 ## Permissions
 
 `afterInitialize`, `beforeSwap`. The deployed address must encode exactly the merged flags of the
@@ -85,23 +101,33 @@ unchanged. It never decodes `hookData` and never takes the swap lock. In a concr
 other features, re-declare the functions that two or more bases define:
 
 ```solidity
-contract MyHook is TwapOracleHook, SomeFeeHook {
+contract MyHook is TwapOracleHook, DecayingFeeHook {
     constructor(IPoolManager m) BaseHook(m) TwapOracleHook(5 minutes, 24) {}
 
     function _hookPermissions(Hooks.Permissions memory p)
-        internal pure override(TwapOracleHook, SomeFeeHook) returns (Hooks.Permissions memory)
+        internal pure override(TwapOracleHook, DecayingFeeHook) returns (Hooks.Permissions memory)
     { return super._hookPermissions(p); }
 
-    // SomeFeeHook does not define _afterInitialize: list BaseHook instead
+    // DecayingFeeHook defines it; TwapOracleHook reaches BaseHook's definition
+    function _beforeInitialize(address s, PoolKey calldata k, uint160 px)
+        internal override(BaseHook, DecayingFeeHook) returns (bytes4)
+    { return super._beforeInitialize(s, k, px); }
+
+    // DecayingFeeHook does not define _afterInitialize: list BaseHook instead
     function _afterInitialize(address s, PoolKey calldata k, uint160 p, int24 t)
         internal override(BaseHook, TwapOracleHook) returns (bytes4)
     { return super._afterInitialize(s, k, p, t); }
 
     function _beforeSwap(address s, PoolKey calldata k, SwapParams calldata sp, bytes calldata d)
-        internal override(TwapOracleHook, SomeFeeHook) returns (bytes4, BeforeSwapDelta, uint24)
+        internal override(TwapOracleHook, DecayingFeeHook) returns (bytes4, BeforeSwapDelta, uint24)
     { return super._beforeSwap(s, k, sp, d); }
 }
 ```
+
+Every fee feature in the library is built on `PoolAdminHook`, so composing one with the oracle
+always needs the `_beforeInitialize` re-declaration; with `SwapFeeHook`, which does not define it
+itself, the list is `override(BaseHook, PoolAdminHook)`. With a feature built directly on
+`BaseHook` that does not define `_beforeInitialize`, drop it.
 
 The oracle reads `slot0` in `beforeSwap`, before any feature's delta or fee takes effect, so the
 order of features in the inheritance list does not change what it records. The tests cover both
@@ -139,7 +165,8 @@ the real `PoolManager` and routers:
 
 - permissions and flag-encoded address, constructor config reverts, `onlyPoolManager`, unflagged
   callbacks
-- checkpoint seeding at initialization
+- checkpoint seeding at initialization, and `_seedOracle` called from `_beforeInitialize` with the
+  `afterInitialize` flag cleared (`test_seedOracle_inBeforeInitialize`)
 - hand-computed averages over four tick periods (positive and negative), checkpoint selection by
   window, and rounding toward negative infinity in both signs
 - fuzz: a two-period average against a reference floor formula, and the floor division itself

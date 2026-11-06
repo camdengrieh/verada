@@ -33,6 +33,18 @@ Nothing below is a hook, and none of it moved into the library:
 - `FeeVault`, `LiveDonationVault`, `RotationGovernor`, the cause registry and the voting
   contracts.
 
+## Pool creation and locked liquidity
+
+Both hooks accept a pool only when the factory initializes it, with a dynamic fee, an allowed and
+routable quote asset, and one pool per token; launch liquidity is held by a locker that never
+removes it. In library terms the factory check is `PoolInitGateHook` with the factory as the only
+initializer, the quote and one-pool-per-token checks are a `_validatePoolKey` override (with the
+recording pattern from [AccessGates.md](AccessGates.md#extension-points)), and so is the
+dynamic-fee check (on the weekly hook `DecayingFeeHook` enforces it as well). The locked position is the outcome of the
+locked-liquidity recipe in [AccessGates.md](AccessGates.md#recipe-locked-launch-liquidity), but
+Verada gets it without `LiquidityGateHook`: its pools have no admin, and `VeradaLpLocker` simply
+has no removal path.
+
 ## VeradaHook (weekly mode)
 
 ### Behaviour to reproduce
@@ -55,9 +67,9 @@ Nothing below is a hook, and none of it moved into the library:
 | --- | --- | --- |
 | factory-only pools | `PoolInitGateHook` | constructor: `_setPoolInitializer(factory, true)` |
 | one pool per token, dynamic fee, exactly one configured side | `PoolInitGateHook` key rule | `_validatePoolKey` reverts `InvalidPool` |
-| base LP fee | `DecayingFeeHook` with a flat schedule (`startFee == endFee == baseFeeBps * 100` pips, `duration = 0`) | written in `_beforeInitialize` from the token's `FeeConfig` |
-| decaying surcharge on the unspecified side | `SwapFeeHook`, tokens to `recipient = feeConsolidator` | `_swapFeeBps`: 0 for the consolidator, else `LinearDecay.value(sniperFeeStartBps, 0, sniperDecaySeconds, launchTimestamp, now)`; `_onSwapFeeTaken`: `consolidate(...)` and `SniperFeeTaken` |
-| TWAP | `TwapOracleHook(OBS_INTERVAL, OBS_CAPACITY)` = `(5 minutes, 24)` | `twapTick(address token, uint32 window)` maps the token to its pool id and calls the generic `twapTick(poolId, window)` |
+| base LP fee | `DecayingFeeHook` with a flat schedule (`startFee == endFee == baseFeeBps * 100` pips, `duration = 0`) | `_setDecayingFee(id, lpFee, lpFee, 0, 0)` in `_beforeInitialize`, from the token's `FeeConfig` |
+| decaying surcharge on the unspecified side | `SwapFeeHook`, tokens to `recipient = feeConsolidator` | `_setSwapFee(id, 0, feeConsolidator, false)` in `_beforeInitialize`; `_swapFeeBps`: 0 for the consolidator, else `LinearDecay.value(sniperFeeStartBps, 0, sniperDecaySeconds, launchTimestamp, now)`; `_swapFeeAsClaims` returns false, so exact-output surcharges are also paid as tokens (the consolidator accepts tokens only, and the shared pool manager holds the allowed quote assets); `_onSwapFeeTaken`: `consolidate(...)` and `SniperFeeTaken` |
+| TWAP | `TwapOracleHook(OBS_INTERVAL, OBS_CAPACITY)` = `(5 minutes, 24)` | `_seedOracle(id)` in `_beforeInitialize` (see below); `twapTick(address token, uint32 window)` maps the token to its pool id and calls the generic `twapTick(poolId, window)` |
 | frozen per-token config | `PoolAdminHook` | `_initialPoolAdmin` returns `address(0)`: no pool has an admin, so `setDecayingFee`, `setSwapFee` and `transferPoolAdmin` always revert `NotPoolAdmin` |
 | register the pool with the consolidator | none | `_beforeInitialize`, after `super` |
 
@@ -65,7 +77,8 @@ Two design points worth copying:
 
 - **Config derived from the protocol, then frozen.** The factory's `configureToken` is the only
   configuration call. `_beforeInitialize` turns the stored `FeeConfig` into the features' per pool
-  structs (`decayingFee[id]`, `swapFee[id]`) and no admin is ever recorded, so the terms are fixed
+  config through their internal setters (`_setDecayingFee`, `_setSwapFee`, which validate like
+  the admin setters) and no admin is ever recorded, so the terms are fixed
   from the first block. Generic hooks with per pool admins become fixed-terms hooks with one
   override.
 - **The rate comes from an override, the plumbing from the feature.** `swapFee[id]` stores only
@@ -75,8 +88,8 @@ Two design points worth copying:
 One deliberate deviation from the composition rules: `TwapOracleHook` asks for
 `afterInitialize` to seed its first checkpoint. To keep the deployed address flags of the
 original hook (`beforeInitialize | beforeSwap | afterSwap | afterSwapReturnDelta`),
-`VeradaHook._hookPermissions` clears that flag and seeds the oracle in `_beforeInitialize`
-instead (the seed does not depend on the tick). A new protocol has no deployed flag set to keep
+`VeradaHook._hookPermissions` clears that flag and calls `_seedOracle(id)` in
+`_beforeInitialize` instead (the seed does not depend on the tick). A new protocol has no deployed flag set to keep
 and should simply take the extra flag.
 
 One observable difference from the bespoke hook: `twapTick` now rounds the average toward
@@ -140,8 +153,10 @@ gas floor, lock) is the generic feature.
 
 ### What the library gained
 
-Fitting Verada's live hook without forking `FeeConversionHook` produced three generic extension
-points that any protocol can use:
+Fitting the weekly hook without writing feature storage directly produced the internal setters
+`_setDecayingFee(id, ...)`, `_setSwapFee(id, ...)` and `_seedOracle(id)`, and the settlement
+override `_swapFeeAsClaims`. Fitting the live hook without forking `FeeConversionHook` produced
+three generic extension points that any protocol can use:
 
 | Extension point | Use |
 | --- | --- |

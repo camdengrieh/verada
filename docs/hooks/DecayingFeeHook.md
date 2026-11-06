@@ -34,6 +34,7 @@ fee is `3000 + ceil(97_000 * 2600 / 3600) = 73_056` (7.3056%). After 1800 s it i
 | Function | Who | Effect |
 | --- | --- | --- |
 | `setDecayingFee(PoolKey key, uint24 startFee, uint24 endFee, uint32 duration, uint40 startTime)` | pool admin | sets or replaces the pool's schedule; `startTime == 0` means `block.timestamp` |
+| `_setDecayingFee(PoolId id, uint24 startFee, uint24 endFee, uint32 duration, uint40 startTime)` | internal, the concrete hook | the body of `setDecayingFee` without the admin check: same validation, same event |
 | `transferPoolAdmin(PoolKey key, address newAdmin)` (PoolAdminHook) | pool admin | hands over the role; `address(0)` freezes the schedule |
 | `currentFee(PoolId) returns (uint24)` | view | the fee the hook applies now (0 when unset) |
 | `decayingFee(PoolId)` | view | the stored `DecayingFee` struct |
@@ -54,6 +55,11 @@ Because the admin only exists once the pool is initialized, a launcher should in
 `setDecayingFee` **in the same transaction** (a factory or a multicall contract). Otherwise
 swaps between the two transactions trade at the pool's stored fee, which is 0 for a new dynamic-fee
 pool.
+
+A protocol that derives the schedule from its own rules, with no admin call, writes it from the
+concrete hook's `_beforeInitialize` (after `super`, so the dynamic-fee check has passed) with
+`_setDecayingFee(key.toId(), ...)`. The pool then has its schedule from its first swap, and
+`_initialPoolAdmin` can return zero so nobody can change it later.
 
 ## Behaviour in the pool
 
@@ -160,7 +166,8 @@ hook placed at a flag address by `HookTest._deployHook`):
   round-up property), monotonic fuzz, revert on a rising schedule.
 - Permissions and address check; callbacks only from the pool manager.
 - Config: stored values and event, `startTime == 0`, future start, replacement, valid boundaries,
-  each invalid case, admin only, key of another hook, transferred admin, frozen admin.
+  each invalid case, admin only, key of another hook, transferred admin, frozen admin;
+  `_setDecayingFee` skips the admin check but validates like the setter.
 - Pool: fee in the `Swap` event at t0, mid-window (rounded up), half way, end and long after;
   unset pool trades at its stored fee; static-fee pool cannot initialize; per-pool schedules;
   output halves at a 50% fee; a 100% fee blocks exact-output swaps.

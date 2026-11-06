@@ -113,8 +113,9 @@ on which no other base overrides it. In practice:
   feature's path reaches `BaseHook`'s definition directly);
 - `PoolAdminHook` is listed when it defines the function and some feature that inherits it does
   not;
-- a base that every path overrides must **not** be listed (`Invalid contracts specified in
-  override list`).
+- a base that every path overrides must **not** be listed: solc rejects it with error 2353
+  (`Invalid contract specified in override list`). Leaving out a base that is still open is
+  error 4327 (`Function needs to specify overridden contract`).
 
 For `LaunchpadHook`:
 
@@ -178,14 +179,18 @@ uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG
     | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
 bytes memory args = abi.encode(poolManager, owner);
 (address predicted, bytes32 salt) =
-    HookMiner.find(CREATE2_DEPLOYER, flags, type(LaunchpadHook).creationCode, args);
+    HookMiner.find(CREATE2_FACTORY, flags, type(LaunchpadHook).creationCode, args);
+vm.broadcast();
 LaunchpadHook hook = new LaunchpadHook{salt: salt}(poolManager, owner);
 require(address(hook) == predicted);
 ```
 
-`deployer` is whoever executes the CREATE2: the contract calling `new` or, in a `forge script`
-broadcast, the standard CREATE2 deployer (`0x4e59b44847b379578588920cA78FbF26c0B4956C`). The
-constructor arguments are part of the init code, so mine with the exact arguments you deploy with.
+This runs inside a `forge script` (`contract DeployLaunchpad is Script`). The first argument of
+`HookMiner.find` is whoever executes the CREATE2. In a broadcast, `new X{salt: ...}` goes through
+the standard CREATE2 deployer, which forge-std exposes as `CREATE2_FACTORY`
+(`0x4e59b44847b379578588920cA78FbF26c0B4956C`); a contract that calls `new` itself passes
+`address(this)`. The constructor arguments are part of the init code, so mine with the exact
+arguments you deploy with.
 Seven flags take about 2^14 attempts on average (well within the default bound).
 
 In tests, `HookTest._deployHook("File.sol:Contract", args, flags)` places the hook at a flag
@@ -205,10 +210,6 @@ cd contracts
 FOUNDRY_PROFILE=hooks forge test --match-path 'test/hooks/integration/*'
 ```
 
-`FOUNDRY_PROFILE=hooks forge build` also compiles `script/`, where the production deploy script
-needs `via_ir`; build the hooks alone with `FOUNDRY_PROFILE=hooks FOUNDRY_SCRIPT=test/hooks forge
-build` (`forge test` is unaffected).
-
 ## Running a launch with LaunchpadHook
 
 All pool config happens while the factory is the pool admin, then the factory renounces:
@@ -218,8 +219,8 @@ All pool config happens while the factory is the pool admin, then the factory re
    `key.fee = LPFeeLibrary.DYNAMIC_FEE_FLAG` (a static fee reverts `NotDynamicFee`) and
    `key.hooks = launchpadHook`. The factory is now the pool admin.
 3. Factory: `setDecayingFee(key, startFee, endFee, duration, 0)`, `setSwapFee(key, bps,
-   recipient, true)` (claims; see the checklist), `setLiquidityGate(key, true, true)`,
-   `setLiquidityProvider(key, locker, true)`.
+   recipient, asClaims)` (see the checklist for the two settlement modes),
+   `setLiquidityGate(key, true, true)`, `setLiquidityProvider(key, locker, true)`.
 4. Locker: adds the launch position. Single-sided launch liquidity is a range entirely on one side
    of the initial price (for example `[tickSpacing, maxUsableTick]` above an initial tick of 0
    when the token is currency0), so it holds only the token. The locker is a contract with no
@@ -234,8 +235,8 @@ add or remove through it; allow only a contract whose own rules you trust.
 
 ## Deployment checklist
 
-- [ ] Every shared internal function is re-declared with every defining base and a `super`-only
-      body; the contract compiles without warnings under the production profile
+- [ ] Every shared internal function is re-declared with exactly its open bases (step 4) and a
+      `super`-only body; the contract compiles without warnings under the production profile
       (`cd contracts && forge build`, `via_ir`).
 - [ ] `getHookPermissions()` matches the intended flags; no feature adds a flag you did not expect
       (each feature's doc page lists its flags).
@@ -248,12 +249,17 @@ add or remove through it; allow only a contract whose own rules you trust.
 - [ ] The pool admin of each pool is the account you expect (`poolAdmin(poolId)`), configures the
       pool, and renounces or transfers when done.
 - [ ] Hook fee recipients are set; tokens to `address(this)` are refused unless as claims.
-- [ ] Token settlement (`asClaims = false`) takes the fee out of the pool manager during the swap.
-      On an exact-output swap the fee is in the input currency, so the manager must already hold
-      enough of it: the first exact-output buy of a fresh single-sided pool reverts
-      (`test_swap_hookFeeAsTokensExactOutOnFreshPoolReverts`). Pay fees as claims for launches.
-- [ ] Oracle consumers use a window no longer than `observationInterval * observationCapacity`
-      and handle `ok == false`.
+- [ ] The fee recipient can use what it receives. With `asClaims = true` every fee arrives as
+      ERC-6909 claims. With token settlement (`asClaims = false`) output-side fees (exact-input
+      swaps) arrive as tokens, but input-side fees (exact-output swaps) still arrive as claims:
+      the trader pays the input only after the swap, so a fresh single-sided pool would not hold
+      it yet (`test_swap_hookFeeAsTokensExactOutOnFreshPoolPaysClaims`). `SwapFeeTaken.asClaims`
+      tells the two apart. A recipient that cannot redeem claims
+      (`PoolManager.unlock`, then `burn` and `take`) needs a different recipient, or an override
+      of `_swapFeeAsClaims` where the pool is known to hold the input currency.
+- [ ] Oracle consumers use a window no longer than
+      `observationInterval * (observationCapacity - 1)` (the longest window a busy pool can
+      always answer; `(5 minutes, 24)` gives 115 minutes) and handle `ok == false`.
 - [ ] Every revert a feature can add to a trader's swap is acceptable (see each feature's page).
 - [ ] The integration tests pass for the exact feature list and order you deploy.
 
