@@ -14,7 +14,7 @@ const nextConfig = {
   // subdomain and at an ENS gateway root at once. scripts/postexport.mjs rewrites
   // the emitted HTML and webpack runtime to hash-agnostic relative URLs instead.
   // Workspace packages ship TypeScript sources with `.js` import specifiers.
-  transpilePackages: ["@verada/sdk"],
+  transpilePackages: ["@verada/sdk", "@verada/ui"],
   webpack(config) {
     config.resolve.extensionAlias = { ".js": [".ts", ".tsx", ".js"] };
     return config;

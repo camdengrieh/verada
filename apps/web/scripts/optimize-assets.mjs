@@ -51,6 +51,11 @@ const BUNDLE = [
 ];
 /** Bundle folders copied as they are (vectors). */
 const BUNDLE_VECTORS = [{ dir: "logo", out: "logo" }];
+/**
+ * Bundle folders copied byte for byte: self-hosted fonts with their stylesheet and licences.
+ * fonts.css uses URLs relative to itself, so it works under any site prefix.
+ */
+const BUNDLE_COPIES = [{ dir: "fonts", out: "fonts", exts: new Set([".woff2", ".css", ".txt"]) }];
 
 /** Packs: published separately to Swarm, loaded at runtime through the gateway. */
 const PACKS = [
@@ -113,6 +118,7 @@ const packs = {};
 
 for (const g of BUNDLE) rmSync(join(bundleOut, g.out), { recursive: true, force: true });
 for (const v of BUNDLE_VECTORS) rmSync(join(bundleOut, v.out), { recursive: true, force: true });
+for (const c of BUNDLE_COPIES) rmSync(join(bundleOut, c.out), { recursive: true, force: true });
 // Earlier layouts kept stock logos in the bundle; make sure none linger there.
 rmSync(join(bundleOut, "stocks"), { recursive: true, force: true });
 rmSync(packsOut, { recursive: true, force: true });
@@ -124,6 +130,12 @@ for (const g of BUNDLE) {
 for (const v of BUNDLE_VECTORS) {
   const r = vectors(join(src, v.dir), join(bundleOut, v.out));
   for (const [stem, e] of Object.entries(r)) assets[`${v.out}/${stem}`] = e;
+}
+for (const c of BUNDLE_COPIES) {
+  for (const name of files(join(src, c.dir), c.exts)) {
+    mkdirSync(join(bundleOut, c.out), { recursive: true });
+    copyFileSync(join(src, c.dir, name), join(bundleOut, c.out, name));
+  }
 }
 for (const p of PACKS) {
   const to = join(packsOut, p.name);

@@ -11,6 +11,10 @@ describe("postexport", () => {
     expect(relativizeHtml(html, 0)).toBe('<script src="./_next/a.js"></script><link href="./_next/b.css">');
     expect(relativizeHtml(html, 1)).toContain('src="../_next/a.js"');
     expect(relativizeHtml('<a href="/causes/">', 1)).toBe('<a href="/causes/">');
+    expect(relativizeHtml('<link rel="stylesheet" href="/assets/fonts/fonts.css">', 1)).toBe(
+      '<link rel="stylesheet" href="../assets/fonts/fonts.css">',
+    );
+    expect(relativizeHtml('<link href="/assets/fonts/fraunces.woff2">', 0)).toContain('href="./assets/fonts/fraunces.woff2"');
   });
 
   it("derives the webpack public path from the runtime script URL", () => {

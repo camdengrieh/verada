@@ -1,7 +1,7 @@
 // Makes the Next static export hash-agnostic so one build works under
 // /bzz/<hash>/, on a bzz gateway subdomain and at an ENS gateway root.
 //
-//  1. HTML: root-absolute "/_next/..." references become depth-relative.
+//  1. HTML: root-absolute "/_next/..." and "/assets/..." references become depth-relative.
 //  2. Webpack runtime: the hard-coded public path "/_next/" becomes an
 //     expression derived from the runtime script's own URL, so lazy chunks load
 //     from wherever the bundle is served.
@@ -24,7 +24,8 @@ function* walk(dir) {
 
 export function relativizeHtml(html, depth) {
   const prefix = depth === 0 ? "./" : "../".repeat(depth);
-  return html.replace(/(["'(=])\/_next\//g, `$1${prefix}_next/`);
+  // _next/ is the bundle; assets/ holds the optimised art and self-hosted fonts.
+  return html.replace(/(["'(=])\/(_next|assets)\//g, `$1${prefix}$2/`);
 }
 
 // Script URL looks like <root>/_next/static/chunks/webpack-<hash>.js; strip the last three segments.
@@ -56,7 +57,7 @@ export function labelRedirect(pathname) {
   if (label.charAt(0) === "-" || label.charAt(label.length - 1) === "-") return null;
   if (label.length >= 4 && label.charAt(2) === "-" && label.charAt(3) === "-") return null;
   // Real routes are never redirected to a token page.
-  if (["launch", "causes", "governance", "token", "agent", "404"].indexOf(label) !== -1) return null;
+  if (["launch", "causes", "governance", "token", "agent", "design", "404"].indexOf(label) !== -1) return null;
   // Relative to the current document: "./" for /pepe, "../" for /pepe/.
   return (seg[2] ? "../" : "./") + "token/?label=" + label;
 }

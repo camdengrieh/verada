@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["dom", "dom.iterable", "ES2022"],
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "declaration": false,
+    "types": ["vitest/globals"],
+    "paths": {
+      "@verada/ui/components/*": ["./src/components/*"],
+      "@verada/ui/lib/*": ["./src/lib/*"],
+      "@verada/ui/hooks/*": ["./src/hooks/*"]
+    }
+  },
+  "include": ["src", "test"]
+}
