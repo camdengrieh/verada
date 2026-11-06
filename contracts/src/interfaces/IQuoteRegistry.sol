@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {DonationAsset} from "./IDonationAsset.sol";
+
 /// @title IQuoteRegistry
 /// @notice Allowlist of assets a token's pool may be paired against (WETH or an Ondo token).
 interface IQuoteRegistry {
@@ -39,6 +41,13 @@ interface IQuoteRegistry {
 
     /// @notice Whether `asset` is registered and active.
     function isAllowed(address asset) external view returns (bool);
+
+    /// @notice Whether a route from `asset` into the donation asset exists (for WETH and `Eth`
+    ///         the route is empty by definition: it already is the donation asset).
+    function hasRouteTo(address asset, DonationAsset donationAsset) external view returns (bool);
+
+    /// @notice The token a donation asset is held as: the settlement asset (USDC) or WETH.
+    function donationToken(DonationAsset donationAsset) external view returns (address);
 
     /// @notice Number of quote assets ever added.
     function quoteAssetCount() external view returns (uint256);

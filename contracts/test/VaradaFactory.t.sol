@@ -40,6 +40,7 @@ import {
     MockQuoteRegistry,
     MockWeth
 } from "./mocks/FactoryMocks.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 contract VaradaFactoryTest is Test {
     using PoolIdLibrary for PoolKey;
@@ -158,7 +159,8 @@ contract VaradaFactoryTest is Test {
             label: _label(salt),
             logoRef: bytes32(0),
             categoryMask: FOCUS_CATEGORIES,
-            regionMask: FOCUS_REGIONS
+            regionMask: FOCUS_REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
     }
 
@@ -652,7 +654,8 @@ contract VaradaFactoryTest is Test {
             label: "fuzz",
             logoRef: salt,
             categoryMask: FOCUS_CATEGORIES,
-            regionMask: FOCUS_REGIONS
+            regionMask: FOCUS_REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
         address predicted = factory.predictTokenAddress(who, p);
         (address token, uint256 id) = _deploy(who, p);

@@ -19,6 +19,7 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
+import {DonationAsset} from "./interfaces/IDonationAsset.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
@@ -27,6 +28,7 @@ import {IVaradaHook} from "./interfaces/IVaradaHook.sol";
 
 interface IConsolidatorRegistry is IQuoteRegistry {
     function routeOf(address asset) external view returns (PoolKey[] memory);
+    function routeToOf(address asset, DonationAsset da) external view returns (PoolKey[] memory);
     function settlementAsset() external view returns (address);
 }
 
@@ -38,6 +40,7 @@ interface IHookOracle {
 }
 
 interface IWETH {
+    function deposit() external payable;
     function withdraw(uint256 amount) external;
 }
 
@@ -372,9 +375,10 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         address quote = c0 == token ? c1 : c0;
         if (c0 != token && c1 != token) revert InvalidCurrency(token, token);
         if (quote == settlementAsset || token == settlementAsset) revert QuoteNotRoutable(quote);
-        if (!quoteRegistry.isAllowed(quote) || quoteRegistry.routeOf(quote).length == 0) {
-            revert QuoteNotRoutable(quote);
-        }
+        if (
+            !quoteRegistry.isAllowed(quote)
+                || !quoteRegistry.hasRouteTo(quote, vault.donationAssetOf(token))
+        ) revert QuoteNotRoutable(quote);
         _poolKeys[token] = key;
         quoteOf[token] = quote;
         emit PoolRegistered(token, quote, key.toId());
@@ -660,11 +664,18 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         (uint256[] memory epochs, uint256[] memory parts) = _release(token, currency, amount);
 
         // `currency` is the token or its quote asset, never the settlement asset itself.
-        bytes memory result = poolManager.unlock(abi.encode(token, currency, amount));
-        out = abi.decode(result, (uint256));
+        address target = _targetOf(token);
+        if (currency == target) {
+            // A WETH-quoted token whose donation asset is ETH: nothing to convert.
+            out = amount;
+        } else {
+            bytes memory result =
+                poolManager.unlock(abi.encode(token, currency, amount, address(this)));
+            out = abi.decode(result, (uint256));
+        }
 
         if (out != 0) {
-            IERC20(settlementAsset).safeTransfer(address(vault), out);
+            IERC20(target).safeTransfer(address(vault), out);
             // Each part becomes its share of the output; the last one takes the remainder.
             uint256 n = parts.length;
             uint256 left = out;
@@ -696,12 +707,36 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         nonReentrant
         returns (uint256 out)
     {
+        return _convertClaims(currency, amount, to, inSwap, DonationAsset.Usdc);
+    }
+
+    /// @inheritdoc IFeeConsolidator
+    /// @dev Same as `convertClaims` with a chosen donation asset: `Eth` converts into WETH (a
+    ///      route ending in native ETH is wrapped; a WETH claim is paid out as is).
+    function convertClaimsTo(
+        address currency,
+        uint256 amount,
+        address to,
+        bool inSwap,
+        DonationAsset da
+    ) external nonReentrant returns (uint256 out) {
+        return _convertClaims(currency, amount, to, inSwap, da);
+    }
+
+    function _convertClaims(
+        address currency,
+        uint256 amount,
+        address to,
+        bool inSwap,
+        DonationAsset da
+    ) private returns (uint256 out) {
         if (!isSource[msg.sender]) revert NotAuthorized();
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert NothingToConsolidate(address(0), currency);
         if (!poolManager.isUnlocked()) revert PoolManagerLocked();
-        PoolKey[] memory route = quoteRegistry.routeOf(currency);
-        if (route.length == 0) revert NoRoute(currency);
+        address target = quoteRegistry.donationToken(da);
+        PoolKey[] memory route = quoteRegistry.routeToOf(currency, da);
+        if (route.length == 0 && currency != target) revert NoRoute(currency);
 
         poolManager.burn(msg.sender, Currency.wrap(currency).toId(), amount);
         address current = currency;
@@ -710,10 +745,9 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
             if (inSwap && address(route[i].hooks) != address(0)) revert HookedRouteHop(i);
             (current, out) = _hop(route[i], current, out, address(0), false, inSwap);
         }
-        if (current != settlementAsset) revert NoRoute(currency);
         if (out == 0) revert SlippageTooHigh(0, 1);
 
-        poolManager.take(Currency.wrap(settlementAsset), to, out);
+        _payOut(current, out, target, to);
         emit ClaimsConverted(msg.sender, currency, to, amount, out);
     }
 
@@ -722,9 +756,13 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     /// @inheritdoc IUnlockCallback
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         if (msg.sender != address(poolManager)) revert NotAuthorized();
-        (address token, address currencyIn, uint256 amountIn) =
-            abi.decode(data, (address, address, uint256));
+        (address token, address currencyIn, uint256 amountIn, address to) =
+            abi.decode(data, (address, address, uint256, address));
 
+        // Token zero marks a donation conversion (WETH into USDC for an Endaoment push).
+        if (token == address(0)) return abi.encode(_donationSwap(amountIn, to, false));
+
+        address target = _targetOf(token);
         PoolKey[] memory route = _routeFor(token, currencyIn);
         bool tokenHop = currencyIn == token;
 
@@ -738,10 +776,71 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         for (uint256 i; i < route.length; ++i) {
             (current, amount) = _hop(route[i], current, amount, token, tokenHop && i == 0, false);
         }
-        if (current != settlementAsset) revert NoRoute(currencyIn);
-
-        poolManager.take(Currency.wrap(current), address(this), amount);
+        _payOut(current, amount, target, to);
         return abi.encode(amount);
+    }
+
+    /// @dev Pays `amount` of `current` (the end of a route) to `to` as `target`: taken straight
+    ///      when it is the target, or taken as native ETH and wrapped when the target is WETH.
+    function _payOut(address current, uint256 amount, address target, address to) private {
+        if (current == target) {
+            poolManager.take(Currency.wrap(current), to, amount);
+        } else if (current == address(0) && target == weth) {
+            poolManager.take(Currency.wrap(address(0)), address(this), amount);
+            IWETH(weth).deposit{value: amount}();
+            if (to != address(this)) IERC20(weth).safeTransfer(to, amount);
+        } else {
+            revert NoRoute(current);
+        }
+    }
+
+    /// @dev The currency a token's fees consolidate into: USDC or WETH.
+    function _targetOf(address token) private view returns (address) {
+        return quoteRegistry.donationToken(vault.donationAssetOf(token));
+    }
+
+    /// @inheritdoc IFeeConsolidator
+    /// @dev For the vaults pushing an `Eth` cause pool to Endaoment, which takes USDC. Pulls
+    ///      `amount` WETH from the caller (exact allowance), swaps it into USDC along the WETH
+    ///      route of the registry with the same price guards as consolidation, and pays the
+    ///      USDC to `to`. Outside a pool manager flow it unlocks the manager itself; inside one
+    ///      (a live vault pushing within a swap) it runs inline with the tight in-swap bounds.
+    ///      Reverts on any guard failure, so the caller keeps its WETH and retries later.
+    function convertDonation(uint256 amount, address to)
+        external
+        nonReentrant
+        returns (uint256 out)
+    {
+        if (!isSource[msg.sender]) revert NotAuthorized();
+        if (to == address(0)) revert ZeroAddress();
+        if (amount == 0) revert NothingToConsolidate(address(0), weth);
+        IERC20(weth).safeTransferFrom(msg.sender, address(this), amount);
+
+        if (poolManager.isUnlocked()) {
+            out = _donationSwap(amount, to, true);
+        } else {
+            out = abi.decode(
+                poolManager.unlock(abi.encode(address(0), weth, amount, to)), (uint256)
+            );
+        }
+        emit DonationConverted(msg.sender, amount, out);
+    }
+
+    /// @dev Inline body of a donation conversion, run inside an already unlocked manager.
+    function _donationSwap(uint256 amount, address to, bool tight) private returns (uint256 out) {
+        PoolKey[] memory route = quoteRegistry.routeOf(weth);
+        if (route.length == 0) revert NoRoute(weth);
+        poolManager.sync(Currency.wrap(weth));
+        IERC20(weth).safeTransfer(address(poolManager), amount);
+        poolManager.settle();
+        address current = weth;
+        out = amount;
+        for (uint256 i; i < route.length; ++i) {
+            if (tight && address(route[i].hooks) != address(0)) revert HookedRouteHop(i);
+            (current, out) = _hop(route[i], current, out, address(0), false, tight);
+        }
+        if (out == 0) revert SlippageTooHigh(0, 1);
+        _payOut(current, out, settlementAsset, to);
     }
 
     function _routeFor(address token, address currency)
@@ -750,8 +849,8 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         returns (PoolKey[] memory route)
     {
         address quote = quoteOf[token];
-        PoolKey[] memory quoteRoute = quoteRegistry.routeOf(quote);
-        if (quoteRoute.length == 0) revert NoRoute(quote);
+        PoolKey[] memory quoteRoute =
+            quoteRegistry.routeToOf(quote, vault.donationAssetOf(token));
         if (currency == quote) return quoteRoute;
         if (currency != token) revert InvalidCurrency(token, currency);
 

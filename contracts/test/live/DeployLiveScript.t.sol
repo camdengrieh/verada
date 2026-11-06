@@ -40,6 +40,7 @@ import {MockWETH} from "../consolidator/ConsolidatorMocks.sol";
 import {MockEndaomentRegistry, MockOrgFactory} from "../mocks/EndaomentMocks.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
 import {LiveUSDC} from "./LiveMocks.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 /// @dev Runs the DeployLive script without an RPC: chain id 1, with local stand-ins placed at the
 ///      mainnet addresses the script checks (a real PoolManager, PositionManager and Permit2;
@@ -225,7 +226,8 @@ contract DeployLiveScriptTest is Test, DeployLive {
             "live-one",
             bytes32(0),
             CatalogPublish.CATEGORIES,
-            CatalogPublish.REGIONS
+            CatalogPublish.REGIONS,
+            DonationAsset.Usdc
         );
         vm.prank(creator);
         (address token,) =

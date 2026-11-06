@@ -43,7 +43,7 @@ trading, [SWAP.md](SWAP.md); for what each part can see, [PRIVACY.md](PRIVACY.md
 | `VaradaToken` | ERC20 with permit, burn and vote checkpoints (ERC20Votes with a timestamp clock; holders are self-delegated on first receipt). Fixed supply minted to the factory. Immutable creator and metadata URI. |
 | `VaradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Varada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. `deployLiveToken` runs the same launch on the live hook and registers the token with the live vault and rotation governor instead. |
 | `QuoteRegistry` | Owner-managed allowlist of quote assets. |
-| `FeeConsolidator` | Swaps collected fees into USDC through Uniswap v4 before the split. |
+| `FeeConsolidator` | Swaps collected fees into the token's donation asset (USDC or WETH) through Uniswap v4 before the split, and converts a WETH cause pool into USDC at Endaoment push time. See chapter 06. |
 | `TokenProfileRegistry` | Per-token profile: ENS label, controller and editor roles, text records, logo reference, suppression flag, and the cause focus (category and region masks, written once at launch). Factory-written at launch; the takeover governor may replace a controller. |
 | `VaradaResolver` | Stateless ENSIP-10 wildcard resolver for `varada.eth`: answers `addr`, `text`, `contenthash` for every `<label>.varada.eth` from the registry, and for `agent.varada.eth` and every `<label>.agent.varada.eth` from `CuratorRegistry`. |
 | `TakeoverGovernor` | Community takeover votes that replace a token's profile controller. |
@@ -57,8 +57,8 @@ trading, [SWAP.md](SWAP.md); for what each part can see, [PRIVACY.md](PRIVACY.md
 | `DonationDistributor` | After finalization, sends the epoch's cause funds to the winning cause's payout address. |
 | `CuratorRegistry` | One curator agent per cause category: ERC-8004 identity (owned by the registry), signer, vault, active flag and ENS label. Accepts each agent's weekly curations for the next epoch. |
 | `AgentVault` | Per-agent USDC donation vault. Only the agent's signer can give, only to unblocked catalogue orgs in the agent's own buckets, within a per-epoch cap. No withdrawal. |
-| `VaradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to USDC inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
-| `LiveDonationVault` | USDC ledger of live tokens: splits every conversion 10% platform / 90% cause, keeps the cause share per `(token, cause)` and pushes it to the cause's Endaoment org once the token's donation threshold is reached, or on `flush`. |
+| `VaradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to the token's donation asset (USDC or WETH) inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
+| `LiveDonationVault` | USDC and WETH ledgers of live tokens (per token donation asset): splits every conversion 10% platform / 90% cause, keeps the cause share per `(token, cause)` and pushes it to the cause's Endaoment org once the token's donation threshold is reached, or on `flush`. |
 | `RotationGovernor` | Live tokens' rotation schedule (anchor-based, period chosen at launch, changeable by vote), the private rotation polls that pick the next cause, and the private yes/no polls that change the period. |
 | `IPrivateDonationAdapter` | Interface only; see Deferred work. |
 
@@ -372,8 +372,10 @@ token, its ENS name, its profile, the locked single-sided liquidity, the takeove
 - Every credit is split once: `floor(gross * 1000 / 10000)` to the platform, the rest to the
   `(token, cause)` bucket. Credit never moves between causes; a cause rotated out keeps its bucket
   until it is paid.
-- Each token has a donation threshold in USDC (6 decimals, at most 1,000,000 USDC), chosen at
-  launch. When a bucket's credit reaches it, the vault pushes the whole bucket to the cause's
+- Each token has a donation asset (USDC or ETH held as WETH, chosen at launch, chapter 06) and a
+  donation threshold in that asset's units (USDC: 6 decimals, at most 1,000,000; ETH: at most
+  1,000 WETH), chosen at launch. An ETH bucket is converted to USDC through the consolidator right
+  before the Endaoment call (600k gas budget in a swap, otherwise deferred to `flush`). When a bucket's credit reaches it, the vault pushes the whole bucket to the cause's
   Endaoment org inside the same swap, through a gas-capped self call (`executePush`, 220k gas). A
   threshold of 0 pushes on every swap.
 - The UI should default to a nonzero threshold. A push inside a swap adds about 120k to 150k gas to

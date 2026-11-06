@@ -35,6 +35,7 @@ import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaoment
 import {PollScopeLib} from "../../src/libraries/PollScopeLib.sol";
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 interface IWETHLaunch is IERC20 {
     function deposit() external payable;
@@ -157,7 +158,8 @@ contract LiveLaunchForkTest is Test, DeployLive {
             string.concat("live-fork-", vm.toString(launches)),
             bytes32(0),
             CatalogPublish.CATEGORIES,
-            CatalogPublish.REGIONS
+            CatalogPublish.REGIONS,
+            DonationAsset.Usdc
         );
         vm.prank(creator);
         (token,) = VaradaFactory(d.factory)

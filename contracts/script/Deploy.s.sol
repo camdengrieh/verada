@@ -289,6 +289,8 @@ contract Deploy is Script {
         vault.setLpLocker(ILpLocker(address(locker)));
         consolidator.setHook(hookAddr);
         consolidator.setSource(address(locker), true);
+        // The distributor converts an ETH cause pool (WETH) into USDC for Endaoment.
+        consolidator.setSource(address(distributor), true);
         scheme.setGovernor(address(governor), true);
         scheme.setGovernor(address(takeover), true);
         profiles.setGovernor(address(takeover));
