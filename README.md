@@ -46,6 +46,31 @@ and trust assumptions: [`docs/hooks/README.md`](docs/hooks/README.md). Tutorial:
 [`docs/hooks/ComposeYourOwn.md`](docs/hooks/ComposeYourOwn.md). Case study:
 [`docs/hooks/Varada.md`](docs/hooks/Varada.md).
 
+## Private chain reads
+
+The app never talks to an Ethereum RPC provider directly. Every chain read goes through an
+[anon-rpc](https://github.com/ethereum/anon-rpc) worker: a client bundle pinned by hash in an
+on-chain specifier contract, fetched at start and run in a null-origin sandboxed iframe with no
+access to the page, its storage or any keys. The default worker is [Nox](https://github.com/hisoka-io/nox),
+the mixnet built by Hisoka. The worker connects to Nox anchors over KPS (WebRTC), the request is
+mixed through the network, and an exit node forwards it to the RPC provider.
+
+What this gives users:
+
+- The RPC provider sees an exit node, never the user's IP.
+- Each connected account gets its own random isolation key, and public reads use another, so the
+  provider cannot tell which accounts belong to the same person.
+- Varada's own servers never receive a wallet address. Reads of account data never fall back to a
+  direct connection: if the mixnet is unreachable they fail rather than leak. Public data may load
+  directly only after an explicit per-visit opt-in.
+- Requests to the Varada indexer can go through the mixnet as well (a switch in the privacy pill),
+  so Varada does not see the user's IP either.
+- Nym and Tor run on the same plumbing behind one setting (`NEXT_PUBLIC_ANON_RPC_NETWORK`).
+
+The header pill shows the live state. `pnpm --filter @varada/web check:private-rpc` drives the app
+in headless Chrome and confirms a read completes through Nox. The route-by-route account of what
+leaves the browser, measurements and known gaps: [`docs/PRIVACY.md`](docs/PRIVACY.md).
+
 ## Getting started
 
 The original artwork in `apps/web/assets-src/` is stored with [Git LFS](https://git-lfs.com).
