@@ -43,8 +43,8 @@ function matches(o: BallotOptionData, q: string): boolean {
  * The weekly ballot: search, All / Pinned / Curated / Rotation tabs, and a radio group of options
  * with roving focus (arrow keys move and select, Tab leaves the group).
  *
- * A size container: one column of options with the tabs two by two in a phone-width card, the tabs
- * in one row from 448px, search and tabs side by side with two columns of options from 672px, and
+ * A size container: one column of options with the tabs two by two under 320px, the tabs in one
+ * row from 320px, search and tabs side by side with two columns of options from 672px, and
  * three columns from 1024px. The footer stacks (full-width button) until 672px.
  */
 export function BallotList({
@@ -101,12 +101,12 @@ export function BallotList({
               className="min-h-10 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-ink-muted focus-visible:outline-none"
             />
           </div>
-          <Tabs.List aria-label="Ballot source" className="grid grid-cols-2 gap-1 rounded-[24px] bg-sand p-1 @md:flex @md:rounded-full">
+          <Tabs.List aria-label="Ballot source" className="grid grid-cols-2 gap-1 rounded-[24px] bg-sand p-1 @xs:flex @xs:rounded-full">
             {GROUPS.map((g) => (
               <Tabs.Trigger
                 key={g}
                 value={g}
-                className="min-h-11 rounded-full px-3.5 text-[13px] font-semibold whitespace-nowrap text-ink transition-colors hover:bg-line data-[state=active]:bg-ink data-[state=active]:text-paper @md:flex-1 @2xl:flex-none"
+                className="min-h-11 rounded-full px-2.5 text-[13px] font-semibold whitespace-nowrap text-ink transition-colors hover:bg-line data-[state=active]:bg-ink data-[state=active]:text-paper @xs:flex-auto @md:px-3.5 @2xl:flex-none"
               >
                 {tabLabel(g)}
               </Tabs.Trigger>

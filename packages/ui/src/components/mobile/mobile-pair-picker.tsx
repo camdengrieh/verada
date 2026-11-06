@@ -8,12 +8,12 @@ import { Check, Search } from "lucide-react";
 import { RadioGroup, Tabs } from "radix-ui";
 import { useId, useMemo, useState } from "react";
 import { Button } from "@verada/ui/components/ui/button";
-import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@verada/ui/components/ui/drawer";
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@verada/ui/components/ui/drawer";
 import { AssetKindBadge } from "@verada/ui/components/varada/asset-kind-badge";
 import type { ImageSource } from "@verada/ui/components/varada/shared";
 import { StockLogo, type QuoteKind } from "@verada/ui/components/varada/stock-logo";
 import { cn } from "@verada/ui/lib/utils";
-import { CONTAINED_SHEET, type MobileSheetBaseProps } from "./sheet-shared";
+import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
 
 export interface PairOption {
   /** "WETH", "NVDAon" */
@@ -60,6 +60,7 @@ export function MobilePairPicker({
   onOpenChange,
   container,
   modal = true,
+  inline,
   crypto,
   stocks,
   value,
@@ -86,12 +87,12 @@ export function MobilePairPicker({
     onValueChange?.(s);
   };
 
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal} noBodyStyles={!!container}>
-      <DrawerContent data-slot="mobile-pair-picker" className={cn("h-[88dvh]", container && "h-[88%]", container && CONTAINED_SHEET)}>
+  const { Title, Description } = sheetParts(inline);
+  const content = (
+    <>
         <DrawerHeader className="pb-3">
-          <DrawerTitle className="text-2xl">{title}</DrawerTitle>
-          <DrawerDescription>{description}</DrawerDescription>
+          <Title className="text-2xl">{title}</Title>
+          <Description>{description}</Description>
         </DrawerHeader>
         <Tabs.Root value={tab} onValueChange={(t) => setTab(t as PairTab)} className="flex min-h-0 flex-1 flex-col">
           <div className="flex flex-col gap-2.5 px-4 pb-3">
@@ -154,6 +155,21 @@ export function MobilePairPicker({
             {selected ? `Pair with ${selected.symbol}` : "Choose a pair"}
           </Button>
         </DrawerFooter>
+    </>
+  );
+
+  if (inline) {
+    return open ? (
+      <InlineSheet data-slot="mobile-pair-picker" onClose={() => onOpenChange(false)} className="h-[88%]">
+        {content}
+      </InlineSheet>
+    ) : null;
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal} noBodyStyles={!!container}>
+      <DrawerContent data-slot="mobile-pair-picker" className={cn("h-[88dvh]", container && "h-[88%]", container && CONTAINED_SHEET)}>
+        {content}
       </DrawerContent>
     </Drawer>
   );

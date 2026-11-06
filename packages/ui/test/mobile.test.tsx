@@ -339,6 +339,24 @@ describe("Other mobile pieces", () => {
     expect(onVote).toHaveBeenCalledWith(expect.objectContaining({ id: "2" }));
   });
 
+  it("renders a sheet in place, non-modal, when inline", () => {
+    const onOpenChange = vi.fn();
+    render(
+      <>
+        <button type="button">Outside</button>
+        <MobileTradeSheet {...tradeProps({ onOpenChange })} inline />
+      </>,
+    );
+    const sheet = screen.getByRole("dialog", { name: "Buy $HARAMBE" });
+    expect(sheet).toHaveAttribute("aria-modal", "false");
+    // Nothing outside is hidden from assistive tech.
+    expect(screen.getByRole("button", { name: "Outside" })).toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: /More options/ }));
+    expect(within(sheet).getByRole("group", { name: "Amount presets in WETH" })).toBeInTheDocument();
+    fireEvent.keyDown(within(sheet).getByRole("button", { name: "Fewer options" }), { key: "Escape" });
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
   it("pair picker switches tabs and confirms the choice", async () => {
     const onConfirm = vi.fn();
     render(

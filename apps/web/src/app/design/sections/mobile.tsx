@@ -233,6 +233,21 @@ function Phone({ label, children }: { label: string; children: (frame: HTMLEleme
   );
 }
 
+/**
+ * The frames show their sheets open at first, in place (`inline`), because several are open at once.
+ * After the first close a sheet reopens as the real vaul drawer inside its frame (drag, snap points,
+ * focus trap).
+ */
+function usePreviewSheet() {
+  const [open, setOpenState] = useState(true);
+  const [inline, setInline] = useState(true);
+  const setOpen = (o: boolean) => {
+    setOpenState(o);
+    if (!o) setInline(false);
+  };
+  return { open, inline, setOpen };
+}
+
 const connect = (
   <Button size="md" className="h-12 px-4">
     Connect
@@ -370,7 +385,7 @@ const CHART = [3.1, 3.0, 3.3, 3.2, 3.5, 3.4, 3.8, 3.7, 3.9, 4.0, 3.95, 4.12];
 function TradeScreen() {
   const tokens = useTokens();
   const coin = tokens[0]!;
-  const [open, setOpen] = useState(true);
+  const { open, inline, setOpen } = usePreviewSheet();
   const [side, setSide] = useState<TradeSide>("buy");
   const [asset, setAsset] = useState<PayAsset>("WETH");
   const [amount, setAmount] = useState("");
@@ -411,12 +426,12 @@ function TradeScreen() {
                 </Button>
               ) : null}
             </div>
-            {open ? <div aria-hidden="true" className="absolute inset-0 z-40 bg-ink/40" onClick={() => setOpen(false)} /> : null}
+            {open && inline ? <div aria-hidden="true" className="absolute inset-0 z-40 bg-ink/40" onClick={() => setOpen(false)} /> : null}
             <MobileTradeSheet
               open={open}
               onOpenChange={setOpen}
               container={frame}
-              modal={false}
+              inline={inline}
               coin={{ name: coin.name, symbol: coin.symbol, art: coin.art, wash: coin.wash, price: "$0.00000412", change24h: 18.42 }}
               side={side}
               onSideChange={(s) => {
@@ -461,7 +476,7 @@ function TradeScreen() {
 }
 
 function VoteScreen() {
-  const [open, setOpen] = useState(true);
+  const { open, inline, setOpen } = usePreviewSheet();
   const [choice, setChoice] = useState("1");
   const [voted, setVoted] = useState<string | null>(null);
   return (
@@ -486,12 +501,12 @@ function VoteScreen() {
                 {voted ? `Encrypted vote for ${voted} ready to sign.` : ""}
               </p>
             </div>
-            {open ? <div aria-hidden="true" className="absolute inset-0 z-40 bg-ink/40" onClick={() => setOpen(false)} /> : null}
+            {open && inline ? <div aria-hidden="true" className="absolute inset-0 z-40 bg-ink/40" onClick={() => setOpen(false)} /> : null}
             <MobileVoteSheet
               open={open}
               onOpenChange={setOpen}
               container={frame}
-              modal={false}
+              inline={inline}
               kicker="$HARAMBE · Epoch 12"
               title="Where should $1,284 go?"
               meta="Closes in 2d 14h · your weight 0.04%"
@@ -511,7 +526,7 @@ function VoteScreen() {
 }
 
 function LaunchScreen() {
-  const [open, setOpen] = useState(true);
+  const { open, inline, setOpen } = usePreviewSheet();
   const [pair, setPair] = useState("NVDAon");
   const [status, setStatus] = useState("");
   const chosen = [...PAIRS_CRYPTO, ...PAIRS_STOCKS].find((p) => p.symbol === pair) ?? PAIRS_STOCKS[0]!;
@@ -555,12 +570,12 @@ function LaunchScreen() {
               secondary={{ label: "Back", onClick: () => setStatus("Back to step 2") }}
               primary={{ label: "Next: cause", onClick: () => setStatus(`Paired with ${pair}; next, the cause`) }}
             />
-            {open ? <div aria-hidden="true" className="absolute inset-0 z-40 bg-ink/40" onClick={() => setOpen(false)} /> : null}
+            {open && inline ? <div aria-hidden="true" className="absolute inset-0 z-40 bg-ink/40" onClick={() => setOpen(false)} /> : null}
             <MobilePairPicker
               open={open}
               onOpenChange={setOpen}
               container={frame}
-              modal={false}
+              inline={inline}
               crypto={PAIRS_CRYPTO}
               stocks={PAIRS_STOCKS}
               value={pair}

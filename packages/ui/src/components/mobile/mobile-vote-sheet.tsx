@@ -6,11 +6,11 @@
 import { LockKeyhole } from "lucide-react";
 import { useId, useState, type ReactNode } from "react";
 import { Button } from "@verada/ui/components/ui/button";
-import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@verada/ui/components/ui/drawer";
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@verada/ui/components/ui/drawer";
 import { BallotList, type BallotGroup } from "@verada/ui/components/varada/ballot-list";
 import type { BallotOptionData } from "@verada/ui/components/varada/ballot-option";
 import { cn } from "@verada/ui/lib/utils";
-import { CONTAINED_SHEET, type MobileSheetBaseProps } from "./sheet-shared";
+import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
 
 export interface MobileVoteSheetProps extends MobileSheetBaseProps {
   options: readonly BallotOptionData[];
@@ -48,6 +48,7 @@ export function MobileVoteSheet({
   onOpenChange,
   container,
   modal = true,
+  inline,
   options,
   value,
   defaultValue,
@@ -72,13 +73,13 @@ export function MobileVoteSheet({
   };
   const label = disabledReason ? "Voting unavailable" : pending ? "Sending your vote…" : selected ? voteLabel(selected) : "Choose a charity to vote";
 
-  return (
-    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal} noBodyStyles={!!container}>
-      <DrawerContent data-slot="mobile-vote-sheet" className={cn("h-[88dvh]", container && "h-[88%]", container && CONTAINED_SHEET)}>
+  const { Title, Description } = sheetParts(inline);
+  const content = (
+    <>
         <DrawerHeader className="gap-0.5 pb-3">
           {kicker ? <span className="kicker text-xs">{kicker}</span> : null}
-          <DrawerTitle className="text-2xl leading-tight">{title}</DrawerTitle>
-          {meta ? <DrawerDescription className="num text-[13px] text-ink-muted">{meta}</DrawerDescription> : <DrawerDescription className="sr-only">Choose one charity on this week&apos;s ballot.</DrawerDescription>}
+          <Title className="text-2xl leading-tight">{title}</Title>
+          {meta ? <Description className="num text-[13px] text-ink-muted">{meta}</Description> : <Description className="sr-only">Choose one charity on this week&apos;s ballot.</Description>}
         </DrawerHeader>
         <DrawerBody className="px-4">
           <BallotList
@@ -111,6 +112,21 @@ export function MobileVoteSheet({
             <span>{privacyNote}</span>
           </p>
         </DrawerFooter>
+    </>
+  );
+
+  if (inline) {
+    return open ? (
+      <InlineSheet data-slot="mobile-vote-sheet" onClose={() => onOpenChange(false)} className="h-[88%]">
+        {content}
+      </InlineSheet>
+    ) : null;
+  }
+
+  return (
+    <Drawer open={open} onOpenChange={onOpenChange} container={container} modal={modal} noBodyStyles={!!container}>
+      <DrawerContent data-slot="mobile-vote-sheet" className={cn("h-[88dvh]", container && "h-[88%]", container && CONTAINED_SHEET)}>
+        {content}
       </DrawerContent>
     </Drawer>
   );

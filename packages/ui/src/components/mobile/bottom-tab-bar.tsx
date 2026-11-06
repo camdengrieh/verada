@@ -191,7 +191,8 @@ export function BottomTabBar({
         "pb-[max(0.5rem,env(safe-area-inset-bottom))] pt-1.5",
         position === "fixed" && "fixed inset-x-0 bottom-0",
         position === "sticky" && "sticky bottom-0",
-        hidden && "translate-y-full focus-within:translate-y-0",
+        // The raised Launch button stands 28px above the bar, so slide that much further.
+        hidden && (launch ? "translate-y-[calc(100%+2.5rem)] focus-within:translate-y-0" : "translate-y-full focus-within:translate-y-0"),
         className,
       )}
       {...props}

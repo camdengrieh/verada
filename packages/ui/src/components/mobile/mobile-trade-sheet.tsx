@@ -7,7 +7,7 @@
 
 import { ChevronDown, ChevronUp } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@verada/ui/components/ui/drawer";
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@verada/ui/components/ui/drawer";
 import { Divider } from "@verada/ui/components/ui/divider";
 import { PriceChange } from "@verada/ui/components/varada/price-change";
 import { WASH_FILL, type ImageSource, type WashTone } from "@verada/ui/components/varada/shared";
@@ -25,7 +25,7 @@ import {
   type TradePanelProps,
 } from "@verada/ui/components/varada/trade-panel";
 import { cn } from "@verada/ui/lib/utils";
-import { CONTAINED_SHEET, type MobileSheetBaseProps } from "./sheet-shared";
+import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
 
 type TicketProps = Pick<
   TradePanelProps,
@@ -90,6 +90,7 @@ export function MobileTradeSheet({
   onOpenChange,
   container,
   modal = true,
+  inline,
   coin,
   expanded: expandedProp,
   defaultExpanded = false,
@@ -107,23 +108,31 @@ export function MobileTradeSheet({
     onExpandedChange?.(e);
   };
 
-  // Size the compact stop to the compact content (header, quote, footer) plus the grab handle.
-  const measureRef = useRef<HTMLDivElement>(null);
+  // Size the compact stop so the compact content (handle, header, quote, footer) ends exactly at the
+  // bottom edge. vaul translates the sheet by (screen height − snap height), and the sheet is a little
+  // shorter than the screen, so the snap is: screen − sheet + content bottom inside the sheet.
+  const [measureEl, setMeasureEl] = useState<HTMLDivElement | null>(null);
   const [measured, setMeasured] = useState<string | null>(null);
   const expandedRef = useRef(expanded);
   expandedRef.current = expanded;
   useLayoutEffect(() => {
-    if (compactSnap !== undefined || !open) return;
-    const el = measureRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => {
+    const el = measureEl;
+    if (compactSnap !== undefined || !open || !el || typeof ResizeObserver === "undefined") return;
+    const measure = () => {
       if (expandedRef.current) return;
-      const h = Math.ceil(el.getBoundingClientRect().height);
-      if (h > 200) setMeasured((m) => (m === `${h + 26}px` ? m : `${h + 26}px`));
-    });
+      const sheet = el.parentElement; // the sheet itself (position: fixed, so also el's offsetParent)
+      if (!sheet) return;
+      const screen = container ? container.getBoundingClientRect().height : window.innerHeight;
+      const bottom = el.offsetTop + el.offsetHeight;
+      if (el.offsetHeight < 200) return;
+      const px = `${Math.ceil(screen - sheet.offsetHeight + bottom)}px`;
+      setMeasured((m) => (m === px ? m : px));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [open, compactSnap]);
+  }, [open, compactSnap, measureEl, container]);
   const compact = compactSnap ?? measured ?? FALLBACK_SNAP;
   const snapPoints = [compact, 1];
 
@@ -136,33 +145,22 @@ export function MobileTradeSheet({
     if (!open) setInnerExpanded(defaultExpanded);
   }, [open, defaultExpanded]);
 
-  return (
-    <Drawer
-      open={open}
-      onOpenChange={onOpenChange}
-      container={container}
-      modal={modal}
-      noBodyStyles={!!container}
-      snapPoints={snapPoints}
-      activeSnapPoint={expanded ? 1 : compact}
-      setActiveSnapPoint={(p) => setExpanded(p === 1)}
-      fadeFromIndex={1}
-    >
-      <DrawerContent data-slot="mobile-trade-sheet" data-expanded={expanded ? "true" : undefined} className={cn(container && CONTAINED_SHEET)}>
-        <div ref={measureRef} className={cn("flex min-h-0 flex-col", expanded ? "flex-1" : "flex-none")}>
+  const { Title, Description } = sheetParts(inline);
+  const content = (
+        <div ref={inline ? undefined : setMeasureEl} className={cn("flex min-h-0 flex-col", expanded ? "flex-1" : "flex-none")}>
           <DrawerHeader className="flex-row items-center gap-3 pb-3">
             {coin.art ? (
               <img src={coin.art.src} srcSet={coin.art.srcSet} sizes="44px" alt="" width={44} height={44} className={cn("size-11 shrink-0 rounded-[14px] object-contain", WASH_FILL[coin.wash ?? "sage"])} />
             ) : null}
             <div className="flex min-w-0 flex-col">
-              <DrawerTitle className="truncate text-lg">
+              <Title className="truncate text-lg">
                 {verb} ${coin.symbol.replace(/^\$/, "")}
-              </DrawerTitle>
-              <DrawerDescription className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
+              </Title>
+              <Description className="flex flex-wrap items-baseline gap-x-2 text-[13px]">
                 <span className="truncate">{coin.name}</span>
                 {coin.price ? <span className="num text-ink">{coin.price}</span> : null}
                 {coin.change24h !== undefined ? <PriceChange value={coin.change24h} className="text-[13px]" /> : null}
-              </DrawerDescription>
+              </Description>
             </div>
           </DrawerHeader>
 
@@ -237,6 +235,35 @@ export function MobileTradeSheet({
             <TradeActionButton state={action} onSubmit={t.onSubmit} className="flex-1" />
           </DrawerFooter>
         </div>
+  );
+
+  if (inline) {
+    return open ? (
+      <InlineSheet
+        data-slot="mobile-trade-sheet"
+        data-expanded={expanded ? "true" : undefined}
+        onClose={() => onOpenChange(false)}
+        className={expanded ? "h-[96%] max-h-[96%]" : undefined}
+      >
+        {content}
+      </InlineSheet>
+    ) : null;
+  }
+
+  return (
+    <Drawer
+      open={open}
+      onOpenChange={onOpenChange}
+      container={container}
+      modal={modal}
+      noBodyStyles={!!container}
+      snapPoints={snapPoints}
+      activeSnapPoint={expanded ? 1 : compact}
+      setActiveSnapPoint={(p) => setExpanded(p === 1)}
+      fadeFromIndex={1}
+    >
+      <DrawerContent data-slot="mobile-trade-sheet" data-expanded={expanded ? "true" : undefined} className={cn(container && CONTAINED_SHEET)}>
+        {content}
       </DrawerContent>
     </Drawer>
   );
