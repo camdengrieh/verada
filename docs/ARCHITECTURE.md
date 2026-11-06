@@ -261,7 +261,10 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   distributes every finalized week itself. The token page runs the same plan in the "Send this
   week's donation" card, so any visitor can push a week through and pay the gas; the money can only
   go to the week's winner. The card leaves the decryption to the keeper, because Zama's mainnet
-  relayer serves public decryption only with the keeper's API key.
+  relayer serves public decryption only with the keeper's API key. Once the tally grace has passed
+  without a decrypted tally, the card offers "Give this week to <default charity>" and says that
+  the votes will not be counted. It shows the oldest week with a step to send, before any week that
+  waits or is blocked.
 - The scheme is pluggable per governor. Interfold (CRISP) or a self-hosted Noir/Barretenberg scheme
   can replace Zama without changing the governors.
 

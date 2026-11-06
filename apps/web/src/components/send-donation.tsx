@@ -3,16 +3,38 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { Address, Hex } from "viem";
-import { remainingStages, type DonationStage } from "@verada/sdk";
+import { remainingStages, type DonationStage, type DonationStep } from "@verada/sdk";
 import { usdcText } from "@/components/agent-common";
 import { useCatalogNames } from "@/components/catalog-browser";
 import { causeName, useCauses } from "@/components/epoch-panel";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText, formatTime, TxStatus, useTx } from "@/components/use-tx";
-import { blockedText, donationAddresses, donationRequest, nextWaitingWeek, planWeek, stageLabel, waitText } from "@/lib/donation-push";
+import {
+  blockedText,
+  donationAddresses,
+  donationRequest,
+  fallbackText,
+  nextWaitingWeek,
+  planWeek,
+  stageLabel,
+  stepLabel,
+  waitText,
+} from "@/lib/donation-push";
 
 const isZero = (h: Hex) => /^0x0*$/.test(h);
 const dateOf = (seconds: bigint) => formatTime(Number(seconds)).slice(0, 10);
+
+/** The step last sent from the card: its label is fixed when sent, whichever week is shown after. */
+interface Sent {
+  stage: DonationStage;
+  epoch: bigint;
+  weekStart: bigint;
+  label: string;
+}
+
+/** Same step: a plan read again just before sending must still be the one the button named. */
+const sameStep = (a: DonationStep, b: DonationStep) =>
+  a.type === "send" && b.type === "send" && a.stage === b.stage && a.functionName === b.functionName && a.fallback === b.fallback;
 
 /**
  * Offered while an ended week's fees have not reached its winning charity. Every step left (close
@@ -28,7 +50,7 @@ export function SendDonation({ token }: { token: Address }) {
   const addrs = donationAddresses(config);
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string>();
-  const [sent, setSent] = useState<DonationStage>();
+  const [sent, setSent] = useState<Sent>();
   const [donated, setDonated] = useState(false);
 
   const week = useQuery({
@@ -40,9 +62,12 @@ export function SendDonation({ token }: { token: Address }) {
   });
   const w = week.data ?? null;
   const winner = w && !isZero(w.state.winningCause) ? w.state.winningCause : null;
+  const fallback = w?.step.type === "send" && w.step.fallback === "tally-timeout";
+  const defaultCause = w && !isZero(w.state.defaultCause) ? w.state.defaultCause : null;
   const causes = useCauses();
-  const names = useCatalogNames(winner ? [winner] : []);
-  const charity = winner ? causeName(causes.data, winner, names.data) : "the winning charity";
+  const names = useCatalogNames([winner, defaultCause].filter((x): x is Hex => x !== null));
+  const defaultCharity = defaultCause ? causeName(causes.data, defaultCause, names.data) : "the default charity";
+  const charity = winner ? causeName(causes.data, winner, names.data) : fallback ? defaultCharity : "the winning charity";
 
   // Each confirmed step re-plans from the chain, which shows the next step (or hides the card).
   const handled = useRef<string | undefined>(undefined);
@@ -51,7 +76,7 @@ export function SendDonation({ token }: { token: Address }) {
     const r = tx.receipt;
     if (!r || r.status !== "success" || handled.current === r.transactionHash) return;
     handled.current = r.transactionHash;
-    if (sent === "distribute") setDonated(true);
+    if (sent?.stage === "distribute") setDonated(true);
     void refetch();
   }, [tx.receipt, sent, refetch]);
 
@@ -62,7 +87,7 @@ export function SendDonation({ token }: { token: Address }) {
       <section aria-label="Send this week's donation">
         <h2>Send this week&apos;s donation</h2>
         <p role="status">The donation was sent. Thank you for paying the gas.</p>
-        <TxStatus tx={tx} label={stageLabel("distribute", "the charity")} />
+        <TxStatus tx={tx} label={sent?.label ?? stageLabel("distribute", "the charity")} />
       </section>
     );
   }
@@ -71,7 +96,11 @@ export function SendDonation({ token }: { token: Address }) {
   const stages = remainingStages(step, w.hasBallots);
   const current = step.type === "done" ? undefined : step.stage;
   const amount = state.settled ? state.pending : state.epochPool;
-  const busy = planning || tx.isPending || Boolean(tx.hash && !tx.receipt && !tx.receiptError);
+  // Disabled until the last transaction has a receipt, even when reading it failed: it may still be
+  // pending, and a re-plan would see the chain without it and send the same step again. "Check
+  // again" re-reads the receipt. Also while the plan is re-read, so the label is never stale.
+  const unconfirmed = Boolean(tx.hash && !tx.receipt);
+  const busy = planning || tx.isPending || unconfirmed || week.isFetching;
   const waiting = waitText(step, formatTime);
   const blocked = blockedText(step, charity);
 
@@ -79,20 +108,24 @@ export function SendDonation({ token }: { token: Address }) {
     setError(undefined);
     setPlanning(true);
     let request: ReturnType<typeof donationRequest>;
-    let stage: DonationStage | undefined;
+    let fresh: Awaited<ReturnType<typeof planWeek>>;
     try {
       // Fresh from the chain: someone else may have sent this step since the card loaded.
-      const fresh = await planWeek(deps, addrs!, token, w!.epoch);
+      fresh = await planWeek(deps, addrs!, token, w!.epoch);
       request = donationRequest(fresh.step, addrs!, config.chainId);
-      stage = fresh.step.type === "send" ? fresh.step.stage : undefined;
     } catch (e) {
       setPlanning(false);
       return setError(errorText(e));
     }
     setPlanning(false);
-    if (!request) return void refetch();
+    if (!request || fresh.step.type !== "send") return void refetch();
+    if (!sameStep(fresh.step, step)) {
+      // Never send a call the button did not name: show the new step and let the visitor press again.
+      setError("The next step changed since this page loaded. Check it below and press again.");
+      return void refetch();
+    }
     tx.reset();
-    setSent(stage);
+    setSent({ stage: fresh.step.stage, epoch: w!.epoch, weekStart: fresh.state.epochStart, label: stepLabel(fresh.step, charity, defaultCharity) });
     try {
       await tx.send(request as never);
     } catch {
@@ -113,25 +146,37 @@ export function SendDonation({ token }: { token: Address }) {
           <ol aria-label="Steps left">
             {stages.map((s) => (
               <li key={s} aria-current={s === current ? "step" : undefined}>
-                {stageLabel(s, charity)}
+                {s === current && step.type === "send" ? stepLabel(step, charity, defaultCharity) : stageLabel(s, charity)}
               </li>
             ))}
           </ol>
         </>
       )}
       <p>
-        Anyone can do these steps, not only the platform. Each one is checked on chain: the money can only go to the week&apos;s winning
-        charity, never to you or anyone else, and you pay the gas.
+        Anyone can do these steps, not only the platform. Each one is checked on chain: the money can only go to{" "}
+        {fallback ? "the default charity" : "the week's winning charity"}, never to you or anyone else, and you pay the gas.
       </p>
+      {fallback && <p role="note">{fallbackText(defaultCharity)}</p>}
       {step.type === "send" && (
         <button type="button" onClick={() => void sendNext()} disabled={busy}>
-          {planning ? "Checking the chain" : stageLabel(step.stage, charity)}
+          {planning || week.isFetching ? "Checking the chain" : stepLabel(step, charity, defaultCharity)}
+        </button>
+      )}
+      {unconfirmed && tx.receiptError && (
+        <button
+          type="button"
+          onClick={() => {
+            void tx.refetchReceipt?.();
+            void refetch();
+          }}
+        >
+          Check again
         </button>
       )}
       {waiting && <p role="status">{waiting}</p>}
       {blocked && <p role="alert">{blocked}</p>}
       {error && <p role="alert">{error}</p>}
-      {sent && <TxStatus tx={tx} label={stageLabel(sent, charity)} />}
+      {sent && <TxStatus tx={tx} label={sent.epoch === w.epoch ? sent.label : `${sent.label} (week of ${dateOf(sent.weekStart)})`} />}
     </section>
   );
 }

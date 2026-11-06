@@ -52,7 +52,11 @@ export interface PlannedWeek {
   hasBallots: boolean;
 }
 
-/** Ended weeks the card looks at per load (oldest first), so a token's RPC reads stay bounded. */
+/**
+ * Ended weeks the card plans per load (the newest ones), so a token's RPC reads stay bounded.
+ * Weeks that cannot move stay undonated in the indexer; taking the newest keeps them from filling
+ * every slot, and an older sendable week comes into range once the newer ones are donated.
+ */
 export const MAX_WEEKS = 6;
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === "object" && v !== null && !Array.isArray(v);
@@ -63,16 +67,23 @@ const big = (v: unknown): bigint | null => {
   return null;
 };
 
+/** Weeks to plan, oldest first. `indexed`: they come from the indexer, which saw fees for them. */
+export interface CandidateWeeks {
+  weeks: bigint[];
+  indexed: boolean;
+}
+
 /**
- * Ended weeks (`epoch < current`) the indexer shows with fees for the cause and no donation yet,
- * oldest first (`GET /api/epochs/:token`, newest 100). When the indexer cannot answer, last week.
+ * The newest {@link MAX_WEEKS} ended weeks (`epoch < current`) the indexer shows with fees for the
+ * cause and no donation yet, oldest first (`GET /api/epochs/:token`, newest 100). When the indexer
+ * cannot answer, last week, unverified (`indexed: false`).
  */
-export async function candidateWeeks(deps: DataDeps, token: Address, current: bigint): Promise<bigint[]> {
+export async function candidateWeeks(deps: DataDeps, token: Address, current: bigint): Promise<CandidateWeeks> {
   let body: unknown;
   try {
     body = await deps.indexer.get(`/api/epochs/${token}`, { limit: 100 });
   } catch {
-    return current > 0n ? [current - 1n] : [];
+    return { weeks: current > 0n ? [current - 1n] : [], indexed: false };
   }
   const items = isRecord(body) && Array.isArray(body.items) ? body.items : [];
   const weeks: bigint[] = [];
@@ -85,7 +96,7 @@ export async function candidateWeeks(deps: DataDeps, token: Address, current: bi
     const settled = big(row.settledAmount) ?? 0n;
     if (attributed > 0n || settled > 0n) weeks.push(epoch);
   }
-  return [...new Set(weeks)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).slice(0, MAX_WEEKS);
+  return { weeks: [...new Set(weeks)].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)).slice(-MAX_WEEKS), indexed: true };
 }
 
 /** The ballot's org ids from the indexer (`optionOrgIds`); the plan checks them against the chain. */
@@ -109,18 +120,32 @@ export async function planWeek(deps: DataDeps, addrs: DonationPushAddresses, tok
   return { epoch, state, step: planDonation(state, { zamaScheme: addrs.zamaScheme, orgIds }), hasBallots };
 }
 
+/** Which planned week the card shows first: one with a step to send, then a wait, then a block. */
+const rank = (step: DonationStep) => (step.type === "send" ? 0 : step.type === "wait" || step.type === "decrypt" ? 1 : step.type === "blocked" ? 2 : 3);
+
 /**
- * The oldest ended week whose donation still has a step left, or null when none does (or the
- * token is not a weekly token of this governor).
+ * The ended week the card offers: the oldest with a step anyone can send now, else the oldest
+ * waiting (on the keeper's decryption, on fees) or blocked one, so a week stuck for good never
+ * hides a newer one that can move. Null when none has a step left, or the token is not a weekly
+ * token of this governor.
+ *
+ * Without the indexer, last week is offered only once the chain shows fees for it (or it is
+ * finalized, when settling decides): it may have none, and finalizing would then cost the visitor
+ * gas for nothing.
  */
 export async function nextWaitingWeek(deps: DataDeps, addrs: DonationPushAddresses, token: Address): Promise<PlannedWeek | null> {
   const current = (await deps.chain().readContract({ address: addrs.epochGovernor, abi: epochGovernorAbi, functionName: "currentEpoch" })) as bigint;
-  for (const epoch of await candidateWeeks(deps, token, current)) {
+  const { weeks, indexed } = await candidateWeeks(deps, token, current);
+  let best: PlannedWeek | null = null;
+  for (const epoch of weeks) {
     const week = await planWeek(deps, addrs, token, epoch);
     if (week.step.type === "blocked" && week.step.reason === "not-registered") return null;
-    if (week.step.type !== "done") return week;
+    if (week.step.type === "done") continue;
+    if (!indexed && !week.state.governor.finalized && week.state.epochPool === 0n) continue;
+    if (week.step.type === "send") return week;
+    if (!best || rank(week.step) < rank(best.step)) best = week;
   }
-  return null;
+  return best;
 }
 
 /** The wagmi `writeContract` request for a planned step, or null when nothing is to be sent. */
@@ -131,6 +156,20 @@ export function donationRequest(
 ): { address: Address; abi: Abi; functionName: string; args: readonly unknown[]; chainId: number } | null {
   if (step.type !== "send") return null;
   return { ...donationCall(step, addrs), chainId };
+}
+
+/** The button for a step: a finalize past the tally grace says that the default charity gets the week. */
+export function stepLabel(step: Extract<DonationStep, { type: "send" }>, charity: string, defaultCharity: string): string {
+  if (step.fallback === "tally-timeout") return `Give this week to ${defaultCharity}`;
+  return stageLabel(step.stage, charity);
+}
+
+/** What happens on a finalize past the tally grace, which overrides the vote. */
+export function fallbackText(defaultCharity: string): string {
+  return (
+    "This week's votes were never decrypted, and the 14 days the platform has to do it are over. Finalizing now does not " +
+    `count the votes: the week goes to the default charity, ${defaultCharity}, whatever the votes said.`
+  );
 }
 
 /** What each step does, in plain words. */

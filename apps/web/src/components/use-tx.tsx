@@ -72,7 +72,7 @@ export function useTx(options: TxOptions = {}) {
     });
   }, [error]);
 
-  return { send: writeContractAsync, hash, isPending, error, receipt: receipt.data, receiptError: receipt.error, reset };
+  return { send: writeContractAsync, hash, isPending, error, receipt: receipt.data, receiptError: receipt.error, refetchReceipt: receipt.refetch, reset };
 }
 
 export type Tx = ReturnType<typeof useTx>;

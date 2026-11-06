@@ -14,6 +14,8 @@ const VAULT = "0x00000000000000000000000000000000000000d2";
 const SCHEME = "0x00000000000000000000000000000000000000d3";
 const DISTRIBUTOR = "0x00000000000000000000000000000000000000d4";
 const CAUSE = `0x${"cc".repeat(32)}`;
+const CAUSE2 = `0x${"dd".repeat(32)}`;
+const REGISTRY = "0x00000000000000000000000000000000000000d5";
 const ZERO32 = `0x${"00".repeat(32)}`;
 const ORGS = [`0x${"01".repeat(32)}`, `0x${"02".repeat(32)}`];
 const WEEK = 604_800n;
@@ -51,6 +53,9 @@ const chain = {
   voters: 0n,
   tallyFinal: false,
   defaultCause: CAUSE,
+  defaultActive: true,
+  /** `winningCause` once finalized. */
+  winner: CAUSE,
   pool: 1_500_000n,
   settled: false,
   pending: 0n,
@@ -59,28 +64,33 @@ const chain = {
   orgInactive: false,
 };
 const initial = { ...chain };
+/** Per-week overrides of `chain` (the same state for every week otherwise). */
+const weekState = new Map<bigint, Partial<typeof chain>>();
+const at = (epoch: unknown) => ({ ...chain, ...(typeof epoch === "bigint" ? weekState.get(epoch) : undefined) });
+const tokenEpochReads = new Set(["isOpened", "isClosed", "closeFailed", "isFinalized", "voterCount", "epochScheme", "winningCause", "ballotCommitment", "settled", "causePoolOf", "pending", "distributed"]);
 
 const revert = (abi: Abi, errorName: string, args: readonly unknown[]) =>
   new ContractFunctionRevertedError({ abi, data: encodeErrorResult({ abi, errorName, args } as never), functionName: "x" });
 
 const readContract = vi.fn(async ({ address, functionName, args }: { address: string; functionName: string; args?: readonly unknown[] }) => {
+  const st = tokenEpochReads.has(functionName) ? at(args?.[1]) : functionName === "tallyOf" ? at(args?.[2]) : chain;
   switch (functionName) {
     case "currentEpoch":
       return chain.current;
     case "isRegistered":
       return address === VAULT ? true : chain.registered;
     case "isOpened":
-      return chain.opened;
+      return st.opened;
     case "isClosed":
-      return chain.closed;
+      return st.closed;
     case "closeFailed":
       return false;
     case "isFinalized":
-      return chain.finalized;
+      return st.finalized;
     case "voterCount":
-      return chain.voters;
+      return st.voters;
     case "epochScheme":
-      return chain.opened ? SCHEME : zeroAddress;
+      return st.opened ? SCHEME : zeroAddress;
     case "epochStart":
       return startOf(args![0] as bigint);
     case "TALLY_GRACE":
@@ -88,36 +98,42 @@ const readContract = vi.fn(async ({ address, functionName, args }: { address: st
     case "defaultCause":
       return chain.defaultCause;
     case "winningCause":
-      return chain.finalized ? CAUSE : ZERO32;
+      return st.finalized ? st.winner : ZERO32;
     case "ballotCommitment":
-      return chain.opened ? [ballotCommitment(ORGS as `0x${string}`[]), 2] : [ZERO32, 0];
+      return st.opened ? [ballotCommitment(ORGS as `0x${string}`[]), 2] : [ZERO32, 0];
     case "tallyOf":
-      return [chain.tallyFinal, chain.tallyFinal ? [3n, 1n] : []];
+      return [st.tallyFinal, st.tallyFinal ? [3n, 1n] : []];
     case "settled":
-      return chain.settled;
+      return st.settled;
     case "causePoolOf":
-      return chain.pool;
+      return st.pool;
     case "SETTLE_GRACE":
       return 7n * DAY;
     case "pending":
-      return chain.pending;
+      return st.pending;
     case "distributed":
-      return chain.distributed;
+      return st.distributed;
+    case "registry":
+      return REGISTRY;
+    case "isActive":
+      return chain.defaultActive;
     default:
       throw new Error(`unexpected read ${functionName}`);
   }
 });
-const simulateContract = vi.fn(async ({ functionName }: { functionName: string }) => {
+const simulateContract = vi.fn(async ({ functionName, args }: { functionName: string; args?: readonly unknown[] }) => {
+  const st = at(args?.[1]);
   if (functionName === "settle") {
-    if (chain.feesPending) throw revert(feeVaultAbi as Abi, "FeesPending", [TOKEN, 4n]);
-    if (chain.pool === 0n) throw revert(feeVaultAbi as Abi, "NothingToSettle", [TOKEN, 4n]);
+    if (st.feesPending) throw revert(feeVaultAbi as Abi, "FeesPending", [TOKEN, 4n]);
+    if (st.pool === 0n) throw revert(feeVaultAbi as Abi, "NothingToSettle", [TOKEN, 4n]);
   }
-  if (functionName === "distribute" && chain.orgInactive) throw revert(donationDistributorAbi as Abi, "OrgNotActive", [DISTRIBUTOR]);
+  if (functionName === "distribute" && st.orgInactive) throw revert(donationDistributorAbi as Abi, "OrgNotActive", [DISTRIBUTOR]);
   return { result: undefined };
 });
 
 const writeContractAsync = vi.fn(async (_req: unknown) => "0xabc");
-const wallet: { hash?: string; receipt?: { status: string; blockNumber: bigint; transactionHash: string } } = {};
+const wallet: { hash?: string; receipt?: { status: string; blockNumber: bigint; transactionHash: string }; receiptError?: Error } = {};
+const refetchReceipt = vi.fn(async () => undefined);
 
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => config,
@@ -127,7 +143,7 @@ vi.mock("@/components/providers", () => ({
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: undefined }),
   useWriteContract: () => ({ writeContractAsync, data: wallet.hash, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: wallet.receipt, error: null }),
+  useWaitForTransactionReceipt: () => ({ data: wallet.receipt, error: wallet.receiptError ?? null, refetch: refetchReceipt }),
 }));
 
 const { SendDonation } = await import("@/components/send-donation");
@@ -155,10 +171,13 @@ function mine(n: number, apply: () => void, rerender: () => void) {
 
 beforeEach(() => {
   Object.assign(chain, initial);
+  weekState.clear();
   config = full;
   writeContractAsync.mockClear();
+  refetchReceipt.mockClear();
   delete wallet.hash;
   delete wallet.receipt;
+  delete wallet.receiptError;
   for (const k of Object.keys(fixtures)) delete fixtures[k];
   fixtures[`/api/epochs/${TOKEN}`] = {
     items: [
@@ -169,7 +188,13 @@ beforeEach(() => {
     ],
     nextCursor: null,
   };
-  fixtures["/api/causes"] = { items: [{ name: "Hunger Relief", causeId: CAUSE, orgId: null, address: null, isDeployed: true }], nextCursor: null };
+  fixtures["/api/causes"] = {
+    items: [
+      { name: "Hunger Relief", causeId: CAUSE, orgId: null, address: null, isDeployed: true },
+      { name: "Clean Water", causeId: CAUSE2, orgId: null, address: null, isDeployed: true },
+    ],
+    nextCursor: null,
+  };
 });
 
 describe("send this week's donation", () => {
@@ -244,6 +269,102 @@ describe("send this week's donation", () => {
     expect(within(c).queryByRole("button")).toBeNull();
   });
 
+  it("offers a newer week that can move before an older one that is stuck", async () => {
+    fixtures[`/api/epochs/${TOKEN}`] = { items: [{ epoch: "3", causeAttributed: "900" }, { epoch: "4", causeAttributed: "1500000" }] };
+    weekState.set(3n, { finalized: true, settled: true, pool: 0n, pending: 900n, orgInactive: true });
+    weekState.set(4n, { finalized: true, winner: CAUSE2 });
+    renderCard();
+    const c = await card();
+    expect(await within(c).findByRole("button", { name: "Move the week's fees to the donation contract" })).toBeEnabled();
+    expect(c).toHaveTextContent(`The week of ${new Date(Number(startOf(4n)) * 1000).toISOString().slice(0, 10)}`);
+    expect(within(c).queryByRole("alert")).toBeNull();
+  });
+
+  it("shows the oldest stuck week when no week can move", async () => {
+    fixtures[`/api/epochs/${TOKEN}`] = { items: [{ epoch: "3", causeAttributed: "900" }, { epoch: "4", causeAttributed: "1500000" }] };
+    weekState.set(3n, { finalized: true, settled: true, pool: 0n, pending: 900n, orgInactive: true });
+    weekState.set(4n, { finalized: true, feesPending: true });
+    renderCard();
+    const c = await card();
+    expect(await within(c).findByRole("status")).toHaveTextContent(/still on their way to the vault/);
+  });
+
+  it("keeps the button disabled when the receipt cannot be read, and offers to check again", async () => {
+    const { rerender } = renderCard();
+    fireEvent.click(within(await card()).getByRole("button", { name: "Finalize the winner" }));
+    await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(1));
+    wallet.hash = `0x${"1".repeat(64)}`;
+    wallet.receiptError = new Error("Timed out while waiting for transaction");
+    rerender();
+    const c = await card();
+    expect(within(c).getByRole("button", { name: "Finalize the winner" })).toBeDisabled();
+    expect(within(c).getByRole("alert")).toHaveTextContent(/Could not read the receipt/);
+    fireEvent.click(within(c).getByRole("button", { name: "Check again" }));
+    expect(refetchReceipt).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(c).getByRole("button", { name: "Finalize the winner" }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(writeContractAsync).toHaveBeenCalledTimes(1);
+  });
+
+  it("names the default charity when finalizing after the tally grace overrides the vote", async () => {
+    Object.assign(chain, { opened: true, voters: 2n, closed: true, now: startOf(5n) + 15n * DAY });
+    renderCard();
+    const c = await card();
+    const button = await within(c).findByRole("button", { name: "Give this week to Hunger Relief" });
+    expect(within(c).getByRole("note")).toHaveTextContent(/votes were never decrypted.*does not count the votes.*default charity, Hunger Relief/);
+    expect(c).toHaveTextContent(/can only go to the default charity/);
+    fireEvent.click(button);
+    await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(1));
+    expect(writeContractAsync.mock.calls[0]![0]).toMatchObject({ functionName: "finalizeEpoch", args: [TOKEN, 4n, []] });
+  });
+
+  it("does not send a different step than the button named", async () => {
+    Object.assign(chain, { opened: true, voters: 2n });
+    renderCard();
+    const button = await screen.findByRole("button", { name: "Close the vote" });
+    // Someone closed it, and the tally grace passed, before the visitor pressed.
+    Object.assign(chain, { closed: true, now: startOf(5n) + 15n * DAY });
+    fireEvent.click(button);
+    expect(await screen.findByText(/The next step changed since this page loaded/)).toBeInTheDocument();
+    expect(writeContractAsync).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: "Give this week to Hunger Relief" })).toBeEnabled();
+  });
+
+  it("keeps the confirmed step's own charity and week once the card moves to another week", async () => {
+    fixtures[`/api/epochs/${TOKEN}`] = { items: [{ epoch: "3", causeAttributed: "900" }, { epoch: "4", causeAttributed: "1500000" }] };
+    weekState.set(3n, { finalized: true, settled: true, pool: 0n, pending: 900n });
+    weekState.set(4n, { finalized: true, settled: true, pool: 0n, pending: 1_500_000n, winner: CAUSE2 });
+    const { rerender } = renderCard();
+    fireEvent.click(await screen.findByRole("button", { name: "Send the donation to Hunger Relief" }));
+    await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(1));
+    mine(1, () => weekState.set(3n, { ...weekState.get(3n), distributed: true, pending: 0n }), rerender);
+    expect(await screen.findByRole("button", { name: "Send the donation to Clean Water" })).toBeInTheDocument();
+    const week3 = new Date(Number(startOf(3n)) * 1000).toISOString().slice(0, 10);
+    expect(screen.getByText(new RegExp(`Send the donation to Hunger Relief \\(week of ${week3}\\) confirmed in block 101`))).toBeInTheDocument();
+    expect(screen.queryByText(/Send the donation to Clean Water confirmed/)).toBeNull();
+  });
+
+  it("is blocked when the default charity is no longer active", async () => {
+    chain.defaultActive = false;
+    renderCard();
+    const c = await card();
+    expect(await within(c).findByRole("alert")).toHaveTextContent(/has not set a default charity/);
+    expect(within(c).queryByRole("button")).toBeNull();
+  });
+
+  it("without the indexer, offers last week only once the chain shows fees for it", async () => {
+    delete fixtures[`/api/epochs/${TOKEN}`];
+    chain.pool = 0n;
+    const first = renderCard();
+    await waitFor(() => expect(readContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: "causePoolOf" })));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByRole("region", { name: "Send this week's donation" })).toBeNull();
+    first.unmount();
+    chain.pool = 5n;
+    renderCard();
+    expect(await screen.findByRole("button", { name: "Finalize the winner" })).toBeInTheDocument();
+  });
+
   it("is hidden when no ended week is waiting", async () => {
     Object.assign(chain, { finalized: true, settled: true, distributed: true });
     renderCard();
@@ -271,11 +392,17 @@ describe("send this week's donation", () => {
 describe("donation-push helpers", () => {
   it("lists ended, undonated weeks with fees, oldest first, and falls back to last week", async () => {
     const deps = { indexer, chain: () => ({}) } as never;
-    expect(await candidateWeeks(deps, TOKEN, 5n)).toEqual([4n]);
+    expect(await candidateWeeks(deps, TOKEN, 5n)).toEqual({ weeks: [4n], indexed: true });
     fixtures[`/api/epochs/${TOKEN}`] = { items: [{ epoch: "4", causeAttributed: "1" }, { epoch: "1", causeAttributed: "0", settledAmount: "5" }] };
-    expect(await candidateWeeks(deps, TOKEN, 5n)).toEqual([1n, 4n]);
+    expect(await candidateWeeks(deps, TOKEN, 5n)).toEqual({ weeks: [1n, 4n], indexed: true });
     delete fixtures[`/api/epochs/${TOKEN}`];
-    expect(await candidateWeeks(deps, TOKEN, 5n)).toEqual([4n]);
+    expect(await candidateWeeks(deps, TOKEN, 5n)).toEqual({ weeks: [4n], indexed: false });
+  });
+
+  it("keeps the newest weeks when more are waiting than it plans", async () => {
+    const deps = { indexer, chain: () => ({}) } as never;
+    fixtures[`/api/epochs/${TOKEN}`] = { items: Array.from({ length: 9 }, (_, i) => ({ epoch: String(i + 1), causeAttributed: "1" })) };
+    expect((await candidateWeeks(deps, TOKEN, 20n)).weeks).toEqual([4n, 5n, 6n, 7n, 8n, 9n]);
   });
 
   it("words every wait and block", () => {
