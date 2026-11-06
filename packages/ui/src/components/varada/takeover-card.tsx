@@ -12,8 +12,11 @@ export interface TakeoverCardProps extends Omit<ComponentProps<"section">, "chil
   status: TakeoverStatus;
   /** The proposal in a sentence; the proposed controller address is usually inside it. */
   proposal: ReactNode;
-  /** Turnout so far and the quorum, as percent of supply. */
-  turnout: number;
+  /**
+   * Turnout so far and the quorum, as percent of supply. Omit the turnout while votes are still
+   * encrypted: the card then shows the quorum alone instead of an empty progress bar.
+   */
+  turnout?: number;
   quorum: number;
   /** Share of votes cast, when known (the tally may stay encrypted until the end). */
   forPct?: number;
@@ -55,7 +58,7 @@ export function TakeoverCard({
 }: TakeoverCardProps) {
   const titleId = `takeover-${useId().replace(/:/g, "")}`;
   const reasonId = `${titleId}-reason`;
-  const progress = quorum > 0 ? Math.min(100, (turnout / quorum) * 100) : 0;
+  const progress = turnout !== undefined && quorum > 0 ? Math.min(100, (turnout / quorum) * 100) : 0;
   const s = STATUS[status];
   const canVote = status === "active" && !!onVote && !disabledReason && !myVote;
   return (
@@ -73,10 +76,10 @@ export function TakeoverCard({
           <div className="m-0 text-sm break-words text-ink-soft">{proposal}</div>
           <div className="flex flex-wrap justify-between gap-x-3 text-[13px]">
             <span>Quorum{endsIn ? <span className="text-ink-muted"> · {endsIn}</span> : null}</span>
-            <span className="num">
-              {turnout}% of {quorum}%
-            </span>
+            <span className="num">{turnout !== undefined ? `${turnout}% of ${quorum}%` : `${quorum}% needed`}</span>
           </div>
+          {turnout === undefined ? <p className="m-0 text-[13px] text-ink-muted">Votes are counted privately, so turnout shows once the tally is decrypted.</p> : null}
+          {turnout !== undefined ? (
           <div
             role="progressbar"
             aria-label="Turnout towards quorum"
@@ -88,6 +91,7 @@ export function TakeoverCard({
           >
             <div className={cn("h-full rounded-full", progress >= 100 ? "bg-sage" : "bg-ochre")} style={{ width: `${progress}%` }} />
           </div>
+          ) : null}
           {forPct !== undefined && againstPct !== undefined ? (
             <div className="flex justify-between text-[13px] text-ink-soft">
               <span>
