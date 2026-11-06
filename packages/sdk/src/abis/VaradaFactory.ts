@@ -228,6 +228,11 @@ export const varadaFactoryAbi = [
             "name": "regionMask",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "donationAsset",
+            "type": "uint8",
+            "internalType": "enum DonationAsset"
           }
         ]
       },
@@ -341,6 +346,11 @@ export const varadaFactoryAbi = [
             "name": "regionMask",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "donationAsset",
+            "type": "uint8",
+            "internalType": "enum DonationAsset"
           }
         ]
       }
@@ -615,6 +625,11 @@ export const varadaFactoryAbi = [
             "name": "regionMask",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "donationAsset",
+            "type": "uint8",
+            "internalType": "enum DonationAsset"
           }
         ]
       }

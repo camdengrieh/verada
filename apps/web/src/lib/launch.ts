@@ -3,7 +3,11 @@ import {
   ALL_CATEGORIES_MASK,
   ALL_REGIONS_MASK,
   categoryMaskOf,
+  DEFAULT_DONATION_ASSET,
+  DONATION_ASSET_ENUM,
   EXTERNAL_ADDRESSES,
+  parseDonationAmount,
+  type DonationAsset,
   isValidLabel,
   normalizeSwarmReference,
   regionMaskOf,
@@ -29,6 +33,13 @@ export const MAX_SNIPER_DECAY_SECONDS = 86_400;
 export const MAX_DONATION_THRESHOLD_USDC = 1_000_000;
 /** Default live-donation threshold in USDC. Zero pushes a donation on every swap (~105-150k extra gas each). */
 export const DEFAULT_DONATION_THRESHOLD_USDC = "25";
+/**
+ * Live-donation thresholds are written in the token's donation asset. The ETH numbers mirror the
+ * USDC ones at roughly 2,500 USD per ETH (the contract's own cap decides; a launch above it reverts).
+ */
+export const DEFAULT_DONATION_THRESHOLD: Record<DonationAsset, string> = { usdc: DEFAULT_DONATION_THRESHOLD_USDC, eth: "0.01" };
+export const DONATION_THRESHOLD_PRESETS: Record<DonationAsset, readonly string[]> = { usdc: ["10", "25", "100", "500"], eth: ["0.005", "0.01", "0.05", "0.25"] };
+export const MAX_DONATION_THRESHOLD: Record<DonationAsset, number> = { usdc: MAX_DONATION_THRESHOLD_USDC, eth: 400 };
 
 export type GivingModeKey = "weekly" | "live";
 
@@ -92,8 +103,10 @@ export interface LaunchInput {
   mode?: GivingModeKey;
   /** Live mode: rotation period key. */
   rotation?: string;
-  /** Live mode: donation threshold in USDC, decimal text. */
+  /** Live mode: donation threshold in the donation asset (USDC or ETH), decimal text. */
   donationThreshold?: string;
+  /** Asset fees are consolidated into and donated in; USDC when omitted. */
+  donationAsset?: DonationAsset;
   /** Live mode: cause id of the first charity; must be active in the cause registry. */
   initialCause?: string;
 }
@@ -119,6 +132,8 @@ export interface DeployParams {
   logoRef: Hex;
   categoryMask: bigint;
   regionMask: number;
+  /** `enum DonationAsset { Usdc, Eth }`: 0 USDC, 1 ETH (WETH on chain). */
+  donationAsset: 0 | 1;
 }
 
 export const ZERO_LOGO_REF: Hex = `0x${"0".repeat(64)}`;
@@ -177,16 +192,20 @@ export function parseLaunchInput(input: LaunchInput): ParseResult {
     return { ok: false, error: "Salt must be empty or a 32-byte hex string" };
   }
 
+  const asset: DonationAsset = input.donationAsset ?? DEFAULT_DONATION_ASSET;
+  if (asset !== "usdc" && asset !== "eth") return { ok: false, error: "Donation asset must be USDC or ETH" };
+
   let live: LiveParams | undefined;
   if (input.mode === "live") {
     const rotation = rotationOf(input.rotation ?? DEFAULT_ROTATION);
     if (!rotation) return { ok: false, error: "Pick how often the charity rotates" };
     const cause = (input.initialCause ?? "").trim();
     if (!isHex(cause) || cause.length !== 66 || /^0x0{64}$/.test(cause)) return { ok: false, error: "Pick the charity that receives the first rotation" };
-    const amount = parseUsdc(input.donationThreshold ?? DEFAULT_DONATION_THRESHOLD_USDC);
-    if (amount === null) return { ok: false, error: "Donation threshold must be a USDC amount with at most 6 decimals" };
+    const sym = asset === "eth" ? "ETH" : "USDC";
+    const amount = parseDonationAmount(input.donationThreshold ?? DEFAULT_DONATION_THRESHOLD[asset], asset);
+    if (amount === null) return { ok: false, error: `Donation threshold must be a ${sym} amount with at most ${asset === "eth" ? 18 : 6} decimals` };
     if (amount === 0n) return { ok: false, error: "Donation threshold must be above zero: a zero threshold donates on every swap and adds about 105,000 to 150,000 gas to each" };
-    if (amount > BigInt(MAX_DONATION_THRESHOLD_USDC) * 1_000_000n) return { ok: false, error: `Donation threshold can be at most ${MAX_DONATION_THRESHOLD_USDC.toLocaleString("en-US")} USDC` };
+    if (amount > BigInt(MAX_DONATION_THRESHOLD[asset]) * 10n ** BigInt(asset === "eth" ? 18 : 6)) return { ok: false, error: `Donation threshold can be at most ${MAX_DONATION_THRESHOLD[asset].toLocaleString("en-US")} ${sym}` };
     live = { initialCause: cause as Hex, rotationPeriod: rotation.value, donationThreshold: amount };
   }
 
@@ -207,6 +226,7 @@ export function parseLaunchInput(input: LaunchInput): ParseResult {
       logoRef,
       categoryMask,
       regionMask,
+      donationAsset: DONATION_ASSET_ENUM[asset],
     },
   };
 }

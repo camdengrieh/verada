@@ -2,7 +2,7 @@ import { EXTERNAL_ADDRESSES, isValidLabel, labelFromSymbol } from "@varada/sdk";
 import type { LabelStatus } from "./chain-reads";
 import {
   buildMetadataDocument,
-  DEFAULT_DONATION_THRESHOLD_USDC,
+  DEFAULT_DONATION_THRESHOLD,
   DEFAULT_ROTATION,
   EMPTY_METADATA_FIELDS,
   MAX_FEE_BPS,
@@ -70,7 +70,8 @@ export function initialWizardState(salt: string): WizardState {
       regions: [],
       mode: "weekly",
       rotation: DEFAULT_ROTATION,
-      donationThreshold: DEFAULT_DONATION_THRESHOLD_USDC,
+      donationThreshold: DEFAULT_DONATION_THRESHOLD.usdc,
+      donationAsset: "usdc",
       initialCause: "",
     },
     fields: EMPTY_METADATA_FIELDS,
