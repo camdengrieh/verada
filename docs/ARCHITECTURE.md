@@ -1,7 +1,7 @@
 # Varada Architecture
 
 Varada is a memecoin launchpad on Ethereum mainnet (chain id 1). Every token launches into a
-Uniswap v4 pool paired with an approved quote asset (WETH or an Ondo token), with single-sided
+Uniswap v4 pool paired with an approved quote asset (any ERC-20 the registry lists: WETH, other liquid crypto assets, or an Ondo token), with single-sided
 liquidity that is locked permanently. Trading fees are consolidated to USDC and split between the
 platform and a per-token cause pool. Each token chooses a cause focus at launch (categories such as
 hunger or endangered species, and regions such as Africa), and its holders vote weekly, with hidden
@@ -42,7 +42,7 @@ trading, [SWAP.md](SWAP.md); for what each part can see, [PRIVACY.md](PRIVACY.md
 |---|---|
 | `VaradaToken` | ERC20 with permit, burn and vote checkpoints (ERC20Votes with a timestamp clock; holders are self-delegated on first receipt). Fixed supply minted to the factory. Immutable creator and metadata URI. |
 | `VaradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Varada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. `deployLiveToken` runs the same launch on the live hook and registers the token with the live vault and rotation governor instead. |
-| `QuoteRegistry` | Owner-managed allowlist of quote assets. |
+| `QuoteRegistry` | Owner-managed allowlist of quote assets, each with a hookless v4 route (at most three hops) that ends in USDC. Any ERC-20 with a connected route qualifies; `Kind` is only a label. |
 | `FeeConsolidator` | Swaps collected fees into USDC through Uniswap v4 before the split. |
 | `TokenProfileRegistry` | Per-token profile: ENS label, controller and editor roles, text records, logo reference, suppression flag, and the cause focus (category and region masks, written once at launch). Factory-written at launch; the takeover governor may replace a controller. |
 | `VaradaResolver` | Stateless ENSIP-10 wildcard resolver for `varada.eth`: answers `addr`, `text`, `contenthash` for every `<label>.varada.eth` from the registry, and for `agent.varada.eth` and every `<label>.agent.varada.eth` from `CuratorRegistry`. |

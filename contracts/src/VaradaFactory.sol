@@ -38,7 +38,7 @@ interface IPermit2Allowance {
 
 /// @title VaradaFactory
 /// @notice Launches a token: deploys it with CREATE2, initializes its Uniswap v4 pool against
-///         a registry-approved quote asset (WETH or an Ondo token) with the Varada hook, mints the whole supply as single-sided liquidity, sends
+///         a registry-approved quote asset (any registry-listed ERC-20: WETH, other liquid crypto or an Ondo token) with the Varada hook, mints the whole supply as single-sided liquidity, sends
 ///         the position NFT to the locker and registers the token with the fee vault, the
 ///         epoch governor and the profile registry (its `<label>.varada.eth` name). The factory
 ///         holds no tokens or positions after a launch. Once the deployer has configured live

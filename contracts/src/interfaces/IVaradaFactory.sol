@@ -16,7 +16,7 @@ interface IVaradaFactory {
     /// @param sniperDecaySeconds Seconds over which the surcharge decays to zero.
     /// @param startTick Initial pool tick at which single-sided liquidity begins.
     /// @param quoteAsset Asset the token is paired against; must be allowed by the QuoteRegistry
-    ///        (WETH or an Ondo token).
+    ///        (any registry-listed ERC-20, such as WETH, WBTC or an Ondo token).
     /// @param label ENS label registered for the token under the Varada parent name
     ///        (`<label>.varada.eth`): 3 to 63 bytes of `[a-z0-9-]`, no leading or trailing
     ///        hyphen, no `--` at positions 3 and 4; must not be taken or reserved for another
