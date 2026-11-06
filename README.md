@@ -62,3 +62,36 @@ pnpm install
 Nothing that builds or ships the app needs LFS: the optimised images in `apps/web/public/assets/` are
 normal git files. You only need the LFS originals to add or regenerate art (see
 [`apps/web/README.md`](apps/web/README.md#art-and-assets)).
+
+## CROPS
+
+How the app stands against the Ethereum Foundation's CROPS properties. Details, measurements and
+every known gap are in [`docs/PRIVACY.md`](docs/PRIVACY.md).
+
+- **C**ensorship resistance. The site is a static export on Swarm, resolved through ENS, so there
+  is no app server to take down, and every token page is the one site under `<label>.varada.eth`.
+  What we run that users depend on is the indexer (one AWS account): without it, core data falls
+  back to chain reads, and the client takes a list of indexer mirrors. The anon-rpc worker bundle
+  comes from resolvers the network operator lists, and the default mixnet's specifier contract is
+  on Sepolia today; Nym and Tor (mainnet specifiers) are a configuration switch.
+- **O**pen source. MIT, see [`LICENSE`](LICENSE). Everything builds and runs from this repository
+  alone: follow Getting started, then `pnpm --filter @varada/web dev` for the app, `pnpm test` for
+  the TypeScript suites and `forge test` in `contracts/`. The published site is a plain static
+  export whose Swarm hash can be rebuilt and compared.
+- **P**rivacy. Chain reads go through anon-rpc (Hisoka's Nox mixnet by default; Nym or Tor by
+  configuration), isolated per account, so the RPC provider sees neither the user's IP nor which
+  accounts belong together, and account reads never fall back to a direct connection. Ballot
+  choices are encrypted (Zama FHE) and only per-option totals are decrypted. Varada's servers never
+  receive a wallet address and keep no access logs; the client has no analytics and no third-party
+  requests. What still learns something: the user's own wallet RPC (transactions), the Zama relayer
+  (the voter's IP and address, never the choice), the Swarm gateway serving the page, and the
+  bootstrap RPC that sees an anon-rpc worker starting.
+- **S**ecurity. Keys stay in the user's wallet. The anon worker is pinned by hash in an on-chain
+  specifier and runs in a null-origin sandbox with no access to the page, storage or keys. Trust
+  assumptions: Zama's threshold KMS for ballot decryption, the specifier owner for the worker code,
+  and the RPC the worker reads for its answers. Known gaps: no Content Security Policy yet (static
+  export) and no second-RPC cross-check of critical reads.
+
+## License
+
+MIT. See [`LICENSE`](LICENSE).

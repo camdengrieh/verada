@@ -1,6 +1,7 @@
 {
   "name": "varada",
   "private": true,
+  "license": "MIT",
   "packageManager": "pnpm@10.0.0",
   "scripts": {
     "build:contracts": "cd contracts && forge build",
