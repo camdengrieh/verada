@@ -64,7 +64,7 @@ export function FeesStep({ state, err, setInput }: StepProps) {
               Launch protection
             </label>
             <p id={`${id}-protect-hint`} className="m-0 text-sm text-ink-soft">
-              An extra fee at the start that fades to the base fee, so bots that buy in the first seconds pay more. The surcharge goes to the cause like any other fee.
+              An extra fee at the start that fades to the base fee, so bots that buy in the first seconds pay more.
             </p>
           </div>
           <Switch

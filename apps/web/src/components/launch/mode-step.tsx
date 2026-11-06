@@ -49,7 +49,7 @@ export function ModeStep({
           tone="cause"
           title={
             <span className="flex flex-wrap items-center gap-2">
-              Weekly pool <ModeBadge giving={{ mode: "weekly" }} />
+              Weekly pool
             </span>
           }
           description="Fees pool for a week. Holders then vote with hidden ballots on which charity from your focus receives the pool."
@@ -83,7 +83,7 @@ export function ModeStep({
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <FieldHint>{rotationOf(rotation)?.label ?? ""}, holders can vote to move to the next charity. A later holder vote can change the period.</FieldHint>
+            <FieldHint>Holders can vote to move to the next charity {rotationOf(rotation)?.label.toLowerCase() ?? ""}. A later holder vote can change the period.</FieldHint>
           </Field>
 
           <Field invalid={!!err("donationThreshold")}>

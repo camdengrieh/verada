@@ -7,7 +7,7 @@ import { ExternalLink, Sparkles } from "@varada/ui/components/ui/icons";
 import { useConfetti } from "@varada/ui/components/motion/confetti";
 import { ModeBadge, type LiveCadence } from "@varada/ui/components/varada/mode-badge";
 import { cn } from "@varada/ui/lib/utils";
-import { useRel } from "@/components/nav";
+import { siteBase } from "@/lib/base";
 import { useAppConfig } from "@/components/providers";
 import { ensGatewayUrl } from "@/lib/host";
 import { shareLinks } from "@/lib/launch-tx";
@@ -33,7 +33,6 @@ export function LaunchSuccess({
   onAgain(): void;
 }) {
   const config = useAppConfig();
-  const rel = useRel();
   const { fire } = useConfetti({ preset: "launch" });
   useEffect(() => {
     fire({ x: 0.5, y: 0.35, unit: "fraction" });
@@ -42,7 +41,7 @@ export function LaunchSuccess({
   const ens = `${label}.${config.ensParentName}`;
   const pageUrl = ensGatewayUrl(label, config.ensParentName);
   const share = shareLinks({ name, symbol, pageUrl });
-  const tokenHref = token ? rel(`token/?address=${token}`) : null;
+  const tokenHref = token ? `${siteBase()}token/?address=${token}` : null;
   const link = "gap-2";
 
   return (
