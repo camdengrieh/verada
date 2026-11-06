@@ -6,19 +6,45 @@ import { useAppConfig, useDeps } from "@/components/providers";
 import { useRel } from "@/components/nav";
 import { quoteAssetLogo } from "@/lib/asset-packs";
 import { quoteAssetsFromRows, type AppQuoteAsset } from "@/lib/quote-assets";
+import { readQuoteMarkets, withQuoteMarkets } from "@/lib/quote-markets";
 
 /**
- * The quote registry's allowlist as library quote assets (names, kinds, logos). Market data
- * (prices, depth, routes, Ondo pause state) is layered on by `useQuoteMarkets`.
+ * The quote registry's allowlist as library quote assets: names, kinds and logos from the indexer's
+ * `/quote-assets`, then (when the chain answers) each asset's fee route, USD price, depth and Ondo
+ * pause state from the registry, the v4 StateView and Ondo's pause manager. `marketsLoading` is true
+ * while those reads are in flight; the list is usable without them.
  */
-export function useQuoteAssets(): { assets: AppQuoteAsset[]; isLoading: boolean; error: unknown; refetch(): void } {
+export function useQuoteAssets(): {
+  assets: AppQuoteAsset[];
+  isLoading: boolean;
+  marketsLoading: boolean;
+  marketsError: unknown;
+  error: unknown;
+  refetch(): void;
+} {
   const config = useAppConfig();
   const deps = useDeps();
   const rel = useRel();
   const query = useQuery({ queryKey: ["quote-assets"], queryFn: () => deps.indexer.quoteAssets(), retry: false, staleTime: 300_000 });
-  const assets = useMemo(
-    () => quoteAssetsFromRows(query.data ?? [], (symbol) => quoteAssetLogo(config, symbol, rel, 64)),
-    [query.data, config, rel],
-  );
-  return { assets, isLoading: query.isLoading, error: query.error, refetch: () => void query.refetch() };
+  const base = useMemo(() => quoteAssetsFromRows(query.data ?? [], (symbol) => quoteAssetLogo(config, symbol, rel, 64)), [query.data, config, rel]);
+  const key = base.map((a) => a.address).join(",");
+  const markets = useQuery({
+    queryKey: ["quote-markets", config.factoryAddress, key],
+    queryFn: () => readQuoteMarkets(deps.chain(), config, base),
+    enabled: base.length > 0,
+    retry: false,
+    staleTime: 60_000,
+  });
+  const assets = useMemo(() => withQuoteMarkets(base, markets.data), [base, markets.data]);
+  return {
+    assets,
+    isLoading: query.isLoading,
+    marketsLoading: markets.isLoading,
+    marketsError: markets.error,
+    error: query.error,
+    refetch: () => {
+      void query.refetch();
+      void markets.refetch();
+    },
+  };
 }
