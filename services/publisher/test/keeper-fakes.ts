@@ -1,12 +1,16 @@
-import { getAddress, keccak256, toHex, type Address, type Hex } from "viem";
+import type { RoundStatus } from "@verada/sdk";
+import { getAddress, keccak256, toHex, zeroAddress, zeroHash, type Address, type Hex } from "viem";
 import {
   KeeperRevert,
+  sameAddress,
   type ChainReader,
   type ChainWriter,
   type EpochView,
   type KeeperAction,
   type ProposalState,
   type ProposalView,
+  type RotationReader,
+  type RoundView,
 } from "../src/keeper/chain.js";
 import { createFakeDecryptor, decodeCleartexts } from "../src/keeper/decrypt.js";
 
@@ -76,6 +80,8 @@ export class FakeChain {
   lpFeesError?: Error;
   /** `token:epoch` of epochs whose curation skip was requested. */
   skipRequested = new Set<string>();
+  /** Live mode: round actions are applied to it, and the decryptor knows its outcome handles. */
+  rotation?: FakeRotation;
   private handleSeq = 0;
 
   register(t: Address) {
@@ -185,6 +191,10 @@ export class FakeChain {
 
   /** Validates `a` like the contracts would and applies it unless `dry`. */
   private apply(a: KeeperAction, dry: boolean) {
+    if (FakeRotation.handles(a)) {
+      if (!this.rotation) throw new Error(`no rotation governor for ${a.kind}`);
+      return this.rotation.apply(a, dry);
+    }
     switch (a.kind) {
       case "closeEpoch": {
         if (a.epoch >= this.current) throw revert("EpochNotEnded");
@@ -308,10 +318,174 @@ export class FakeChain {
           const i = p.handles.findIndex((x) => x.toLowerCase() === h.toLowerCase());
           if (i >= 0) return p.values[i]!;
         }
+        const winner = this.rotation?.winnerOf(h);
+        if (winner !== undefined) return winner;
         throw new Error("unknown handle");
       },
       { proof: PROOF, ...opts },
     );
+  }
+}
+
+export const RG = "0x00000000000000000000000000000000000000e3" as Address;
+
+interface FakeRound {
+  status: RoundStatus;
+  voteEnd: bigint;
+  voters: bigint;
+  scheme: Address;
+}
+interface OutcomePoll {
+  handle: Hex;
+  /** The (hidden) winning option index. */
+  winner: bigint;
+  isFinal: boolean;
+}
+type RoundKind = "openRound" | "prepareRound" | "prepareCuratedRound" | "closeRound" | "finalizeRound" | "submitOutcome";
+const ROUND_KINDS: readonly string[] = ["openRound", "prepareRound", "prepareCuratedRound", "closeRound", "finalizeRound", "submitOutcome"];
+
+/**
+ * In-memory `RotationGovernor` with an hourly schedule from `anchor` (vote window
+ * `[start(target - 1), start(target) - 15 min)`, curation grace 15 minutes), plus the outcome side
+ * of `ZamaVotingScheme`, with the contracts' guards.
+ */
+export class FakeRotation {
+  static readonly PERIOD = 3_600n;
+  static readonly BUFFER = 900n;
+  anchor = 1_000_000n;
+  /** Chain time: rotation 4, one minute in. */
+  now = this.anchor + 4n * FakeRotation.PERIOD + 60n;
+  registered = new Set<string>();
+  rounds = new Map<string, FakeRound>();
+  outcomes = new Map<string, OutcomePoll>();
+  minVoters = 1n;
+  /** Models usable curations: until the grace ends a round needs `prepareCuratedRound`. */
+  curatedUntilGrace = false;
+  reads = 0;
+  private seq = 0;
+
+  static handles(a: KeeperAction): a is Extract<KeeperAction, { kind: RoundKind }> {
+    return ROUND_KINDS.includes(a.kind);
+  }
+
+  register(t: Address) {
+    this.registered.add(t.toLowerCase());
+    return this;
+  }
+
+  current(): bigint {
+    return (this.now - this.anchor) / FakeRotation.PERIOD;
+  }
+
+  window(target: bigint) {
+    const voteStart = this.anchor + (target - 1n) * FakeRotation.PERIOD;
+    const voteEnd = this.anchor + target * FakeRotation.PERIOD - FakeRotation.BUFFER;
+    return { snapshot: voteStart - 1n, voteStart, voteEnd, graceEnd: voteStart + (voteEnd - voteStart) / 3n };
+  }
+
+  roundOf(t: Address, target: bigint): FakeRound {
+    const k = `${t}:${target}`.toLowerCase();
+    let r = this.rounds.get(k);
+    if (!r) {
+      r = { status: "None", voteEnd: 0n, voters: 0n, scheme: zeroAddress };
+      this.rounds.set(k, r);
+    }
+    return r;
+  }
+
+  /** A round opened earlier with `voters` ballots whose hidden winner is option `winner`. */
+  openRound(t: Address, target: bigint, voters: bigint, winner = 0n, scheme: Address = ZAMA) {
+    Object.assign(this.roundOf(t, target), { status: "Open", voteEnd: this.window(target).voteEnd, voters, scheme });
+    this.outcomes.set(`${t}:${target}`.toLowerCase(), { handle: zeroHash, winner, isFinal: false });
+  }
+
+  outcomeOfRound(t: Address, target: bigint) {
+    return this.outcomes.get(`${t}:${target}`.toLowerCase());
+  }
+
+  winnerOf(h: Hex): bigint | undefined {
+    for (const o of this.outcomes.values()) if (o.handle !== zeroHash && o.handle.toLowerCase() === h.toLowerCase()) return o.winner;
+    return undefined;
+  }
+
+  private targetOf(scope: bigint): bigint {
+    if (scope >> 248n !== 1n) throw new Error("not a rotation scope");
+    return scope & ((1n << 64n) - 1n);
+  }
+
+  reader(): RotationReader {
+    const r = <T>(v: T) => {
+      this.reads++;
+      return Promise.resolve(v);
+    };
+    return {
+      isRegistered: (t) => r(this.registered.has(t.toLowerCase())),
+      currentRotation: (t) => r(this.registered.has(t.toLowerCase()) ? this.current() : 0n),
+      round: (t, target) => {
+        const v = this.roundOf(t, target);
+        const view: RoundView = { status: v.status, voteEnd: v.voteEnd, voters: v.voters, scheme: v.scheme };
+        return r(view);
+      },
+      outcomeOf: (scheme, governor, t, scope) => {
+        const o = this.outcomeOfRound(t, this.targetOf(scope));
+        return r({ isFinal: o?.isFinal ?? false, winner: o?.isFinal ? Number(o.winner) : 255 });
+      },
+      outcomeHandle: (scheme, governor, t, scope) => r(this.outcomeOfRound(t, this.targetOf(scope))?.handle ?? zeroHash),
+      now: () => r(this.now),
+    };
+  }
+
+  apply(a: Extract<KeeperAction, { kind: RoundKind }>, dry: boolean) {
+    switch (a.kind) {
+      case "openRound":
+      case "prepareRound":
+      case "prepareCuratedRound": {
+        if (!this.registered.has(a.token.toLowerCase())) throw revert("TokenNotRegistered");
+        const target = a.kind === "openRound" ? this.current() + 1n : a.target;
+        if (target !== this.current() + 1n) throw revert("RoundNotCurrent");
+        const r = this.roundOf(a.token, target);
+        if (r.status !== "None") throw revert("RoundAlreadyOpened");
+        const w = this.window(target);
+        if (this.now >= w.voteEnd) throw revert("VotingClosed");
+        if (this.curatedUntilGrace && this.now < w.graceEnd && a.kind !== "prepareCuratedRound") throw revert("IncompleteCuratedBallot");
+        if (!dry) Object.assign(r, { status: "Open", voteEnd: w.voteEnd, scheme: ZAMA });
+        return;
+      }
+      case "closeRound": {
+        const r = this.roundOf(a.token, a.target);
+        if (r.status === "None") throw revert("RoundNotOpened");
+        if (r.status !== "Open") throw revert("RoundAlreadyClosed");
+        if (this.now < r.voteEnd) throw revert("VotingNotEnded");
+        if (dry) return;
+        if (r.voters < this.minVoters) {
+          r.status = "NoChange";
+          return;
+        }
+        r.status = "Closed";
+        const o = this.outcomeOfRound(a.token, a.target)!;
+        o.handle = keccak256(toHex(`outcome-${++this.seq}`));
+        return;
+      }
+      case "submitOutcome": {
+        if (!sameAddress(a.governor, RG)) throw revert("PollNotClosed");
+        const target = this.targetOf(a.scope);
+        const o = this.outcomeOfRound(a.token, target);
+        if (!o || o.handle === zeroHash) throw revert("PollNotClosed");
+        if (o.isFinal) throw revert("TallyAlreadyFinal");
+        if ((a.cleartexts.length - 2) / 2 !== 32) throw revert("InvalidTallyProof");
+        const [word] = decodeCleartexts(a.cleartexts);
+        if (a.proof !== PROOF || word !== o.winner) throw revert("InvalidKMSSignatures");
+        if (!dry) o.isFinal = true;
+        return;
+      }
+      case "finalizeRound": {
+        const r = this.roundOf(a.token, a.target);
+        if (r.status !== "Closed") throw revert("RoundNotClosed");
+        if (!this.outcomeOfRound(a.token, a.target)?.isFinal) throw revert("TallyNotFinal");
+        if (!dry) r.status = "Applied";
+        return;
+      }
+    }
   }
 }
 

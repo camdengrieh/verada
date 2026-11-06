@@ -1,4 +1,4 @@
-import { epochGovernorAbi, takeoverGovernorAbi, veradaFactoryAbi, veradaLpLockerAbi, zamaVotingSchemeAbi } from "@verada/sdk/abis";
+import { epochGovernorAbi, rotationGovernorAbi, takeoverGovernorAbi, veradaFactoryAbi, veradaLpLockerAbi, zamaVotingSchemeAbi } from "@verada/sdk/abis";
 import {
   BaseError,
   ContractFunctionRevertedError,
@@ -17,8 +17,8 @@ import {
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { mainnet } from "viem/chains";
-import { ballotCall, ballotCommitment as ballotCommitmentOf, createBallotReader } from "@verada/sdk";
-import type { BallotReader } from "./ballot.js";
+import { ballotCall, ballotCommitment as ballotCommitmentOf, createBallotReader, createRoundReader, ROUND_STATUSES, roundCall } from "@verada/sdk";
+import type { BallotReader, RoundReader } from "./ballot.js";
 import {
   KeeperRevert,
   PROPOSAL_STATES,
@@ -26,6 +26,7 @@ import {
   type ChainWriter,
   type FactoryLogReader,
   type KeeperAction,
+  type RotationReader,
 } from "./chain.js";
 
 /** The ballot's org ids could be read from neither the indexer nor the governor's logs. */
@@ -43,6 +44,8 @@ export interface ViemChainOptions {
   privateKey: Hex;
   epochGovernor: Address;
   takeoverGovernor: Address;
+  /** Live mode's `RotationGovernor`; without it no rotation reader is built and round calls throw. */
+  rotationGovernor?: Address;
   /** Factory whose `TokenCreated` logs list tokens (needs a start block, so set apart from `locker`). */
   factory?: Address;
   /** Factory whose `locker()` holds the tokens' LP positions, for {@link ChainReader.uncollectedFees}. */
@@ -97,6 +100,9 @@ export function createViemChain(opts: ViemChainOptions): {
   reader: ChainReader;
   writer: ChainWriter;
   ballots: BallotReader;
+  /** With `rotationGovernor`: round state and outcome reads, and the round preparer's reads. */
+  rotation?: RotationReader;
+  rounds?: RoundReader;
   factoryLogs?: FactoryLogReader;
   publicClient: PublicClient;
 } {
@@ -214,8 +220,45 @@ export function createViemChain(opts: ViemChainOptions): {
     };
   }
 
+  const rg = opts.rotationGovernor;
+  const needRotation = (): Address => {
+    if (!rg) throw new Error("no rotation governor configured");
+    return rg;
+  };
+  let rotation: RotationReader | undefined;
+  if (rg) {
+    rotation = {
+      isRegistered: (token) => read<boolean>(rg, rotationGovernorAbi, "isRegistered", [token]),
+      currentRotation: (token) => read<bigint>(rg, rotationGovernorAbi, "currentRotation", [token]),
+      async round(token, target) {
+        const [[status, , voteEnd, voters], scheme] = await Promise.all([
+          read<readonly [number, number, number, number, Hex, bigint, readonly Hex[]]>(rg, rotationGovernorAbi, "roundOf", [token, target]),
+          read<Address>(rg, rotationGovernorAbi, "roundScheme", [token, target]),
+        ]);
+        const s = ROUND_STATUSES[Number(status)];
+        if (!s) throw new Error(`unknown round status ${status}`);
+        return { status: s, voteEnd: BigInt(voteEnd), voters: BigInt(voters), scheme };
+      },
+      async outcomeOf(scheme, governor, token, scope) {
+        const [isFinal, winner] = await read<readonly [boolean, number]>(scheme, zamaVotingSchemeAbi, "outcomeOf", [governor, token, scope]);
+        return { isFinal, winner: Number(winner) };
+      },
+      outcomeHandle: (scheme, governor, token, scope) => read<Hex>(scheme, zamaVotingSchemeAbi, "outcomeHandle", [governor, token, scope]),
+      now: async () => (await publicClient.getBlock({ blockTag: "latest" })).timestamp,
+    };
+  }
+
   const toCall = (a: KeeperAction): Call => {
     switch (a.kind) {
+      case "openRound":
+      case "prepareRound":
+      case "prepareCuratedRound":
+        return roundCall(a, needRotation());
+      case "closeRound":
+      case "finalizeRound":
+        return { address: needRotation(), abi: rotationGovernorAbi, functionName: a.kind, args: [a.token, a.target] };
+      case "submitOutcome":
+        return { address: a.scheme, abi: zamaVotingSchemeAbi, functionName: "submitOutcome", args: [a.governor, a.token, a.scope, a.cleartexts, a.proof] };
       case "openEpoch":
       case "requestCurationSkip":
       case "prepareBallot":
@@ -274,6 +317,7 @@ export function createViemChain(opts: ViemChainOptions): {
   }
 
   const ballots: BallotReader = createBallotReader(publicClient, eg);
+  const rounds: RoundReader | undefined = rg ? createRoundReader(publicClient, rg) : undefined;
 
-  return { reader, writer, ballots, factoryLogs, publicClient };
+  return { reader, writer, ballots, rotation, rounds, factoryLogs, publicClient };
 }

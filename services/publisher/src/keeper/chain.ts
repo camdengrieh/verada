@@ -1,3 +1,4 @@
+import type { RoundStatus } from "@verada/sdk";
 import type { Address, Hex } from "viem";
 
 /** `ITakeoverGovernor.State`, in enum order. */
@@ -55,6 +56,34 @@ export interface ChainReader {
   uncollectedFees?(token: Address): Promise<bigint>;
 }
 
+/** `RotationGovernor` state of one rotation round (the poll on the cause of rotation `target`). */
+export interface RoundView {
+  status: RoundStatus;
+  /** Stored once the round is prepared (zero before). */
+  voteEnd: bigint;
+  voters: bigint;
+  /** Scheme the round's poll was opened with (zero if never opened). */
+  scheme: Address;
+}
+
+/** `IOutcomeVotingScheme.outcomeOf`: only the winning option index is ever revealed. */
+export interface Outcome {
+  isFinal: boolean;
+  winner: number;
+}
+
+/** Contract reads the keeper bases its decisions on for live-mode tokens (`RotationGovernor`). */
+export interface RotationReader {
+  isRegistered(token: Address): Promise<boolean>;
+  currentRotation(token: Address): Promise<bigint>;
+  round(token: Address, target: bigint): Promise<RoundView>;
+  outcomeOf(scheme: Address, governor: Address, token: Address, scope: bigint): Promise<Outcome>;
+  /** `ZamaVotingScheme.outcomeHandle`: the encrypted winner (zero before `requestOutcome`). */
+  outcomeHandle(scheme: Address, governor: Address, token: Address, scope: bigint): Promise<Hex>;
+  /** Latest block timestamp, in seconds. */
+  now(): Promise<bigint>;
+}
+
 /** A permissionless transaction the keeper may send. */
 export type KeeperAction =
   | { kind: "openEpoch"; token: Address; epoch: bigint }
@@ -71,6 +100,20 @@ export type KeeperAction =
       draws: { orgId: Hex; proof: Hex[] }[];
     }
   | { kind: "submitTally"; scheme: Address; governor: Address; token: Address; scope: bigint; cleartexts: Hex; proof: Hex }
+  /** `openRound(token)`: the next rotation's round, with no draws. `target` is the one planned for. */
+  | { kind: "openRound"; token: Address; target: bigint }
+  | { kind: "prepareRound"; token: Address; target: bigint; draws: { orgId: Hex; proof: Hex[] }[] }
+  | {
+      kind: "prepareCuratedRound";
+      token: Address;
+      target: bigint;
+      curated: { catalogIndex: number; pickOrgId: Hex; pickProof: Hex[]; entryOrgId: Hex; entryProof: Hex[] }[];
+      draws: { orgId: Hex; proof: Hex[] }[];
+    }
+  | { kind: "closeRound"; token: Address; target: bigint }
+  | { kind: "finalizeRound"; token: Address; target: bigint }
+  /** `IOutcomeVotingScheme.submitOutcome`: the decrypted winner of a poll closed for its outcome. */
+  | { kind: "submitOutcome"; scheme: Address; governor: Address; token: Address; scope: bigint; cleartexts: Hex; proof: Hex }
   | { kind: "closeProposal"; id: bigint }
   | { kind: "recordTally"; id: bigint }
   | { kind: "execute"; id: bigint };

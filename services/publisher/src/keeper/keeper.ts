@@ -1,10 +1,30 @@
+import { rotationPollScope } from "@verada/sdk";
 import type { Address } from "viem";
 import type { Log } from "../jobs/types.js";
 import { Backoff } from "./backoff.js";
-import { KeeperRevert, redact, type ChainReader, type ChainWriter, type KeeperAction } from "./chain.js";
-import type { BallotPreparer } from "./ballot.js";
+import { KeeperRevert, redact, type ChainReader, type ChainWriter, type KeeperAction, type RotationReader } from "./chain.js";
+import type { BallotPreparer, RoundPreparer } from "./ballot.js";
 import { checkDecryption, type PublicDecryptor } from "./decrypt.js";
-import { epochNeedsTally, finalizeNeedsOptions, planEpoch, planProposal, proposalNeedsTally, type Step } from "./plan.js";
+import {
+  epochNeedsTally,
+  finalizeNeedsOptions,
+  planEpoch,
+  planProposal,
+  planRound,
+  proposalNeedsTally,
+  roundNeedsOutcome,
+  type Step,
+} from "./plan.js";
+
+/** Live-mode rotation rounds (`RotationGovernor`). */
+export interface RotationDeps {
+  governor: Address;
+  reader: RotationReader;
+  /** Prepares the next rotation's round; omitted when no catalogue source (indexer). */
+  rounds?: RoundPreparer;
+  /** Rounds before the next rotation's that are re-read each run for close, outcome and finalize. Default 24. */
+  lookbackRounds?: number;
+}
 
 export interface KeeperDeps {
   reader: ChainReader;
@@ -16,6 +36,12 @@ export interface KeeperDeps {
   tokens: () => Promise<Address[]>;
   epochGovernor: Address;
   takeoverGovernor: Address;
+  /**
+   * Live tokens' rotation rounds: prepares each token's next round, closes ended ones, relays the
+   * public decryption of their winner and finalizes them. Omitted when no rotation governor is
+   * configured.
+   */
+  rotation?: RotationDeps;
   /** The Zama voting scheme; polls on any other scheme are never decrypted. */
   zamaScheme: Address;
   dryRun: boolean;
@@ -64,6 +90,9 @@ export interface KeeperRunSummary {
   /** Current-epoch openings skipped because the token is idle. */
   idleSkipped: number;
   proposalsChecked: number;
+  /** Live tokens registered with the rotation governor. */
+  liveTokens: number;
+  roundsChecked: number;
   /** Transactions mined (or, in dry run, planned). */
   txs: number;
   decrypted: number;
@@ -74,7 +103,7 @@ export interface KeeperRunSummary {
   dryRun: boolean;
 }
 
-type ItemRef = { token: Address; epoch: bigint } | { proposal: bigint; token?: Address };
+type ItemRef = { token: Address; epoch: bigint } | { token: Address; round: bigint } | { proposal: bigint; token?: Address };
 
 const describe = (a: KeeperAction): Record<string, unknown> => {
   switch (a.kind) {
@@ -85,11 +114,20 @@ const describe = (a: KeeperAction): Record<string, unknown> => {
     case "finalizeEpoch":
       return { tx: a.kind, token: a.token, epoch: a.epoch, options: a.orgIds.length };
     case "submitTally":
+    case "submitOutcome":
       return { tx: a.kind, token: a.token, scope: a.scope, governor: a.governor };
     case "prepareBallot":
       return { tx: a.kind, token: a.token, epoch: a.epoch, draws: a.draws.length };
     case "prepareCuratedBallot":
       return { tx: a.kind, token: a.token, epoch: a.epoch, curated: a.curated.length, draws: a.draws.length };
+    case "openRound":
+    case "closeRound":
+    case "finalizeRound":
+      return { tx: a.kind, token: a.token, round: a.target };
+    case "prepareRound":
+      return { tx: a.kind, token: a.token, round: a.target, draws: a.draws.length };
+    case "prepareCuratedRound":
+      return { tx: a.kind, token: a.token, round: a.target, curated: a.curated.length, draws: a.draws.length };
     default:
       return { tx: a.kind, proposal: a.id };
   }
@@ -115,6 +153,11 @@ export function createKeeper(deps: KeeperDeps) {
   const maxLag = BigInt(deps.maxIndexerLagSeconds ?? 600);
   const now = deps.now ?? Date.now;
   let noFeeReaderLogged = false;
+  /** Lowercase live tokens (registration is permanent); other tokens are re-checked each run. */
+  const liveTokens = new Set<string>();
+  /** Per lowercase live token: rounds in a final state, never read again (pruned past the lookback). */
+  const doneRounds = new Map<string, Set<bigint>>();
+  const lookbackRounds = BigInt(deps.rotation?.lookbackRounds ?? 24);
 
   /** Lowercase addresses of active tokens, or null when every epoch should be opened. */
   async function activeSet(current: bigint): Promise<Set<string> | null> {
@@ -171,6 +214,8 @@ export function createKeeper(deps: KeeperDeps) {
       ballotsChecked: 0,
       idleSkipped: 0,
       proposalsChecked: 0,
+      liveTokens: 0,
+      roundsChecked: 0,
       txs: 0,
       decrypted: 0,
       failed: 0,
@@ -198,15 +243,29 @@ export function createKeeper(deps: KeeperDeps) {
       deps.log(expected ? "warn" : "error", "keeper step failed", data);
     };
 
-    /** Builds `submitTally` from the scheme's handles and a public decryption. */
+    /**
+     * Builds `submitTally` from the scheme's tally handles and a public decryption, or for an
+     * outcome poll `submitOutcome` from its single winner handle (no count is ever decrypted).
+     */
     const decryptAction = async (step: Extract<Step, { type: "decrypt" }>, ref: ItemRef): Promise<KeeperAction> => {
-      const handles = await deps.reader.tallyHandles(step.scheme, step.governor, step.token, step.scope);
+      const { scheme, governor, token, scope } = step;
+      if (step.outcome) {
+        if (!deps.rotation) throw new Error("outcome poll without a rotation reader");
+        const handle = await deps.rotation.reader.outcomeHandle(scheme, governor, token, scope);
+        if (/^0x0*$/.test(handle)) throw new Error("poll has no outcome handle");
+        const r = await deps.decryptor.publicDecrypt([handle]);
+        const { cleartexts } = checkDecryption([handle], r);
+        s.decrypted++;
+        deps.log("info", "outcome decrypted", { ...ref });
+        return { kind: "submitOutcome", scheme, governor, token, scope, cleartexts, proof: r.decryptionProof };
+      }
+      const handles = await deps.reader.tallyHandles(scheme, governor, token, scope);
       if (handles.length === 0) throw new Error("poll has no tally handles");
       const r = await deps.decryptor.publicDecrypt(handles);
       const { cleartexts } = checkDecryption(handles, r);
       s.decrypted++;
       deps.log("info", "tally decrypted", { ...ref, options: handles.length });
-      return { kind: "submitTally", scheme: step.scheme, governor: step.governor, token: step.token, scope: step.scope, cleartexts, proof: r.decryptionProof };
+      return { kind: "submitTally", scheme, governor, token, scope, cleartexts, proof: r.decryptionProof };
     };
 
     /** Drives one item through up to `maxSteps` steps, re-reading chain state before each. */
@@ -231,7 +290,7 @@ export function createKeeper(deps: KeeperDeps) {
 
         if (step.type === "decrypt" && deps.dryRun) {
           s.txs++;
-          deps.log("info", "keeper dry run", { ...ref, tx: "submitTally", note: "decryption skipped in dry run" });
+          deps.log("info", "keeper dry run", { ...ref, tx: step.outcome ? "submitOutcome" : "submitTally", note: "decryption skipped in dry run" });
           return "open";
         }
         let action: KeeperAction;
@@ -275,6 +334,62 @@ export function createKeeper(deps: KeeperDeps) {
       return "open";
     };
 
+    /**
+     * Live tokens: per token, the rounds from `next - lookbackRounds` to the next rotation's round
+     * (`next = currentRotation + 1`), oldest first. The next round is prepared once nobody has;
+     * every ended round with ballots is closed, its winner decrypted and submitted, and finalized.
+     */
+    const runRotation = async (rot: RotationDeps, tokens: Address[]) => {
+      let chainNow: bigint;
+      try {
+        chainNow = await rot.reader.now();
+      } catch (err) {
+        deps.log("error", "keeper could not read the chain time; rotation rounds skipped", {
+          error: redact(err instanceof Error ? err.message : String(err)),
+        });
+        return;
+      }
+      const ctx = { rotationGovernor: rot.governor, zamaScheme: deps.zamaScheme };
+      for (const token of tokens) {
+        if (stop()) break;
+        const t = token.toLowerCase();
+        let current: bigint;
+        try {
+          if (!liveTokens.has(t)) {
+            // Weekly tokens are never registered here; they cost one read per run.
+            if (!(await rot.reader.isRegistered(token))) continue;
+            liveTokens.add(t);
+          }
+          current = await rot.reader.currentRotation(token);
+        } catch (err) {
+          deps.log("warn", "keeper could not read the token's rotation", { token, error: redact(err instanceof Error ? err.message : String(err)) });
+          continue;
+        }
+        s.liveTokens++;
+        const next = current + 1n;
+        const from = next > lookbackRounds ? next - lookbackRounds : 1n;
+        let done = doneRounds.get(t);
+        if (!done) doneRounds.set(t, (done = new Set()));
+        for (const target of done) if (target < from) done.delete(target);
+
+        for (let target = from; target <= next && !stop(); target++) {
+          if (done.has(target)) continue;
+          s.roundsChecked++;
+          const r = await drive(`round:${t}:${target}`, { token, round: target }, async () => {
+            const v = await rot.reader.round(token, target);
+            if (v.status === "None" && target === next) {
+              // Nobody can vote until the round is prepared.
+              if (!rot.rounds) return { type: "none", reason: "no round preparer", terminal: false };
+              return rot.rounds.plan(token, target);
+            }
+            const outcome = roundNeedsOutcome(v) ? await rot.reader.outcomeOf(v.scheme, rot.governor, token, rotationPollScope(target)) : undefined;
+            return planRound(token, target, v, outcome, chainNow, ctx);
+          });
+          if (r === "done") done.add(target);
+        }
+      }
+    };
+
     // Takeovers first: their execution window is the tighter deadline.
     let count = 0n;
     try {
@@ -294,12 +409,21 @@ export function createKeeper(deps: KeeperDeps) {
       if (r === "done") doneProposals.add(id);
     }
 
+    let tokenList: Address[] | undefined;
+    const listTokens = async () => {
+      tokenList ??= await deps.tokens();
+      s.tokens = tokenList.length;
+      return tokenList;
+    };
+
+    // Rotation rounds next: their windows are minutes to hours, an epoch's are days.
+    if (deps.rotation && !stop()) await runRotation(deps.rotation, await listTokens());
+
     if (!stop()) {
       const current = await deps.reader.currentEpoch();
       const from = current > BigInt(deps.lookbackEpochs) ? current - BigInt(deps.lookbackEpochs) : 0n;
       for (const [k, e] of doneEpochs) if (e < from) doneEpochs.delete(k);
-      const tokens = await deps.tokens();
-      s.tokens = tokens.length;
+      const tokens = await listTokens();
 
       for (const k of doneBallots) if (!k.endsWith(`:${current}`)) doneBallots.delete(k);
       for (const k of idleLogged) if (!k.endsWith(`:${current}`)) idleLogged.delete(k);

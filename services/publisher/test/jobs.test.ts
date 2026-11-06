@@ -11,7 +11,7 @@ import type { BallotReader } from "../src/keeper/ballot.js";
 import { createTallyKeeperJob, missingKeeperEnv } from "../src/jobs/tally-keeper.js";
 import type { StampStatus, SwarmClient } from "../src/swarm.js";
 import { json } from "./helpers.js";
-import { EG, FakeChain, KEEPER, TG, token, ZAMA } from "./keeper-fakes.js";
+import { EG, FakeChain, FakeRotation, KEEPER, RG, TG, token, ZAMA } from "./keeper-fakes.js";
 
 const tokenRow = (i: number, over: Record<string, unknown> = {}) => ({
   address: `0x${(0xfeed00 + i).toString(16).padStart(40, "0")}`,
@@ -259,5 +259,32 @@ describe("tally-keeper job", () => {
     expect(String(fetchMock.mock.calls.find((c) => String(c[0]).includes("/api/active-tokens"))?.[0])).toContain("sinceEpoch=0");
     expect(logs.find((l) => l.msg === "keeper skipped idle epoch")?.data).toMatchObject({ token: token(1), epoch: 1n });
     expect(logs.at(-1)).toMatchObject({ msg: "tally keeper run", data: { idleSkipped: 1 } });
+  });
+
+  it("drives live tokens' rotation rounds only with ROTATION_GOVERNOR_ADDRESS", async () => {
+    const run = async (env: Record<string, string>) => {
+      const chain = new FakeChain();
+      const rot = new FakeRotation().register(token(1));
+      chain.rotation = rot;
+      rot.openRound(token(1), 4n, 2n, 1n);
+      const fetchMock = fakeIndexer({ tokens: [tokenRow(1, { address: token(1) })], causes: [] });
+      const job = createTallyKeeperJob({
+        keeper: readConfig({ ...keeperEnv, KEEPER_ENABLED: "true", ...env }).keeper,
+        chainId: 1,
+        indexer: createIndexerClient("https://api.verada.test", { fetch: fetchMock as unknown as typeof fetch }),
+        chain: { reader: chain.reader(), writer: chain.writer(), rotation: rot.reader() },
+        decryptor: chain.decryptor(),
+        log,
+      })!;
+      await job.run();
+      return chain.sent.map((a) => a.kind);
+    };
+    expect(await run({})).toEqual([]);
+    expect(logs.find((l) => l.msg === "tally keeper ready")?.data).toMatchObject({ rotationRounds: "off" });
+    logs.length = 0;
+    // Without the chain's round reads the rounds are closed and finalized, not prepared.
+    expect(await run({ ROTATION_GOVERNOR_ADDRESS: RG })).toEqual(["closeRound", "submitOutcome", "finalizeRound"]);
+    expect(logs.find((l) => l.msg === "tally keeper ready")?.data).toMatchObject({ rotationRounds: "close, finalize" });
+    expect(logs.at(-1)).toMatchObject({ msg: "tally keeper run", data: { liveTokens: 1, decrypted: 1 } });
   });
 });
