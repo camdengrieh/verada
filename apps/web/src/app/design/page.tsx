@@ -1,17 +1,6 @@
-import { ActivitySection } from "./sections/activity";
-import { DataSection } from "./sections/data";
-import { EffectsSection } from "./sections/effects";
-import { EnsSection } from "./sections/ens";
 import { FoundationsSection } from "./sections/foundations";
 import { HeroesSection } from "./sections/heroes";
-import { ImpactSection } from "./sections/impact";
-import { MarketsSection } from "./sections/markets";
-import { MetricsSection } from "./sections/metrics";
-import { MobileSection } from "./sections/mobile";
-import { MotionSection } from "./sections/motion";
-import { NavigationSection } from "./sections/navigation";
-import { PrimitivesSection } from "./sections/primitives";
-import { VaradaSection } from "./sections/varada";
+import { LazySections } from "./lazy-sections";
 
 const TOC = [
   { id: "foundations", label: "Foundations" },
@@ -62,18 +51,7 @@ export default function DesignPage() {
         <div className="flex min-w-0 flex-[999_1_640px] flex-col gap-16">
           <FoundationsSection />
           <HeroesSection />
-          <MotionSection />
-          <EffectsSection />
-          <PrimitivesSection />
-          <NavigationSection />
-          <DataSection />
-          <MarketsSection />
-          <MetricsSection />
-          <ActivitySection />
-          <EnsSection />
-          <ImpactSection />
-          <VaradaSection />
-          <MobileSection />
+          <LazySections />
         </div>
       </div>
       <footer className="border-t border-line px-4 py-6 text-sm text-muted-foreground sm:px-10">
