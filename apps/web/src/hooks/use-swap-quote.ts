@@ -48,6 +48,7 @@ export function useSwapQuote(params: UseSwapQuoteParams): SwapQuoteState {
   const clients = useSwapClients();
   const [state, setState] = useState<Omit<SwapQuoteState, "refresh">>({ status: "idle", quote: null, error: null, stale: false, updatedAt: null });
   const generation = useRef(0);
+  const inFlight = useRef(false);
   const [tick, setTick] = useState(0);
   const refresh = useCallback(() => setTick((t) => t + 1), []);
   const clientsRef = useRef(clients);
@@ -64,6 +65,9 @@ export function useSwapQuote(params: UseSwapQuoteParams): SwapQuoteState {
     let interval: ReturnType<typeof setInterval> | undefined;
 
     const run = async (background: boolean) => {
+      // a slow network (the private RPC takes seconds per round trip) must not pile refreshes up
+      if (background && inFlight.current) return;
+      inFlight.current = true;
       const myId = background ? generation.current : id;
       if (!background) setState((s) => ({ ...s, status: "loading", stale: s.quote !== null, error: null }));
       try {
@@ -76,6 +80,9 @@ export function useSwapQuote(params: UseSwapQuoteParams): SwapQuoteState {
         // a failed background refresh keeps the last good quote on screen but marks it stale
         const err = mapSwapError(e);
         setState((s) => (background && s.quote ? { ...s, stale: true, error: err } : { status: "error", quote: null, error: err, stale: false, updatedAt: null }));
+      } finally {
+        // a request that was superseded must not clear the flag of the one that replaced it
+        if (myId === generation.current) inFlight.current = false;
       }
     };
 

@@ -112,6 +112,19 @@ describe("useSwapQuote", () => {
     expect(result.current.error?.reason).toBe("rpc-unavailable");
   });
 
+  it("does not start a background refresh while the previous request is still running", async () => {
+    let calls = 0;
+    requestTradeQuote.mockImplementation(() => {
+      calls++;
+      return calls === 1 ? Promise.resolve(quoteOf(1n)) : new Promise(() => {});
+    });
+    renderHook((p) => useSwapQuote({ ...p, refreshMs: 1000 }), { initialProps: base });
+    await flush(400); // first quote
+    await flush(1000); // refresh 1 starts and never answers
+    await flush(3000); // would be refreshes 2..4
+    expect(calls).toBe(2);
+  });
+
   it("does nothing without a resolved token and re-quotes when the account changes", async () => {
     requestTradeQuote.mockResolvedValue(quoteOf(1n));
     const { result, rerender } = renderHook((p) => useSwapQuote(p), { initialProps: { ...base, token: null } });

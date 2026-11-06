@@ -22,7 +22,7 @@ export interface RoutingConfig {
   maxHops?: number;
   /** Pools kept per asset pair, deepest first. Default 2. */
   poolsPerPair?: number;
-  /** Most candidate routes handed on to the quoter. Default 16. */
+  /** Most candidate routes handed on to the quoter. Default 10. */
   maxCandidates?: number;
 }
 
@@ -36,7 +36,7 @@ export function resolveRoutingConfig(cfg: RoutingConfig = {}): ResolvedRouting {
     feeTiers: cfg.feeTiers ?? DEFAULT_FEE_TIERS,
     maxHops: Math.min(cfg.maxHops ?? MAX_ROUTE_POOL_HOPS, MAX_ROUTE_POOL_HOPS),
     poolsPerPair: cfg.poolsPerPair ?? 2,
-    maxCandidates: cfg.maxCandidates ?? 16,
+    maxCandidates: cfg.maxCandidates ?? 10,
   };
 }
 
@@ -74,9 +74,9 @@ interface CacheEntry {
   states: PoolState[];
 }
 
-/** Short-lived memo of pool discovery: which pools exist hardly changes within a minute. */
+/** Short-lived memo of pool discovery: it only spares the repeated reads of one typing session; prices are re-read after 10 s. */
 const discoveryCache = new Map<string, CacheEntry>();
-export const DISCOVERY_TTL_MS = 30_000;
+export const DISCOVERY_TTL_MS = 10_000;
 export function clearDiscoveryCache(): void {
   discoveryCache.clear();
 }
@@ -84,7 +84,7 @@ export function clearDiscoveryCache(): void {
 /**
  * Finds which candidate pools exist (initialized, with liquidity) via `StateView`, in one batched
  * read: pools between hubs, and between each other node and the hubs. Also reads the `extra` pool keys (the
- * Varada token's own pool). Cached for 30 s per node set.
+ * Varada token's own pool). Cached for 10 s per node set.
  */
 export async function discoverPools(
   client: ReadClient,
@@ -132,7 +132,7 @@ export function enumerateRoutes(
 ): Route[] {
   const maxHops = Math.min(opts.maxHops ?? MAX_ROUTE_POOL_HOPS, MAX_ROUTE_POOL_HOPS);
   const perPair = opts.poolsPerPair ?? 2;
-  const maxCandidates = opts.maxCandidates ?? 16;
+  const maxCandidates = opts.maxCandidates ?? 10;
   const src = key(from);
   const dst = key(to);
   if (src === dst) return [];

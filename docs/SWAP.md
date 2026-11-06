@@ -47,11 +47,11 @@ has three steps (`routing.ts`, `quote.ts`; `quoteTrade` in `engine.ts` runs them
 1. `discoverPools`: the candidate pools are every hook-less pair among {user asset, quote asset, hubs}
    in the fee tiers `DEFAULT_FEE_TIERS` (100/1, 500/10, 3000/60, 10000/200 and 10000/100, which the
    Ondo pools use), plus the token's own pool. One `StateView` multicall tells which exist
-   (initialized, liquidity > 0). Cached for 30 s.
+   (initialized, liquidity > 0). Cached for 10 s.
 2. `enumerateRoutes`: all simple paths of at most three pool hops. Native ETH (address zero, the v4
    currency) and WETH are different nodes joined by a free wrap / unwrap edge. Per pair the two
-   deepest pools are kept. Shortest first, at most 16 candidates.
-3. `pickBestQuote`: every candidate is quoted through the V4Quoter in parallel (`quoteExactInputSingle`
+   deepest pools are kept. Shortest first, at most 10 candidates.
+3. `pickBestQuote`: every candidate is quoted through the V4Quoter, four at a time (`quoteExactInputSingle`
    or `quoteExactInput`, exact-out forms for exact-out); highest output (exact-in) or lowest input
    (exact-out) wins. A route with a wrap in the middle is quoted segment by segment.
 

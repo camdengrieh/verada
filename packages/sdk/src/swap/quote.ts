@@ -135,13 +135,34 @@ export interface BestQuote {
   failures: { route: Route; error: SwapError }[];
 }
 
+/** Candidate routes quoted at once: public RPCs rate-limit bursts of heavy `eth_call`s. */
+export const QUOTE_CONCURRENCY = 4;
+
+/** `Promise.allSettled` over `items` with at most `limit` running at a time, results in input order. */
+async function mapSettled<T, R>(items: readonly T[], limit: number, fn: (item: T) => Promise<R>): Promise<PromiseSettledResult<R>[]> {
+  const out: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        out[i] = { status: "fulfilled", value: await fn(items[i]!) };
+      } catch (reason) {
+        out[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, worker));
+  return out;
+}
+
 /**
- * Quotes all candidate routes (in parallel) and picks the best: highest output for exact-in, lowest
+ * Quotes all candidate routes (at most {@link QUOTE_CONCURRENCY} at a time) and picks the best: highest output for exact-in, lowest
  * input for exact-out. Throws the most informative {@link SwapError} when none quotes.
  */
-export async function pickBestQuote(client: ReadClient, routes: readonly Route[], mode: QuoteMode, amount: bigint, ctx: QuoteContext): Promise<BestQuote> {
+export async function pickBestQuote(client: ReadClient, routes: readonly Route[], mode: QuoteMode, amount: bigint, ctx: QuoteContext, opts: { concurrency?: number } = {}): Promise<BestQuote> {
   if (routes.length === 0) throw new SwapError("no-route");
-  const settled = await Promise.allSettled(routes.map((r) => quoteRoute(client, r, mode, amount, ctx)));
+  const settled = await mapSettled(routes, opts.concurrency ?? QUOTE_CONCURRENCY, (r) => quoteRoute(client, r, mode, amount, ctx));
   const all: RouteQuote[] = [];
   const failures: BestQuote["failures"] = [];
   settled.forEach((s, i) => {
