@@ -162,6 +162,20 @@ contract CatalogFixture {
         return drawsAfter(gov, registry, token, epoch, categoryMask, regionMask, taken);
     }
 
+    /// @dev The ballot size of `token`'s `epoch`: the weekly governor's per-token
+    ///      `ballotSizeFor`, or `ballotSize` for the rotation governor, which has no per-token size.
+    function _sizeOf(IEpochGovernor gov, address token, uint256 epoch)
+        internal
+        view
+        returns (uint256)
+    {
+        try gov.ballotSizeFor(token, epoch) returns (uint256 size) {
+            return size;
+        } catch {
+            return gov.ballotSize();
+        }
+    }
+
     /// @dev Rotation draws after `taken` (cause ids already on the ballot: pins and curated picks).
     function drawsAfter(
         IEpochGovernor gov,
@@ -175,7 +189,7 @@ contract CatalogFixture {
         (uint32 version, uint256 pool) = gov.poolOf(token, epoch);
         out = new IEpochGovernor.Draw[](0);
         if (version == 0 || pool == 0) return out;
-        uint256 size = gov.ballotSize();
+        uint256 size = _sizeOf(gov, token, epoch);
         bytes32[] memory opts = new bytes32[](size);
         uint256 n;
         for (uint256 i; i < taken.length && n < size; ++i) {
