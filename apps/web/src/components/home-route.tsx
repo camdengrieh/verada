@@ -5,7 +5,7 @@ import { AgentDetail } from "@/components/agent-detail";
 import { AgentIndex } from "@/components/agent-index";
 import { useAppConfig } from "@/components/providers";
 import { TokenDetail } from "@/components/token-detail";
-import { TokenList } from "@/components/token-list";
+import { DiscoverPage } from "@/components/discover/discover-page";
 import { agentFromLocation, tokenLabelFromLocation } from "@/lib/host";
 
 /** What the root page shows on this host. */
@@ -39,7 +39,7 @@ export function useTokenLabel(): string | null | undefined {
 
 /**
  * Root page: a curator agent's page on `<cause>.agent.<parent>`, the agents index on `agent.<parent>`,
- * a token's own page on its ENS name, the token list everywhere else.
+ * a token's own page on its ENS name, the discover page everywhere else.
  */
 export function HomeRoute() {
   const route = useHostRoute();
@@ -52,6 +52,6 @@ export function HomeRoute() {
     case "token":
       return <TokenDetail label={route.label} />;
     default:
-      return <TokenList />;
+      return <DiscoverPage />;
   }
 }

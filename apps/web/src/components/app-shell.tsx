@@ -5,12 +5,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AssetProvider } from "@varada/ui/lib/assets";
 import { BottomTabBar, BOTTOM_TAB_BAR_HEIGHT, type BottomTab } from "@varada/ui/components/mobile/bottom-tab-bar";
 import { Compass, HandHeart, Vote, User, Coins } from "@varada/ui/components/ui/icons";
+import { useCommandShortcut } from "@varada/ui/components/ui/command";
 import { Toaster } from "@varada/ui/components/ui/toaster";
 import { Divider } from "@varada/ui/components/ui/divider";
 import { LogoMark } from "@varada/ui/components/varada/logo-mark";
 import { SiteHeader, type SiteNavLink } from "@varada/ui/components/varada/site-header";
 import type { VaradaLinkProps } from "@varada/ui/components/varada/shared";
 import { ConnectButton } from "@/components/connect-button";
+import { CommandPalette } from "@/components/discover/command-palette";
+import { URL_EVENT } from "@/components/discover/hooks";
 import { NAV_ITEMS, relativeRoot } from "@/components/nav";
 import { PrivacyMenu } from "@/components/privacy-status";
 import { siteBase, siteBaseFromPath } from "@/lib/base";
@@ -37,6 +40,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => setRoute(activeRoute(window.location.pathname)), [pathname]);
 
   const href = (to: string) => `${prefix}${to}`;
+  const [paletteOpen, setPaletteOpen] = useCommandShortcut();
+
+  /** Header search and the palette's "search all": the home list filtered by the query, in place when already there. */
+  const searchCoins = (query: string) => {
+    const q = query.trim();
+    const search = q ? `?q=${encodeURIComponent(q)}` : "";
+    if (route === "") {
+      window.history.pushState(null, "", `${window.location.pathname}${search}#coins`);
+      window.dispatchEvent(new Event(URL_EVENT));
+      document.getElementById("coins")?.scrollIntoView({ behavior: "smooth" });
+    } else {
+      window.location.href = `${href("")}${search}#coins`;
+    }
+  };
   const links: SiteNavLink[] = useMemo(() => NAV_ITEMS.map((n) => ({ href: href(n.to), label: n.label })), [prefix]); // eslint-disable-line react-hooks/exhaustive-deps
   const tabs: BottomTab[] = useMemo(
     () =>
@@ -53,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         links={links}
         activeHref={href(route)}
         homeHref={href("")}
+        search={{ placeholder: "Search coins and causes", label: "Search coins", onSubmit: searchCoins }}
         privacy={<PrivacyMenu />}
         wallet={<ConnectButton />}
       />
@@ -83,6 +101,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           LinkComponent={RelLink}
         />
       </div>
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} onSearch={searchCoins} />
       <Toaster />
     </AssetProvider>
   );

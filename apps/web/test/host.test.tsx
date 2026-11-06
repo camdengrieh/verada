@@ -32,7 +32,7 @@ describe("tokenLabelFromLocation", () => {
 
 vi.mock("@/components/providers", () => ({ useAppConfig: () => ({ ensParentName: "varada.eth" }) }));
 vi.mock("@/components/token-detail", () => ({ TokenDetail: ({ label }: { label: string }) => <p>token page for {label}</p> }));
-vi.mock("@/components/token-list", () => ({ TokenList: () => <p>token list</p> }));
+vi.mock("@/components/discover/discover-page", () => ({ DiscoverPage: () => <p>token list</p> }));
 vi.mock("@/components/agent-detail", () => ({
   AgentDetail: ({ label, region }: { label: string; region?: string }) => <p>agent page for {label}{region ? ` in ${region}` : ""}</p>,
 }));
