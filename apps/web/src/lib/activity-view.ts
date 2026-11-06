@@ -1,4 +1,4 @@
-import type { ActivityItem as FeedRow } from "@verada/ui/components/data/activity-list";
+import type { ActivityItem as FeedRow } from "@varada/ui/components/data/activity-list";
 import { formatUsdc } from "./agents";
 import type { ActivityItem } from "./indexer";
 
