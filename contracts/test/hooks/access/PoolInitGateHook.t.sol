@@ -59,6 +59,16 @@ contract QuoteRuleGate is PoolInitGateHook {
 ///      BothGatesHook, LiquidityGateHook, PoolAdminHook, PoolInitGateHook, BaseHook, so in
 ///      `beforeInitialize` the initializer check runs before the pool admin is recorded.
 contract BothGatesHook is PoolInitGateHook, LiquidityGateHook {
+    /// @dev Test-only open admin: the initializer becomes the pool admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+
     constructor(IPoolManager m) BaseHook(m) {}
 
     function setPoolInitializer(address account, bool allowed) external {

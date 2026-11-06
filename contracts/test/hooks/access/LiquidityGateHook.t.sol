@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {CurrencySettler} from "@uniswap/v4-core/test/utils/CurrencySettler.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
@@ -80,8 +81,13 @@ contract LiquidityGateHookTest is HookTest {
         deployFreshManagerAndRouters();
         deployMintAndApprove2Currencies();
         gate = LiquidityGateExample(
-            _deployHook("LiquidityGateExample.sol:LiquidityGateExample", abi.encode(manager), FLAGS)
+            _deployHook(
+                "LiquidityGateExample.sol:LiquidityGateExample",
+                abi.encode(manager, address(this)),
+                FLAGS
+            )
         );
+        gate.setPoolInitializer(address(this), true);
         (key, id) = initPool(currency0, currency1, gate, 3000, SQRT_PRICE_1_1);
         router = address(modifyLiquidityRouter);
     }
@@ -123,6 +129,25 @@ contract LiquidityGateHookTest is HookTest {
         gate.beforeAddLiquidity(router, key, LIQUIDITY_PARAMS, "");
         vm.expectRevert(BaseHook.NotPoolManager.selector);
         gate.beforeRemoveLiquidity(router, key, REMOVE_LIQUIDITY_PARAMS, "");
+    }
+
+    /// @dev Regression: a stranger who initializes a key first must not become its admin.
+    function test_initialize_strangerRejected() public {
+        address squatter = makeAddr("squatter");
+        PoolKey memory k = PoolKey(currency0, currency1, 500, 10, gate);
+        vm.prank(squatter);
+        vm.expectRevert(_initGateRevert(address(gate), squatter));
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(gate.poolAdmin(k.toId()), address(0));
+    }
+
+    function test_setPoolInitializer_onlyOwner() public {
+        address squatter = makeAddr("squatter");
+        vm.prank(squatter);
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, squatter)
+        );
+        gate.setPoolInitializer(squatter, true);
     }
 
     // ------------------------------------------------------------ config

@@ -57,7 +57,7 @@ Shared base contracts, documented in [BaseHook.md](BaseHook.md):
 | Contract | Role |
 | --- | --- |
 | `BaseHook` | Implements `IHooks`, pool-manager-only entry points, address check of the merged permissions, merge helpers, the shared transient lock |
-| `PoolAdminHook` | Records the caller of `PoolManager.initialize` as the pool's admin; `onlyPoolAdmin(key)`, `transferPoolAdmin` (zero renounces and freezes config) |
+| `PoolAdminHook` | Records the admin the concrete hook's `_initialPoolAdmin(sender, key)` picks when a pool is initialized (no default: gate initialization or use a fixed admin, see [front-running](BaseHook.md#front-running-the-initializer)); `onlyPoolAdmin(key)`, `transferPoolAdmin` (zero renounces and freezes config) |
 | `LinearDecay` (library) | `value(start, end, duration, startTime, now)`, the rounded-up linear ramp used by `DecayingFeeHook`, reusable for any schedule |
 | `ITwapOracle` (interface) | The read interface of `TwapOracleHook` for consumers |
 
@@ -65,14 +65,18 @@ Deployable examples in `contracts/src/hooks/examples/`:
 
 | Example | Composition |
 | --- | --- |
-| `DecayingFeeExample` | `DecayingFeeHook` |
-| `SwapFeeExample` | `SwapFeeHook` |
+| `DecayingFeeExample` | `PoolInitGateHook, DecayingFeeHook, Ownable` |
+| `SwapFeeExample` | `PoolInitGateHook, SwapFeeHook, Ownable` |
 | `TwapOracleExample` | `TwapOracleHook(5 minutes, 24)` |
 | `PoolInitGateExample` | `PoolInitGateHook, Ownable` |
-| `LiquidityGateExample` | `LiquidityGateHook` |
-| `ConvertingSwapFeeExample` | `SwapFeeHook, FeeConversionHook, Ownable` |
+| `LiquidityGateExample` | `PoolInitGateHook, LiquidityGateHook, Ownable` |
+| `ConvertingSwapFeeExample` | `PoolInitGateHook, SwapFeeHook, FeeConversionHook, Ownable` |
 | `LaunchpadHook` | `PoolInitGateHook, LiquidityGateHook, TwapOracleHook, DecayingFeeHook, SwapFeeHook, Ownable` |
-| `BondingCurveHook` | `PoolAdminHook, IUnlockCallback` plus its own curve (reference only) |
+| `BondingCurveHook` | `PoolInitGateHook, PoolAdminHook, Ownable, IUnlockCallback` plus its own curve (reference only) |
+
+Every example that has a pool admin gates pool creation with `PoolInitGateHook`: the owner allows
+initializers, and only they become pool admins. Their constructors take `(IPoolManager, address
+owner)` (`ConvertingSwapFeeExample` keeps its own argument list).
 
 ## Permission flags
 
@@ -102,8 +106,13 @@ own (the compose guide adds a donation block in three lines).
 contract MyPoolHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook {
     constructor(IPoolManager m) BaseHook(m) TwapOracleHook(5 minutes, 24) {}
     // plus one super-only re-declaration per shared callback (see ComposeYourOwn.md)
+    // and `_initialPoolAdmin`: who administers each pool (no default, see below)
 }
 ```
+
+- **Pool admin**: per pool features need a concrete `_initialPoolAdmin`. A pool key is public, so
+  "whoever initializes is the admin" lets a front-runner take the role; gate initialization with
+  `PoolInitGateHook` or use a fixed admin ([BaseHook.md](BaseHook.md#front-running-the-initializer)).
 
 - **Callbacks** run every feature once, in inheritance order; each feature calls `super` first.
 - **Permissions** are OR-merged; features only ever set flags.
@@ -235,14 +244,14 @@ Who you trust, per hook:
 
 | Hook | Trusted party | What they can do | How to remove the trust |
 | --- | --- | --- | --- |
-| `PoolAdminHook` (all per pool features) | the pool admin (the account that called `PoolManager.initialize`) | change that pool's config at any time | `transferPoolAdmin(key, address(0))` freezes it; check `poolAdmin(poolId) == address(0)` |
+| `PoolAdminHook` (all per pool features) | the pool admin (whoever the concrete hook's `_initialPoolAdmin` records; in the examples, an initializer the owner allowed) | change that pool's config at any time | `transferPoolAdmin(key, address(0))` freezes it; check `poolAdmin(poolId) == address(0)` |
 | `DecayingFeeHook` | pool admin | set a new schedule, up to a 100% LP fee | renounce; traders always use slippage limits |
 | `SwapFeeHook` | pool admin | rate up to `_maxSwapFeeBps()` (10% default), recipient, claims or tokens | renounce, or override `_isPoolAdmin` |
 | `TwapOracleHook` | nobody | | consumers must still handle `ok == false` and pick a window long against multi-block manipulation |
 | `PoolInitGateHook` | the concrete hook's owner scheme | allow initializers; no effect on existing pools | a fixed initializer set, or renounce the owner |
 | `LiquidityGateHook` | pool admin | allow or block adders and removers (removal gating also blocks fee collection) | renounce after placing locked liquidity |
 | `FeeConversionHook` | the concrete hook's owner scheme, and its price guard | routes, guard bounds, payout | a guard against a reference the trader cannot move within one transaction; holding is always safe |
-| `BondingCurveHook` | pool admin | seed until the first buy, receive both reserves at graduation | use a migrator contract as the admin |
+| `BondingCurveHook` | the owner (who may create curves) and the pool admin | seed until the first buy, receive all raised quote and unsold tokens at graduation; after graduation the curve rejects every swap | use a migrator contract as the admin |
 
 The library has extensive tests but **has not had an external audit**. Treat it as you would any
 unaudited code that holds value.

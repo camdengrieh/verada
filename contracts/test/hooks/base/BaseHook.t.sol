@@ -271,6 +271,29 @@ contract AdminHook is PoolAdminHook {
     function setValue(PoolKey calldata key, uint256 v) external onlyPoolAdmin(key) {
         value = v;
     }
+
+    /// @dev Test-only open admin: the initializer becomes the pool admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+}
+
+/// @dev Admin rule that ignores the initializer: every pool gets the same fixed admin.
+contract FixedAdminHook is PoolAdminHook {
+    address public immutable admin;
+
+    constructor(IPoolManager m, address admin_) BaseHook(m) {
+        admin = admin_;
+    }
+
+    function _initialPoolAdmin(address, PoolKey calldata) internal view override returns (address) {
+        return admin;
+    }
 }
 
 /// @dev Exposes the merge helpers.
@@ -578,6 +601,29 @@ contract BaseHookTest is HookTest {
         vm.prank(next);
         vm.expectRevert(abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, id, next));
         h.setValue(k, 9);
+    }
+
+    /// @dev A front-runner who initializes the key first does not become admin under a fixed
+    ///      admin rule.
+    function test_fixedAdmin_initializerGetsNoAdmin() public {
+        address admin = makeAddr("admin");
+        FixedAdminHook h = FixedAdminHook(
+            _deployHook(
+                "BaseHook.t.sol:FixedAdminHook",
+                abi.encode(manager, admin),
+                Hooks.BEFORE_INITIALIZE_FLAG
+            )
+        );
+        PoolKey memory k = PoolKey(currency0, currency1, 3000, 60, IHooks(address(h)));
+        address squatter = makeAddr("squatter");
+        vm.prank(squatter);
+        manager.initialize(k, SQRT_PRICE_1_1);
+        PoolId id = k.toId();
+        assertEq(h.poolAdmin(id), admin);
+
+        vm.prank(squatter);
+        vm.expectRevert(abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, id, squatter));
+        h.transferPoolAdmin(k, squatter);
     }
 
     function test_poolAdminRejectsForeignKey() public {

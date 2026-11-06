@@ -27,10 +27,22 @@ import {SwapFeeHook} from "v4-hooks/fee/SwapFeeHook.sol";
 import {TwapOracleHook} from "v4-hooks/oracle/TwapOracleHook.sol";
 
 contract MyPoolHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook {
-    constructor(IPoolManager m) BaseHook(m) TwapOracleHook(5 minutes, 24) {}
+    address public immutable admin;
+    constructor(IPoolManager m, address admin_) BaseHook(m) TwapOracleHook(5 minutes, 24) {
+        admin = admin_;
+    }
+    // choose who administers each pool (no default; see the note below)
+    function _initialPoolAdmin(address, PoolKey calldata) internal view override returns (address) {
+        return admin;
+    }
     // re-declare each shared internal callback with a super-only body
 }
 ```
+
+`PoolAdminHook._initialPoolAdmin` has no default. A pool key is public, so returning the caller
+of `PoolManager.initialize` with no check lets anyone who initializes your key first become its
+admin. Gate initialization with `PoolInitGateHook` (as every example does) or use a fixed admin:
+[`docs/hooks/BaseHook.md`](../../../docs/hooks/BaseHook.md#front-running-the-initializer).
 
 with the remapping `v4-hooks/=lib/varada/contracts/src/hooks/` after
 `forge install camdengrieh/varada@<ref>` (needs the repository to be public), or copy this folder

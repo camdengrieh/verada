@@ -17,6 +17,7 @@ The reference version of the same rules, worked on the five-feature `LaunchpadHo
 | A launch LP fee that starts at 10% and decays to 0.30% over an hour, paid to LPs | `DecayingFeeHook` |
 | A 0.5% treasury fee on every swap | `SwapFeeHook` |
 | An on-chain TWAP other contracts can read | `TwapOracleHook` |
+| Only the DAO may configure the pools, whoever creates them | a fixed `_initialPoolAdmin` |
 
 ## 1. Install
 
@@ -68,7 +69,21 @@ import {TwapOracleHook} from "v4-hooks/oracle/TwapOracleHook.sol";
 
 /// @notice A pool hook with a TWAP oracle, a launch LP fee that decays, and a treasury fee.
 contract MyPoolHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook {
-    constructor(IPoolManager manager) BaseHook(manager) TwapOracleHook(5 minutes, 24) {}
+    /// @notice Pool admin of every pool created with this hook.
+    address public immutable admin;
+
+    constructor(IPoolManager manager, address admin_)
+        BaseHook(manager)
+        TwapOracleHook(5 minutes, 24)
+    {
+        admin = admin_;
+    }
+
+    // Who administers a pool. A pool key is public, so `return sender` here would let anyone
+    // who calls PoolManager.initialize first become the admin. A fixed admin removes that risk.
+    function _initialPoolAdmin(address, PoolKey calldata) internal view override returns (address) {
+        return admin;
+    }
 
     // Rule 6: re-declare every internal function two or more bases define. Bodies only call super.
 
@@ -127,7 +142,23 @@ contract MyPoolHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook {
 ```
 
 That is the whole hook. All behaviour lives in the features; the concrete contract only lists
-them, calls the constructors, and re-declares the shared functions.
+them, calls the constructors, picks the admin rule, and re-declares the shared functions.
+
+### Choosing the admin rule
+
+`PoolAdminHook` leaves `_initialPoolAdmin` unimplemented, so the compiler stops you until you
+choose who configures each pool (error 3656, "Contract should be marked as abstract"). The
+choices, and the front-running risk behind them, are in
+[BaseHook.md](BaseHook.md#front-running-the-initializer). In short:
+
+- **Fixed admin** (this page): anyone may create a pool with the hook, only `admin` configures it.
+- **Gated initializers**: add `PoolInitGateHook` to the list, let an owner allow your factory, and
+  return `sender` (see `LaunchpadHook` in [Composition.md](Composition.md)).
+- **Open** (`return sender` with no gate): an attacker who initializes your key first becomes its
+  admin. Use it only if every pool is initialized and configured in one transaction from a
+  contract, so a front-run can only make that transaction revert.
+
+Only `PoolAdminHook` declares `_initialPoolAdmin`, so the override takes no base list.
 
 ### Why these `override(...)` lists
 
@@ -152,7 +183,7 @@ each extra one (error 2353, "Invalid contract specified in override list").
 The inheritance list is `TwapOracleHook, DecayingFeeHook, SwapFeeHook`, and each feature calls
 `super` first, so:
 
-- `beforeInitialize`: `PoolAdminHook` records the caller as pool admin, then `DecayingFeeHook`
+- `beforeInitialize`: `PoolAdminHook` records `admin` as pool admin, then `DecayingFeeHook`
   requires a dynamic-fee key (`NotDynamicFee`).
 - `afterInitialize`: `TwapOracleHook` seeds checkpoint 0.
 - `beforeSwap`: `TwapOracleHook` accrues the pre-swap tick, then `DecayingFeeHook` returns the
@@ -171,6 +202,8 @@ pragma solidity ^0.8.26;
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
 import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
+import {PoolKey} from "v4-core/types/PoolKey.sol";
+import {PoolAdminHook} from "v4-hooks/base/PoolAdminHook.sol";
 import {HookMiner} from "v4-hooks-script/HookMiner.sol";
 import {HookTest} from "v4-hooks-test/utils/HookTest.sol";
 
@@ -187,7 +220,9 @@ contract MyPoolHookTest is HookTest {
         deployFreshManagerAndRouters(); // real PoolManager and test routers
         deployMintAndApprove2Currencies();
         // Places the hook at an address whose low bits encode FLAGS.
-        hook = MyPoolHook(_deployHook("MyPoolHook.sol:MyPoolHook", abi.encode(manager), FLAGS));
+        hook = MyPoolHook(
+            _deployHook("MyPoolHook.sol:MyPoolHook", abi.encode(manager, address(this)), FLAGS)
+        );
     }
 
     function test_flags() public view {
@@ -196,10 +231,24 @@ contract MyPoolHookTest is HookTest {
 
     function test_minedDeploy() public {
         (address predicted, bytes32 salt) = HookMiner.find(
-            address(this), FLAGS, type(MyPoolHook).creationCode, abi.encode(manager)
+            address(this), FLAGS, type(MyPoolHook).creationCode, abi.encode(manager, address(this))
         );
-        MyPoolHook h = new MyPoolHook{salt: salt}(manager);
+        MyPoolHook h = new MyPoolHook{salt: salt}(manager, address(this));
         assertEq(address(h), predicted);
+    }
+
+    function test_initializerIsNotAdmin() public {
+        address squatter = makeAddr("squatter");
+        PoolKey memory k =
+            PoolKey(currency0, currency1, LPFeeLibrary.DYNAMIC_FEE_FLAG, 60, IHooks(address(hook)));
+        vm.prank(squatter);
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(hook.poolAdmin(k.toId()), address(this)); // the fixed admin, not the squatter
+        vm.prank(squatter);
+        vm.expectRevert(
+            abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, k.toId(), squatter)
+        );
+        hook.setSwapFee(k, 1000, squatter, true);
     }
 
     function test_endToEnd() public {
@@ -227,8 +276,9 @@ contract MyPoolHookTest is HookTest {
 forge test --match-contract MyPoolHookTest
 ```
 
-In this test the test contract calls `PoolManager.initialize` (through `initPool`), so it is the
-pool admin and may call `setDecayingFee` and `setSwapFee`.
+The test contract deploys the hook with itself as `admin`, so it may call `setDecayingFee` and
+`setSwapFee`. `test_initializerIsNotAdmin` shows that someone else who initializes a pool does not
+get the admin role.
 
 ## 4. Mine the address
 
@@ -271,21 +321,22 @@ contract DeployMyPoolHook is Script {
         address token0 = vm.envAddress("TOKEN0"); // sorted: token0 < token1
         address token1 = vm.envAddress("TOKEN1");
         address treasury = vm.envAddress("TREASURY");
+        address admin = vm.envAddress("ADMIN"); // the account you broadcast with
 
         // 1. Mine a salt whose CREATE2 address encodes exactly the hook's merged flags.
         uint160 flags = Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_INITIALIZE_FLAG
             | Hooks.BEFORE_SWAP_FLAG | Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG;
-        bytes memory args = abi.encode(POOL_MANAGER);
+        bytes memory args = abi.encode(POOL_MANAGER, admin);
         (address predicted, bytes32 salt) =
             HookMiner.find(CREATE2_FACTORY, flags, type(MyPoolHook).creationCode, args);
 
         vm.startBroadcast();
 
         // 2. Deploy through the standard CREATE2 deployer (forge routes `new{salt}` through it).
-        MyPoolHook hook = new MyPoolHook{salt: salt}(POOL_MANAGER);
+        MyPoolHook hook = new MyPoolHook{salt: salt}(POOL_MANAGER, admin);
         require(address(hook) == predicted, "address mismatch");
 
-        // 3. Initialize a dynamic-fee pool; the broadcaster becomes its pool admin.
+        // 3. Initialize a dynamic-fee pool; `admin` is its pool admin.
         PoolKey memory key = PoolKey({
             currency0: Currency.wrap(token0),
             currency1: Currency.wrap(token1),
@@ -305,7 +356,7 @@ contract DeployMyPoolHook is Script {
 ```
 
 ```sh
-TOKEN0=0x... TOKEN1=0x... TREASURY=0x... \
+TOKEN0=0x... TOKEN1=0x... TREASURY=0x... ADMIN=0x... \
 forge script script/DeployMyPoolHook.s.sol --rpc-url "$ETH_RPC_URL" --account deployer --broadcast
 ```
 
@@ -315,12 +366,16 @@ Notes:
   (wrapped by the pool manager in `WrappedError`).
 - Set the starting price for your pair (`TickMath.getSqrtPriceAtTick(tick)` or an explicit
   `sqrtPriceX96`); tick 0 means a 1:1 raw-unit price.
+- `ADMIN` must be the broadcasting account, or the two config calls revert `NotPoolAdmin`.
 - The script sends initialize and the two config calls as separate transactions. That is safe
-  here because the pool has no liquidity until step 6, so nobody can trade in between. If
-  liquidity goes in at creation, do all of it from one contract call (a factory, as
-  `LaunchpadHook`'s launch flow does).
-- The broadcaster is now the pool admin and can change both fees later. To fix the terms for
-  good: `hook.transferPoolAdmin(key, address(0))`.
+  here because the admin is fixed and the pool has no liquidity until step 6: someone who
+  initializes the key first gets no admin role, and a price they set on an empty pool costs
+  nothing to move back. If liquidity goes in at creation, do all of it from one contract call
+  (a factory, as `LaunchpadHook`'s launch flow does). With an open admin rule
+  (`return sender`), separate transactions are **not** safe: whoever initializes first owns
+  the pool's config.
+- `ADMIN` is the admin of every pool this hook serves and can change both fees later. To fix the
+  terms of one pool for good: `hook.transferPoolAdmin(key, address(0))`.
 - The treasury redeems its claims with `PoolManager.unlock` then `burn` and `take`, or uses
   them as v4 balances directly.
 
@@ -366,7 +421,8 @@ again with `override(BaseHook, MyPoolHook)`.
 ## 8. Before mainnet
 
 Walk the [deployment checklist](Composition.md#deployment-checklist): flags, mined salt for the
-exact init code, dynamic-fee keys, who the pool admin is, fee recipients, and the reverts each
+exact init code, dynamic-fee keys, who the pool admin is (and whether a front-runner could
+become it), fee recipients, and the reverts each
 feature can add to a trade. Other ideas for glue, all `internal virtual` overrides with no
 feature edits: a fee exemption (`_swapFeeBps`), factory-only admin (`_isPoolAdmin`), a key rule
 (`_validatePoolKey` with `PoolInitGateHook`), fee routing (`_onSwapFeeTaken`), in-swap

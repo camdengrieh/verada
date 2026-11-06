@@ -43,6 +43,8 @@ contract ConvertingSwapFeeExampleTest is HookTest {
                 FLAGS
             )
         );
+        vm.prank(owner);
+        hook.setPoolInitializer(address(this), true);
 
         pool = _pool(tX, tQ, 3000, 60, IHooks(address(hook)));
         qt = _pool(tQ, tT, 500, 10, IHooks(address(0)));
@@ -129,6 +131,22 @@ contract ConvertingSwapFeeExampleTest is HookTest {
         hook.setConversionRoute(tQ, r);
         _sellX(1e18);
         assertGt(hook.heldFees(bucket, tQ), 0);
+    }
+
+    /// @dev Regression: a stranger who initializes a key first must not become its admin.
+    function test_initialize_strangerRejected() public {
+        address squatter = makeAddr("squatter");
+        PoolKey memory k = PoolKey(pool.currency0, pool.currency1, 500, 10, IHooks(address(hook)));
+        vm.prank(squatter);
+        vm.expectRevert(_initGateRevert(address(hook), squatter));
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(hook.poolAdmin(k.toId()), address(0));
+
+        vm.prank(squatter);
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, squatter)
+        );
+        hook.setPoolInitializer(squatter, true);
     }
 
     function test_onlyOwner() public {

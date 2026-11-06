@@ -8,13 +8,17 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {BaseHook} from "./BaseHook.sol";
 
 /// @title PoolAdminHook
-/// @notice Per-pool admin shared by every configurable feature hook. The admin of a pool is the
-///         account that called `PoolManager.initialize` for it (an EOA or a factory calls the
-///         pool manager directly; initializing through a router makes the router the admin).
-///         The admin can hand the role over or renounce it (which freezes the pool's config).
+/// @notice Per-pool admin shared by every configurable feature hook. When a pool is initialized
+///         the hook records `_initialPoolAdmin(sender, key)` as its admin, where `sender` is the
+///         caller of `PoolManager.initialize`. The admin can hand the role over or renounce it
+///         (which freezes the pool's config).
 /// @dev Contributes `beforeInitialize`. Features gate their config entry points with
-///      `onlyPoolAdmin(key)`. A protocol replaces the rule by overriding `_isPoolAdmin` (for
-///      example "only the factory") or `_initialPoolAdmin`.
+///      `onlyPoolAdmin(key)`. `_initialPoolAdmin` has no default: a pool key is public and anyone
+///      can call `PoolManager.initialize` first, so each concrete hook must choose who becomes
+///      admin. Usual choices: compose `PoolInitGateHook` and return `sender` (only allowed
+///      initializers get that far), or return a fixed account (an owner or a factory). Returning
+///      `sender` with no gate lets anyone who initializes a key first take its admin role.
+///      `_isPoolAdmin` can also be overridden (for example "only the factory").
 abstract contract PoolAdminHook is BaseHook {
     /// @notice Admin of each pool (zero before initialization or after renouncing).
     mapping(PoolId => address) public poolAdmin;
@@ -51,15 +55,13 @@ abstract contract PoolAdminHook is BaseHook {
     }
 
     /// @dev Admin recorded when a pool is initialized; `sender` is the caller of
-    ///      `PoolManager.initialize`.
-    function _initialPoolAdmin(address sender, PoolKey calldata)
+    ///      `PoolManager.initialize`. Revert here to refuse the pool. No default (see the
+    ///      contract notes): an ungated `return sender` lets a front-runner become admin.
+    function _initialPoolAdmin(address sender, PoolKey calldata key)
         internal
         view
         virtual
-        returns (address)
-    {
-        return sender;
-    }
+        returns (address);
 
     function _hookPermissions(Hooks.Permissions memory p)
         internal

@@ -43,8 +43,11 @@ currency, the concrete hook overrides `_swapFeeAsClaims` (see below).
 
 ## Configuration
 
-Per pool, by the pool admin (`PoolAdminHook`: the caller of `PoolManager.initialize` for that
-pool, transferable, renounceable):
+Per pool, by the pool admin (`PoolAdminHook`: the account the concrete hook's
+`_initialPoolAdmin` records when the pool is initialized, transferable, renounceable). In
+`SwapFeeExample` only initializers the owner allows (`setPoolInitializer`) may create pools, and
+the initializer is the admin, so nobody can initialize your key first and set its fee
+(see [BaseHook.md](BaseHook.md#front-running-the-initializer)):
 
 ```solidity
 function setSwapFee(PoolKey calldata key, uint16 feeBps, address recipient, bool asClaims)
@@ -114,7 +117,8 @@ user.
 ## Permissions
 
 `beforeInitialize` (from `PoolAdminHook`, records the admin), `afterSwap`, `afterSwapReturnDelta`.
-The standalone `SwapFeeExample` must be deployed at an address that encodes exactly these three
+The standalone `SwapFeeExample` (`PoolInitGateHook, SwapFeeHook, Ownable`, constructor
+`(IPoolManager, address owner)`) must be deployed at an address that encodes exactly these three
 flags (`Hooks.BEFORE_INITIALIZE_FLAG | Hooks.AFTER_SWAP_FLAG |
 Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG`), mined with `script/HookMiner.sol`.
 
@@ -137,6 +141,11 @@ one):
 ```solidity
 contract DecayThenSwapFee is MockDecayingFee, SwapFeeHook {
     constructor(IPoolManager m) BaseHook(m) {}
+
+    // Test only: open admin. A real hook gates initialization or fixes the admin
+    // (BaseHook.md#front-running-the-initializer).
+    function _initialPoolAdmin(address s, PoolKey calldata) internal pure override returns (address)
+    { return s; }
 
     function _hookPermissions(Hooks.Permissions memory p)
         internal pure override(MockDecayingFee, SwapFeeHook) returns (Hooks.Permissions memory)

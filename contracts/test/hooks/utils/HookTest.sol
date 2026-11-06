@@ -2,7 +2,11 @@
 pragma solidity ^0.8.26;
 
 import {Deployers} from "@uniswap/v4-core/test/utils/Deployers.sol";
+import {IHooks} from "v4-core/interfaces/IHooks.sol";
+import {CustomRevert} from "v4-core/libraries/CustomRevert.sol";
 import {Hooks} from "v4-core/libraries/Hooks.sol";
+
+import {PoolInitGateHook} from "../../../src/hooks/access/PoolInitGateHook.sol";
 
 /// @notice Shared test base for `src/hooks`: the real v4 PoolManager and routers (Deployers),
 ///         plus deployment of a hook at an address that encodes a given flag set.
@@ -47,5 +51,16 @@ abstract contract HookTest is Deployers {
     {
         hook = _hookAddress(flags);
         deployCodeTo(what, args, hook);
+    }
+
+    /// @notice Revert data of `PoolManager.initialize` when `hook`'s init gate refuses `sender`.
+    function _initGateRevert(address hook, address sender) internal pure returns (bytes memory) {
+        return abi.encodeWithSelector(
+            CustomRevert.WrappedError.selector,
+            hook,
+            IHooks.beforeInitialize.selector,
+            abi.encodeWithSelector(PoolInitGateHook.InitializerNotAllowed.selector, sender),
+            abi.encodeWithSelector(Hooks.HookCallFailed.selector)
+        );
     }
 }

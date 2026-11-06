@@ -149,7 +149,7 @@ the merged set adds `beforeInitialize`, `afterSwap` and `afterSwapReturnDelta`.
 - A concrete hook combines a fee feature with this one. For example, from the example:
 
   ```solidity
-  contract ConvertingSwapFeeExample is SwapFeeHook, FeeConversionHook, Ownable {
+  contract ConvertingSwapFeeExample is PoolInitGateHook, SwapFeeHook, FeeConversionHook, Ownable {
       function _onSwapFeeTaken(address s, PoolKey calldata key, Currency c, uint256 amount,
           address recipient, bool asClaims) internal override {
           super._onSwapFeeTaken(s, key, c, amount, recipient, asClaims);

@@ -132,7 +132,7 @@ contract MyHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook {
    | --- | --- |
    | `_hookPermissions` | `SwapFeeHook, FeeConversionHook` (both define it; `BaseHook` is closed) |
    | `_usesSwapLock` | `BaseHook, FeeConversionHook` (`SwapFeeHook` reaches `BaseHook`'s) |
-   | `_beforeInitialize` | `BaseHook, PoolAdminHook` (open via `FeeConversionHook` and `SwapFeeHook`) |
+   | `_beforeInitialize` | `BaseHook, PoolAdminHook` (open via `FeeConversionHook` and `SwapFeeHook`); add `PoolInitGateHook` when it is composed, as in `ConvertingSwapFeeExample` |
    | `_afterSwap` | `BaseHook, SwapFeeHook` |
 
    For `LaunchpadHook is PoolInitGateHook, LiquidityGateHook, TwapOracleHook, DecayingFeeHook,
@@ -149,13 +149,27 @@ contract MyHook is TwapOracleHook, DecayingFeeHook, SwapFeeHook {
 
    [Composition.md](Composition.md#4-re-declare-every-shared-override-rule-6) shows the full
    boilerplate.
-7. **Per-pool config belongs to the pool admin.** `PoolAdminHook` records the caller of
-   `PoolManager.initialize` as the pool's admin (an EOA or a factory calls the pool manager
-   directly). Features with per-pool config inherit `PoolAdminHook` and guard their setters with
-   `onlyPoolAdmin(key)` (which also checks `key.hooks == this`). The admin can
-   `transferPoolAdmin(key, newAdmin)`; transferring to zero freezes the pool's config. Protocols
-   override `_isPoolAdmin` / `_initialPoolAdmin` (e.g. factory-only). Config entry points take a
-   `PoolKey calldata`, not a `PoolId`. A pool with no config behaves neutrally (no fee, no gate).
+7. **Per-pool config belongs to the pool admin.** `PoolAdminHook` records
+   `_initialPoolAdmin(sender, key)` as the pool's admin when the pool is initialized (`sender` is
+   the caller of `PoolManager.initialize`: an EOA, a factory or a router). Features with per-pool
+   config inherit `PoolAdminHook` and guard their setters with `onlyPoolAdmin(key)` (which also
+   checks `key.hooks == this`). The admin can `transferPoolAdmin(key, newAdmin)`; transferring
+   to zero freezes the pool's config. Protocols override `_isPoolAdmin` (e.g. factory-only).
+   Config entry points take a `PoolKey calldata`, not a `PoolId`. A pool with no config behaves
+   neutrally (no fee, no gate).
+
+   **Front-running.** A pool key is public and anyone may call `PoolManager.initialize` first,
+   so "the initializer is the admin" with no other check lets an attacker take the admin role of
+   the key a protocol plans to use (and set its fees and recipients). `_initialPoolAdmin` is
+   therefore left unimplemented in `PoolAdminHook`: every concrete hook must pick a rule, and the
+   compiler refuses a concrete hook that does not (error 3656). Recommended:
+   - gate initialization with `PoolInitGateHook` and return `sender` (every shipped example);
+   - or return a fixed account (an owner or factory), so whoever initializes gets no power;
+   - or revert for senders or keys the hook does not accept.
+
+   An open rule (`return sender`, no gate) is an explicit opt-in. Its users must initialize and
+   configure in one transaction from a contract, so a front-run can only make that transaction
+   revert. See [BaseHook.md](BaseHook.md#front-running-the-initializer).
 8. **Hook-level config** (not per pool: allowed initializers, conversion routes) is set through
    `internal` setters. The feature never picks an access-control scheme; the concrete hook exposes
    them (the examples use `Ownable` from OpenZeppelin contracts).
@@ -207,7 +221,8 @@ window (anti-sniper protection that pays LPs). Per pool, set by the pool admin.
 - Events: `DecayingFeeSet(PoolId indexed poolId, uint24 startFee, uint24 endFee, uint32 duration,
   uint40 startTime)`. Errors: `NotDynamicFee()`, `InvalidDecayingFee(uint24 startFee, uint24
   endFee, uint32 duration)`.
-- Example: `DecayingFeeExample is DecayingFeeHook` (constructor takes the pool manager only).
+- Example: `DecayingFeeExample is PoolInitGateHook, DecayingFeeHook, Ownable` (constructor
+  `(IPoolManager, address owner_)`; the owner allows initializers, each initializer is the admin).
 - Tests: schedule math incl. fuzz against a reference formula and rounding; fee seen in the
   `Swap` event at t0, mid-window and after; unset pool uses the stored fee; static-fee pool cannot
   initialize; only the admin configures; frozen admin.
@@ -247,7 +262,8 @@ exact-in, input of exact-out), per-pool bps, paid to a per-pool recipient either
 - Events: `SwapFeeSet(PoolId indexed poolId, uint16 feeBps, address recipient, bool asClaims)`,
   `SwapFeeTaken(PoolId indexed poolId, Currency indexed currency, address indexed recipient,
   uint256 amount, bool asClaims)` (`asClaims` is the form paid). Errors: `InvalidSwapFee(uint16 feeBps)`, `InvalidFeeRecipient(address)`.
-- Example: `SwapFeeExample is SwapFeeHook`.
+- Example: `SwapFeeExample is PoolInitGateHook, SwapFeeHook, Ownable` (constructor
+  `(IPoolManager, address owner_)`; the owner allows initializers, each initializer is the admin).
 - Tests: all four swap shapes (zeroForOne x exact-in/out) charge the unspecified side exactly;
   claims vs tokens, including token mode paying exact-output fees as claims; recipient balances; fuzz amount and bps (fee <= gross, rounding up); exemption
   via an override in a test harness; config validation and admin gating; composes with
@@ -325,7 +341,9 @@ removal with an empty list to lock forever).
   - Events: `LiquidityGateSet(PoolId indexed, bool gateAdd, bool gateRemove)`,
     `LiquidityProviderSet(PoolId indexed, address indexed account, bool allowed)`.
     Errors: `LiquidityNotAllowed(PoolId poolId, address sender)`.
-  - Example: `LiquidityGateExample is LiquidityGateHook`.
+  - Example: `LiquidityGateExample is PoolInitGateHook, LiquidityGateHook, Ownable` (constructor
+    `(IPoolManager, address owner_)`; the owner allows initializers, each initializer is the
+    admin).
   - Locked liquidity recipe (documented and tested): admin gates add and remove, allows the
     locker, the locker adds the position, admin renounces (`transferPoolAdmin(key, 0)`); nobody
     can then remove it or change the gate.
@@ -403,7 +421,8 @@ claims and anyone can retry later outside a swap. It does not take fees itself; 
 - Invariants (tested): `poolManager.balanceOf(hook, id(c)) == totalHeld[c]` after every swap and
   retry (for a hook whose only claims are fees); a fee is either converted in its swap or held in
   full; the trader's swap never reverts for a conversion failure (only `InsufficientGas`).
-- Example: `ConvertingSwapFeeExample is SwapFeeHook, FeeConversionHook, Ownable`: `_onSwapFeeTaken`
+- Example: `ConvertingSwapFeeExample is PoolInitGateHook, SwapFeeHook, FeeConversionHook,
+  Ownable` (the owner also allows initializers): `_onSwapFeeTaken`
   calls `_convertOrHold(PoolId.unwrap(key.toId()), currency, amount)` when the recipient is the
   hook and fees are claims; owner sets routes, a per-hop reference tick and bounds, and the payout
   address.
@@ -419,8 +438,9 @@ in production.
 
 - Files: `src/hooks/examples/BondingCurveHook.sol`, `test/hooks/examples/BondingCurveHook.t.sol`,
   `docs/hooks/BondingCurveHook.md`.
-- `contract BondingCurveHook is PoolAdminHook, IUnlockCallback` (the unlock callback settles
-  `seed`): one side of each pool is the curve token, the
+- `contract BondingCurveHook is PoolInitGateHook, PoolAdminHook, Ownable, IUnlockCallback`,
+  constructor `(IPoolManager, address owner_)`: only initializers the owner allows create curve
+  pools, and the initializer is the admin (the unlock callback settles `seed`). One side of each pool is the curve token, the
   other the quote. Virtual constant-product curve `(virtualQuote + quoteRaised) * tokenReserve =
   k`; the hook holds its reserves as ERC-6909 claims and settles each swap with `mint` / `burn` of
   its own claims, returning a `BeforeSwapDelta` that fully consumes the specified amount so the
@@ -439,9 +459,13 @@ in production.
 - Events: `CurveConfigured`, `CurveSeeded`, `CurveSwap(PoolId indexed, address indexed sender,
   bool buy, uint256 amountIn, uint256 amountOut)`, `Graduated(PoolId indexed, uint256
   quoteRaised)`. Errors as above plus `CurveNotReady()`, `InsufficientReserve()`.
+- Known limitations (documented, not fixed in the reference): after graduation every swap reverts,
+  sells included, so holders have no market until the admin moves the reserves; and
+  `withdrawAfterGraduation` sends all raised quote to an address the admin picks. The admin is
+  trusted with the buyers' quote (use a migrator contract as the admin).
 - Tests: buy and sell amounts match the curve formula (fuzz, k never decreases), graduation
   threshold, post-graduation revert, liquidity blocked, claims accounting
-  (`balanceOf(hook) == reserves`).
+  (`balanceOf(hook) == reserves`), a front-running initializer is refused.
 
 ### 7. Launchpad composition and integration (examples/)
 

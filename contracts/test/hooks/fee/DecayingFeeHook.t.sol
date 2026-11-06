@@ -62,6 +62,16 @@ abstract contract FlatFeeStub is BaseHook {
 
 /// @dev DecayingFeeHook composed with the stub (rule 6: shared overrides re-declared).
 contract DecayingWithStub is DecayingFeeHook, FlatFeeStub {
+    /// @dev Test-only open admin: the initializer becomes the pool admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+
     constructor(IPoolManager m) BaseHook(m) {}
 
     function _hookPermissions(Hooks.Permissions memory p)
@@ -92,6 +102,16 @@ contract DecayingWithStub is DecayingFeeHook, FlatFeeStub {
 
 /// @dev Exposes the internal setter (the protocol-glue path) without access control.
 contract DecayingFeeHarness is DecayingFeeHook {
+    /// @dev Test-only open admin: the initializer becomes the pool admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+
     constructor(IPoolManager m) BaseHook(m) {}
 
     function setDecayingFeeInternal(
@@ -127,8 +147,13 @@ contract DecayingFeeHookTest is HookTest {
         deployMintAndApprove2Currencies();
         vm.warp(T0);
         hook = DecayingFeeExample(
-            _deployHook("DecayingFeeExample.sol:DecayingFeeExample", abi.encode(manager), FLAGS)
+            _deployHook(
+                "DecayingFeeExample.sol:DecayingFeeExample",
+                abi.encode(manager, address(this)),
+                FLAGS
+            )
         );
+        hook.setPoolInitializer(address(this), true);
         (poolKey, id) = initPoolAndAddLiquidity(
             currency0, currency1, IHooks(address(hook)), DYNAMIC, SQRT_PRICE_1_1
         );
@@ -169,10 +194,22 @@ contract DecayingFeeHookTest is HookTest {
         assertEq(hook.poolAdmin(id), address(this));
     }
 
+    /// @dev Regression: a stranger who initializes a key first must not become its admin.
+    function test_initialize_strangerRejected() public {
+        address squatter = makeAddr("squatter");
+        PoolKey memory k = PoolKey(currency0, currency1, DYNAMIC, 10, IHooks(address(hook)));
+        vm.prank(squatter);
+        vm.expectRevert(_initGateRevert(address(hook), squatter));
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(hook.poolAdmin(k.toId()), address(0));
+    }
+
     function test_constructorRejectsWrongAddress() public {
         address wrong = _hookAddress(Hooks.BEFORE_SWAP_FLAG);
         vm.expectRevert();
-        this.deployAt("DecayingFeeExample.sol:DecayingFeeExample", abi.encode(manager), wrong);
+        this.deployAt(
+            "DecayingFeeExample.sol:DecayingFeeExample", abi.encode(manager, address(this)), wrong
+        );
     }
 
     function deployAt(string memory what, bytes memory args, address where) external {

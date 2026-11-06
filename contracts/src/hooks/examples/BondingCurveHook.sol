@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
@@ -14,6 +15,7 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol";
 
+import {PoolInitGateHook} from "../access/PoolInitGateHook.sol";
 import {BaseHook} from "../base/BaseHook.sol";
 import {PoolAdminHook} from "../base/PoolAdminHook.sol";
 
@@ -29,16 +31,23 @@ import {PoolAdminHook} from "../base/PoolAdminHook.sol";
 ///         token moves and no external code runs inside a swap. Its `beforeSwap` delta consumes
 ///         the whole specified amount, so the pool's own liquidity (there is none: adding it is
 ///         blocked) is never touched.
-/// @dev Lifecycle per pool: the caller of `PoolManager.initialize` becomes the pool admin
-///      (`PoolAdminHook`), calls `configureCurve` once, `seed`s the curve with tokens before the
+/// @dev Lifecycle per pool: only an initializer the owner allows (`PoolInitGateHook`, for
+///      example a launch factory) may call `PoolManager.initialize`, and it becomes the pool
+///      admin. The admin calls `configureCurve` once, `seed`s the curve with tokens before the
 ///      first buy, and after graduation withdraws both reserves as claims with
 ///      `withdrawAfterGraduation`. Swaps are exact-input only. Output rounds down, so `k` never
 ///      decreases and a round trip never profits.
+///      Example limitations (fix them before any real use):
+///      - After graduation every swap reverts `CurveGraduated`, sells included. Holders have no
+///        market until the admin moves the reserves somewhere they can trade.
+///      - `withdrawAfterGraduation` sends all raised quote and the unsold tokens to any address
+///        the admin picks. The admin is trusted with the buyers' quote: make it a migrator
+///        contract that puts both reserves into a locked pool in the same transaction.
 ///      Composition: the curve must be the only feature of a concrete hook that returns a
 ///      `beforeSwap` delta (it consumes the full specified amount, so any other delta would make
 ///      the pool manager revert `HookDeltaExceedsSwapAmount`). Its callbacks call `super` first
 ///      and are `virtual`, so it can be inherited next to other features. hookData is unused.
-contract BondingCurveHook is PoolAdminHook, IUnlockCallback {
+contract BondingCurveHook is PoolInitGateHook, PoolAdminHook, Ownable, IUnlockCallback {
     using SafeCast for uint256;
     using SafeERC20 for IERC20;
 
@@ -103,9 +112,18 @@ contract BondingCurveHook is PoolAdminHook, IUnlockCallback {
     error UnexpectedCallback();
 
     /// @param poolManager_ The v4 pool manager.
-    constructor(IPoolManager poolManager_) BaseHook(poolManager_) {}
+    /// @param owner_ The account that may allow and disallow pool initializers.
+    constructor(IPoolManager poolManager_, address owner_) BaseHook(poolManager_) Ownable(owner_) {}
 
     // ------------------------------------------------------------------ admin
+
+    /// @notice Allows or disallows `account` to initialize pools with this hook (and so to
+    ///         become their pool admin). Only the owner; existing pools keep their admin.
+    /// @param account The initializer (normally a launch factory).
+    /// @param allowed Whether `account` may call `PoolManager.initialize` for this hook.
+    function setPoolInitializer(address account, bool allowed) external onlyOwner {
+        _setPoolInitializer(account, allowed);
+    }
 
     /// @notice Sets the curve of `key`'s pool. Callable once, by the pool admin.
     /// @param key The pool (its hook must be this contract).
@@ -159,6 +177,8 @@ contract BondingCurveHook is PoolAdminHook, IUnlockCallback {
 
     /// @notice Sends both reserves of a graduated curve to `to` as ERC-6909 claims on the pool
     ///         manager (redeem them with `unlock` + `burn` + `take`). Pool admin only.
+    /// @dev The admin receives every unit of quote the buyers paid; nothing here makes it
+    ///      provide a market afterwards (see the contract notes).
     /// @param key The pool.
     /// @param to Recipient of the claims (not zero).
     function withdrawAfterGraduation(PoolKey calldata key, address to)
@@ -221,11 +241,22 @@ contract BondingCurveHook is PoolAdminHook, IUnlockCallback {
 
     // ------------------------------------------------------------------ hook
 
+    /// @dev The caller of `PoolManager.initialize` passed the init gate, so it is the admin.
+    function _initialPoolAdmin(address sender, PoolKey calldata)
+        internal
+        view
+        virtual
+        override
+        returns (address)
+    {
+        return sender;
+    }
+
     function _hookPermissions(Hooks.Permissions memory p)
         internal
         pure
         virtual
-        override
+        override(PoolInitGateHook, PoolAdminHook)
         returns (Hooks.Permissions memory)
     {
         p = super._hookPermissions(p);
@@ -233,6 +264,15 @@ contract BondingCurveHook is PoolAdminHook, IUnlockCallback {
         p.beforeSwap = true;
         p.beforeSwapReturnDelta = true;
         return p;
+    }
+
+    function _beforeInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96)
+        internal
+        virtual
+        override(PoolInitGateHook, PoolAdminHook)
+        returns (bytes4)
+    {
+        return super._beforeInitialize(sender, key, sqrtPriceX96);
     }
 
     function _beforeAddLiquidity(

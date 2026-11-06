@@ -85,6 +85,16 @@ contract LaunchpadHookFeesSwapped is
     DecayingFeeHook,
     Ownable
 {
+    /// @dev The caller of `PoolManager.initialize` passed the init gate, so it is the admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+
     constructor(IPoolManager manager, address owner_)
         BaseHook(manager)
         TwapOracleHook(5 minutes, 24)

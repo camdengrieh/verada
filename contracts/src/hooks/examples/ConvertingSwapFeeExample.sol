@@ -11,6 +11,7 @@ import {PoolId} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
+import {PoolInitGateHook} from "../access/PoolInitGateHook.sol";
 import {BaseHook} from "../base/BaseHook.sol";
 import {PoolAdminHook} from "../base/PoolAdminHook.sol";
 import {FeeConversionHook} from "../conversion/FeeConversionHook.sol";
@@ -26,7 +27,9 @@ import {SwapFeeHook} from "../fee/SwapFeeHook.sol";
 ///      bounds (keep the in-swap bounds tight: the trader chooses that moment). Fees paid to any
 ///      other recipient, or as tokens, are not converted. Any swap whose fee is converted needs
 ///      `conversionGasRequired()` gas left at `afterSwap`, or it reverts `InsufficientGas`.
-contract ConvertingSwapFeeExample is SwapFeeHook, FeeConversionHook, Ownable {
+///      Only initializers the owner allows may create pools (`PoolInitGateHook`); the
+///      initializer becomes the pool admin.
+contract ConvertingSwapFeeExample is PoolInitGateHook, SwapFeeHook, FeeConversionHook, Ownable {
     /// @notice Price guard of one route hop.
     struct HopGuard {
         bool set;
@@ -77,6 +80,13 @@ contract ConvertingSwapFeeExample is SwapFeeHook, FeeConversionHook, Ownable {
     }
 
     // ------------------------------------------------------------------ owner config
+
+    /// @notice Allows or disallows `account` to initialize pools with this hook.
+    /// @param account The initializer.
+    /// @param allowed Whether `account` may call `PoolManager.initialize` for this hook.
+    function setPoolInitializer(address account, bool allowed) external onlyOwner {
+        _setPoolInitializer(account, allowed);
+    }
 
     /// @notice Sets the conversion route of `from` (1 to 3 hookless pools ending at the target).
     /// @param from Fee currency.
@@ -184,12 +194,22 @@ contract ConvertingSwapFeeExample is SwapFeeHook, FeeConversionHook, Ownable {
         return payout;
     }
 
+    /// @dev The caller of `PoolManager.initialize` passed the init gate, so it is the admin.
+    function _initialPoolAdmin(address sender, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return sender;
+    }
+
     // ------------------------------------------------------------------ rule 6 re-declarations
 
     function _hookPermissions(Hooks.Permissions memory p)
         internal
         pure
-        override(SwapFeeHook, FeeConversionHook)
+        override(PoolInitGateHook, SwapFeeHook, FeeConversionHook)
         returns (Hooks.Permissions memory)
     {
         return super._hookPermissions(p);
@@ -201,7 +221,7 @@ contract ConvertingSwapFeeExample is SwapFeeHook, FeeConversionHook, Ownable {
 
     function _beforeInitialize(address sender, PoolKey calldata key, uint160 sqrtPriceX96)
         internal
-        override(BaseHook, PoolAdminHook)
+        override(BaseHook, PoolAdminHook, PoolInitGateHook)
         returns (bytes4)
     {
         return super._beforeInitialize(sender, key, sqrtPriceX96);

@@ -71,6 +71,17 @@ contract LaunchpadHook is
         _setPoolInitializer(account, allowed);
     }
 
+    /// @dev The caller of `PoolManager.initialize` passed the init gate, so it is the admin.
+    function _initialPoolAdmin(address sender, PoolKey calldata)
+        internal
+        view
+        virtual
+        override
+        returns (address)
+    {
+        return sender;
+    }
+
     // ------------------------------------------------------------------ rule 6 boilerplate
 
     function _hookPermissions(Hooks.Permissions memory p)

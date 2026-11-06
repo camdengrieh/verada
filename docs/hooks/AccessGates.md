@@ -107,7 +107,8 @@ abstract contract LiquidityGateHook is PoolAdminHook
 ```
 
 Optional per-pool allowlist for adding and/or removing liquidity, each side gated separately. The
-pool admin (by default the caller of `PoolManager.initialize`, see `PoolAdminHook`) configures it.
+pool admin (the account the concrete hook's `_initialPoolAdmin` records, see `PoolAdminHook`)
+configures it.
 A pool with no gate set behaves like a plain pool.
 
 ### State
@@ -148,8 +149,10 @@ can never be collected.
 
 ### Example
 
-`LiquidityGateExample is LiquidityGateHook`, constructor `(IPoolManager)`. Anyone may create a
-pool and becomes its admin. Address flags: `BEFORE_INITIALIZE_FLAG | BEFORE_ADD_LIQUIDITY_FLAG |
+`LiquidityGateExample is PoolInitGateHook, LiquidityGateHook, Ownable`, constructor
+`(IPoolManager, address owner)`. Only initializers the owner allows (`setPoolInitializer`) may
+create a pool, and the initializer becomes its admin. Without the init gate, anyone could
+initialize the key you plan to use first and control its liquidity gate. Address flags: `BEFORE_INITIALIZE_FLAG | BEFORE_ADD_LIQUIDITY_FLAG |
 BEFORE_REMOVE_LIQUIDITY_FLAG`.
 
 ### Reverts it adds
@@ -189,6 +192,10 @@ succeeds, and the locker collects its fees with the position unchanged.
 contract GatedLaunchHook is PoolInitGateHook, LiquidityGateHook /*, other features */ {
     constructor(IPoolManager m) BaseHook(m) {}
 
+    // the initializer passed the gate, so it may be the pool admin
+    function _initialPoolAdmin(address s, PoolKey calldata) internal pure override returns (address)
+    { return s; }
+
     // rule 6: re-declare every internal function two or more bases define
     function _hookPermissions(Hooks.Permissions memory p)
         internal pure override(PoolInitGateHook, LiquidityGateHook)
@@ -214,7 +221,9 @@ contract GatedLaunchHook is PoolInitGateHook, LiquidityGateHook /*, other featur
 - The linearization is `GatedLaunchHook, LiquidityGateHook, PoolAdminHook, PoolInitGateHook,
   BaseHook`, so in `beforeInitialize` the initializer gate and key rule run first and the pool
   admin is recorded only if they pass. With this order the allowed initializer (for example a
-  factory) becomes the admin of every pool it creates, configures the gate, and renounces.
+  factory) becomes the admin of every pool it creates, configures the gate, and renounces. The
+  concrete hook implements `_initialPoolAdmin` as `return sender`, which is safe because only
+  allowed initializers reach it.
 - `BothGatesHook` in `PoolInitGateHook.t.sol` is this composition; its tests check the merged
   flags, that a refused initializer records no admin, and that both `beforeInitialize` logics run.
 

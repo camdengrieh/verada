@@ -7,8 +7,23 @@
 
 - Source: `contracts/src/hooks/examples/BondingCurveHook.sol`
 - Tests: `contracts/test/hooks/examples/BondingCurveHook.t.sol`
-- `contract BondingCurveHook is PoolAdminHook, IUnlockCallback` (concrete, deployable as is;
-  constructor takes the pool manager only)
+- `contract BondingCurveHook is PoolInitGateHook, PoolAdminHook, Ownable, IUnlockCallback`
+  (concrete, deployable as is; constructor `(IPoolManager poolManager, address owner)`)
+
+## Known limitations
+
+Fix these before using the code for a real sale:
+
+- **Front-running is closed by an init gate.** Only initializers the owner allows with
+  `setPoolInitializer(account, true)` may create curve pools, and the initializer becomes the
+  pool admin. Without the gate, anyone who initialized a curve's pool key first would become its
+  admin, configure the curve and later withdraw both reserves.
+- **A graduated curve rejects every swap, sells included.** Holders have no market on this pool
+  after graduation; they depend on the admin moving the reserves to a pool where they can trade.
+- **The admin takes all raised quote.** `withdrawAfterGraduation` sends both reserves to any
+  address the admin picks. Buyers trust the admin with their quote. Make the admin a migrator
+  contract that withdraws and seeds a locked pool in the same transaction, so no person holds the
+  reserves.
 
 ## Purpose
 
@@ -53,8 +68,11 @@ a swap. Invariant (tested after every operation):
 
 ## Configuration (pool admin)
 
-The pool admin is the caller of `PoolManager.initialize` (see `PoolAdminHook`). The pool's LP fee
-and starting price are irrelevant: the pool never trades its own liquidity.
+Only an allowed initializer may call `PoolManager.initialize` for a pool with this hook
+(`PoolInitGateHook`; a refused caller gets `InitializerNotAllowed(sender)` wrapped by the pool
+manager), and that initializer is the pool admin (see `PoolAdminHook`). The owner manages the
+allowlist. The pool's LP fee and starting price are irrelevant: the pool never trades its own
+liquidity.
 
 | Function | Rules |
 | --- | --- |
@@ -62,12 +80,14 @@ and starting price are irrelevant: the pool never trades its own liquidity.
 | `seed(PoolKey key, uint256 tokenAmount)` | after configure (`CurveNotReady`), before graduation (`CurveGraduated`), only until the first buy and with a non-zero amount (`SeedingClosed`). Pulls the tokens from the admin (approve the hook first) through `poolManager.unlock`; credits what the pool manager actually received. `hookNonReentrant`. |
 | `withdrawAfterGraduation(PoolKey key, address to)` | only once graduated (`CurveNotGraduated`), `to != 0` (`InvalidRecipient`). Transfers both reserves to `to` as ERC-6909 claims (redeem with `unlock` + `burn` + `take`) and zeroes them. |
 | `transferPoolAdmin(PoolKey key, address newAdmin)` | from `PoolAdminHook`; zero renounces and freezes the curve (no more seeding, no withdrawal). |
+| `setPoolInitializer(address account, bool allowed)` | owner only (`Ownable`); who may create curve pools. Existing pools keep their admin. |
 
 `unlockCallback` only accepts the pool manager (`NotPoolManager`) while this hook's own `seed`
 holds the lock (`UnexpectedCallback`).
 
-Typical flow: initialize the pool, `configureCurve`, approve and `seed` the supply, trade until
-graduation, `withdrawAfterGraduation` to a migrator or the admin.
+Typical flow: the owner allows a launch contract, which initializes the pool, calls
+`configureCurve`, approves and `seed`s the supply in the same transaction; trade until
+graduation; `withdrawAfterGraduation` to a migrator.
 
 ## Swaps
 
@@ -98,9 +118,10 @@ asserted by a forge test against the real `PoolManager` (the same calls as
 
 **1. Deploy and create the pool.** Mine an address with exactly `BEFORE_INITIALIZE |
 BEFORE_ADD_LIQUIDITY | BEFORE_SWAP | BEFORE_SWAP_RETURNS_DELTA` and deploy
-`new BondingCurveHook{salt: s}(poolManager)`. Initialize a pool with `hooks = curveHook`. The fee,
-tick spacing and starting price are irrelevant, because the pool's own liquidity is never used.
-The caller of `initialize` becomes the pool admin.
+`new BondingCurveHook{salt: s}(poolManager, owner)`. The owner allows the account that will
+create the pool: `curve.setPoolInitializer(launcher, true)`. The launcher initializes a pool with
+`hooks = curveHook` and becomes its admin. The fee, tick spacing and starting price are
+irrelevant, because the pool's own liquidity is never used.
 
 **2. Configure and seed.**
 
@@ -156,7 +177,7 @@ Choosing parameters:
 
 ## Permissions
 
-`beforeInitialize` (from `PoolAdminHook`), `beforeAddLiquidity`, `beforeSwap`,
+`beforeInitialize` (from `PoolInitGateHook` and `PoolAdminHook`), `beforeAddLiquidity`, `beforeSwap`,
 `beforeSwapReturnDelta`. The deployed address must encode exactly these (mine it with
 `script/HookMiner.sol`; tests use `HookTest._deployHook`).
 
@@ -183,7 +204,10 @@ counter). Notes:
   unspecified side must be adapted to read the curve amounts instead.
 - Because `BondingCurveHook` is concrete, a derived hook must re-declare every internal function
   that two of its bases define, including `_beforeInitialize` (`override(BaseHook,
-  PoolAdminHook)`) and `_beforeAddLiquidity` (`override(BaseHook, BondingCurveHook)`).
+  BondingCurveHook)`) and `_beforeAddLiquidity` (`override(BaseHook, BondingCurveHook)`).
+  `BondingCurveHook` implements `_initialPoolAdmin` (`return sender`, safe behind its init gate);
+  a derived hook that adds another `PoolAdminHook` feature re-declares it with
+  `override(BondingCurveHook, PoolAdminHook)`.
 - The liquidity error is `CurveLiquidityDisabled()`, so its name does not clash with
   `LiquidityGateHook`'s `LiquidityNotAllowed(poolId, sender)`. The two compile together, but they
   make no sense together: the curve already blocks all liquidity.
@@ -193,11 +217,14 @@ counter). Notes:
 ## Security notes
 
 - Reference code: unaudited, no production use.
+- Pool creation is gated (`PoolInitGateHook`), so a front-runner cannot initialize a curve's key
+  and become its admin. The owner decides who may create curves.
 - No token transfer inside a swap; reserves are claims and the claims invariant is tested.
 - The admin controls seeding and withdrawal. Seeding closes at the first buy so the admin cannot
   dilute buyers by adding tokens mid-sale. After graduation the admin receives all quote raised and
-  all unsold tokens; buyers rely on the admin (or a migrator contract set as admin) to use them as
-  promised. Renouncing the admin before graduation locks the reserves forever.
+  all unsold tokens, and the pool rejects every swap, so buyers cannot sell back on the curve;
+  buyers rely on the admin (or a migrator contract set as admin) to use the reserves as promised.
+  Renouncing the admin before graduation locks the reserves forever.
 - Fee-on-transfer curve tokens are credited by the amount received; rebasing tokens are not
   supported (claims do not rebase).
 - Native ETH is supported as the quote (tested); the curve token must be an ERC-20.

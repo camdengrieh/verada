@@ -135,6 +135,9 @@ created and gives features an `onlyPoolAdmin(key)` modifier.
 - `onlyPoolAdmin(PoolKey calldata key)`: reverts `NotPoolAdmin(poolId, caller)` unless
   `key.hooks == this` and `_isPoolAdmin(poolId, msg.sender)`.
 - A pool with no config behaves neutrally in every feature (no fee, no gate).
+- `_initialPoolAdmin` has **no default**. Every concrete hook must define it, so each hook makes
+  an explicit choice about who administers its pools (see
+  [Front-running](#front-running-the-initializer)).
 
 Because the admin only exists once the pool is initialized, initialize and configure **in the
 same transaction** (from a factory or a multicall contract) when the gap matters, for example a
@@ -147,16 +150,57 @@ launch fee that must apply to the first swap.
 | `poolAdmin(PoolId) returns (address)` | the admin; zero before initialization or after renouncing |
 | `transferPoolAdmin(PoolKey calldata key, address newAdmin)` | admin only; `newAdmin == address(0)` renounces and freezes every feature's config for that pool |
 | `_isPoolAdmin(PoolId, address) internal view virtual returns (bool)` | default: `account != 0 && poolAdmin[id] == account`. Override for factory-only control, roles or multisigs |
-| `_initialPoolAdmin(address sender, PoolKey calldata) internal view virtual returns (address)` | default: `sender`. Override to record someone else (a token creator a factory passes on) |
+| `_initialPoolAdmin(address sender, PoolKey calldata key) internal view virtual returns (address)` | **must be implemented** by the concrete hook. Return the admin to record, or revert to refuse the pool |
 
 Event: `PoolAdminChanged(PoolId indexed poolId, address indexed previousAdmin, address indexed
 newAdmin)`. Error: `NotPoolAdmin(PoolId poolId, address caller)`.
 
+### Front-running the initializer
+
+A `PoolKey` is public: two currencies, a fee, a tick spacing and the hook address. Anyone can
+call `PoolManager.initialize` with the key you plan to use, and a pending initialize is visible
+in the mempool. If the hook makes the caller the admin with no other check, an attacker who
+initializes first becomes the admin. They then set the fees, the fee recipient or any other
+per pool config, and the real launch either reverts (`PoolAlreadyInitialized`) or runs on a
+pool someone else controls.
+
+Pick one of these rules in `_initialPoolAdmin`:
+
+| Rule | How | When |
+| --- | --- | --- |
+| Gate initialization (recommended) | compose `PoolInitGateHook` (allowed initializers, for example your factory) and return `sender` | a hook shared by a launchpad or a set of trusted creators; every shipped example does this |
+| Fixed admin | return an owner or factory address, whoever initializes | one operator configures every pool; a squatter can create the pool but cannot configure it |
+| Refuse | revert for senders or keys you do not accept | custom rules, for example "only the token's creator" |
+| Open (`return sender` with no gate) | only if you accept the risk above | a permissionless shared hook where creators pick fresh keys and configure in the same transaction |
+
+With the open rule, always initialize and configure in **one transaction** from a contract
+(factory or multicall), and check `poolAdmin(key.toId())` before adding liquidity. A front-runner
+can then only make that transaction revert; it cannot take over a pool you go on to fund.
+
+```solidity
+contract MyHook is PoolInitGateHook, SwapFeeHook, Ownable {
+    // ... constructor, setPoolInitializer (onlyOwner) and the rule 6 re-declarations
+
+    /// @dev The caller passed the init gate, so it is the admin.
+    function _initialPoolAdmin(address sender, PoolKey calldata)
+        internal
+        view
+        virtual
+        override
+        returns (address)
+    {
+        return sender;
+    }
+}
+```
+
+List `PoolInitGateHook` first so its check runs before the admin is recorded (a refused
+initializer records nothing; the whole initialize reverts either way).
+
 ### Security notes
 
-- Whoever can call `PoolManager.initialize` for a key with this hook becomes that pool's admin.
-  If only some accounts should create pools, compose `PoolInitGateHook` (it runs before the admin
-  is recorded when listed first, so a refused initializer records nothing).
+- See [Front-running](#front-running-the-initializer): the caller of `PoolManager.initialize` is
+  untrusted unless your hook checks it.
 - The admin is per pool. One hook can serve many pools with different admins and configs.
 - Renouncing is final. Traders who need fixed terms check `poolAdmin(poolId) == address(0)` or
   that the admin is a contract that cannot change them.

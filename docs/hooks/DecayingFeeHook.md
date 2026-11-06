@@ -50,7 +50,8 @@ duration)`:
 A `startTime` in the past is allowed; the schedule is then already partly decayed. A
 `startTime` in the future holds `startFee` until then. Calling again replaces the whole schedule.
 
-The pool admin is whoever called `PoolManager.initialize` for the pool (see `PoolAdminHook`).
+The pool admin is chosen by the concrete hook's `_initialPoolAdmin` (see `PoolAdminHook`); in
+`DecayingFeeExample` it is the allowed initializer that called `PoolManager.initialize`.
 Because the admin only exists once the pool is initialized, a launcher should initialize and call
 `setDecayingFee` **in the same transaction** (a factory or a multicall contract). Otherwise
 swaps between the two transactions trade at the pool's stored fee, which is 0 for a new dynamic-fee
@@ -89,16 +90,23 @@ address with `script/HookMiner.sol`; in tests use `HookTest._deployHook`.
 `contracts/src/hooks/examples/DecayingFeeExample.sol`:
 
 ```solidity
-contract DecayingFeeExample is DecayingFeeHook {
-    constructor(IPoolManager poolManager_) BaseHook(poolManager_) {}
+contract DecayingFeeExample is PoolInitGateHook, DecayingFeeHook, Ownable {
+    constructor(IPoolManager poolManager_, address owner_)
+        BaseHook(poolManager_)
+        Ownable(owner_)
+    {}
+    // setPoolInitializer (onlyOwner), _initialPoolAdmin returns sender, rule 6 re-declarations
 }
 ```
 
-Then:
+Only initializers the owner allows may create pools, so nobody can initialize your key first and
+take its admin role (see [BaseHook.md](BaseHook.md#front-running-the-initializer)). Then:
 
-1. Initialize a pool with `fee = LPFeeLibrary.DYNAMIC_FEE_FLAG` and `hooks = example`.
-2. In the same transaction, call `setDecayingFee(key, startFee, endFee, duration, 0)`.
-3. Optionally renounce with `transferPoolAdmin(key, address(0))` to fix the schedule for good.
+1. Owner: `setPoolInitializer(launcher, true)`.
+2. Launcher: initialize a pool with `fee = LPFeeLibrary.DYNAMIC_FEE_FLAG` and `hooks = example`;
+   it becomes the pool admin.
+3. In the same transaction, call `setDecayingFee(key, startFee, endFee, duration, 0)`.
+4. Optionally renounce with `transferPoolAdmin(key, address(0))` to fix the schedule for good.
 
 ## Composition
 
@@ -107,6 +115,11 @@ Inherit it with other features and re-declare the shared overrides (DESIGN.md ru
 ```solidity
 contract MyHook is DecayingFeeHook, OtherFeature {
     constructor(IPoolManager m) BaseHook(m) {}
+
+    // Required: who administers each pool. Return `sender` only behind an init gate
+    // (BaseHook.md#front-running-the-initializer).
+    function _initialPoolAdmin(address s, PoolKey calldata k) internal view override returns (address)
+    { /* your rule */ }
 
     function _hookPermissions(Hooks.Permissions memory p)
         internal pure override(DecayingFeeHook, OtherFeature) returns (Hooks.Permissions memory)
@@ -125,8 +138,8 @@ contract MyHook is DecayingFeeHook, OtherFeature {
 - LP fee overrides from several features merge to the **highest** fee, whatever the inheritance
   order. With another feature asking for 0.30%, the pool pays the decaying fee while it is above
   0.30% and 0.30% after that (tested in `test_composedFeeIsMaxOfFeatures`).
-- To change who may configure (for example "only the factory"), override `_isPoolAdmin` or
-  `_initialPoolAdmin` from `PoolAdminHook`. To allow longer windows, override
+- The concrete hook must implement `_initialPoolAdmin` from `PoolAdminHook` (it has no default).
+  To change who may configure later (for example "only the factory"), override `_isPoolAdmin`. To allow longer windows, override
   `_maxDecayDuration`.
 - `LinearDecay.value` can drive other schedules, such as a decaying hook fee in a `SwapFeeHook`
   override of `_swapFeeBps`.

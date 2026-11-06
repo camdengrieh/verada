@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {MockERC20} from "solmate/src/test/utils/mocks/MockERC20.sol";
 import {IHooks} from "v4-core/interfaces/IHooks.sol";
 import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
@@ -65,7 +66,7 @@ abstract contract SwapCounter is BaseHook {
 
 /// @dev Test-only concrete: the curve plus the stub feature in one hook (rule 6 re-declarations).
 contract CountedBondingCurve is BondingCurveHook, SwapCounter {
-    constructor(IPoolManager m) BondingCurveHook(m) {}
+    constructor(IPoolManager m, address o) BondingCurveHook(m, o) {}
 
     function _hookPermissions(Hooks.Permissions memory p)
         internal
@@ -78,7 +79,7 @@ contract CountedBondingCurve is BondingCurveHook, SwapCounter {
 
     function _beforeInitialize(address s, PoolKey calldata k, uint160 px)
         internal
-        override(BaseHook, PoolAdminHook)
+        override(BaseHook, BondingCurveHook)
         returns (bytes4)
     {
         return super._beforeInitialize(s, k, px);
@@ -137,8 +138,13 @@ contract BondingCurveHookTest is HookTest {
         token = currency0;
         quote = currency1;
         hook = BondingCurveHook(
-            _deployHook("BondingCurveHook.sol:BondingCurveHook", abi.encode(manager), CURVE_FLAGS)
+            _deployHook(
+                "BondingCurveHook.sol:BondingCurveHook",
+                abi.encode(manager, address(this)),
+                CURVE_FLAGS
+            )
         );
+        hook.setPoolInitializer(address(this), true);
         (poolKey, id) = initPool(currency0, currency1, IHooks(address(hook)), 3000, SQRT_PRICE_1_1);
         MockERC20(Currency.unwrap(token)).approve(address(hook), type(uint256).max);
     }
@@ -207,11 +213,45 @@ contract BondingCurveHookTest is HookTest {
     function test_deploy_wrongFlags_reverts() public {
         address at = _hookAddress(CURVE_FLAGS | Hooks.AFTER_SWAP_FLAG);
         vm.expectRevert();
-        deployCodeTo("BondingCurveHook.sol:BondingCurveHook", abi.encode(manager), at);
+        deployCodeTo(
+            "BondingCurveHook.sol:BondingCurveHook", abi.encode(manager, address(this)), at
+        );
     }
 
     function test_poolAdmin_isInitializer() public view {
         assertEq(hook.poolAdmin(id), address(this));
+    }
+
+    /// @dev Regression: an attacker who initializes a curve key first must not become its admin,
+    ///      so it can neither configure the curve nor withdraw its reserves later.
+    function test_initialize_frontRunnerRejected() public {
+        PoolKey memory k = PoolKey(currency0, currency1, 500, 10, IHooks(address(hook)));
+        PoolId kid = k.toId();
+        vm.prank(alice);
+        vm.expectRevert(_initGateRevert(address(hook), alice));
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(hook.poolAdmin(kid), address(0));
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(PoolAdminHook.NotPoolAdmin.selector, kid, alice));
+        hook.configureCurve(k, true, VIRTUAL_QUOTE, GRADUATION);
+
+        // The allowed initializer then creates the same key and is its admin.
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(hook.poolAdmin(kid), address(this));
+    }
+
+    function test_setPoolInitializer_onlyOwner() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        hook.setPoolInitializer(alice, true);
+
+        hook.setPoolInitializer(alice, true);
+        PoolKey memory k = PoolKey(currency0, currency1, 500, 10, IHooks(address(hook)));
+        vm.prank(alice);
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(hook.poolAdmin(k.toId()), alice);
+        assertEq(hook.owner(), address(this));
     }
 
     // ------------------------------------------------------------------ configure
@@ -520,8 +560,13 @@ contract BondingCurveHookTest is HookTest {
     function test_composition_withStubFeature() public {
         uint160 flags = CURVE_FLAGS | Hooks.AFTER_INITIALIZE_FLAG;
         CountedBondingCurve c = CountedBondingCurve(
-            _deployHook("BondingCurveHook.t.sol:CountedBondingCurve", abi.encode(manager), flags)
+            _deployHook(
+                "BondingCurveHook.t.sol:CountedBondingCurve",
+                abi.encode(manager, address(this)),
+                flags
+            )
         );
+        c.setPoolInitializer(address(this), true);
         assertEq(_flags(c.getHookPermissions()), flags, "merged permissions");
 
         (PoolKey memory ck, PoolId cid) =

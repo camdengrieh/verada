@@ -26,6 +26,16 @@ import {HookTest} from "../utils/HookTest.sol";
 ///      setter cap, the internal setter exposed without access control and a record of the
 ///      `_onSwapFeeTaken` call.
 contract SwapFeeHarness is SwapFeeHook {
+    /// @dev Test-only open admin: the initializer becomes the pool admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+
     mapping(address => bool) public exempt;
     bool public forceBps;
     uint16 public forcedBps;
@@ -171,6 +181,16 @@ abstract contract MockDecayingFee is PoolAdminHook {
 
 /// @dev Rule 6: both orders of the two features, each re-declaring the shared overrides.
 contract DecayThenSwapFee is MockDecayingFee, SwapFeeHook {
+    /// @dev Test-only open admin: the initializer becomes the pool admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+
     constructor(IPoolManager m) BaseHook(m) {}
 
     function _hookPermissions(Hooks.Permissions memory p)
@@ -210,6 +230,16 @@ contract DecayThenSwapFee is MockDecayingFee, SwapFeeHook {
 }
 
 contract SwapFeeThenDecay is SwapFeeHook, MockDecayingFee {
+    /// @dev Test-only open admin: the initializer becomes the pool admin.
+    function _initialPoolAdmin(address s, PoolKey calldata)
+        internal
+        pure
+        override
+        returns (address)
+    {
+        return s;
+    }
+
     constructor(IPoolManager m) BaseHook(m) {}
 
     function _hookPermissions(Hooks.Permissions memory p)
@@ -263,8 +293,11 @@ contract SwapFeeHookTest is HookTest {
         deployFreshManagerAndRouters();
         deployMintAndApprove2Currencies();
         hook = SwapFeeHook(
-            _deployHook("SwapFeeExample.sol:SwapFeeExample", abi.encode(manager), FLAGS)
+            _deployHook(
+                "SwapFeeExample.sol:SwapFeeExample", abi.encode(manager, address(this)), FLAGS
+            )
         );
+        SwapFeeExample(address(hook)).setPoolInitializer(address(this), true);
         (poolKey,) = initPoolAndAddLiquidity(
             currency0, currency1, IHooks(address(hook)), 3000, SQRT_PRICE_1_1
         );
@@ -387,10 +420,22 @@ contract SwapFeeHookTest is HookTest {
         assertFalse(p.beforeSwap || p.beforeSwapReturnDelta || p.afterInitialize);
     }
 
+    /// @dev Regression: a stranger who initializes a key first must not become its admin.
+    function test_initialize_strangerRejected() public {
+        address squatter = makeAddr("squatter");
+        PoolKey memory k = PoolKey(currency0, currency1, 500, 10, IHooks(address(hook)));
+        vm.prank(squatter);
+        vm.expectRevert(_initGateRevert(address(hook), squatter));
+        manager.initialize(k, SQRT_PRICE_1_1);
+        assertEq(hook.poolAdmin(k.toId()), address(0));
+    }
+
     function test_deployRejectsWrongAddress() public {
         address wrong = _hookAddress(Hooks.AFTER_SWAP_FLAG | Hooks.AFTER_SWAP_RETURNS_DELTA_FLAG);
         vm.expectRevert();
-        this.deployAt("SwapFeeExample.sol:SwapFeeExample", abi.encode(manager), wrong);
+        this.deployAt(
+            "SwapFeeExample.sol:SwapFeeExample", abi.encode(manager, address(this)), wrong
+        );
     }
 
     function deployAt(string memory what, bytes memory args, address where) external {
@@ -795,8 +840,11 @@ contract SwapFeeHookTest is HookTest {
 
     function test_nativePoolFeeInEth() public {
         SwapFeeHook h = SwapFeeHook(
-            _deployHook("SwapFeeExample.sol:SwapFeeExample", abi.encode(manager), FLAGS)
+            _deployHook(
+                "SwapFeeExample.sol:SwapFeeExample", abi.encode(manager, address(this)), FLAGS
+            )
         );
+        SwapFeeExample(address(h)).setPoolInitializer(address(this), true);
         vm.deal(address(this), 10 ether);
         (PoolKey memory key,) = initPoolAndAddLiquidityETH(
             CurrencyLibrary.ADDRESS_ZERO,

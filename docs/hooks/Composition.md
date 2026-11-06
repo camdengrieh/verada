@@ -43,6 +43,17 @@ contract LaunchpadHook is
         _setPoolInitializer(account, allowed);
     }
 
+    /// @dev The caller of `PoolManager.initialize` passed the init gate, so it is the admin.
+    function _initialPoolAdmin(address sender, PoolKey calldata)
+        internal
+        view
+        virtual
+        override
+        returns (address)
+    {
+        return sender;
+    }
+
     // rule 6 boilerplate below
 }
 ```
@@ -95,8 +106,13 @@ function setPoolInitializer(address account, bool allowed) external onlyOwner {
 ```
 
 Per-pool config (`setDecayingFee`, `setSwapFee`, `setLiquidityGate`, `setLiquidityProvider`,
-`transferPoolAdmin`) is already external on the features and guarded by `onlyPoolAdmin(key)`:
-the account that called `PoolManager.initialize` for that pool. Nothing to add.
+`transferPoolAdmin`) is already external on the features and guarded by `onlyPoolAdmin(key)`.
+Nothing to add there, but the concrete hook must say **who the pool admin is** by implementing
+`_initialPoolAdmin` (`PoolAdminHook` has no default). `LaunchpadHook` returns `sender`, the
+allowed initializer. Never return `sender` without an init gate or a fixed admin: a pool key is
+public, so anyone who initializes your key first would become its admin
+([BaseHook.md](BaseHook.md#front-running-the-initializer)). If you must, initialize and
+configure in one transaction from a contract so a front-run only makes it revert.
 
 ### 4. Re-declare every shared override (rule 6)
 
@@ -246,6 +262,9 @@ add or remove through it; allow only a contract whose own rules you trust.
 - [ ] Hook-level config is behind the access control you intend (`onlyOwner` here) and the owner
       is the intended account (a multisig for production). Plan who allows initializers.
 - [ ] Pools are created with a dynamic-fee key when `DecayingFeeHook` is present.
+- [ ] `_initialPoolAdmin` cannot hand the admin role to a stranger: initialization is gated
+      (`PoolInitGateHook`), the admin is fixed, or initialize and configure happen in one
+      transaction from a contract.
 - [ ] The pool admin of each pool is the account you expect (`poolAdmin(poolId)`), configures the
       pool, and renounces or transfers when done.
 - [ ] Hook fee recipients are set; tokens to `address(this)` are refused unless as claims.
@@ -271,7 +290,8 @@ call `super` when it narrows rather than replaces the default.
 
 ### Factory-only pool admin: `_isPoolAdmin`
 
-By default the pool admin is whoever initialized the pool and can be handed over. A protocol that
+In `LaunchpadHook` the pool admin is the allowed initializer that created the pool, and it can be
+handed over. A protocol that
 wants its factory to remain the sole configurator of every pool, even after an accidental
 transfer, overrides the rule:
 
@@ -294,8 +314,12 @@ contract MyLaunchHook is LaunchpadHook {
 }
 ```
 
-`_initialPoolAdmin(sender, key)` can likewise record a different admin (for example the token
-creator a factory passes in) when the pool is created. A per-token rule such as "one pool per
+`_initialPoolAdmin(sender, key)` chooses the admin recorded when the pool is created.
+`PoolAdminHook` gives it no default, so every concrete hook decides; `LaunchpadHook` returns
+`sender`, which is safe only because `PoolInitGateHook` has already refused every initializer the
+owner did not allow (without the gate, anyone could initialize a key first and become its admin;
+see [BaseHook.md](BaseHook.md#front-running-the-initializer)). Override it to record a different
+admin (for example the token creator a factory passes in). A per-token rule such as "one pool per
 token" or "quote must be on an allowed list" goes in `_validatePoolKey(key, sqrtPriceX96)`
 (reverting `InvalidPoolKey()`).
 
