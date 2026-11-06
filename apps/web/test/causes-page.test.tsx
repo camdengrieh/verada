@@ -19,7 +19,6 @@ vi.mock("@/components/providers", () => ({
   useDeps: () => ({ indexer: new IndexerClient(["https://idx.example"], { fetchImpl: fetchMock as unknown as typeof fetch }), chain: () => { throw new Error("unused"); } }),
   useAppConfig: () => ({ ensParentName: "varada.eth" }),
 }));
-vi.mock("@/components/nav", () => ({ useRel: () => (p: string) => `./${p}` }));
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
 const org = (i: number, over = {}) => ({ orgId: `0x${i}`, causeId: `0xca${i}`, ein: null, name: `Org ${i}`, country: "KEN", state: null, nteeCode: null, categories: ["hunger"], regions: ["africa"], ...over });
@@ -91,6 +90,15 @@ describe("CausesExplorer", () => {
     fireEvent.click(within(grid).getByRole("button", { name: /Hunger & famine/ }));
     await waitFor(() => expect(window.location.search).toBe("?category=hunger"));
     expect(within(grid).getByRole("button", { name: /Hunger & famine/ })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("links each category tile to its curator agent from the site root, not the page directory", async () => {
+    window.history.replaceState(null, "", "/bzz/abc123/causes/");
+    wrap(<CausesExplorer />);
+    const grid = await screen.findByRole("list", { name: "Cause categories" });
+    const link = within(grid).getAllByRole("link", { name: /Curator agent/ })[0]!;
+    expect(link.getAttribute("href")).toMatch(/^\/bzz\/abc123\/agent\/[a-z-]+\/$/);
+    expect(link.getAttribute("href")).not.toContain("/causes/");
   });
 
   it("says so when the catalogue is not loaded (503)", async () => {

@@ -19,7 +19,7 @@ import { categoryLabelOf, regionLabelOf } from "@/components/causes/org-card";
 
 import { CauseSearch } from "@/components/cause-search";
 import { CatalogResults, FocusPicker, useDebounced } from "@/components/catalog-browser";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText } from "@/components/use-tx";
 import { agentHref } from "@/components/agent-common";

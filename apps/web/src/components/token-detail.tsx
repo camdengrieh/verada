@@ -9,7 +9,7 @@ import { Button } from "@varada/ui/components/ui/button";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { TokenHeroSkeleton } from "@/components/token/token-hero";
 import { TokenView } from "@/components/token/token-view";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { loadTokenDetail, resolveTokenLabel } from "@/lib/data";
 import { readTokenAddress } from "@/lib/token-address";
 
