@@ -6,6 +6,7 @@ import { HeroesSection } from "./sections/heroes";
 import { ImpactSection } from "./sections/impact";
 import { MarketsSection } from "./sections/markets";
 import { MetricsSection } from "./sections/metrics";
+import { MobileSection } from "./sections/mobile";
 import { MotionSection } from "./sections/motion";
 import { NavigationSection } from "./sections/navigation";
 import { PrimitivesSection } from "./sections/primitives";
@@ -24,6 +25,7 @@ const TOC = [
   { id: "ens", label: "ENS names" },
   { id: "impact", label: "Raised for causes" },
   { id: "varada", label: "Varada components" },
+  { id: "mobile", label: "Mobile" },
 ];
 
 /**
@@ -68,6 +70,7 @@ export default function DesignPage() {
           <EnsSection />
           <ImpactSection />
           <VaradaSection />
+          <MobileSection />
         </main>
       </div>
       <footer className="border-t border-line px-4 py-6 text-sm text-muted-foreground sm:px-10">
