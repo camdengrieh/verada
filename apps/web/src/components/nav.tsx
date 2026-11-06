@@ -26,11 +26,23 @@ export function AppLink({ to, children }: { to: string; children: ReactNode }) {
   return <a href={rel(to)}>{children}</a>;
 }
 
+export const NAV_ITEMS = [
+  { to: "", label: "Tokens" },
+  { to: "launch/", label: "Launch" },
+  { to: "causes/", label: "Causes" },
+  { to: "governance/", label: "Governance" },
+  { to: "agent/", label: "Agents" },
+] as const;
+
+/** Plain relative-link nav; the app shell renders the styled header and tab bar from NAV_ITEMS. */
 export function Nav() {
   return (
     <nav>
-      <AppLink to="">Tokens</AppLink> <AppLink to="launch/">Launch</AppLink> <AppLink to="causes/">Causes</AppLink>{" "}
-      <AppLink to="governance/">Governance</AppLink> <AppLink to="agent/">Agents</AppLink>
+      {NAV_ITEMS.map((n) => (
+        <AppLink key={n.to} to={n.to}>
+          {n.label}
+        </AppLink>
+      ))}
     </nav>
   );
 }

@@ -9,6 +9,7 @@ export {
   ChevronRight,
   CircleAlert,
   Coins,
+  Compass,
   Copy,
   ExternalLink,
   Filter,

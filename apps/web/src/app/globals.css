@@ -1,0 +1,4 @@
+/* Varada UI (Direction A · Paper & Pigment) for the whole app. Tokens, base styles and utilities
+   come from the library; @source lets Tailwind see the classes used inside the library. */
+@import "@varada/ui/styles.css";
+@source "../../../../packages/ui/src";

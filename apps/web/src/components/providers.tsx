@@ -1,6 +1,7 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { LoadingScreen } from "@varada/ui/components/motion/loading-screen";
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useAccount, WagmiProvider } from "wagmi";
 import { loadRuntimeConfig, type AppConfig } from "@/lib/config";
@@ -87,15 +88,20 @@ export function Providers({ children }: { children: ReactNode }) {
     [base, prefs],
   );
 
-  if (!runtime || !wagmiConfig) return <p role="status">Loading configuration</p>;
+  const ready = Boolean(runtime && wagmiConfig);
   return (
-    <RuntimeContext.Provider value={runtime}>
-      <WagmiProvider config={wagmiConfig}>
-        <QueryClientProvider client={queryClient}>
-          <AccountIsolation rpc={runtime.rpc} />
-          {children}
-        </QueryClientProvider>
-      </WagmiProvider>
-    </RuntimeContext.Provider>
+    <>
+      <LoadingScreen ready={ready} minVisibleMs={400} />
+      {runtime && wagmiConfig && (
+        <RuntimeContext.Provider value={runtime}>
+          <WagmiProvider config={wagmiConfig}>
+            <QueryClientProvider client={queryClient}>
+              <AccountIsolation rpc={runtime.rpc} />
+              {children}
+            </QueryClientProvider>
+          </WagmiProvider>
+        </RuntimeContext.Provider>
+      )}
+    </>
   );
 }

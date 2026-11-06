@@ -1,4 +1,0 @@
-/* Varada UI (Direction A). Loaded only by the /design layout until pages move to the library;
-   then this import moves to the root layout. */
-@import "@varada/ui/styles.css";
-@source "../../../../../packages/ui/src";
