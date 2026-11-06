@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { encodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
 import { epochGovernorAbi, rotationGovernorAbi } from "../src/abis/index.js";
+import { BUCKET_COUNT, bucketId, categoryMaskOf, regionMaskOf } from "../src/catalog.js";
 import {
   ballotCall,
   createBallotReader,
@@ -175,6 +176,31 @@ describe("planRoundOpening", () => {
     expect(await plan({}, 6n)).toMatchObject({ type: "none", terminal: false });
     expect(await plan({ now: async () => 12_700n })).toMatchObject({ type: "none", reason: "round's vote window ended", terminal: false });
     expect(await plan({ pollWindow: async () => ({ snapshot: 0n, voteStart: 0n, voteEnd: 0n }) })).toMatchObject({ type: "none", terminal: true });
+  });
+
+  it("asks the entry source for the round's catalogue version and root, not the latest", async () => {
+    // A version published mid-week: the round keeps the epoch-start version 3 and its root.
+    const OLD_ROOT = `0x${"33".repeat(32)}` as Hex;
+    const b = bucketId(2, 0);
+    const sizes = Array.from({ length: BUCKET_COUNT }, (_, i) => (i === b ? 5 : 0));
+    const asked: ({ version: number; root: Hex } | undefined)[] = [];
+    const src = {
+      async entries(at: { bucket: number; index: number }[], catalog?: { version: number; root: Hex }) {
+        asked.push(catalog);
+        return { root: OLD_ROOT, items: at.map((e) => ({ ...e, orgId: `0x${(e.index + 1).toString(16).padStart(64, "0")}` as Hex, proof: [] })) };
+      },
+    };
+    const reader: RoundReader = {
+      ...base,
+      poolOf: async () => ({ version: 3, poolSize: 5n }),
+      focusOf: async () => ({ categoryMask: categoryMaskOf(["hunger"]), regionMask: regionMaskOf(["africa"]) }),
+      bucketSizes: async (v) => (v === 3 ? sizes : []),
+      catalogRoot: async (v) => (v === 3 ? OLD_ROOT : ORG),
+    };
+    const step = await planRoundOpening({ reader, entries: src }, T, 5n);
+    expect(step).toMatchObject({ type: "send", action: { kind: "prepareRound", target: 5n } });
+    expect(asked.length).toBeGreaterThan(0);
+    for (const c of asked) expect(c).toEqual({ version: 3, root: OLD_ROOT });
   });
 });
 

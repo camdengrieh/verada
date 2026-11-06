@@ -14,6 +14,7 @@ import {
 } from "@verada/sdk";
 import { type Context, Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import type { Hex } from "viem";
 import { z } from "zod";
 import { ActivityBus } from "./bus";
 import type { ApiConfig } from "./config";
@@ -207,6 +208,12 @@ const EntriesQuery = z.object({
       }
       return out;
     }),
+  /** Root of the catalogue version the ballot is built from; omitted: the main snapshot. */
+  root: z
+    .string()
+    .regex(/^0x[0-9a-fA-F]{64}$/)
+    .transform((s) => s.toLowerCase() as Hex)
+    .optional(),
 });
 
 const CausesQuery = z.object({
@@ -518,6 +525,13 @@ export function createApi(deps: ApiDeps): Hono {
   app.get("/api/catalog/entries", (c) => {
     const p = parse(c, EntriesQuery, c.req.query());
     if (!p.ok) return p.res;
+    if (p.data.root) {
+      // A ballot built from a given version (a rotation round keeps the epoch-start one all week).
+      const r = deps.catalog?.entriesOf(p.data.root, p.data.at);
+      if (r === null || !deps.catalog) return unavailable(c);
+      if (r === undefined) return send(c, { error: "catalog_root_unavailable" }, CACHE.none, 404);
+      return send(c, { root: p.data.root, items: r }, CACHE.catalog);
+    }
     const cat = deps.catalog?.catalog();
     const r = deps.catalog?.entries(p.data.at);
     if (!r || !cat) return unavailable(c);

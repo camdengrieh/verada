@@ -113,6 +113,36 @@ describe("catalogue API", () => {
     }
   });
 
+  it("serves entries of an older snapshot by root, alongside the main one", async () => {
+    const older = buildCatalog([org(1, { name: "Nairobi Feeding Program", nteeCode: "Z00", country: "KEN" }), org(2, { name: "City Food Bank" })]).catalog;
+    expect(older.meta.root).not.toBe(catalog.meta.root);
+    const [main, dirOld] = [await mkdtemp(join(tmpdir(), "catalog-")), await mkdtemp(join(tmpdir(), "catalog-old-"))];
+    await writeCatalog(main, catalog);
+    await writeCatalog(dirOld, older);
+    const store = createCatalogStore(`${main}, ${dirOld}`, { log: () => {} });
+    await store.ready;
+    expect(store.catalog()?.meta.root).toBe(catalog.meta.root);
+    const app = mkApp(store);
+    const pool = (await json(app, "/api/catalog/pool?categories=hunger&regions=north-america")).body;
+    const at = `${pool.buckets[0].bucket}:0`;
+
+    const fromOld = await json(app, `/api/catalog/entries?at=${at}&root=${older.meta.root}`);
+    expect(fromOld.status).toBe(200);
+    expect(fromOld.body.root).toBe(older.meta.root.toLowerCase());
+    expect(fromOld.body.items).toHaveLength(1);
+    expect(verifyEntryProof(older.meta.root, fromOld.body.items[0], fromOld.body.items[0].proof)).toBe(true);
+    const fromMain = await json(app, `/api/catalog/entries?at=${at}&root=${catalog.meta.root.toUpperCase().replace("0X", "0x")}`);
+    expect(fromMain.body.root).toBe(catalog.meta.root.toLowerCase());
+    // No root: the main snapshot, as before.
+    expect((await json(app, `/api/catalog/entries?at=${at}`)).body.root).toBe(catalog.meta.root);
+
+    const unknown = await json(app, `/api/catalog/entries?at=${at}&root=0x${"77".repeat(32)}`);
+    expect(unknown).toEqual({ status: 404, body: { error: "catalog_root_unavailable" } });
+    expect((await json(app, `/api/catalog/entries?at=${at}&root=0x12`)).status).toBe(400);
+    // Nothing loaded yet: 503, not "unknown root".
+    expect((await json(mkApp(catalogStoreOf(null)), `/api/catalog/entries?at=${at}&root=${older.meta.root}`)).status).toBe(503);
+  });
+
   it("loads from a directory in the background", async () => {
     const dir = await mkdtemp(join(tmpdir(), "catalog-"));
     await writeCatalog(dir, catalog);

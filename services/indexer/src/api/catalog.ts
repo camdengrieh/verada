@@ -45,6 +45,11 @@ export interface CatalogStore {
   org(id: string): { org: CatalogOrgResult; entries: CatalogEntryWithProof[] } | null | undefined;
   /** Entries by `(bucket, index)`, with proofs; unknown entries are omitted. */
   entries(at: { bucket: number; index: number }[]): CatalogEntryWithProof[] | null;
+  /**
+   * Entries of the loaded snapshot whose root is `root`: the main one or an extra (older) one.
+   * Null while nothing is loaded; undefined when no loaded snapshot has that root.
+   */
+  entriesOf(root: Hex, at: { bucket: number; index: number }[]): CatalogEntryWithProof[] | null | undefined;
   pool(categoryMask: bigint, regionMask: number): { poolSize: number; buckets: { bucket: number; category: string; region: string; size: number }[] } | null;
 }
 
@@ -67,7 +72,7 @@ const slugOfRegion = (bit: number) => REGIONS.find((r) => r.bit === bit)?.slug ?
 /** Builds the in-memory indexes over a loaded catalogue. Exported for tests. */
 export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
   if (!c) {
-    return { catalog: () => null, search: () => null, causes: () => null, org: () => null, entries: () => null, pool: () => null };
+    return { catalog: () => null, search: () => null, causes: () => null, org: () => null, entries: () => null, entriesOf: () => null, pool: () => null };
   }
   const names = c.orgs.map((o) => o.name.toLowerCase());
   const masks = c.orgs.map((o) => ({ c: BigInt(o.categoryMask), r: o.regionMask }));
@@ -81,6 +86,14 @@ export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
   const orgAt = new Map<string, Hex>();
   for (const [, [bucket, index, orgId]] of c.tree.entries()) orgAt.set(`${bucket}:${index}`, orgId);
   const withProof = (e: CatalogEntry): CatalogEntryWithProof => ({ ...e, proof: entryProof(c.tree, e) });
+  const entries = (at: { bucket: number; index: number }[]) => {
+    const out: CatalogEntryWithProof[] = [];
+    for (const { bucket, index } of at) {
+      const orgId = orgAt.get(`${bucket}:${index}`);
+      if (orgId) out.push(withProof({ bucket, index, orgId }));
+    }
+    return out;
+  };
 
   return {
     catalog: () => c,
@@ -112,14 +125,8 @@ export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
       const o = c.orgs[i]!;
       return { org: toResult(o), entries: o.entries.map((e) => withProof({ ...e, orgId: o.orgId })) };
     },
-    entries(at) {
-      const out: CatalogEntryWithProof[] = [];
-      for (const { bucket, index } of at) {
-        const orgId = orgAt.get(`${bucket}:${index}`);
-        if (orgId) out.push(withProof({ bucket, index, orgId }));
-      }
-      return out;
-    },
+    entries,
+    entriesOf: (root, at) => (root.toLowerCase() === c.meta.root.toLowerCase() ? entries(at) : undefined),
     pool(categoryMask, regionMask) {
       const buckets = focusBuckets(c.meta.bucketSizes, categoryMask, regionMask).map(({ bucket, size }) => {
         const { categoryBit, regionBit } = bucketParts(bucket);
@@ -133,29 +140,51 @@ export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
 /**
  * Loads the catalogue from `source` in the background and swaps it in when ready. Without a
  * source every call answers null (the routes return 503). Load errors are logged by name only.
+ *
+ * `source` may list several snapshots, comma-separated: the first is the catalogue every route
+ * serves; the others are only served by `entriesOf` (`/api/catalog/entries?root=`), for ballots
+ * still built from an older version. Rotation rounds keep the version in effect at the start of
+ * the weekly epoch containing their vote start until the next epoch, so after a version is
+ * published mid-week the previous snapshot is listed second until that epoch ends. Each snapshot
+ * is held in memory.
  */
 export function createCatalogStore(
   source: string | undefined,
   opts: { fetch?: typeof fetch; log?: (msg: string) => void } = {},
 ): CatalogStore & { ready: Promise<void> } {
-  let store = catalogStoreOf(null);
-  const ready = source
-    ? loadCatalog(source, opts.fetch)
+  const sources = (source ?? "")
+    .split(",")
+    .map((x) => x.trim())
+    .filter(Boolean);
+  const stores: CatalogStore[] = sources.map(() => catalogStoreOf(null));
+  const ready = Promise.all(
+    sources.map((src, i) =>
+      loadCatalog(src, opts.fetch)
         .then((c) => {
-          store = catalogStoreOf(c);
-          opts.log?.(`catalogue loaded: ${c.orgs.length} orgs, root ${c.meta.root}`);
+          stores[i] = catalogStoreOf(c);
+          opts.log?.(`catalogue ${i === 0 ? "loaded" : "loaded (extra)"}: ${c.orgs.length} orgs, root ${c.meta.root}`);
         })
         .catch((e: unknown) => {
-          opts.log?.(`catalogue load failed: ${e instanceof Error ? e.name : "unknown"}`);
-        })
-    : Promise.resolve();
+          opts.log?.(`catalogue ${i === 0 ? "" : "(extra) "}load failed: ${e instanceof Error ? e.name : "unknown"}`);
+        }),
+    ),
+  ).then(() => undefined);
+  const main = () => stores[0] ?? catalogStoreOf(null);
   return {
     ready,
-    catalog: () => store.catalog(),
-    search: (q) => store.search(q),
-    causes: (ids) => store.causes(ids),
-    org: (id) => store.org(id),
-    entries: (at) => store.entries(at),
-    pool: (cm, rm) => store.pool(cm, rm),
+    catalog: () => main().catalog(),
+    search: (q) => main().search(q),
+    causes: (ids) => main().causes(ids),
+    org: (id) => main().org(id),
+    entries: (at) => main().entries(at),
+    entriesOf(root, at) {
+      for (const st of stores) {
+        const r = st.entriesOf(root, at);
+        if (r) return r;
+      }
+      // Still loading: the routes answer 503 rather than "unknown root".
+      return main().catalog() ? undefined : null;
+    },
+    pool: (cm, rm) => main().pool(cm, rm),
   };
 }

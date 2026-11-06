@@ -61,7 +61,13 @@ export interface EntryWithProof {
 
 /** Catalogue entries with proofs, from the indexer's `/api/catalog/entries`. */
 export interface CatalogEntrySource {
-  entries(at: { bucket: number; index: number }[]): Promise<{ root: Hex; items: EntryWithProof[] }>;
+  /**
+   * `catalog` is the version the ballot is built from and its root on chain. It is not always the
+   * latest version: a rotation round keeps the version in effect at the start of the weekly epoch
+   * containing its vote start (`CatalogBallotBuilder.versionOf`), all week, so a source serving
+   * several catalogue snapshots answers from the one with this root (indexer `?root=`).
+   */
+  entries(at: { bucket: number; index: number }[], catalog?: { version: number; root: Hex }): Promise<{ root: Hex; items: EntryWithProof[] }>;
 }
 
 /**
@@ -264,7 +270,7 @@ async function planCatalogBallot<E>(
   const got = new Map<string, EntryWithProof>();
   const fetchEntries = async (list: { bucket: number; index: number }[]) => {
     for (let i = 0; i < list.length; i += BATCH) {
-      const res = await deps.entries.entries(list.slice(i, i + BATCH));
+      const res = await deps.entries.entries(list.slice(i, i + BATCH), { version, root });
       if (res.root.toLowerCase() !== root.toLowerCase()) {
         throw new CatalogMismatch(`indexer catalogue root ${res.root} is not version ${version}'s ${root}`);
       }

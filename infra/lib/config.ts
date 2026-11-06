@@ -249,11 +249,18 @@ const bool = (node: Node, key: string, dflt = false): boolean => {
   return v === "true";
 };
 
+/**
+ * One https URL, or a comma list: the catalogue served everywhere first, then older snapshots the
+ * indexer serves only by root (kept for the rest of a week after a mid-week catalogue version).
+ */
 function loadCatalogSource(node: Node): string | undefined {
   const v = str(node, "indexerCatalogSource");
   if (v === undefined) return undefined;
-  if (!/^https:\/\/[^\s]+$/.test(v)) throw new Error('"indexerCatalogSource" must be an https:// URL (the catalogue collection on a Swarm gateway)');
-  return v.replace(/\/+$/, "");
+  const parts = v.split(",").map((x) => x.trim());
+  if (parts.some((x) => !/^https:\/\/[^\s,]+$/.test(x))) {
+    throw new Error('"indexerCatalogSource" must be an https:// URL (the catalogue collection on a Swarm gateway), or a comma list of them');
+  }
+  return parts.map((x) => x.replace(/\/+$/, "")).join(",");
 }
 
 const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;

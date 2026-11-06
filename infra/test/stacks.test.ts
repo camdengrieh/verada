@@ -133,6 +133,14 @@ describe("https and cors configuration", () => {
     expect(withSrc).toContain("CATALOG_SOURCE");
     expect(withSrc).toContain(src + '"');
     expect(() => build({ ...HTTPS, indexerCatalogSource: "http://x.example" })).toThrow(/indexerCatalogSource/);
+    // After a mid-week catalogue version: the new snapshot, then the previous one.
+    const prev = "https://swarm.example.com/bzz/" + "cd".repeat(32);
+    const both = JSON.stringify(
+      Template.fromStack(build({ ...HTTPS, indexerCatalogSource: `${src}/, ${prev}` }).indexer).findResources("AWS::ECS::TaskDefinition"),
+    );
+    expect(both).toContain(`${src},${prev}"`);
+    expect(() => build({ ...HTTPS, indexerCatalogSource: `${src},http://x.example` })).toThrow(/indexerCatalogSource/);
+    expect(() => build({ ...HTTPS, indexerCatalogSource: `${src},` })).toThrow(/indexerCatalogSource/);
   });
   test("hosted zone: stack creates a DNS-validated certificate and the alias record", () => {
     const b = build({

@@ -1,3 +1,4 @@
+import type { Hex } from "viem";
 import type { KeeperConfig } from "../env.js";
 import type { IndexerClient } from "../indexer-client.js";
 import { createBallotPreparer, createRoundPreparer, type BallotReader, type RoundReader } from "../keeper/ballot.js";
@@ -117,7 +118,8 @@ export function createTallyKeeperJob(deps: TallyKeeperDeps): Job | null {
   if (!indexer) deps.log("warn", "tally keeper has no INDEXER_URL; ballots that need rotation draws are left to other keepers");
   const sources = indexer
     ? {
-        entries: { entries: (at: { bucket: number; index: number }[]) => indexer.catalogEntries(at) },
+        // The ballot's own version: rotation rounds keep the epoch-start one after a mid-week version.
+        entries: { entries: (at: { bucket: number; index: number }[], catalog?: { root: Hex }) => indexer.catalogEntries(at, catalog?.root) },
         picks: { picks: (label: string, epoch: bigint, region: string) => indexer.agentPicks(label, epoch, region) },
       }
     : undefined;
