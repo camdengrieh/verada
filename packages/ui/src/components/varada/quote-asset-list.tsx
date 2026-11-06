@@ -30,7 +30,9 @@ import {
   quoteMetaLine,
   type QuoteAsset,
 } from "./quote-asset";
+import { compareByDepth, fillStatus, type DepthOrdered } from "./quote-order";
 import { DefaultLink, type LinkComponent } from "./shared";
+import { Skeleton } from "@varada/ui/components/ui/skeleton";
 
 /**
  * The quote-asset explorer: Discover's pairs tab (link mode, each row opens the asset) and the launch
@@ -51,6 +53,10 @@ export interface QuoteListFilter {
 }
 
 const depthOf = (a: QuoteAsset) => (isDirectUsdc(a) ? Math.max(a.poolLiquidityUsd ?? 0, a.routeDepthUsd ?? 0) : (a.routeDepthUsd ?? 0));
+
+const routedOf = (a: QuoteAsset) => isDirectUsdc(a) || (!!a.route && a.route.length >= 2 && (a.routeDepthUsd ?? 0) > 0);
+/** The sort key the list orders by; `sortByDepth` in quote-order.ts is the pure function on it. */
+const depthKey = (a: QuoteAsset): DepthOrdered => ({ symbol: a.symbol, depthUsd: depthOf(a), routed: routedOf(a), poolDepthUsd: a.poolLiquidityUsd });
 
 function matches(a: QuoteAsset, q: string): boolean {
   const needle = q.trim().toLowerCase().replace(/^\$/, "");
@@ -77,7 +83,7 @@ export function filterQuoteAssets(assets: readonly QuoteAsset[], f: QuoteListFil
   const kind = f.kind ?? "all";
   const out = baseFilter(assets, f).filter((a) => kind === "all" || a.kind === kind);
   const bySymbol = (a: QuoteAsset, b: QuoteAsset) => a.symbol.localeCompare(b.symbol, "en");
-  const byDepth = (a: QuoteAsset, b: QuoteAsset) => depthOf(b) - depthOf(a) || (b.poolLiquidityUsd ?? 0) - (a.poolLiquidityUsd ?? 0) || bySymbol(a, b);
+  const byDepth = (a: QuoteAsset, b: QuoteAsset) => compareByDepth(depthKey(a), depthKey(b));
   switch (f.sort ?? "featured") {
     case "name":
       return out.sort(bySymbol);
@@ -130,6 +136,8 @@ interface ListCommon {
   hideControls?: boolean;
   /** Replaces the default empty state. */
   empty?: ReactNode;
+  /** The allowlist or its market data is still loading: rows show as skeletons (only while there are no assets yet). */
+  loading?: boolean;
   className?: string;
 }
 
@@ -204,6 +212,7 @@ export function QuoteAssetList(props: QuoteAssetListProps) {
     defaultLaunchableOnly = false,
     hideControls = false,
     empty,
+    loading = false,
     className,
   } = props;
   const id = useId();
@@ -299,12 +308,21 @@ export function QuoteAssetList(props: QuoteAssetListProps) {
         </div>
       )}
 
-      <p aria-live="polite" className="m-0 text-[13px] text-ink-muted">
-        {rows.length === assets.length ? `${rows.length} assets` : `${rows.length} of ${assets.length} assets`}
-        {launchableOnly ? ` with a route at least ${formatUsdCompact(minDepthUsd)} deep` : null}
-      </p>
+      {loading && assets.length === 0 ? null : (
+        <p aria-live="polite" className="m-0 text-[13px] text-ink-muted">
+          {rows.length === assets.length ? `${rows.length} assets` : `${rows.length} of ${assets.length} assets`}
+          {launchableOnly ? ` with a route at least ${formatUsdCompact(minDepthUsd)} deep` : null}
+        </p>
+      )}
 
-      {rows.length === 0 ? (
+      {loading && assets.length === 0 ? (
+        <div role="status" aria-busy="true" data-slot="quote-asset-list-loading" className="flex flex-col gap-2">
+          <span className="sr-only">Loading pairs and their depth</span>
+          {[0, 1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-[68px] rounded-2xl" />
+          ))}
+        </div>
+      ) : rows.length === 0 ? (
         <div className="rounded-2xl border border-line bg-card">{emptyState}</div>
       ) : (
         <ListBody {...props} rows={rows} session={session} minDepthUsd={minDepthUsd} thresholds={thresholds} coinSymbol={coinSymbol} recommendedSymbol={recommendedSymbol} titleId={`${id}-title`} idBase={id} select={select} />
@@ -349,6 +367,7 @@ function ListBody(props: QuoteAssetListProps & BodyProps) {
     const launch = launchability(a, minDepthUsd);
     const sessioned = followsUsSession(a.kind);
     const direct = isDirectUsdc(a);
+    const fill = fillStatus({ routed: routedOf(a), depthUsd: depthOf(a), direct }, minDepthUsd);
     return (
       <>
         <span role={role} className={cn("flex min-w-0 items-center gap-3", CELL.asset)}>
@@ -369,6 +388,16 @@ function ListBody(props: QuoteAssetListProps & BodyProps) {
                 <span className="font-semibold text-ink">{a.symbol}</span>
               )}
               {recommendedSymbol === a.symbol ? <span className="shrink-0 rounded-full bg-sage-tint px-2 py-px text-[11px] font-semibold text-sage-ink">Default</span> : null}
+              {fill === "cant-fill" ? (
+                <span data-fill="cant-fill" className="shrink-0 rounded-full bg-terracotta-tint px-2 py-px text-[11px] font-semibold text-terracotta-strong">
+                  Can&rsquo;t fill
+                </span>
+              ) : fill === "thin" ? (
+                <span data-fill="thin" className="shrink-0 rounded-full bg-ochre-tint px-2 py-px text-[11px] font-semibold text-ochre-ink">
+                  Thin
+                </span>
+              ) : null}
+              {sessioned && a.paused ? <span className="shrink-0 rounded-full bg-sand px-2 py-px text-[11px] font-semibold text-ink-soft">Paused</span> : null}
             </span>
             <span className="truncate text-[13px] text-ink-muted">
               {a.name} · {ASSET_KIND_SHORT[a.kind]}
