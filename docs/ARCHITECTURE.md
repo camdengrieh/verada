@@ -10,6 +10,10 @@ choices, on which Endaoment-listed nonprofit inside that focus receives the accu
 curator agents, one per cause (`<label>.agent.varada.eth`), publish weekly ranked picks that fill
 part of each ballot; see [Curator agents](#curator-agents).
 
+A token can instead launch in live mode: every swap's fee is converted to USDC inside the swap and
+donated to the cause active at that moment, and holders rotate that cause by private vote on a
+period the creator picks (hourly to weekly); see [Live donation mode](#live-donation-mode).
+
 ## Repository layout
 
 | Path | Contents |
@@ -32,7 +36,7 @@ part of each ballot; see [Curator agents](#curator-agents).
 | Contract | Responsibility |
 |---|---|
 | `VeradaToken` | ERC20 with permit, burn and vote checkpoints (ERC20Votes with a timestamp clock; holders are self-delegated on first receipt). Fixed supply minted to the factory. Immutable creator and metadata URI. |
-| `VeradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Verada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. |
+| `VeradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Verada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. `deployLiveToken` runs the same launch on the live hook and registers the token with the live vault and rotation governor instead. |
 | `QuoteRegistry` | Owner-managed allowlist of quote assets. |
 | `FeeConsolidator` | Swaps collected fees into USDC through Uniswap v4 before the split. |
 | `TokenProfileRegistry` | Per-token profile: ENS label, controller and editor roles, text records, logo reference, contenthash override, suppression flag, and the cause focus (category and region masks, written once at launch). Factory-written at launch; the takeover governor may replace a controller. |
@@ -48,6 +52,9 @@ part of each ballot; see [Curator agents](#curator-agents).
 | `DonationDistributor` | After finalization, sends the epoch's cause funds to the winning cause's payout address. |
 | `CuratorRegistry` | One curator agent per cause category: ERC-8004 identity (owned by the registry), signer, vault, active flag and ENS label. Accepts each agent's weekly curations for the next epoch. |
 | `AgentVault` | Per-agent USDC donation vault. Only the agent's signer can give, only to unblocked catalogue orgs in the agent's own buckets, within a per-epoch cap. No withdrawal. |
+| `VeradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to USDC inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
+| `LiveDonationVault` | USDC ledger of live tokens: splits every conversion 10% platform / 90% cause, keeps the cause share per `(token, cause)` and pushes it to the cause's Endaoment org once the token's donation threshold is reached, or on `flush`. |
+| `RotationGovernor` | Live tokens' rotation schedule (anchor-based, period chosen at launch, changeable by vote), the private rotation polls that pick the next cause, and the private yes/no polls that change the period. |
 | `IPrivateDonationAdapter` | Interface only; see Deferred work. |
 
 ### Fee model
@@ -68,6 +75,8 @@ FeeVault --90%--> causePool[token] --settle(epoch winner)--> DonationDistributor
 ```
 
 ### Weekly epoch governance (hidden choices)
+
+This is the weekly mode; the live counterpart is [Live rotation governance](#live-rotation-governance-hidden-choices).
 
 - Epochs last 7 days. Epoch 0 starts at a Thursday 00:00 UTC boundary at or before deployment.
 - A token's focus is fixed at launch: a set of catalogue categories and a set of regions. Its pool
@@ -186,6 +195,174 @@ and the agent vaults' `Donated`/`Given`.
   write throughput and lifetime-extension cost for a few hundred thousand entities.
 - **Preparing a ballot from the web app**: the keeper prepares ballots; the dApp only shows that a
   ballot is not prepared yet.
+
+## Live donation mode
+
+Live mode is the second way to launch a token. A weekly token accrues a cause pool that holders
+assign once a week; a live token donates as it trades. The creator picks the mode at launch
+(`VeradaFactory.deployLiveToken` instead of `deployToken`); it cannot be changed afterwards. The
+token, its ENS name, its profile, the locked single-sided liquidity, the takeover governor and the
+10% / 90% split are the same in both modes.
+
+| | Weekly mode | Live mode |
+|---|---|---|
+| Hook | `VeradaHook` | `VeradaLiveHook` |
+| Fee to USDC | Collected, then consolidated by `FeeConsolidator` | Converted inside the trader's swap |
+| Ledger | `FeeVault` cause pool per token | `LiveDonationVault` credit per `(token, cause)` |
+| Payout | Once per epoch, to the winner, through `DonationDistributor` | Continuously, to the cause active when the fee was earned |
+| Governor | `EpochGovernor`, 7-day epochs | `RotationGovernor`, 1 h / 12 h / 24 h / 72 h / 7 d rotations |
+| No result | Default cause | Current cause continues |
+| Revealed | Per-option tallies | Winning option only |
+
+### Launch and focus
+
+- `deployLiveToken(params, live)` takes the same `DeployParams` as `deployToken` plus
+  `LiveParams`: `initialCause` (an active `CauseRegistry` cause, which receives fees from launch),
+  `rotationPeriod` and `donationThreshold`.
+- Launch focus rule: both modes fix the token's cause focus (category and region masks) at launch,
+  forever, under the same catalogue check: the latest catalogue must give the focus at least two
+  entries, or the launch reverts (`IEpochGovernor.PoolTooSmall`). A weekly token is checked when the
+  epoch governor registers it; a live token never reaches that governor, so the factory runs the
+  same check itself.
+- Live mode is enabled once by the factory's deployer with `configureLiveMode(liveHook,
+  liveVault)`; until then `deployLiveToken` reverts `LiveModeNotConfigured`. The live hook must
+  differ from the weekly hook and report the live vault as its vault.
+
+### In-swap conversion and donation
+
+- The pool's LP fee is overridden to 0, so the locked position earns nothing. The hook takes the fee
+  itself: base fee (1% to 5%) plus the decaying launch surcharge, at most 85% of the swap's gross
+  quote flow, rounded up. It is taken from the input or the output depending on which side of the
+  swap is the quote currency; exact-input buys and exact-output sells must fill completely
+  (`PartialFillNotSupported`).
+- In `afterSwap` the hook mints itself ERC-6909 claims for the fee and, unless the router has a
+  currency synced mid-settlement, makes a gas-capped self call (`inlineConvert`, 650k gas) that has
+  the consolidator burn the claims and swap them to USDC along the quote's hookless registry route
+  (at most three hops, including the WETH unwrap), under the consolidator's tighter in-swap price
+  guards. The USDC is paid to `LiveDonationVault` and credited to the cause `RotationGovernor`
+  reports as active at that moment (`FeeTaken(token, causeId, rotation, ..., converted, failure)`).
+- Nothing about the conversion or the donation can revert a trader's swap. If the conversion fails
+  (a route pool pushed off its reference, a synced currency, out of gas), the frame is rolled back
+  and the claims stay with the hook as `heldRaw[token][cause]`, attributed to the cause active when
+  they were earned. Anyone can convert them later with `retryHeld(token, causeId, amount)`; the
+  credit still goes to that cause (`HeldRetried`, and `Credited` with rotation `type(uint64).max`).
+- The only reverts the hook adds to a swap are `InsufficientGas`, `PartialFillNotSupported` and
+  `SwapReentered`. `PoolManager.donate` to a live pool always reverts (`DonateNotAllowed`), since
+  the locked position could never collect it.
+
+### LiveDonationVault and the donation threshold
+
+- Every credit is split once: `floor(gross * 1000 / 10000)` to the platform, the rest to the
+  `(token, cause)` bucket. Credit never moves between causes; a cause rotated out keeps its bucket
+  until it is paid.
+- Each token has a donation threshold in USDC (6 decimals, at most 1,000,000 USDC), chosen at
+  launch. When a bucket's credit reaches it, the vault pushes the whole bucket to the cause's
+  Endaoment org inside the same swap, through a gas-capped self call (`executePush`, 220k gas). A
+  threshold of 0 pushes on every swap.
+- The UI should default to a nonzero threshold. A push inside a swap adds about 120k to 150k gas to
+  that trader's swap (Endaoment registry lookup, address and active checks, approve, donate). With
+  threshold 0 every trader pays it; with a threshold, only the swap that crosses it does, and the
+  donations are larger and fewer.
+- A push only goes to a deployed, Endaoment-active org. Any failure (undeployed or inactive org,
+  address mismatch, paused USDC, out of gas) keeps the credit, sets a one-hour backoff on that
+  bucket and emits `DonationDeferred`. `flush(token, causeId)` sends a bucket at any time, ignoring
+  the threshold and backoff, and deploys the org through the Endaoment factory if needed.
+- `withdrawPlatform` and `skim` are permissionless and only ever pay the platform treasury; `skim`
+  never touches owed USDC. The vault has no pause, redirect or rescue. Its invariant is
+  `usdc.balanceOf(vault) >= platformAccrued + totalPending`.
+
+```
+swap -> VeradaLiveHook (fee in quote) --inlineConvert--> FeeConsolidator (route to USDC) --> LiveDonationVault
+LiveDonationVault --10%--> platform treasury
+LiveDonationVault --90%--> pending[token][activeCause] --threshold reached or flush--> Endaoment org
+conversion failed -> heldRaw[token][activeCause] --retryHeld--> FeeConsolidator --> LiveDonationVault
+```
+
+### Live rotation governance (hidden choices)
+
+- Periods: one hour, 12 hours, 24 hours, 72 hours or one week (`RotationPeriod`). The creator picks
+  one at launch; holders can change it by vote (below).
+- Schedule: anchor-based (`RotationScheduleLib`). Rotation 0 starts at launch, and rotation `n`
+  covers `[startOf(n), startOf(n + 1))`, counted from the anchor rather than from
+  `block.timestamp / period`. A period change only ever applies from the next boundary, so past and
+  current rotations are never renumbered, the start of the current and next rotation never move,
+  and poll scopes and snapshots never collide across a change.
+- During rotation `c`, holders vote on the cause for rotation `c + 1`. The poll opens at
+  `startOf(c)` and closes `min(period / 4, 6 hours)` before rotation `c + 1` starts, leaving that
+  buffer to close, decrypt and finalize: 15 minutes for hourly rotations, 3 hours for 12-hour
+  rotations, 6 hours for longer ones. `openRound(token)` is permissionless.
+- Keep-current: a winner applies from the rotation after the one in which it is finalized, never
+  retroactively, so a result that arrives late applies one boundary later. With no ballots, fewer
+  than `minVoters` ballots (nothing is decrypted then), no option with weight, or no result yet,
+  the current cause simply keeps receiving fees. There is no fallback cause in live mode. A winner
+  that is no longer active in `CauseRegistry` is recorded as `InactiveWinner` and changes nothing.
+  Rounds are plurality with no quorum; ties go to the lowest option index.
+- Weights: a voter's weight is the lowest vote checkpoint it held over the whole hold window
+  `[snapshot - lookback, snapshot]`, with `snapshot = startOf(c) - 1` and `lookback = max(period,
+  1 day)`, in whole tokens. Tokens bought during the rotation carry nothing, and a position held
+  only around the public snapshot instant carries nothing either (no buy-vote-sell, flash loans or
+  one-block holds). Polls in a token's first day therefore carry no weight.
+- Privacy: polls run on the same pluggable `IVotingScheme` (`ZamaVotingScheme`), but are closed
+  with `requestOutcome`, which computes the argmax under FHE and makes only the winning option index
+  publicly decryptable. Per-option tallies are never decrypted: in small polls whose voters and
+  weights are public, they would give individual choices away.
+- Period changes: any holder whose hold weight meets the proposal threshold may
+  `proposePeriod(token, newPeriod)` (not in rotation 0). It opens a private yes/no poll; quorum is
+  a share of the circulating supply at the snapshot (total supply minus the pool manager's
+  balance). Only the outcome is revealed (`PeriodProposalTallied(id, passed)`; FOR wins with
+  `for > against` and `for >= quorum`), and a passed proposal executed within its window schedules
+  the new period from the next boundary. One proposal per token and period may be active, so
+  proposals for different periods run side by side. Defeats and expiries start a cooldown for that
+  period; an execution starts it for every period and supersedes older pending proposals. The
+  deploy defaults are a one-day vote, a three-day execution window, a seven-day cooldown, 10%
+  quorum and a 0.5% proposal threshold.
+
+### Live ballot candidates
+
+Live rotation polls draw their candidates the same way weekly epochs do, over the token's focus
+pool, so a live token's causes always come from its launch focus:
+
+1. **Pins.** The controller's catalogue pins inside the focus (with Merkle proofs) lead the ballot.
+2. **Curated picks.** The curator agents' current curations for the focus buckets fill part of the
+   remaining slots, with the same weighted quotas and pick checks as a weekly ballot.
+3. **Rotation.** Deterministic draws over the focus pool fill the rest: draw `k` is pool entry
+   `keccak256(abi.encode(token, target, version, k)) % poolSize`, skipping repeats and blocked orgs
+   under the same draw budget, so nobody can choose them.
+
+The options are frozen when the round is prepared, before its first ballot, so an option index
+always refers to a list fixed by an earlier transaction, and pins or curations changed later apply
+from the next round. Blocked orgs are skipped in every phase. A catalogue winner is materialized
+into `CauseRegistry` with the Endaoment factory's computed address before it receives fees. The
+round size is the governor's ballot size, further capped by the scheme.
+
+This replaces the first version's per-token shortlist of `CauseRegistry` causes set by the
+controller (with an owner-set default shortlist), which the contracts are moving away from.
+
+Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured`,
+`PoolRegistered`, `FeeTaken`, `HeldRetried`; the vault's `LiveTokenRegistered`, `Credited`,
+`Donated`, `DonationDeferred`, `PlatformWithdrawn`, `Skimmed`; the governor's `TokenRegistered`,
+`RoundOpened`, `RotationVoteCast`, `RoundClosed`, `RoundFinalized`, `CauseScheduled`,
+`PeriodProposed`, `PeriodVoteCast`, `PeriodProposalClosed`, `PeriodProposalTallied`,
+`PeriodProposalExpired`, `PeriodChangeScheduled`, `PeriodProposalCanceled`.
+
+### Live mode operator notes
+
+- **Swap gas.** A swap that owes a fee needs `LIVE_GAS_REQUIRED` (770,317) gas left at
+  `afterSwap`, or it reverts `InsufficientGas` rather than silently skipping the donation. In
+  practice that is a gas limit of about 0.86M to 0.89M per swap, of which the swap uses about 0.29M
+  (no push) to 0.40M (push in the swap); the rest is refunded. The requirement does not depend on
+  state, so `eth_estimateGas` finds it.
+- **Aggregators and routers.** An integrator that sizes the gas limit from a simulation of the
+  swap's actual usage, or forwards a fixed per-hop budget, can leave too little at `afterSwap` and
+  hit `InsufficientGas`. Live pools need the full limit above; tell integrators so.
+- **Hourly periods.** The poll closes 15 minutes before the next rotation. In that window the
+  keeper must call `closeRound`, have the outcome decrypted through Zama's relayer and call
+  `finalizeRound`; anything later applies one rotation late. Watch hourly tokens closely.
+- **First fee of a new WETH-quoted pool.** It may be held rather than converted (`FeeTaken` with
+  `converted = false`). It stays attributed to the cause active when it was earned; call
+  `retryHeld` (or let the keeper do it) to convert it. Watch `totalHeld` and `heldRaw`.
+- **Deferred pushes.** `DonationDeferred` buckets retry inside a swap after the one-hour backoff;
+  `flush` pays them now and deploys an undeployed org.
 
 ## Token profiles and ENS subnames
 
