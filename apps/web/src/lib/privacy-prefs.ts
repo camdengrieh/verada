@@ -4,16 +4,18 @@ const KEY = "varada:privacy";
 export interface PrivacyPrefs {
   /** Also send indexer (Varada API) requests through the anon network, so Varada never sees your IP. */
   routeIndexer: boolean;
+  /** The first-visit privacy explainer has been shown (and dismissed) in this browser. */
+  introSeen: boolean;
 }
 
-const DEFAULTS: PrivacyPrefs = { routeIndexer: false };
+const DEFAULTS: PrivacyPrefs = { routeIndexer: false, introSeen: false };
 
 export function readPrivacyPrefs(storage: Pick<Storage, "getItem"> | undefined = safeStorage()): PrivacyPrefs {
   try {
     const raw = storage?.getItem(KEY);
     if (!raw) return { ...DEFAULTS };
     const v = JSON.parse(raw) as Partial<PrivacyPrefs>;
-    return { routeIndexer: v.routeIndexer === true };
+    return { routeIndexer: v.routeIndexer === true, introSeen: v.introSeen === true };
   } catch {
     return { ...DEFAULTS };
   }
