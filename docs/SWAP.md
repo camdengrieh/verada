@@ -51,12 +51,24 @@ has three steps (`routing.ts`, `quote.ts`; `quoteTrade` in `engine.ts` runs them
 2. `enumerateRoutes`: all simple paths of at most three pool hops. Native ETH (address zero, the v4
    currency) and WETH are different nodes joined by a free wrap / unwrap edge. Per pair the two
    deepest pools are kept. Shortest first, at most 10 candidates.
-3. `pickBestQuote`: every candidate is quoted through the V4Quoter, four at a time (`quoteExactInputSingle`
-   or `quoteExactInput`, exact-out forms for exact-out); highest output (exact-in) or lowest input
-   (exact-out) wins. A route with a wrap in the middle is quoted segment by segment.
+3. `rankRoutes` then `pickBestQuote`: every quoter call simulates a whole route, which is slow over a private
+   RPC, so each candidate is first estimated without any RPC (constant product on the pool's virtual
+   reserves after fees, `estimateRoute`) and the best four are quoted through the V4Quoter
+   (`quoteExactInputSingle` or `quoteExactInput`, exact-out forms for exact-out), four at a time. Highest
+   output (exact-in) or lowest input (exact-out) wins. If none of the four can fill the size (a thin pool
+   runs out of liquidity inside its tick range, which the estimate cannot see) the next four are tried. A
+   route with a wrap in the middle is quoted segment by segment. The estimate can rank a slightly worse
+   route first, so the result is the best of the routes quoted, not a proof of the global optimum (on the
+   fork the best of ten and the best of four differed by 0.008% once).
 
-Hubs: ETH, WETH, USDC, USDT, DAI, WBTC (`DEFAULT_HUBS`); `extraHubs` adds nodes, for instance
-allowlisted Ondo tokens that should be allowed as intermediate hops.
+Hubs: ETH, WETH, USDC, USDT, DAI, WBTC (`DEFAULT_HUBS`). `extraHubs` adds nodes; the app passes the quote
+registry's active allowlisted assets (`loadRegistryAssets`, at most 12), which are also offered as pay
+assets. Extra nodes and the endpoints are paired with the hubs only, not with each other, so the reads grow
+linearly with them.
+
+A trade whose price impact (net of fees) reaches 30% is blocked with the reason `price-impact`
+(`maxImpactPct`): the real AMZNon / USDC pool holds roughly $10k, and one ETH routed through it shows a
+99.9% impact.
 
 ## Execution
 
@@ -90,6 +102,16 @@ token on the route and `checkIsCompliant(account)` on the shared compliance view
 Reasons: `paused`, `blocked`, `sanctioned` (blockers) and `market-closed` (a warning: the app's
 New York market calendar says closed, so prices can be stale; `blockWhenClosed` makes it a blocker).
 USDon has no pause manager and is treated as not paused.
+
+A pause blocks the trade when the paused token is the one the user pays or receives, or the pool's quote
+asset. An Ondo token that is only an intermediate hop is a warning: the pool manager nets its flow to zero
+inside the swap, so it is never transferred (checked on the fork: `AMZNon.transfer` reverts while paused, the
+ETH-paid swap through it still succeeds). The user's blocklist status is read only when the user's own
+transfer involves an Ondo token.
+
+Errors: the quoter, router and pool manager wrap the real error (`UnexpectedRevertBytes`,
+`ExecutionFailed`, `WrappedError`); `mapSwapError` decodes the chain of wrappers and names the innermost
+known error (liquidity, slippage, deadline, a hook's own error with its selector, `UserBlocked`).
 
 ## Privacy
 
