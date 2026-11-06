@@ -13,7 +13,8 @@ Images ship only as optimised copies under `assets/`, within a size budget (see 
 | `/launch/` | Launch wizard (identity, giving mode, pair, cause focus, fees, review): logo and metadata uploads, ENS label, `VaradaFactory.deployToken` or `deployLiveToken` |
 | `/token/?address=0x...` | Single client-side token page; the address is read from the query (or `#0x...` hash), or resolved from `?label=` |
 | `/causes/` | Cause categories with catalogue counts and totals, the most-given-to leaderboard (`GET /api/causes/leaderboard`), the catalogue browser (category x region x name, offset paging, a filter sheet on phones) and Endaoment search (`GET /api/causes/search`). Filters live in `?category=&region=&q=` |
-| `/governance/` | Current epoch (chain read); ballots are cast from each token's page |
+| `/governance/` | The platform vote: epoch clock, every token's ballot and status, the viewer's weight (account-scoped chain reads), the selected token's ballot with the encrypted vote flow (dialog, bottom sheet on phones), curator picks, takeover polls, results and past winners (`?token=0x...` links a token) |
+| `/agent/`, `/agent/<label>/`, `/agent/<label>/<region>/` | The 20 curator agents (`<cause>.agent.<parent>`): vault balances, weekly report with Merkle proofs, donate dialog, credited donors and gifts, ENS identity |
 | `/404.html` | Swarm error document (self-contained, no external assets); `/<label>` redirects to `token/?label=<label>` |
 
 ## Static export and Swarm
@@ -266,3 +267,12 @@ the UI shows a lettered badge instead.
 `verify:export` (or `node scripts/verify-export.mjs --build`) checks `out/`: binaries only as budgeted
 assets under `assets/` (see Size budget), `index.html` for every route, `404.html` and `config.json` present, no root-absolute `/_next/`
 references left, runtime public path patched.
+
+## Governance and agent pages
+
+- `components/governance-panel.tsx` composes `components/governance/*`. Loaders and mappers (epoch clock and status, ballot options for `BallotList`, tally results, history) are pure and live in `src/lib/governance.ts`.
+- The viewer's weight and `hasVoted` are read through `createAccountClient` only (`useStanding`); the history comes from the public `/api/activity?kind=epoch|donation` feeds, so no address reaches the indexer.
+- Every wallet write goes through `useTx`, which raises a pending/confirmed/reverted `txToast`; `src/lib/tx-errors.ts` turns rejections, wrong networks and known reverts into plain reasons.
+- Links inside page components are built with `useSiteRel` (from the real site base); agent pages take `root` from the route.
+- Agent vault balances are public chain reads (`balanceOf` on USDC); the donate flow reads the vault from `CuratorRegistry` and runs approve then donate in a dialog. The web app never calls the `/x402` routes.
+- The privacy menu opens a full "what goes where" dialog (`src/lib/privacy-routes.ts`) and shows a first-visit explainer, remembered in `privacy-prefs` (`introSeen`).
