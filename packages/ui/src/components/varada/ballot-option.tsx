@@ -17,7 +17,8 @@ export interface BallotOptionData {
   org: string;
   category: CauseName;
   region: string;
-  source: BallotSource;
+  /** Omitted when the data source does not say (the option then shows no source tag). */
+  source?: BallotSource;
   /** Optional curator score ("94/100"). */
   score?: string;
 }
@@ -50,7 +51,7 @@ export function BallotOption({ option: o, className, ...props }: BallotOptionPro
     <RadioGroup.Item
       value={o.id}
       data-slot="ballot-option"
-      aria-label={`${o.org}, ${CAUSE_SHORT_LABELS[o.category]}, ${o.region}, ${SOURCE_LABELS[o.source]}: ${SOURCE_HINT[o.source]}`}
+      aria-label={`${o.org}, ${CAUSE_SHORT_LABELS[o.category]}, ${o.region}${o.source ? `, ${SOURCE_LABELS[o.source]}: ${SOURCE_HINT[o.source]}` : ""}`}
       className={cn(
         "group @container flex min-h-16 w-full items-center gap-3 rounded-2xl border-2 border-line bg-paper-card px-3 py-2.5 text-left text-ink transition-colors",
         "hover:border-line-strong data-[state=checked]:border-sage data-[state=checked]:bg-sage-tint/60",
@@ -67,11 +68,15 @@ export function BallotOption({ option: o, className, ...props }: BallotOptionPro
           {o.score ? <span className="num"> · {o.score}</span> : null}
         </span>
         {/* Below 288px the source tag moves under the name instead of taking width beside it. */}
-        <span aria-hidden="true" className="hidden text-[11px] font-bold text-ink-soft @max-2xs:block">
-          {SOURCE_LABELS[o.source]}
-        </span>
+        {o.source ? (
+          <span aria-hidden="true" className="hidden text-[11px] font-bold text-ink-soft @max-2xs:block">
+            {SOURCE_LABELS[o.source]}
+          </span>
+        ) : null}
       </span>
-      <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold @max-2xs:hidden", SOURCE_TAG[o.source])}>{SOURCE_LABELS[o.source]}</span>
+      {o.source ? (
+        <span className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-bold @max-2xs:hidden", SOURCE_TAG[o.source])}>{SOURCE_LABELS[o.source]}</span>
+      ) : null}
       <span
         aria-hidden="true"
         className="grid size-6 shrink-0 place-items-center rounded-full border-2 border-line-strong group-data-[state=checked]:border-sage group-data-[state=checked]:bg-sage"

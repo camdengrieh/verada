@@ -31,7 +31,7 @@ const GROUPS: BallotGroup[] = ["all", "pinned", "curated", "rotation"];
 
 function matches(o: BallotOptionData, q: string): boolean {
   if (!q) return true;
-  const hay = `${o.org} ${CAUSE_LABELS[o.category]} ${CAUSE_SHORT_LABELS[o.category]} ${o.region} ${SOURCE_LABELS[o.source]}`.toLowerCase();
+  const hay = `${o.org} ${CAUSE_LABELS[o.category]} ${CAUSE_SHORT_LABELS[o.category]} ${o.region} ${o.source ? SOURCE_LABELS[o.source] : ""}`.toLowerCase();
   return q
     .toLowerCase()
     .split(/\s+/)
@@ -67,7 +67,7 @@ export function BallotList({
 
   const counts = useMemo(() => {
     const c: Record<BallotGroup, number> = { all: options.length, pinned: 0, curated: 0, rotation: 0 };
-    for (const o of options) c[o.source] += 1;
+    for (const o of options) if (o.source) c[o.source] += 1;
     return c;
   }, [options]);
 
