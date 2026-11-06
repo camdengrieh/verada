@@ -373,29 +373,77 @@ conversion failed -> heldRaw[token][activeCause] --retryHeld--> FeeConsolidator 
 
 ### Live ballot candidates
 
-Live rotation polls draw their candidates the same way weekly epochs do, over the token's focus
-pool, so a live token's causes always come from its launch focus:
+Live rotation polls build their candidates exactly as weekly ballots do, over the token's focus
+pool, so a live token's causes always come from its launch focus. The ballot logic is
+`CatalogBallotLib`, shared by `EpochGovernor` and `RotationGovernor`; the rotation governor runs it
+through `CatalogBallotBuilder`, a view contract it deploys in its constructor (which keeps the
+governor under the contract size limit). A round's options come in three phases:
 
-1. **Pins.** The controller's catalogue pins inside the focus (with Merkle proofs) lead the ballot.
-2. **Curated picks.** The curator agents' current curations for the focus buckets fill part of the
-   remaining slots, with the same weighted quotas and pick checks as a weekly ballot.
+1. **Pins.** The controller's catalogue pins inside the focus (`setShortlist(token, pins)`, up to
+   `PINNED_MAX` with Merkle proofs, checked by `CatalogBallotBuilder.validatePins`) lead the
+   ballot.
+2. **Curated picks.** The curator agents' curations for the focus buckets fill part of the
+   remaining slots, with the same weighted quotas (`CatalogBallotLib.quotas`) and pick checks as a
+   weekly ballot. The curations are those of the weekly epoch containing the round's vote start
+   (`curationEpochOf`), on the curator registry's weekly clock, which `setCuratorRegistry` copies
+   once into the builder (`setCurators`).
 3. **Rotation.** Deterministic draws over the focus pool fill the rest: draw `k` is pool entry
-   `keccak256(abi.encode(token, target, version, k)) % poolSize`, skipping repeats and blocked orgs
-   under the same draw budget, so nobody can choose them.
+   `keccak256(abi.encode(token, target, version, k)) % poolSize` (`drawIndex`), skipping repeats
+   and blocked orgs under the same draw budget (`DRAW_FACTOR`), so nobody can choose them.
 
-The options are frozen when the round is prepared, before its first ballot, so an option index
-always refers to a list fixed by an earlier transaction, and pins or curations changed later apply
-from the next round. Blocked orgs are skipped in every phase. A catalogue winner is materialized
-into `CauseRegistry` with the Endaoment factory's computed address before it receives fees. The
-round size is the governor's ballot size, further capped by the scheme.
+Preparing a round (all permissionless, only for the next rotation's round, `target = current + 1`,
+and only before its vote end):
 
-This replaces the first version's per-token shortlist of `CauseRegistry` causes set by the
-controller (with an owner-set default shortlist), which the contracts are moving away from.
+- `openRound(token)` prepares it with no draws: enough when the pins fill the ballot or the pool is
+  empty, as the weekly `openEpoch`.
+- `prepareRound(token, target, draws)` supplies the rotation draws and their proofs.
+- `prepareCuratedRound(token, target, curated, draws)` also supplies the curated draws, when the
+  curated phase takes slots.
+
+The builder requires exactly the curated and rotation draws the ballot consumes
+(`TooManyCuratedDraws`, `TooManyDraws`, `IncompleteCuratedBallot` and `InvalidCuratedDraw`, with
+`IEpochGovernor`'s error signatures, bubbled unchanged). A round with fewer than `MIN_OPTIONS` (2)
+options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens at once
+(`BallotPrepared`, `CuratedPicksUsed` when picks were drawn, `RoundOpened`).
+
+- **Freezing.** The options are frozen when the round is prepared, before its first ballot, so an
+  option index always refers to a list fixed by an earlier transaction, and pins or curations
+  changed later apply from the next round. Blocked orgs are skipped in every phase. Only the
+  winner is materialized into `CauseRegistry`, with the Endaoment factory's computed address,
+  before it receives fees.
+- **Catalogue version.** A round uses the catalogue version that the weekly ballots of its
+  containing epoch use: the version in effect at that epoch's start
+  (`CatalogBallotBuilder.versionOf(voteStart)`; `poolOf` shows the round's version and pool size).
+  Curations carry a version no newer than that one and count only under it, so a version published
+  mid-week does not drop the week's curated phase from later rounds, and a round matches that
+  week's weekly ballot. Without a curator clock, or when no version was in effect at the epoch's
+  start, the version at the vote start is used.
+- **Curation grace.** A round whose buckets have usable curations needs its curated draws only
+  until `CatalogBallotBuilder.curationGraceEnd(voteStart, voteEnd)`: `min(6 hours, vote window /
+  3)` from the round's own vote start, not the epoch's. The vote window is the period less its
+  close buffer `min(6 hours, period / 4)`, so the grace equals the close buffer: 15 minutes for
+  hourly rotations, 3 hours for 12-hour rotations, 6 hours for longer ones. Grace and close buffer
+  never take more than half the period. During the grace, `openRound` and `prepareRound` revert
+  `IncompleteCuratedBallot`; after it they skip the curated phase and rotation fills the ballot.
+  Curated draws that are supplied always apply, and an empty `prepareCuratedRound` after the grace
+  builds as `prepareRound`. Picks committed but never published therefore hold a round for its
+  grace, not for the week. Unlike the weekly epoch, there is no skip request: the grace is fixed by
+  the schedule.
+- **Round size.** `maxOptions()` is `min(RotationGovernor.MAX_OPTIONS, scheme.MAX_OPTIONS())`, so
+  at most 10 options against the weekly ballot's 32. The pin limit is the same, but with fewer free
+  slots the curated quotas can split differently from the weekly ballot of the same epoch, so a
+  round is not simply a prefix of it. The cap comes from the outcome-only close:
+  `ZamaVotingScheme.requestOutcome` runs an encrypted comparison and two selects per option in one
+  transaction, which is safe up to 17 options under the mainnet coprocessor's HCU depth limit of
+  5M per transaction; 10 leaves a margin.
+- **No rotation keeper yet.** The platform keeper prepares weekly ballots only. No service prepares
+  rotation rounds, and none retries a round at `curationGraceEnd` once its picks turn out to be
+  missing; until one exists, rounds are prepared by whoever calls the functions above.
 
 Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured`,
 `PoolRegistered`, `FeeTaken`, `HeldRetried`; the vault's `LiveTokenRegistered`, `Credited`,
 `Donated`, `DonationDeferred`, `PlatformWithdrawn`, `Skimmed`; the governor's `TokenRegistered`,
-`RoundOpened`, `RotationVoteCast`, `RoundClosed`, `RoundFinalized`, `CauseScheduled`,
+`BallotPrepared`, `CuratedPicksUsed`, `RoundOpened`, `RotationVoteCast`, `RoundClosed`, `RoundFinalized`, `CauseScheduled`,
 `PeriodProposed`, `PeriodVoteCast`, `PeriodProposalClosed`, `PeriodProposalTallied`,
 `PeriodProposalExpired`, `PeriodChangeScheduled`, `PeriodProposalCanceled`.
 
@@ -409,9 +457,10 @@ Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured
 - **Aggregators and routers.** An integrator that sizes the gas limit from a simulation of the
   swap's actual usage, or forwards a fixed per-hop budget, can leave too little at `afterSwap` and
   hit `InsufficientGas`. Live pools need the full limit above; tell integrators so.
-- **Hourly periods.** The poll closes 15 minutes before the next rotation. In that window the
-  keeper must call `closeRound`, have the outcome decrypted through Zama's relayer and call
-  `finalizeRound`; anything later applies one rotation late. Watch hourly tokens closely.
+- **Hourly periods.** The poll closes 15 minutes before the next rotation. In that window someone
+  must call `closeRound`, have the outcome decrypted through Zama's relayer and call
+  `finalizeRound` (there is no rotation keeper yet); anything later applies one rotation late.
+  Watch hourly tokens closely.
 - **First fee of a new WETH-quoted pool.** It may be held rather than converted (`FeeTaken` with
   `converted = false`). It stays attributed to the cause active when it was earned; call
   `retryHeld` (or let the keeper do it) to convert it. Watch `totalHeld` and `heldRaw`.
