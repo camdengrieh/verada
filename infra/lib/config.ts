@@ -144,6 +144,8 @@ export const PUBLISHER_CHAIN_ENV = [
   "EPOCH_GOVERNOR_ADDRESS",
   "VOTING_SCHEME_ADDRESS",
   "TAKEOVER_GOVERNOR_ADDRESS",
+  /** Live mode: the keeper drives rotation rounds only when it is set. */
+  "ROTATION_GOVERNOR_ADDRESS",
   "FACTORY_ADDRESS",
   "START_BLOCK",
   "CURATOR_REGISTRY_ADDRESS",
@@ -228,6 +230,8 @@ export const INDEXER_OPTIONAL_CHAIN_KEYS = {
   votingSchemeAddress: "VOTING_SCHEME_ADDRESS",
   causeCatalogAddress: "CAUSE_CATALOG_ADDRESS",
   curatorRegistryAddress: "CURATOR_REGISTRY_ADDRESS",
+  /** Live mode's `RotationGovernor` (the zero address: live mode not deployed). */
+  rotationGovernorAddress: "ROTATION_GOVERNOR_ADDRESS",
 } as const;
 
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -245,11 +249,18 @@ const bool = (node: Node, key: string, dflt = false): boolean => {
   return v === "true";
 };
 
+/**
+ * One https URL, or a comma list: the catalogue served everywhere first, then older snapshots the
+ * indexer serves only by root (kept for the rest of a week after a mid-week catalogue version).
+ */
 function loadCatalogSource(node: Node): string | undefined {
   const v = str(node, "indexerCatalogSource");
   if (v === undefined) return undefined;
-  if (!/^https:\/\/[^\s]+$/.test(v)) throw new Error('"indexerCatalogSource" must be an https:// URL (the catalogue collection on a Swarm gateway)');
-  return v.replace(/\/+$/, "");
+  const parts = v.split(",").map((x) => x.trim());
+  if (parts.some((x) => !/^https:\/\/[^\s,]+$/.test(x))) {
+    throw new Error('"indexerCatalogSource" must be an https:// URL (the catalogue collection on a Swarm gateway), or a comma list of them');
+  }
+  return parts.map((x) => x.replace(/\/+$/, "")).join(",");
 }
 
 const HOSTNAME = /^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;

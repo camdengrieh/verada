@@ -47,7 +47,10 @@ describe("readConfig", () => {
   });
 
   it("reads the keeper settings with defaults", () => {
-    expect(readConfig({}).keeper).toMatchObject({ enabled: false, dryRun: false, rpcUrls: [], maxTxPerRun: 10, lookbackEpochs: 4, idleEpochs: 2, maxIndexerLagSeconds: 600, intervalMs: 300_000 });
+    expect(readConfig({}).keeper).toMatchObject({ enabled: false, dryRun: false, rpcUrls: [], maxTxPerRun: 10, lookbackEpochs: 4, lookbackRounds: 24, idleEpochs: 2, maxIndexerLagSeconds: 600, intervalMs: 300_000 });
+    // Live mode is off unless its governor is configured.
+    expect(readConfig({}).keeper.rotationGovernor).toBeUndefined();
+    expect(readConfig({ ROTATION_GOVERNOR_ADDRESS: "" }).keeper.rotationGovernor).toBeUndefined();
     const k = readConfig({
       KEEPER_ENABLED: "true",
       KEEPER_DRY_RUN: "1",
@@ -60,6 +63,8 @@ describe("readConfig", () => {
       FACTORY_DEPLOY_BLOCK: "21000000",
       KEEPER_MAX_TX_PER_RUN: "3",
       KEEPER_LOOKBACK_EPOCHS: "2",
+      KEEPER_LOOKBACK_ROUNDS: "48",
+      ROTATION_GOVERNOR_ADDRESS: "0x00000000000000000000000000000000000000E3",
       KEEPER_IDLE_EPOCHS: "0",
       ZAMA_RELAYER_URL: "https://relayer.example/",
       ZAMA_RELAYER_API_KEY: "zk",
@@ -69,9 +74,11 @@ describe("readConfig", () => {
       dryRun: true,
       rpcUrls: ["https://a.example/key", "https://b.example"],
       votingScheme: getAddress("0x00000000000000000000000000000000000000a1"),
+      rotationGovernor: getAddress("0x00000000000000000000000000000000000000e3"),
       factoryDeployBlock: 21_000_000n,
       maxTxPerRun: 3,
       lookbackEpochs: 2,
+      lookbackRounds: 48,
       idleEpochs: 0,
       zamaRelayerUrl: "https://relayer.example",
       zamaRelayerApiKey: "zk",
@@ -82,6 +89,8 @@ describe("readConfig", () => {
     expect(() => readConfig({ KEEPER_PRIVATE_KEY: "0xsecret" })).toThrow(/^Invalid publisher environment: KEEPER_PRIVATE_KEY$/);
     expect(() => readConfig({ ETH_RPC_URL: "wss://x" })).toThrow(/ETH_RPC_URL/);
     expect(() => readConfig({ EPOCH_GOVERNOR_ADDRESS: "0x1234" })).toThrow(/EPOCH_GOVERNOR_ADDRESS/);
+    expect(() => readConfig({ ROTATION_GOVERNOR_ADDRESS: "0x1234" })).toThrow(/ROTATION_GOVERNOR_ADDRESS/);
+    expect(() => readConfig({ KEEPER_LOOKBACK_ROUNDS: "0" })).toThrow(/KEEPER_LOOKBACK_ROUNDS/);
   });
 
   it("names invalid variables without echoing their values", () => {

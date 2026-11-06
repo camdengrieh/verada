@@ -147,7 +147,7 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/catalog` | Loaded catalogue: `root`, taxonomy version, org and entry counts, per-category and per-region org counts, `bucketSizes` |
 | `/api/catalog/search?q&categories&regions&offset&limit` | `{ items: CatalogOrg[], total }` (comma-separated slugs; none means any) |
 | `/api/catalog/pool?categories&regions` | `{ poolSize, buckets: [{ bucket, category, region, size }] }` |
-| `/api/catalog/entries?at=bucket:index,...` | `{ root, items: [{ bucket, index, orgId, proof }] }`, at most 100 entries (what the keeper's `prepareBallot` needs) |
+| `/api/catalog/entries?at=bucket:index,...&root=` | `{ root, items: [{ bucket, index, orgId, proof }] }`, at most 100 entries (what the keeper's `prepareBallot` and round preparation need). With `root` (optional), from the loaded snapshot with that root, or 404 `catalog_root_unavailable` when none has it |
 | `/api/catalog/causes?ids=0x..,...` | `{ items: CatalogOrg[] }` by cause id, at most 50 (names for ballot options) |
 | `/api/catalog/orgs/:id` | `{ root, org, entries }` by org id, cause id, EIN or Endaoment id, entries with proofs |
 
@@ -155,6 +155,14 @@ The `/api/catalog/*` routes answer 503 `catalog_unavailable` until the snapshot 
 `CATALOG_SOURCE` (a directory, or a Swarm gateway URL such as `https://<gateway>/bzz/<swarmRef>`)
 has loaded. The catalogue is held in memory (a full catalogue takes a few hundred MB); clients
 should compare `root` with `CauseCatalog.rootOf` for the version they use.
+
+`CATALOG_SOURCE` may be a comma-separated list. The first snapshot is the one every route serves;
+the others are served only by `/api/catalog/entries?root=`. Ballots use the version in effect at
+their epoch's start, and live-mode rotation rounds keep that version until the next weekly epoch
+starts, so after `CauseCatalog.setVersion` mid-week, list the new snapshot first and the previous
+one second until the next epoch starts. Without it, the keeper cannot prepare that week's
+remaining rotation rounds: the indexer answers 404 `catalog_root_unavailable` for their version.
+Each extra snapshot adds its own memory.
 
 ```ts
 type Token = {
