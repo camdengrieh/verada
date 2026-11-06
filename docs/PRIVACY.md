@@ -106,6 +106,18 @@ starts on the first chain read, or straight away once a wallet connects.
   "trades of address X" or "balance of address X" route; a "my trades" view filters the public
   feed in the browser, and a balance is read through `createAccountClient`.
 
+## Swaps
+
+- **Pool reads are public.** Prices, pool state, fees and quotes (`StateView`, the V4 quoter) carry no
+  address and use the public client.
+- **Address-keyed reads are private.** Balances, Permit2 allowances and the Ondo blocklist check of the
+  connected address go through `createAccountClient`, so neither Varada nor the RPC provider sees the
+  address with the user's IP. The trade code never sends an address to the indexer.
+- **Signing and sending are the wallet's.** The Permit2 permit is signed in the wallet and travels
+  inside the swap transaction; the swap is broadcast by the wallet's own RPC, which sees it (see
+  "What it does not protect"). Gas is estimated through the private RPC under the account's key.
+- Details of routing and execution: [`SWAP.md`](SWAP.md).
+
 ## Curator agents and paid data
 
 ### Donations to agent vaults (opt-in credit)
