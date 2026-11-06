@@ -189,7 +189,8 @@ vi.mock("@varada/ui/components/data/price-chart", async (importOriginal) => {
 });
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: (_rpc: unknown, address: string) => ({ address, readContract: accountRead }) }));
 vi.mock("wagmi", () => ({
-  useAccount: () => ({ address: account.address }),
+  useAccount: () => ({ address: account.address, chainId: 1, isConnected: Boolean(account.address) }),
+  useSwitchChain: () => ({ switchChain: vi.fn(), isPending: false }),
   useWriteContract: () => ({ writeContractAsync: writeContract, data: undefined, isPending: false, error: null, reset: vi.fn() }),
   useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));

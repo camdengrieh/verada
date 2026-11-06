@@ -74,7 +74,7 @@ export function Providers({ children }: { children: ReactNode }) {
     () => (config && rpc ? { config, rpc, deps: createDeps(config, rpc, () => prefsRef.current.routeIndexer) } : null),
     [config, rpc],
   );
-  const wagmiConfig = useMemo(() => (rpc ? createWagmiConfig(rpc) : null), [rpc]);
+  const wagmiConfig = useMemo(() => (rpc && config ? createWagmiConfig(rpc, config.chainId) : null), [rpc, config]);
   const runtime = useMemo<Runtime | null>(
     () =>
       base && {

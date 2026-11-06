@@ -73,14 +73,29 @@ export function isUserRejection(e: unknown): boolean {
 /** The wallet is on a different network than the app. */
 export function isWrongChain(e: unknown): boolean {
   return chain(e).some((c) => {
-    if (c.name === "ChainMismatchError" || c.name === "SwitchChainError") return true;
+    // viem's ChainMismatchError, wagmi's ConnectorChainMismatchError (what a write raises when the
+    // wallet sits on another network than `chainId`) and ChainNotConfiguredError.
+    if (c.name === "ChainMismatchError" || c.name === "ConnectorChainMismatchError" || c.name === "ChainNotConfiguredError" || c.name === "SwitchChainError") return true;
     const text = typeof c.message === "string" ? c.message : "";
-    return /does not match the target chain|chain mismatch|wrong network/i.test(text);
+    return /does not match the (target|connection's) chain|chain mismatch|wrong network|chain not configured/i.test(text);
   });
 }
 
 function isInsufficientFunds(e: unknown): boolean {
   return chain(e).some((c) => c.name === "InsufficientFundsError" || /insufficient funds/i.test(typeof c.message === "string" ? c.message : ""));
+}
+
+/**
+ * The 4-byte selector of a custom error viem could not decode against the contract's ABI (it comes
+ * from another contract in the call, such as the FHE input verifier), or undefined.
+ */
+export function undecodedRevertSignature(e: unknown): string | undefined {
+  for (const c of chain(e)) {
+    const text = [c.shortMessage, c.message].filter((x): x is string => typeof x === "string").join(" ");
+    const m = /reverted with the following signature:\s*(0x[0-9a-fA-F]{8})\b/.exec(text);
+    if (m) return m[1];
+  }
+  return undefined;
 }
 
 /**
@@ -94,5 +109,7 @@ export function friendlyTxError(e: unknown): string | null {
   if (isInsufficientFunds(e)) return "Your wallet does not have enough ETH to pay for gas.";
   const revert = revertName(e);
   if (revert && REVERTS[revert]) return REVERTS[revert]!;
+  const signature = undecodedRevertSignature(e);
+  if (signature) return `The contract rejected the transaction (error ${signature}). Nothing was spent beyond gas.`;
   return null;
 }
