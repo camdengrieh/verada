@@ -436,9 +436,16 @@ options is recorded as `NoBallot` and takes no ballots; otherwise its poll opens
   `ZamaVotingScheme.requestOutcome` runs an encrypted comparison and two selects per option in one
   transaction, which is safe up to 17 options under the mainnet coprocessor's HCU depth limit of
   5M per transaction; 10 leaves a margin.
-- **No rotation keeper yet.** The platform keeper prepares weekly ballots only. No service prepares
-  rotation rounds, and none retries a round at `curationGraceEnd` once its picks turn out to be
-  missing; until one exists, rounds are prepared by whoever calls the functions above.
+- **Rotation keeper.** With `ROTATION_GOVERNOR_ADDRESS` set, the publisher's tally keeper drives
+  every live token's rounds (`services/publisher/README.md`, "Tally keeper", step 2). It prepares
+  the next rotation's round with the SDK's `planRoundOpening`, the weekly planner run over the
+  rotation governor's views (pins, then the curated picks of `curationEpochOf`, then draws seeded by
+  the target rotation). When a usable curation's picks are not served yet it backs off, never past
+  `curationGraceEnd` plus 30 seconds, and its first attempt after the grace prepares the round
+  with rotation only. It then closes each ended round that got ballots, relays the public
+  decryption of the winner only (`outcomeHandle`, `submitOutcome`) and calls `finalizeRound`.
+  Rounds that ended without ballots are left open: nothing would change. Anyone can still call
+  the functions above themselves.
 
 Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured`,
 `PoolRegistered`, `FeeTaken`, `HeldRetried`; the vault's `LiveTokenRegistered`, `Credited`,
@@ -459,8 +466,10 @@ Key live events: the factory's `LiveModeConfigured`; the hook's `TokenConfigured
   hit `InsufficientGas`. Live pools need the full limit above; tell integrators so.
 - **Hourly periods.** The poll closes 15 minutes before the next rotation. In that window someone
   must call `closeRound`, have the outcome decrypted through Zama's relayer and call
-  `finalizeRound` (there is no rotation keeper yet); anything later applies one rotation late.
-  Watch hourly tokens closely.
+  `finalizeRound`; anything later applies one rotation late. The keeper runs every
+  `KEEPER_INTERVAL_SECONDS` (300 by default), so it has about three runs in that window, each
+  also spending its `KEEPER_MAX_TX_PER_RUN` budget on other items. Watch hourly tokens closely,
+  and shorten the interval if many live tokens are hourly.
 - **First fee of a new WETH-quoted pool.** It may be held rather than converted (`FeeTaken` with
   `converted = false`). It stays attributed to the cause active when it was earned; call
   `retryHeld` (or let the keeper do it) to convert it. Watch `totalHeld` and `heldRaw`.
