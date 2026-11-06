@@ -12,6 +12,11 @@ describe("siteBaseFromPath", () => {
     ["/bzz/abc123", "/bzz/abc123/"],
     ["/bzz/abc123/causes/", "/bzz/abc123/"],
     ["/bzz/abc123/token/index.html", "/bzz/abc123/"],
+    ["/agent/", "/"],
+    ["/agent/homeless/", "/"],
+    ["/agent/homeless/africa/", "/"],
+    ["/bzz/abc123/agent/homeless/africa/", "/bzz/abc123/"],
+    ["/bzz/abc123/agent/homeless/index.html", "/bzz/abc123/"],
   ])("%s -> %s", (path, base) => expect(siteBaseFromPath(path)).toBe(base));
 });
 

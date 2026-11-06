@@ -168,20 +168,41 @@ export function parseMarkdown(source: string): Block[] {
   return blocks;
 }
 
+/** Library typography (Direction A): the classes each element of the rendered subset carries. */
+const TYPE = {
+  p: "m-0 text-[15px] leading-relaxed text-ink-soft",
+  ul: "m-0 grid list-disc gap-1 pl-5 text-[15px] leading-relaxed text-ink-soft marker:text-ink-muted",
+  a: "font-semibold text-primary underline underline-offset-4 hover:text-terracotta-strong",
+  code: "rounded bg-sand px-1.5 py-0.5 font-mono text-[0.9em] text-ink",
+  strong: "font-semibold text-ink",
+  heading: "m-0 mt-2 font-display font-semibold leading-tight text-ink",
+} as const;
+
+/** Size by how far a heading sits below the section's own heading. */
+const HEADING_SIZE = ["text-xl", "text-lg", "text-base", "text-base"] as const;
+
 function renderInline(nodes: Inline[]): ReactNode[] {
   return nodes.map((n, i) => {
     switch (n.type) {
       case "text":
         return n.text;
       case "code":
-        return <code key={i}>{n.text}</code>;
+        return (
+          <code key={i} className={TYPE.code}>
+            {n.text}
+          </code>
+        );
       case "strong":
-        return <strong key={i}>{renderInline(n.children)}</strong>;
+        return (
+          <strong key={i} className={TYPE.strong}>
+            {renderInline(n.children)}
+          </strong>
+        );
       case "em":
         return <em key={i}>{renderInline(n.children)}</em>;
       case "link":
         return (
-          <a key={i} href={n.href} target="_blank" rel={SAFE_LINK_REL}>
+          <a key={i} href={n.href} target="_blank" rel={SAFE_LINK_REL} className={TYPE.a}>
             {renderInline(n.children)}
           </a>
         );
@@ -219,22 +240,30 @@ export function Markdown({
 }) {
   const base = baseLevel ?? (headingLevel !== undefined ? headingLevel - 1 : 2);
   return (
-    <div className={className}>
+    <div className={className ?? "grid gap-3"}>
       {parseMarkdown(source).map((b, i) => {
         if (b.type === "heading") {
           const Tag = `h${markdownHeadingLevel(base, b.level)}` as HeadingTag;
-          return <Tag key={i}>{renderInline(b.children)}</Tag>;
+          return (
+            <Tag key={i} className={`${TYPE.heading} ${HEADING_SIZE[b.level - 1] ?? "text-base"}`}>
+              {renderInline(b.children)}
+            </Tag>
+          );
         }
         if (b.type === "list") {
           return (
-            <ul key={i}>
+            <ul key={i} className={TYPE.ul}>
               {b.items.map((item, j) => (
                 <li key={j}>{renderInline(item)}</li>
               ))}
             </ul>
           );
         }
-        return <p key={i}>{renderInline(b.children)}</p>;
+        return (
+          <p key={i} className={TYPE.p}>
+            {renderInline(b.children)}
+          </p>
+        );
       })}
     </div>
   );
@@ -249,7 +278,7 @@ export function SafeLink({ href, children, className }: { href: string | null | 
   const content = children ?? href ?? "";
   if (!safe) return <span className={className}>{content}</span>;
   return (
-    <a className={className} href={safe} target="_blank" rel={SAFE_LINK_REL}>
+    <a className={className ?? TYPE.a} href={safe} target="_blank" rel={SAFE_LINK_REL}>
       {content}
     </a>
   );

@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import type { Address } from "viem";
 import { useAppConfig, useDeps } from "@/components/providers";
-import { useTx, errorText } from "@/components/use-tx";
+import { useTx, errorText, type TxOptions } from "@/components/use-tx";
 import { lazyEncryptor, type Encryptor } from "@/lib/ballot";
 import type { DataDeps } from "@/lib/data";
 import { schemeContract, selectVoteAdapter, type VoteAdapter } from "@/lib/vote-adapter";
@@ -23,20 +23,32 @@ export interface CastBallotArgs {
 
 export type BallotPhase = "idle" | "encrypting" | "signing" | "sent" | "error";
 
-/** Encrypt (or, in development, encode) a choice and send `castBallot` from the voter's wallet. */
-export function useCastBallot(): {
+/** The step that failed, matching VoteFlowDialog: 0 encrypt, 1 wallet signature, 2 submit. */
+export type FailedStep = 0 | 1 | 2;
+
+/**
+ * Encrypt (or, in development, encode) a choice and send `castBallot` from the voter's wallet. The
+ * transaction raises a "vote" toast; pass `txOptions` to say which poll it is for.
+ */
+export function useCastBallot(txOptions: TxOptions = {}): {
   adapter: VoteAdapter;
   phase: BallotPhase;
   error?: string;
+  /** Which step failed when `phase` is "error". */
+  failedStep: FailedStep;
   tx: ReturnType<typeof useTx>;
   cast(args: CastBallotArgs): Promise<void>;
+  /** Back to idle (e.g. when the vote dialog closes). */
+  reset(): void;
 } {
   const config = useAppConfig();
   const deps = useDeps();
   const { address } = useAccount();
-  const tx = useTx();
+  const tx = useTx({ kind: "vote", confetti: "vote", ...txOptions });
   const [phase, setPhase] = useState<BallotPhase>("idle");
   const [error, setError] = useState<string>();
+  const [failedStep, setFailedStep] = useState<FailedStep>(1);
+  const step = useRef<FailedStep>(0);
 
   const adapter = useMemo(() => {
     let get = encryptors.get(deps);
@@ -51,11 +63,13 @@ export function useCastBallot(): {
     setError(undefined);
     tx.reset();
     const scheme = args.scheme ?? config.votingSchemeAddress;
+    step.current = 0;
     if (!address) return fail("Connect a wallet to vote");
     if (!scheme) return fail("votingSchemeAddress is not configured (config.json)");
     try {
       setPhase("encrypting");
       const call = await adapter.buildCall({ ...args, scheme, voter: address });
+      step.current = 1;
       setPhase("signing");
       await tx.send({ ...schemeContract, address: scheme, ...call, chainId: config.chainId });
       setPhase("sent");
@@ -66,8 +80,16 @@ export function useCastBallot(): {
 
   function fail(message: string) {
     setError(message);
+    setFailedStep(step.current);
     setPhase("error");
   }
 
-  return { adapter, phase, error, tx, cast };
+  const { reset: resetTx } = tx;
+  const reset = useCallback(() => {
+    setError(undefined);
+    setPhase("idle");
+    resetTx();
+  }, [resetTx]);
+
+  return { adapter, phase, error, failedStep, tx, cast, reset };
 }

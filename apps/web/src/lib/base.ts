@@ -5,8 +5,11 @@
  */
 export const ROUTES = ["launch", "causes", "governance", "token", "design", "404"] as const;
 
+/** `agent/`, `agent/<label>/` and `agent/<label>/<region>/` are one to three directories deep. */
+const AGENT_PATH = /^(.*\/)agent(?:\/[^/]+){0,2}\/?(?:index\.html)?$/;
+
 export function siteBaseFromPath(pathname: string): string {
-  const m = pathname.match(new RegExp(`^(.*/)(?:${ROUTES.join("|")})/?(?:index\\.html)?$`));
+  const m = pathname.match(new RegExp(`^(.*/)(?:${ROUTES.join("|")})/?(?:index\\.html)?$`)) ?? pathname.match(AGENT_PATH);
   if (m) return m[1] ?? "/";
   if (/\/bzz\/[^/]+$/.test(pathname)) return `${pathname}/`;
   return pathname.replace(/[^/]*$/, "") || "/";

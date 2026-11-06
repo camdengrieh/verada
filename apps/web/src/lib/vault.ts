@@ -4,7 +4,7 @@
  * amount)`, then `AgentVault.donate(amount, credit)`. `credit: true` publicly credits the donor's
  * address (opt-in); otherwise the donation is anonymous and the app never shows its address.
  */
-import { erc20Abi, type Address } from "viem";
+import { erc20Abi, isAddress, type Address, type PublicClient } from "viem";
 import { CHAIN_ID, SETTLEMENT_ASSET, USDC_DECIMALS } from "@varada/sdk";
 import { agentVaultAbi } from "@varada/sdk/abis";
 
@@ -84,4 +84,22 @@ export function usdcBalanceRequest(p: { usdc: Address; owner: Address; chainId: 
     args: [p.owner],
     chainId: p.chainId,
   } as const;
+}
+
+/**
+ * USDC held by each vault, read from the chain (public data, so the public-scope client): totals
+ * from the indexer miss plain transfers, which emit no `Donated` event. A vault whose read fails is
+ * left out, so the caller shows "unavailable" for it rather than a made-up number. Keys are
+ * lowercase vault addresses.
+ */
+export async function readVaultBalances(client: Pick<PublicClient, "readContract">, usdc: Address, vaults: readonly string[]): Promise<Map<string, bigint>> {
+  const valid = [...new Set(vaults.filter((v) => isAddress(v)).map((v) => v.toLowerCase()))];
+  const settled = await Promise.allSettled(
+    valid.map((v) => client.readContract({ address: usdc, abi: erc20Abi, functionName: "balanceOf", args: [v as Address] })),
+  );
+  const out = new Map<string, bigint>();
+  settled.forEach((r, i) => {
+    if (r.status === "fulfilled") out.set(valid[i]!, r.value);
+  });
+  return out;
 }
