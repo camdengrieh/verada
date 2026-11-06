@@ -106,10 +106,11 @@ vi.mock("@/components/providers", () => ({
 vi.mock("@/lib/account-reads", () => ({
   createAccountClient: () => ({ readContract: async ({ functionName }: { functionName: string }) => (functionName === "weightOf" ? 10n : false) }),
 }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: wallet.receipt, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: VOTER }),
   useWriteContract: () => ({ writeContractAsync, data: wallet.hash, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: wallet.receipt, error: null }),
 }));
 
 const { EpochPanel } = await import("@/components/epoch-panel");

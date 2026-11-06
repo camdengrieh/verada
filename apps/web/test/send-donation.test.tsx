@@ -140,10 +140,11 @@ vi.mock("@/components/providers", () => ({
   useDeps: () => ({ indexer, chain: () => ({ readContract, simulateContract, getBlock: async () => ({ number: 100n, timestamp: chain.now }) }) }),
   usePrivateRpc: () => ({}),
 }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, data: wallet.receipt, error: wallet.receiptError ?? null, refetch: refetchReceipt }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: undefined }),
   useWriteContract: () => ({ writeContractAsync, data: wallet.hash, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: wallet.receipt, error: wallet.receiptError ?? null, refetch: refetchReceipt }),
 }));
 
 const { SendDonation } = await import("@/components/send-donation");

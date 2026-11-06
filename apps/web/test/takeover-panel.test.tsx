@@ -14,11 +14,12 @@ const switchChain = vi.fn();
 const writeContractAsync = vi.fn(async () => `0x${"ab".repeat(32)}`);
 const mine = { weight: 7n, voted: false };
 
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: undefined, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: account.address, chainId: account.chainId, isConnected: Boolean(account.address) }),
   useSwitchChain: () => ({ switchChain, isPending: false }),
   useWriteContract: () => ({ writeContractAsync, data: undefined, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => ({ ...envDefaults(), chainId: 1, takeoverGovernorAddress: GOVERNOR }),

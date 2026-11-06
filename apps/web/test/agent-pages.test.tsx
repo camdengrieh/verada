@@ -139,6 +139,8 @@ vi.mock("@/components/providers", () => ({
   usePrivateRpc: () => ({}),
 }));
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: (_rpc: unknown, address: string) => ({ address, readContract: accountRead }) }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: (hash?: string) => ({ revertReason: undefined, refetch: () => {}, data: receiptOf(hash), error: null }) }));
 vi.mock("wagmi", async () => {
   const { useCallback, useState } = await import("react");
   return {
@@ -154,7 +156,6 @@ vi.mock("wagmi", async () => {
       }, []);
       return { writeContractAsync: send, data: hash, isPending: false, error: null, reset: () => setHash(undefined) };
     },
-    useWaitForTransactionReceipt: ({ hash }: { hash?: string }) => ({ data: receiptOf(hash), error: null }),
   };
 });
 
