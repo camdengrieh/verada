@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { FeesStep } from "@/components/launch/fees-step";
 import { causeNameOf, FocusStep } from "@/components/launch/focus-step";
-import { LabelStatusLine } from "@/components/launch/identity-step";
+import { IdentityStep, LabelStatusLine } from "@/components/launch/identity-step";
 import { LaunchSuccess } from "@/components/launch/launch-success";
 import type { StepProps } from "@/components/launch/types";
 import { initialWizardState, type WizardState } from "@/lib/launch-steps";
@@ -69,6 +69,22 @@ describe("FeesStep", () => {
     render(<FeesStep {...props(protectedState)} />);
     expect(screen.getByText("Starting surcharge")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /90% to your coin's cause, 10% to Varada/ })).toBeInTheDocument();
+  });
+});
+
+describe("IdentityStep label errors", () => {
+  const identity = (state: WizardState, errors: Record<string, string>) =>
+    render(<IdentityStep {...props(state)} errors={errors} labelLoading={false} labelFailed={false} labelEdited setLabelEdited={vi.fn()} onLogo={vi.fn()} onLogoBusy={vi.fn()} />);
+
+  it("shows a taken label before the field is left", () => {
+    const taken = { ...base, input: { ...base.input, label: "paws" }, labelStatus: { kind: "taken" as const, token: "0x0000000000000000000000000000000000000001" as const } };
+    identity(taken, { label: "paws is already taken" });
+    expect(screen.getByText("paws is already taken")).toBeInTheDocument();
+  });
+
+  it("keeps a plain format error hidden until the field is touched", () => {
+    identity({ ...base, input: { ...base.input, label: "ab" } }, { label: "Use 3 to 63 characters" });
+    expect(screen.queryByText("Use 3 to 63 characters")).toBeNull();
   });
 });
 
