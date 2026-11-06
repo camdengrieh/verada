@@ -174,6 +174,10 @@ export function v2Path(steps: readonly PoolStep[]): Address[] {
   return [steps[0]!.currencyIn, ...steps.map((s) => s.currencyOut)];
 }
 
+/** `TickMath.MIN_SQRT_RATIO` / `MAX_SQRT_RATIO`: the price bounds of a v3 pool. */
+export const V3_MIN_SQRT_RATIO = 4295128739n;
+export const V3_MAX_SQRT_RATIO = 1461446703485210103287273052203988822378723970342n;
+
 /** Gas a v2 hop costs, for the estimate (the router has no gas quote). */
 export const V2_HOP_GAS = 110_000n;
 
@@ -186,6 +190,9 @@ export async function quoteV3Segment(client: ReadClient, steps: readonly PoolSte
       mode === "exactIn"
         ? await client.readContract({ address: env.v3Quoter, abi: v3QuoterAbi, functionName: "quoteExactInput", args: [path, amount] })
         : await client.readContract({ address: env.v3Quoter, abi: v3QuoterAbi, functionName: "quoteExactOutput", args: [path, amount] });
+    // A pool that runs out of liquidity stops at the price bound and the quoter returns the partial fill without
+    // failing. Executing that would spend only part of the input (and strand wrapped ETH in the router): refuse it.
+    if (res[1].some((p) => p <= V3_MIN_SQRT_RATIO + 1n || p >= V3_MAX_SQRT_RATIO - 1n)) throw new SwapError("insufficient-liquidity");
     return { amount: res[0], gas: res[3] };
   } catch (e) {
     throw mapSwapError(e);

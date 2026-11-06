@@ -297,6 +297,15 @@ describe("buildSwapCalldata with v3 and v2", () => {
     expect([recipient, out, maxIn, payerIsUser]).toEqual([ROUTER_MSG_SENDER, 1_000_000n, 2n * 10n ** 18n, false]);
   });
 
+  it("exact-out ending in ETH on v3: the router receives WETH and UNWRAP_WETH pays exactly the target", () => {
+    const r = find([usdcWeth3], usdc, NATIVE_CURRENCY);
+    const { commands, inputs } = decode(buildSwapCalldata({ route: r, mode: "exactOut", amountIn: 3_000_000n, amountOut: 10n ** 16n, deadline }).data);
+    expect(commands).toEqual([UR_COMMAND.V3_SWAP_EXACT_OUT, UR_COMMAND.UNWRAP_WETH]);
+    const [recipient, out, maxIn, , payerIsUser] = decodeAbiParameters(packedV3, inputs[0]!);
+    expect([recipient, out, maxIn, payerIsUser]).toEqual([ROUTER_ADDRESS_THIS, 10n ** 16n, 3_000_000n, true]);
+    expect(decodeAbiParameters([{ type: "address" }, { type: "uint256" }], inputs[1]!)).toEqual([ROUTER_MSG_SENDER, 10n ** 16n]);
+  });
+
   it("exact-out across venues is unsupported", () => {
     const r = find([tokenPool, usdcWeth3], usdc, TOKEN);
     expect(() => buildSwapCalldata({ route: r, mode: "exactOut", amountIn: 1n, amountOut: 1n, deadline })).toThrow(SwapError);
@@ -400,6 +409,20 @@ describe("quoteTrade with a v3 leg", () => {
   it("counts an Ondo token between two v3 pools as moving (so its pause blocks)", () => {
     const r = enumerateRoutes([v3Pool(usdc, aapl, 10_000, 10n), v3Pool(aapl, weth, 10_000, 10n, getAddress("0x7777777777777777777777777777777777777778")), tokenPool], usdc, TOKEN, { weth })[0]!;
     expect(movingCurrencies(r).map((a) => a.toLowerCase())).toContain(aapl.toLowerCase());
+  });
+});
+
+describe("v3 partial fills", () => {
+  it("refuses a quote whose pool ran out of liquidity (price at its bound)", async () => {
+    const pool = v3Pool(usdc, weth, 500, 10n ** 15n);
+    const [route] = enumerateRoutes([pool], usdc, weth, { weth });
+    const mk = (after: bigint) => ({ async readContract() { return [5n, [after], [1], 100_000n]; } });
+    const states = new Map([[pool.poolId, pool]]);
+    const ctx = { tokenIn: USDC, tokenOut: WETH, states };
+    await expect(quoteRoute(mk(4295128740n) as never, route!, "exactIn", 1_000_000n, ctx)).rejects.toMatchObject({ reason: "insufficient-liquidity" });
+    await expect(quoteRoute(mk(1461446703485210103287273052203988822378723970341n) as never, route!, "exactIn", 1_000_000n, ctx)).rejects.toMatchObject({ reason: "insufficient-liquidity" });
+    const ok = await quoteRoute(mk(2n ** 96n) as never, route!, "exactIn", 1_000_000n, ctx);
+    expect(ok.amountOut).toBe(5n);
   });
 });
 

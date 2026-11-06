@@ -252,14 +252,18 @@ function sweep(token: Address, amountMin: bigint): Hex {
 
 function buildExactOut(cmds: Commands, segments: RouteSegment[], p: SwapCalldataParams, nativeIn: boolean) {
   const wrapFirst = segments[0]?.kind === "wrap";
-  const rest = wrapFirst ? segments.slice(1) : segments;
+  // a v3 / v2 swap can end in WETH that is unwrapped to ETH for the user
+  const lastSeg = segments[segments.length - 1];
+  const unwrapLast = segments.length === 2 && lastSeg?.kind === "unwrap" && (segments[0]!.kind === "v3" || segments[0]!.kind === "v2");
+  const rest = wrapFirst ? segments.slice(1) : unwrapLast ? segments.slice(0, 1) : segments;
   if (rest.length !== 1 || rest[0]!.kind === "wrap" || rest[0]!.kind === "unwrap") {
     throw new SwapError("exact-out-unsupported", "Exact-output works for one swap on one venue, optionally paid in ETH through a wrap");
   }
   if (rest[0]!.kind === "v3" || rest[0]!.kind === "v2") {
     // the router pulls what the swap needs (at most amountIn) from the user, or spends the wrapped ETH it holds
     if (wrapFirst) cmds.add(UR_COMMAND.WRAP_ETH, encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [ROUTER_ADDRESS_THIS, p.amountIn]));
-    packedSwap(cmds, rest[0] as PackedSegment, "exactOut", ROUTER_MSG_SENDER, p.amountOut, p.amountIn, !wrapFirst);
+    packedSwap(cmds, rest[0] as PackedSegment, "exactOut", unwrapLast ? ROUTER_ADDRESS_THIS : ROUTER_MSG_SENDER, p.amountOut, p.amountIn, !wrapFirst);
+    if (unwrapLast) cmds.add(UR_COMMAND.UNWRAP_WETH, encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [ROUTER_MSG_SENDER, p.amountOut]));
     if (wrapFirst) cmds.add(UR_COMMAND.UNWRAP_WETH, encodeAbiParameters([{ type: "address" }, { type: "uint256" }], [ROUTER_MSG_SENDER, 0n]));
     return;
   }
