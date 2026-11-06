@@ -84,6 +84,8 @@ export function CauseLeaderboard({
   const reduced = useReducedMotion();
   const ranked = [...entries].sort((a, b) => b.raised - a.raised);
   const top = ranked[0]?.raised ?? 0;
+  // Without any previous period to compare with, a column of "New" says nothing: hide it.
+  const trackMovement = entries.some((e) => e.moved !== undefined);
   const Heading = `h${headingLevel}` as const;
 
   return (
@@ -126,7 +128,7 @@ export function CauseLeaderboard({
                       style={{ width: `${top ? (e.raised / top) * 100 : 0}%` }}
                     />
                   </span>
-                  <Movement moved={e.moved} />
+                  {trackMovement ? <Movement moved={e.moved} /> : null}
                 </span>
                 {e.sub ? <span className="truncate text-xs text-ink-muted">{e.sub}</span> : null}
               </span>

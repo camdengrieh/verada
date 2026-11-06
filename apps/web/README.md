@@ -12,7 +12,7 @@ Images ship only as optimised copies under `assets/`, within a size budget (see 
 | `/` | Token list (`GET /api/tokens`, chain-log fallback), or a token's page when served on its ENS name (see Hostname routing) |
 | `/launch/` | Launch form: logo and metadata uploads, ENS label, `VaradaFactory.deployToken` |
 | `/token/?address=0x...` | Single client-side token page; the address is read from the query (or `#0x...` hash), or resolved from `?label=` |
-| `/causes/` | Nonprofit search via the indexer's `GET /api/causes/search` (names and ids only) |
+| `/causes/` | Cause categories with catalogue counts and totals, the most-given-to leaderboard (`GET /api/causes/leaderboard`), the catalogue browser (category x region x name, offset paging, a filter sheet on phones) and Endaoment search (`GET /api/causes/search`). Filters live in `?category=&region=&q=` |
 | `/governance/` | Current epoch (chain read); ballots are cast from each token's page |
 | `/404.html` | Swarm error document (self-contained, no external assets); `/<label>` redirects to `token/?label=<label>` |
 
