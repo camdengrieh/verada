@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseEventLogs, zeroAddress, type Address } from "viem";
 import { useAccount, usePublicClient } from "wagmi";
@@ -17,6 +17,7 @@ import {
   canAdvance,
   firstInvalidStep,
   initialWizardState,
+  labelBlockedText,
   STEPS,
   toLaunchInput,
   validateStep,
@@ -46,6 +47,7 @@ export function LaunchWizard() {
   const { address: account } = useAccount();
   const publicClient = usePublicClient({ chainId: config.chainId });
   const tx = useTx();
+  const qc = useQueryClient();
 
   const [local, setLocal] = useState<WizardState>(() => initialWizardState(randomSalt()));
   const [index, setIndex] = useState(0);
@@ -195,6 +197,15 @@ export function LaunchWizard() {
     if (!parsed.ok) return setParseError(parsed.error);
     let metadataURI = parsed.params.metadataURI;
     try {
+      // The availability shown was read up to 15 s ago: ask the registry again before spending an upload and a signature.
+      const fresh = await chainLabelStatus(deps.chain(), config, parsed.params.label).catch(() => undefined);
+      if (fresh) {
+        qc.setQueryData(["label-status", config.profileRegistryAddress, parsed.params.label], fresh);
+        if (labelBlockedText(parsed.params.label, fresh, account)) {
+          setAttempted((a) => new Set(a).add(0));
+          return goTo(0);
+        }
+      }
       if (!metadataURI) {
         if (!config.publisherUrl) return setParseError("publisherUrl is not configured (config.json), so the metadata document cannot be stored. Set a metadata URI under Advanced on the Identity step.");
         const doc = buildMetadataDocument(parsed.params, ws.logoRef ?? "", ws.fields);

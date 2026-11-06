@@ -900,7 +900,8 @@ export class IndexerClient {
         categories: categories.length ? categories.join(",") : undefined,
         regions: regions.length ? regions.join(",") : undefined,
       });
-      return isRecord(v) ? num(v.poolSize) ?? 0 : 0;
+      // A reply without a pool size is "unknown" (null), never an empty pool: zero would block every launch.
+      return isRecord(v) ? (num(v.poolSize) ?? null) : null;
     });
   }
 

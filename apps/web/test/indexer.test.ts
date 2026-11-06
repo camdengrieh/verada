@@ -7,6 +7,15 @@ import { envDefaults } from "@/lib/config";
 const res = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
 const F = (fn: unknown) => fn as typeof fetch;
 
+describe("IndexerClient.catalogPool", () => {
+  it("reads the pool size, and treats a reply without one as unknown rather than empty", async () => {
+    const ok = new IndexerClient(["https://a.test"], { fetchImpl: F(vi.fn(async () => res({ poolSize: 0, buckets: [] }))) });
+    expect(await ok.catalogPool([], [])).toBe(0);
+    const odd = new IndexerClient(["https://a.test"], { fetchImpl: F(vi.fn(async () => res({ buckets: [] }))) });
+    expect(await odd.catalogPool(["hunger"], [])).toBeNull();
+  });
+});
+
 describe("IndexerClient", () => {
   it("fails over on network errors and 5xx, then sticks to the working URL", async () => {
     const fn = vi.fn(async (url: string) => {
