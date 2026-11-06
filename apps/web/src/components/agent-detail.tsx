@@ -31,7 +31,7 @@ export const ERC8004_IDENTITY_REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539
 
 const REGION_ORDER = new Map(REGIONS.map((r, i) => [r.slug, i]));
 
-const SECTION = "grid gap-4 rounded-[26px] border border-line bg-card p-5";
+const SECTION = "grid grid-cols-1 gap-4 rounded-[26px] border border-line bg-card p-5";
 const H2 = "m-0 font-display text-2xl font-semibold text-ink";
 
 /** "3h ago" style time for a unix-seconds timestamp, relative to `now` (ms). */
@@ -84,7 +84,7 @@ export function AgentDetail({ label, region, root = "./" }: { label: string; reg
   const coins = (tokens.data?.data ?? []).filter((t) => t.label);
 
   return (
-    <section aria-label={`${title} agent`} className="@container grid gap-8">
+    <section aria-label={`${title} agent`} className="@container grid grid-cols-1 gap-8">
       <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-x-2 text-sm text-ink-soft">
         <a href={agentsIndexHref(root)} className="inline-flex min-h-11 items-center font-semibold text-primary underline-offset-4 hover:underline">
           All agents
@@ -99,11 +99,11 @@ export function AgentDetail({ label, region, root = "./" }: { label: string; reg
         )}
       </nav>
 
-      <header className="grid gap-4 overflow-hidden rounded-[26px] border border-line bg-card p-5 @2xl:grid-cols-[auto_minmax(0,1fr)] @2xl:items-center @2xl:gap-6">
+      <header className="grid grid-cols-1 gap-4 overflow-hidden rounded-[26px] border border-line bg-card p-5 @2xl:grid-cols-[auto_minmax(0,1fr)] @2xl:items-center @2xl:gap-6">
         <span className="grid size-24 place-items-center rounded-3xl bg-sage-tint @2xl:size-32">
           <CauseIcon cause={agentCause(def.ensLabel)} size={96} decorative />
         </span>
-        <div className="grid min-w-0 gap-2">
+        <div className="grid grid-cols-1 min-w-0 gap-2">
           <p className="kicker m-0">Curator agent</p>
           <h1 className="m-0 font-display text-3xl font-semibold tracking-tight text-ink @2xl:text-4xl">
             {title}
@@ -128,7 +128,7 @@ export function AgentDetail({ label, region, root = "./" }: { label: string; reg
       </header>
 
       {detail.isLoading && (
-        <div role="status" aria-label="Loading the agent" className="grid gap-3">
+        <div role="status" aria-label="Loading the agent" className="grid grid-cols-1 gap-3">
           <Skeleton className="h-24 w-full" />
           <Skeleton className="h-48 w-full" />
         </div>
@@ -141,19 +141,19 @@ export function AgentDetail({ label, region, root = "./" }: { label: string; reg
           <AgentFacts agent={agent} balance={balances.data?.get(agent.vault.toLowerCase())} balanceLoading={balances.isLoading} balanceOff={!usdcAddress(config.chainId)} />
           <ReportSection agent={agent} report={report.data ?? null} loading={report.isLoading} error={report.error} epoch={epoch} region={focus?.slug} root={root} />
           <ReportArchive agent={agent} epoch={epoch} onChoose={setChosenEpoch} />
-          <div className="grid gap-6 @4xl:grid-cols-2 @4xl:items-start">
+          <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-2 @4xl:items-start">
             {/* The category bit comes from the SDK (static), not the indexer row: it keys the on-chain vault lookup. */}
             <AgentDonatePanel categoryBit={def.bit} vault={agent.vault} name={agent.name} />
             <AgentIdentity agent={agent} ensName={ensName} gateway={agentGatewayUrl(def.ensLabel, config.ensParentName)} chainId={config.chainId} />
           </div>
-          <div className="grid gap-6 @4xl:grid-cols-2 @4xl:items-start">
+          <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-2 @4xl:items-start">
             <CreditedDonors agent={agent} />
             <RecentGifts agent={agent} report={report.data ?? null} />
           </div>
         </>
       )}
 
-      <div className="grid gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <h2 className={H2}>Where this name lives</h2>
         <SubnameTree
           coins={coins.slice(0, 4).map((t) => ({ label: t.label!, note: t.symbol ? `$${t.symbol}` : undefined, href: `${root}token/?address=${t.address}` }))}
@@ -172,7 +172,7 @@ function AgentFacts({ agent, balance, balanceLoading, balanceOff }: { agent: Age
   const donations = agent.totals?.donations ?? 0;
   const gifts = agent.totals?.gifts ?? 0;
   return (
-    <section aria-label="Agent" className="grid gap-3">
+    <section aria-label="Agent" className="grid grid-cols-1 gap-3">
       <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
         <StatCard
           label="In the vault"
@@ -216,7 +216,7 @@ function ReportSection({
       <h2 className={H2}>{epoch === null ? "Weekly report" : `Report for epoch ${epoch}`}</h2>
       {epoch === null && <p className="m-0 text-sm text-ink-soft">No report published yet.</p>}
       {loading && (
-        <div role="status" aria-label="Loading the report" className="grid gap-2">
+        <div role="status" aria-label="Loading the report" className="grid grid-cols-1 gap-2">
           <Skeleton className="h-6 w-2/3" />
           <Skeleton className="h-32 w-full" />
         </div>
@@ -289,7 +289,7 @@ function RegionTabs({ regions, label, epoch, root }: { regions: AgentReport["reg
         ))}
       </TabsList>
       {regions.map((r) => (
-        <TabsContent key={r.region} value={r.region} className="grid gap-3 outline-none">
+        <TabsContent key={r.region} value={r.region} className="grid grid-cols-1 gap-3 outline-none">
           <AgentRegionView region={r} label={label} epoch={epoch} headingLevel={3} />
           <p className="m-0">
             <a href={agentHref(root, label, r.region)} className="inline-flex min-h-11 items-center font-semibold text-primary underline-offset-4 hover:underline">
@@ -304,7 +304,7 @@ function RegionTabs({ regions, label, epoch, root }: { regions: AgentReport["reg
 
 function ReportArchive({ agent, epoch, onChoose }: { agent: AgentInfo; epoch: string | null; onChoose: (e: string) => void }) {
   return (
-    <section aria-label="Report archive" className="grid gap-3">
+    <section aria-label="Report archive" className="grid grid-cols-1 gap-3">
       <h2 className={H2}>Report archive</h2>
       {agent.reports.length === 0 ? (
         <p className="m-0 text-sm text-ink-soft">No reports yet.</p>

@@ -72,7 +72,7 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
     );
   }
   return (
-    <div role="group" aria-label="Open ballot" className="grid gap-3 rounded-2xl border border-line bg-paper-card p-4">
+    <div role="group" aria-label="Open ballot" className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-paper-card p-4">
       <p className="m-0 text-sm text-ink-soft">
         Nobody has opened this week&apos;s ballot yet. Anyone can: the ballot is drawn on chain exactly as the platform keeper would draw
         it, and you pay the gas (about 2M gas for a full 32-option ballot, less for a smaller one).

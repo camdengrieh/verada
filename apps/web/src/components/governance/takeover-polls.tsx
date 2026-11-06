@@ -87,7 +87,7 @@ export function TakeoverPolls({ token }: { token: TokenSummary }) {
   if (!list.isLoading && !list.error && items.length === 0) return null;
 
   return (
-    <section aria-label="Takeover polls" className="grid gap-3">
+    <section aria-label="Takeover polls" className="grid grid-cols-1 gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="m-0 font-display text-xl font-semibold text-ink">Takeover polls</h3>
         <a href={rel(`token/?address=${token.address}`)} className="inline-flex min-h-11 items-center text-sm font-semibold text-primary underline-offset-4 hover:underline">
@@ -100,7 +100,7 @@ export function TakeoverPolls({ token }: { token: TokenSummary }) {
           Could not load proposals: {errorText(list.error)}
         </p>
       )}
-      <div className="grid gap-3">
+      <div className="grid grid-cols-1 gap-3">
         {items.map((p) => (
           <Proposal key={p.proposalId} governor={governor} token={token} proposal={p} now={now} />
         ))}
@@ -180,7 +180,7 @@ function Proposal({ governor, token, proposal: p, now }: { governor: Address; to
   const dialogState = phase === "encrypting" ? "encrypting" : phase === "signing" ? "wallet" : phase === "sent" ? "sent" : phase === "error" ? "error" : "confirm";
 
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-1 gap-2">
       <TakeoverCard
         status={status}
         proposal={

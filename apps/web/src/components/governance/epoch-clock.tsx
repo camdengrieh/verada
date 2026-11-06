@@ -12,13 +12,13 @@ import type { EpochClock as Clock } from "@/lib/governance";
  */
 export function EpochClock({ clock, loading, error, onDone }: { clock: Clock | undefined; loading: boolean; error: unknown; onDone?: () => void }) {
   return (
-    <section aria-label="Epoch clock" className="grid gap-3 rounded-[26px] border border-line bg-card p-5">
+    <section aria-label="Epoch clock" className="grid grid-cols-1 gap-3 rounded-[26px] border border-line bg-card p-5">
       <div className="flex items-center gap-1">
         <p className="kicker m-0">{clock ? `Current epoch: ${clock.epoch}` : "Current epoch"}</p>
         <InfoTip entry="epoch" />
       </div>
       {loading && (
-        <div role="status" aria-label="Loading the epoch clock" className="grid gap-2">
+        <div role="status" aria-label="Loading the epoch clock" className="grid grid-cols-1 gap-2">
           <Skeleton className="h-6 w-40" />
           <Skeleton className="h-16 w-72 max-w-full" />
         </div>

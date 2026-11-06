@@ -135,7 +135,7 @@ export function GovernancePanel() {
 
   if (!governor) {
     return (
-      <section aria-label="Governance" className="@container grid gap-6">
+      <section aria-label="Governance" className="@container grid grid-cols-1 gap-6">
         <PageHeading capText={capText} />
         <EmptyState
           icon={<Vote />}
@@ -147,8 +147,8 @@ export function GovernancePanel() {
   }
 
   return (
-    <section aria-label="Governance" className="@container grid gap-8">
-      <div className="grid gap-5 @3xl:grid-cols-[minmax(0,1fr)_auto] @3xl:items-start">
+    <section aria-label="Governance" className="@container grid grid-cols-1 gap-8">
+      <div className="grid grid-cols-1 gap-5 @3xl:grid-cols-[minmax(0,1fr)_auto] @3xl:items-start">
         <PageHeading capText={capText} />
         <EpochClock clock={clock.data} loading={clock.isLoading} error={clock.error} onDone={() => void clock.refetch()} />
       </div>
@@ -161,7 +161,7 @@ export function GovernancePanel() {
       </div>
 
       {tokens.isLoading && (
-        <div className="grid gap-3" role="status" aria-label="Loading tokens">
+        <div className="grid grid-cols-1 gap-3" role="status" aria-label="Loading tokens">
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
           <Skeleton className="h-16 w-full" />
@@ -191,7 +191,7 @@ export function GovernancePanel() {
       )}
 
       {board.length > 0 && (
-        <div className="grid gap-6 @4xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] @4xl:items-start">
+        <div className="grid grid-cols-1 gap-6 @4xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] @4xl:items-start">
           <TokenBoard
             entries={entries}
             selected={selectedAddress}
@@ -203,7 +203,7 @@ export function GovernancePanel() {
               select(a);
             }}
           />
-          <div className="grid min-w-0 gap-6">
+          <div className="grid grid-cols-1 min-w-0 gap-6">
             {selected ? (
               <>
                 <TokenBallot token={selected} clock={clock.data} />
@@ -224,7 +224,7 @@ export function GovernancePanel() {
 
 function PageHeading({ capText }: { capText: string }) {
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-1 gap-2">
       <p className="kicker m-0">Governance</p>
       <h1 className="m-0 font-display text-4xl font-semibold tracking-tight text-ink @3xl:text-5xl">This week&apos;s vote</h1>
       <p className="m-0 max-w-2xl text-[15px] text-ink-soft">

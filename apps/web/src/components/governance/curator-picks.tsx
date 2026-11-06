@@ -48,9 +48,9 @@ export function CuratorPicks({
   const rel = useRel();
   if (items.length === 0) return null;
   return (
-    <section aria-label="Curator agents" className="grid gap-3">
+    <section aria-label="Curator agents" className="grid grid-cols-1 gap-3">
       <h3 className="m-0 font-display text-xl font-semibold text-ink">Curator agents for this token</h3>
-      <div className="grid gap-3 @3xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 @3xl:grid-cols-2">
         {items.map(({ agent, report }) => {
           const regions = report ? focusRegions(report, focus) : [];
           const top = regions

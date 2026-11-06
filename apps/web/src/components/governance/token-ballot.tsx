@@ -251,7 +251,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
   const voteOpen = status.phase === "open" && canShowList;
 
   return (
-    <section aria-label={`${name} ballot`} className="@container grid gap-4 rounded-[26px] border border-line bg-card p-4 @lg:p-6">
+    <section aria-label={`${name} ballot`} className="@container grid grid-cols-1 gap-4 rounded-[26px] border border-line bg-card p-4 @lg:p-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           {logo ? (
@@ -284,7 +284,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
       </header>
 
       {loading && (
-        <div className="grid gap-2" role="status" aria-label="Loading the ballot">
+        <div className="grid grid-cols-1 gap-2" role="status" aria-label="Loading the ballot">
           <Skeleton className="h-6 w-1/2" />
           <Skeleton className="h-24 w-full" />
         </div>
@@ -327,14 +327,14 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
 
       {/* The ballot is not prepared: show the pins that lead it and let any holder open it. */}
       {view.data && !frozen && (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <p role="note" className={`${NOTE} bg-ochre-tint text-ochre-ink`}>
             This epoch&apos;s ballot is not prepared yet. {options.length > 0 ? "The pinned causes below lead it; " : ""}up to{" "}
             {td?.ballotSize?.size ?? MAX_BALLOT_OPTIONS} options are filled from the curator agents&apos; picks and then in rotation from the token&apos;s focus
             pool when it is prepared, and voting opens then.
           </p>
           {options.length > 0 && (
-            <ol aria-label="Pinned causes" className="m-0 grid list-none gap-1.5 p-0 text-sm text-ink">
+            <ol aria-label="Pinned causes" className="m-0 grid grid-cols-1 list-none gap-1.5 p-0 text-sm text-ink">
               {options.map((id) => (
                 <li key={id} className="flex items-center gap-2 rounded-xl bg-paper px-3 py-2">
                   <Badge tone="ink" shape="pill">
@@ -375,7 +375,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
       {canShowList && !results && (
         <>
           {isPhone ? (
-            <div className="grid gap-2">
+            <div className="grid grid-cols-1 gap-2">
               <p className="m-0 text-sm text-ink-soft">
                 {optionData.length} charities on this ballot.
                 {voteBlocker ? ` ${voteBlocker}` : ""}
@@ -393,7 +393,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
               value={choiceId}
               onValueChange={setChoiceId}
               label={`Choose a charity for ${name}`}
-              disabled={!voteOpen || Boolean(voteBlocker)}
+              disabled={!voteOpen}
               footer={
                 <>
                   <div className="flex min-w-0 flex-1 flex-col gap-1.5">
@@ -452,9 +452,9 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
 
 function Fact({ term, value }: { term: string; value: string }) {
   return (
-    <div className="grid gap-0.5 rounded-xl bg-paper px-3 py-2">
+    <div className="grid grid-cols-1 gap-0.5 rounded-xl bg-paper px-3 py-2">
       <dt className="kicker text-[11px]">{term}</dt>
-      <dd className="num m-0 break-words text-ink">{value}</dd>
+      <dd className="num m-0 min-w-0 [overflow-wrap:anywhere] text-ink">{value}</dd>
     </div>
   );
 }
@@ -464,7 +464,7 @@ function VoteReceipt({ ballot, chainId }: { ballot: ReturnType<typeof useCastBal
   const { hash, receipt, receiptError } = ballot.tx;
   const href = txUrl(chainId, hash);
   return (
-    <div className="grid gap-1.5 text-sm" aria-live="polite">
+    <div className="grid grid-cols-1 gap-1.5 text-sm" aria-live="polite">
       {!receipt && !receiptError && <p className="m-0 text-ink-soft">Waiting for the chain to confirm…</p>}
       {receiptError && <p role="alert" className="m-0 text-terracotta-strong">Could not read the receipt: {errorText(receiptError)}</p>}
       {receipt?.status === "success" && <p className="m-0 text-gain">Confirmed in block {String(receipt.blockNumber)}.</p>}

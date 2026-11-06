@@ -6,8 +6,8 @@ import { openPrivacyDetails } from "@/components/privacy-status";
 /** Plain-language rules of the weekly vote, in the order a holder meets them. */
 export function HowVotingWorks({ ballotSize }: { ballotSize: number | undefined }) {
   return (
-    <section aria-label="How voting works" className="grid gap-3">
-      <div className="grid gap-1">
+    <section aria-label="How voting works" className="grid grid-cols-1 gap-3">
+      <div className="grid grid-cols-1 gap-1">
         <p className="kicker m-0">How it works</p>
         <h2 className="m-0 font-display text-2xl font-semibold text-ink">How the weekly vote works</h2>
       </div>

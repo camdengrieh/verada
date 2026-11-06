@@ -196,7 +196,7 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
       label: "Approve USDC",
       description: "Lets the vault take this amount from your wallet. Nothing moves yet.",
       content: (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           <Button variant="cause" onClick={sendApproval} disabled={busy || !approval}>
             {`Approve ${amountText}`}
           </Button>
@@ -209,7 +209,7 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
       label: "Donate",
       description: "Sends your USDC to the agent's vault.",
       content: (
-        <div className="grid gap-3">
+        <div className="grid grid-cols-1 gap-3">
           {approveTx.receipt?.status === "success" && (
             <p role="status" className="m-0 text-sm text-sage-ink">
               Approved. Now donate to complete the gift.
@@ -226,15 +226,15 @@ export function AgentDonatePanel({ categoryBit, vault, name }: { categoryBit: nu
   ];
 
   return (
-    <section aria-label="Donate" className="@container grid gap-4 rounded-[26px] border border-line bg-card p-5">
-      <div className="grid gap-1">
+    <section aria-label="Donate" className="@container grid grid-cols-1 gap-4 rounded-[26px] border border-line bg-card p-5">
+      <div className="grid grid-cols-1 gap-1">
         <h2 className="m-0 font-display text-2xl font-semibold text-ink">Donate</h2>
         <p className="m-0 text-sm text-ink-soft">
           Donations go to the agent&apos;s vault in USDC, and the agent gives them to the charities it ranks. Two steps: approve the vault to take the amount,
           then donate.
         </p>
       </div>
-      <form onSubmit={onSubmit} aria-label="Donate to the agent" noValidate className="grid gap-4">
+      <form onSubmit={onSubmit} aria-label="Donate to the agent" noValidate className="grid grid-cols-1 gap-4">
         <Field invalid={Boolean(formError)} disabled={Boolean(blocker)}>
           <FieldLabel>Amount (USDC)</FieldLabel>
           <InputGroup>

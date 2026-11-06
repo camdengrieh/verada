@@ -80,7 +80,7 @@ export function PrivacyStatus({ onDetails }: { onDetails?: () => void }) {
 
   const switchId = useId();
   return (
-    <aside aria-label="Privacy" className="grid gap-3 text-sm">
+    <aside aria-label="Privacy" className="grid grid-cols-1 gap-3 text-sm">
       <p role="status" className="m-0 text-ink">{text}</p>
       {status.state === "failed" && (
         <div className="flex flex-wrap gap-2">
@@ -130,13 +130,13 @@ const KIND_BADGE: Record<RouteKind, { label: string; tone: "cause" | "rwa" | "ne
 /** The full account of what leaves the browser, where it goes, and who can see it (docs/PRIVACY.md). */
 export function PrivacyDetails({ network }: { network: string }) {
   return (
-    <div className="grid gap-4 text-sm">
+    <div className="grid grid-cols-1 gap-4 text-sm">
       <p className="m-0 text-ink-soft">{PRIVACY_SUMMARY.replace("{network}", network)}</p>
-      <ul aria-label="Where each request goes" className="m-0 grid list-none gap-3 p-0">
+      <ul aria-label="Where each request goes" className="m-0 grid grid-cols-1 list-none gap-3 p-0">
         {PRIVACY_ROUTES.map((r) => {
           const badge = KIND_BADGE[r.kind];
           return (
-            <li key={r.id} className="grid gap-1 rounded-2xl border border-line bg-card p-3.5">
+            <li key={r.id} className="grid grid-cols-1 gap-1 rounded-2xl border border-line bg-card p-3.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <strong className="text-[15px] text-ink">{r.what}</strong>
                 <Badge tone={badge.tone} shape="pill">
@@ -160,6 +160,7 @@ export function PrivacyDetails({ network }: { network: string }) {
 /** Header pill showing the private-RPC state; opens the full privacy controls. */
 export function PrivacyMenu() {
   const { state, network } = usePrivacyState();
+  const anonymizes = usePrivateRpc().network.anonymizes;
   const [prefs, setPrefs] = usePrivacyPrefs();
   const [details, setDetails] = useState(false);
   const [intro, setIntro] = useState(false);
@@ -213,9 +214,12 @@ export function PrivacyMenu() {
             <DialogTitle>Private by default</DialogTitle>
             <DialogDescription>Varada reads the chain for you without telling anyone who is asking.</DialogDescription>
           </DialogHeader>
-          <ul className="m-0 grid list-none gap-3 p-0 text-[15px] text-ink-soft">
+          <ul className="m-0 grid grid-cols-1 list-none gap-3 p-0 text-[15px] text-ink-soft">
             <li>
-              <strong className="text-ink">Reads go through {network}.</strong> The RPC provider sees an exit node, not your IP, and your wallet&apos;s lookups never reach Varada.
+              <strong className="text-ink">{anonymizes ? `Reads go through ${network}.` : `Reads use ${network}, which does not hide your IP.`}</strong>{" "}
+              {anonymizes
+                ? "The RPC provider sees an exit node, not your IP, and your wallet's lookups never reach Varada."
+                : "Your wallet's lookups still never reach Varada."}
             </li>
             <li>
               <strong className="text-ink">Your vote stays secret.</strong> The choice is encrypted in your browser. Only the totals are ever decrypted, after voting ends.

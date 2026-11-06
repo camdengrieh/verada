@@ -48,7 +48,7 @@ export function AgentRegionView({
     proofs.data?.items.find((x) => x.rank === p.rank && x.orgId.toLowerCase() === p.orgId.toLowerCase());
 
   return (
-    <section aria-label={`${name} picks`} className="grid gap-4">
+    <section aria-label={`${name} picks`} className="grid grid-cols-1 gap-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <H className="m-0 font-display text-2xl font-semibold text-ink">{name}</H>
         {region.verified ? (
@@ -90,11 +90,11 @@ export function AgentRegionView({
       {region.picks.length === 0 ? (
         <p className="m-0 text-sm text-ink-soft">No picks for {name} this week.</p>
       ) : (
-        <ol aria-label={`${name} ranked picks`} className="m-0 grid list-none gap-3 p-0">
+        <ol aria-label={`${name} ranked picks`} className="m-0 grid grid-cols-1 list-none gap-3 p-0">
           {region.picks.map((p) => {
             const proof = proofOf(p);
             return (
-              <li key={`${p.rank}-${p.orgId}`} className="grid gap-2 rounded-2xl border border-line bg-paper-card p-4">
+              <li key={`${p.rank}-${p.orgId}`} className="grid grid-cols-1 gap-2 rounded-2xl border border-line bg-paper-card p-4">
                 <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
                   <p className="m-0 min-w-0 text-[15px] text-ink">
                     <strong>
@@ -124,7 +124,7 @@ export function AgentRegionView({
                         {proofs.isLoading ? (
                           <p role="status" className="m-0 text-sm text-ink-soft">Loading the proof</p>
                         ) : proof ? (
-                          <div className="grid gap-2 text-xs">
+                          <div className="grid grid-cols-1 gap-2 text-xs">
                             <p className="m-0 text-ink-soft">
                               Leaf: rank {proof.rank}, catalogue index {proof.catalogIndex}, org <code className="break-all font-mono">{proof.orgId}</code>. Hashing it up through
                               these {proof.proof.length} siblings gives the root above.

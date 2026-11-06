@@ -69,8 +69,8 @@ export function AgentIndex({ root = "./" }: { root?: string }) {
   const coins = (tokens.data?.data ?? []).filter((t) => t.label);
 
   return (
-    <section aria-label="Curator agents" className="@container grid gap-8">
-      <div className="grid gap-2">
+    <section aria-label="Curator agents" className="@container grid grid-cols-1 gap-8">
+      <div className="grid grid-cols-1 gap-2">
         <p className="kicker m-0">Curator agents</p>
         <h1 className="m-0 font-display text-4xl font-semibold tracking-tight text-ink @3xl:text-5xl">Curator agents</h1>
         <p className="m-0 max-w-2xl text-[15px] text-ink-soft">
@@ -89,7 +89,7 @@ export function AgentIndex({ root = "./" }: { root?: string }) {
       )}
 
       {isLoading && (
-        <div role="status" aria-label="Loading agents" className="grid gap-3 @3xl:grid-cols-2 @6xl:grid-cols-3">
+        <div role="status" aria-label="Loading agents" className="grid grid-cols-1 gap-3 @3xl:grid-cols-2 @6xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="h-48 w-full rounded-[26px]" />
           ))}
@@ -105,8 +105,8 @@ export function AgentIndex({ root = "./" }: { root?: string }) {
       )}
 
       {rows.length > 0 && (
-        <div className="grid gap-4">
-          <div className="grid gap-3 @3xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] @3xl:items-center">
+        <div className="grid grid-cols-1 gap-4">
+          <div className="grid grid-cols-1 gap-3 @3xl:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] @3xl:items-center">
             <InputGroup>
               <InputAddon>
                 <Search aria-hidden="true" />
@@ -133,7 +133,7 @@ export function AgentIndex({ root = "./" }: { root?: string }) {
               No cause matches “{query}”.
             </p>
           ) : (
-            <ul aria-label="Agents" className="m-0 grid list-none gap-3 p-0 @3xl:grid-cols-2 @6xl:grid-cols-3">
+            <ul aria-label="Agents" className="m-0 grid grid-cols-1 list-none gap-3 p-0 @3xl:grid-cols-2 @6xl:grid-cols-3">
               {shown.map((r) => (
                 <AgentCard key={r.label} row={r} root={root} region={region} balance={r.agent ? balances.data?.get(r.agent.vault.toLowerCase()) : undefined} balanceLoading={balances.isLoading} balanceOff={!usdcAddress(config.chainId)} />
               ))}
@@ -142,7 +142,7 @@ export function AgentIndex({ root = "./" }: { root?: string }) {
         </div>
       )}
 
-      <div className="grid gap-3">
+      <div className="grid grid-cols-1 gap-3">
         <h2 className="m-0 font-display text-2xl font-semibold text-ink">Every agent has a name</h2>
         <p className="m-0 max-w-2xl text-sm text-ink-soft">
           Agents live under <code className="font-mono">agent.{config.ensParentName}</code> and resolve to their vault, so a name is all a donor needs.
@@ -176,7 +176,7 @@ function AgentCard({
 }) {
   const a = row.agent;
   return (
-    <li className="relative grid gap-3 rounded-[26px] border border-line bg-card p-4 transition-colors focus-within:border-line-strong hover:bg-paper-card hover:shadow-paper">
+    <li className="relative grid grid-cols-1 gap-3 rounded-[26px] border border-line bg-card p-4 transition-colors focus-within:border-line-strong hover:bg-paper-card hover:shadow-paper">
       <div className="flex items-start gap-3">
         <span className="grid size-16 shrink-0 place-items-center rounded-2xl bg-sage-tint">
           <CauseIcon cause={agentCause(row.label)} size={56} decorative />
@@ -223,9 +223,9 @@ function AgentCard({
 
 function Stat({ term, value }: { term: string; value: string }) {
   return (
-    <div className="grid gap-0.5 rounded-xl bg-paper px-3 py-2">
+    <div className="grid grid-cols-1 gap-0.5 rounded-xl bg-paper px-3 py-2">
       <dt className="kicker text-[11px]">{term}</dt>
-      <dd className="num m-0 break-words text-ink">{value}</dd>
+      <dd className="num m-0 min-w-0 [overflow-wrap:anywhere] text-ink">{value}</dd>
     </div>
   );
 }

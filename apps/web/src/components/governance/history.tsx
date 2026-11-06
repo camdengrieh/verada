@@ -70,9 +70,9 @@ export function GovernanceHistory({ tokens, selected, nowMs }: { tokens: readonl
   };
 
   return (
-    <section aria-label="Past epochs" className="grid gap-5">
+    <section aria-label="Past epochs" className="grid grid-cols-1 gap-5">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="grid gap-1">
+        <div className="grid grid-cols-1 gap-1">
           <p className="kicker m-0">History</p>
           <h2 className="m-0 font-display text-2xl font-semibold text-ink">Past winners and what they received</h2>
         </div>
@@ -87,7 +87,7 @@ export function GovernanceHistory({ tokens, selected, nowMs }: { tokens: readonl
       </div>
 
       {history.isLoading && (
-        <div className="grid gap-2" role="status" aria-label="Loading history">
+        <div className="grid grid-cols-1 gap-2" role="status" aria-label="Loading history">
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />
@@ -137,7 +137,7 @@ export function GovernanceHistory({ tokens, selected, nowMs }: { tokens: readonl
       )}
 
       {(board.length > 0 || timeline.length > 0) && (
-        <div className="grid gap-6 @3xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
           {board.length > 0 && <CauseLeaderboard entries={board} title="Causes by USDC received" period={`${usd(total)} in the latest payouts`} headingLevel={3} />}
           {timeline.length > 0 && <DonationTimeline donations={timeline.slice(0, 8)} now={nowMs} title="Donations to winners" headingLevel={3} />}
         </div>

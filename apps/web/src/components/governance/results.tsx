@@ -13,7 +13,7 @@ export function TallyResults({ rows, nameOf, symbol }: { rows: ResultRow[]; name
   const ranked = [...rows].sort((a, b) => (a.votes === b.votes ? a.index - b.index : a.votes > b.votes ? -1 : 1));
   const total = rows.reduce((n, r) => n + r.votes, 0n);
   return (
-    <section aria-label="Results" className="grid gap-3">
+    <section aria-label="Results" className="grid grid-cols-1 gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="m-0 font-display text-xl font-semibold text-ink">Results</h3>
         <span className="num text-sm text-ink-muted">
@@ -21,9 +21,9 @@ export function TallyResults({ rows, nameOf, symbol }: { rows: ResultRow[]; name
         </span>
       </div>
       {total === 0n && <p className="m-0 text-sm text-ink-soft">Nobody voted, so this epoch pays the platform&apos;s fallback cause.</p>}
-      <ol className="m-0 grid list-none gap-3 p-0">
+      <ol className="m-0 grid grid-cols-1 list-none gap-3 p-0">
         {ranked.map((r) => (
-          <li key={r.index} className="grid gap-1">
+          <li key={r.index} className="grid grid-cols-1 gap-1">
             <Progress
               label={
                 <span className="flex min-w-0 items-center gap-2">

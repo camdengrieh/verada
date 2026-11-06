@@ -66,7 +66,7 @@ export function TokenBoard({
   const votable = entries.filter((e) => canVoteHere(e, nowSeconds)).length;
 
   return (
-    <section aria-label="Tokens voting this week" className="grid content-start gap-3">
+    <section aria-label="Tokens voting this week" className="grid grid-cols-1 content-start gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="m-0 font-display text-xl font-semibold text-ink">Tokens voting this week</h2>
         {connected && votable > 0 && (
@@ -94,7 +94,7 @@ export function TokenBoard({
         </TabsList>
       </Tabs>
       {shown.length === 0 ? (
-        <div className="grid gap-2 rounded-2xl bg-paper px-4 py-6 text-center text-sm text-ink-soft">
+        <div className="grid grid-cols-1 gap-2 rounded-2xl bg-paper px-4 py-6 text-center text-sm text-ink-soft">
           <p role="status" className="m-0">
             {query ? `No tokens match “${query}”.` : filter === "mine" ? "You held none of these tokens at the snapshot." : "No tokens have an open ballot right now."}
           </p>
@@ -105,7 +105,7 @@ export function TokenBoard({
           )}
         </div>
       ) : (
-        <ul aria-label="Tokens" className="m-0 grid list-none gap-2 p-0">
+        <ul aria-label="Tokens" className="m-0 grid grid-cols-1 list-none gap-2 p-0">
           {visible.map((e) => {
             const t = e.row.token;
             const status = epochStatus(e.row.detail, nowSeconds);
