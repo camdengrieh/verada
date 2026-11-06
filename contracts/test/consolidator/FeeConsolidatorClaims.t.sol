@@ -11,6 +11,7 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
+import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {LiveBase} from "../live/LiveBase.sol";
 import {ClaimsSource, NoopRouteHook} from "../live/LiveMocks.sol";
@@ -143,10 +144,15 @@ contract FeeConsolidatorClaimsTest is LiveBase {
         src.convert(address(quote), 1, to, true);
     }
 
+    /// The registry refuses a static hop fee above the ceiling (it could never convert); the
+    /// consolidator keeps its own runtime check for dynamic-fee hops.
     function test_hopFeeTooHigh() public {
-        (MockOndoToken q,) = _newQuote("MSFTon", 100_100, 2e19, IHooks(address(0)), true);
-        vm.expectRevert(abi.encodeWithSelector(FeeConsolidator.HopFeeTooHigh.selector, 1001));
-        src.convert(address(q), 1e18, to, true);
+        MockOndoToken q = new MockOndoToken("MSFTon");
+        (Currency c0, Currency c1) = _sorted(address(q), address(usdc));
+        PoolKey[] memory route = new PoolKey[](1);
+        route[0] = PoolKey(c0, c1, 100_100, 60, IHooks(address(0)));
+        vm.expectRevert(abi.encodeWithSelector(QuoteRegistry.HopFeeTooHigh.selector, 0, 100_100));
+        registry.addQuoteAssetWithRoute(address(q), IQuoteRegistry.Kind.Ondo, route);
     }
 
     function test_partialFill() public {
