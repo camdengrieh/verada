@@ -10,7 +10,7 @@ Images ship only as optimised copies under `assets/`, within a size budget (see 
 | Route | Purpose |
 |---|---|
 | `/` | Token list (`GET /api/tokens`, chain-log fallback), or a token's page when served on its ENS name (see Hostname routing) |
-| `/launch/` | Launch form: logo and metadata uploads, ENS label, `VaradaFactory.deployToken` |
+| `/launch/` | Launch wizard (identity, giving mode, pair, cause focus, fees, review): logo and metadata uploads, ENS label, `VaradaFactory.deployToken` or `deployLiveToken` |
 | `/token/?address=0x...` | Single client-side token page; the address is read from the query (or `#0x...` hash), or resolved from `?label=` |
 | `/causes/` | Cause categories with catalogue counts and totals, the most-given-to leaderboard (`GET /api/causes/leaderboard`), the catalogue browser (category x region x name, offset paging, a filter sheet on phones) and Endaoment search (`GET /api/causes/search`). Filters live in `?category=&region=&q=` |
 | `/governance/` | Current epoch (chain read); ballots are cast from each token's page |
@@ -85,6 +85,8 @@ ships a local-development default (indexer on 42069, publisher on 42070).
   bound the log scan; the RPC must allow that range.
 
 ## Launch flow
+
+`/launch/` is a six-step wizard (`components/launch/`, step rules in `lib/launch-steps.ts`): Identity, Giving (weekly pool, or live donation with a rotation period, a nonzero USDC donation threshold and a first charity that is active in the cause registry), Pair (quote registry allowlist; the start market cap is typed in quote units and becomes the factory's `startTick`, a multiple of 200), Causes (focus of at least two eligible catalogue entries), Fees and Review (gas estimate through the wagmi client, i.e. the private RPC). The numbered list below describes the calls it makes.
 
 1. Logo: the file input posts the image to `{publisherUrl}/uploads/logo` (multipart field `file`,
    PNG/JPEG/WebP, 2 MiB at most; the form prechecks size and type). The preview is a local object URL.

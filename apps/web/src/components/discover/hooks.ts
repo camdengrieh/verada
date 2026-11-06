@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ImageSource } from "@varada/ui/components/varada/shared";
 import { swarmGatewayUrl } from "@varada/sdk";
 import { causeNameOf } from "@/lib/discover";
-import { useRel } from "@/components/nav";
+import { siteBase } from "@/lib/base";
 import { usePrivacyPrefs, useAppConfig, useDeps } from "@/components/providers";
 import { mergeActivity } from "@/lib/activity";
 import { subscribeActivity } from "@/lib/activity-stream";
@@ -198,5 +198,10 @@ export function useCauseLookup(causeIds: readonly (string | undefined)[]): (id: 
   );
 }
 
-/** Relative href builder, re-exported so discover components do not each import nav. */
-export { useRel };
+/**
+ * Site-relative href builder. `useRel()` from nav is only right in the root layout (a page sees no
+ * layout segments), so page components resolve against the site root from the URL instead.
+ */
+export function useRel(): (path: string) => string {
+  return useCallback((path) => `${siteBase()}${path.replace(/^\//, "")}`, []);
+}
