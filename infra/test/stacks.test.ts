@@ -246,6 +246,7 @@ describe("indexer runtime contract", () => {
       TOKEN_REGISTRY_ADDRESS: "0x0000000000000000000000000000000000000000",
       TAKEOVER_GOVERNOR_ADDRESS: "0x0000000000000000000000000000000000000000",
       VOTING_SCHEME_ADDRESS: "0x0000000000000000000000000000000000000000",
+      ROTATION_GOVERNOR_ADDRESS: "0x0000000000000000000000000000000000000000",
     });
     expect(env).not.toHaveProperty("PONDER_CHAIN_ID");
     expect(c.Secrets.map((x: any) => x.Name)).toContain("ETH_RPC_URL");
@@ -263,11 +264,14 @@ describe("indexer runtime contract", () => {
 
   test("optional registry/governance addresses pass through when given and are validated", () => {
     const c = container(
-      Template.fromStack(build({ tokenRegistryAddress: A(8), takeoverGovernorAddress: A(9), votingSchemeAddress: A(10) }).indexer),
+      Template.fromStack(
+        build({ tokenRegistryAddress: A(8), takeoverGovernorAddress: A(9), votingSchemeAddress: A(10), rotationGovernorAddress: A(13) }).indexer,
+      ),
     );
     const env = Object.fromEntries(c.Environment.map((e: any) => [e.Name, e.Value]));
-    expect(env).toMatchObject({ TOKEN_REGISTRY_ADDRESS: A(8), TAKEOVER_GOVERNOR_ADDRESS: A(9), VOTING_SCHEME_ADDRESS: A(10) });
+    expect(env).toMatchObject({ TOKEN_REGISTRY_ADDRESS: A(8), TAKEOVER_GOVERNOR_ADDRESS: A(9), VOTING_SCHEME_ADDRESS: A(10), ROTATION_GOVERNOR_ADDRESS: A(13) });
     expect(() => build({ votingSchemeAddress: "0x12" })).toThrow(/votingSchemeAddress/);
+    expect(() => build({ rotationGovernorAddress: "0x12" })).toThrow(/rotationGovernorAddress/);
   });
 
   test("fee consolidator and quote registry: required in prod, a warning (not an error) outside prod", () => {
@@ -745,6 +749,7 @@ describe("publisher", () => {
           zamaRelayerUrl: "https://relayer.example.org/",
           votingSchemeAddress: A(10),
           takeoverGovernorAddress: A(9),
+          rotationGovernorAddress: A(13),
           siteFeedOwner: A(11),
           siteFeedManifest: "ab".repeat(32),
         }).publisher,
@@ -758,6 +763,7 @@ describe("publisher", () => {
       ZAMA_RELAYER_URL: "https://relayer.example.org",
       VOTING_SCHEME_ADDRESS: A(10),
       TAKEOVER_GOVERNOR_ADDRESS: A(9),
+      ROTATION_GOVERNOR_ADDRESS: A(13),
       EPOCH_GOVERNOR_ADDRESS: A(4),
       SITE_FEED_OWNER: A(11),
       SITE_FEED_MANIFEST: "ab".repeat(32),
@@ -768,7 +774,7 @@ describe("publisher", () => {
     expect(secrets.ZAMA_RELAYER_API_KEY).toContain("secret:verada/dev/publisher:zamaRelayerApiKey::");
     // Defaults: no zero-address placeholders, no relayer URL, no site feed.
     const d = Object.fromEntries(container(t).Environment.map((e: any) => [e.Name, e.Value]));
-    for (const k of ["VOTING_SCHEME_ADDRESS", "TAKEOVER_GOVERNOR_ADDRESS", "ZAMA_RELAYER_URL", "SITE_FEED_OWNER", "SITE_FEED_MANIFEST"]) {
+    for (const k of ["VOTING_SCHEME_ADDRESS", "TAKEOVER_GOVERNOR_ADDRESS", "ROTATION_GOVERNOR_ADDRESS", "ZAMA_RELAYER_URL", "SITE_FEED_OWNER", "SITE_FEED_MANIFEST"]) {
       expect(d).not.toHaveProperty(k);
     }
     expect(() => build({ keeperEnabled: "true" })).toThrow(/keeperEnabled.*votingSchemeAddress/);

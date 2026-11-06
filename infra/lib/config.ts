@@ -144,6 +144,8 @@ export const PUBLISHER_CHAIN_ENV = [
   "EPOCH_GOVERNOR_ADDRESS",
   "VOTING_SCHEME_ADDRESS",
   "TAKEOVER_GOVERNOR_ADDRESS",
+  /** Live mode: the keeper drives rotation rounds only when it is set. */
+  "ROTATION_GOVERNOR_ADDRESS",
   "FACTORY_ADDRESS",
   "START_BLOCK",
   "CURATOR_REGISTRY_ADDRESS",
@@ -228,6 +230,8 @@ export const INDEXER_OPTIONAL_CHAIN_KEYS = {
   votingSchemeAddress: "VOTING_SCHEME_ADDRESS",
   causeCatalogAddress: "CAUSE_CATALOG_ADDRESS",
   curatorRegistryAddress: "CURATOR_REGISTRY_ADDRESS",
+  /** Live mode's `RotationGovernor` (the zero address: live mode not deployed). */
+  rotationGovernorAddress: "ROTATION_GOVERNOR_ADDRESS",
 } as const;
 
 export const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
