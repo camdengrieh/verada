@@ -29,6 +29,15 @@ remappings = [
 [profile.ci]
 fuzz = { runs = 1_000 }
 
+# Fast profile for the generic hooks in src/hooks (builds in seconds; no via_ir).
+# Separate out/cache so it never invalidates the default via_ir build.
+[profile.hooks]
+src = "src/hooks"
+test = "test/hooks"
+out = "out-hooks"
+cache_path = "cache-hooks"
+via_ir = false
+
 [rpc_endpoints]
 mainnet = "${ETH_RPC_URL}"
 

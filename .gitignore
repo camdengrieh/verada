@@ -4,6 +4,8 @@ node_modules/
 !.env.example
 out/
 cache/
+out-hooks/
+cache-hooks/
 broadcast/
 dist/
 .next/
