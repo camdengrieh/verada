@@ -32,10 +32,11 @@ import { AssetProvider } from "@verada/ui/lib/assets";
 | Folder | What's in it |
 |---|---|
 | `src/styles.css` | Tokens (shadcn names plus Varada ones), Tailwind v4 theme, `num` and `kicker` utilities, animations, an evening-paper dark variant (`.dark`) |
-| `src/components/ui/` | Primitives and overlays: button, badge, card, input, field, select, checkbox, radio-group, switch, slider, toggle-group, tabs, tooltip, popover, hover-card, dropdown-menu, dialog, sheet, drawer, command, toaster, skeleton, progress, accordion, table, avatar, separator, scroll-area, kbd, icons |
+| `src/components/ui/` | Primitives and overlays: button (with `effect` hovers), badge, card, divider (line, dashed, brush, ornament, labelled), input, field, select, checkbox, radio-group, switch, slider, toggle-group, tabs (underline, pill, brush, segmented, card, vertical; scrollable lists), tooltip (spring, cursor-follow, tap to open), info-tip (glossary "?"), rich-tooltip / FeeTooltip, avatar-tooltip-group, popover, hover-card, dropdown-menu, dialog, sheet, drawer (scaled background, snap points, paper), command, toaster, skeleton, progress, accordion, table, avatar, separator, scroll-area, kbd, icons |
 | `src/components/data/` | Data and flow: data-table, stat-card, sparkline, price-chart, countdown, stepper, file-dropzone, copy-button, empty-state, activity-list |
-| `src/components/motion/` | marquee, number-ticker, step-transition, confetti (launch / vote / donation presets), loading-screen and PageLoader, ink-button (the Button `effect` hovers: wash, brush, shine, magnetic) |
-| `src/components/varada/` | Varada-only: site-header, logo-mark, token-card, token-row, pair-chip, stock-logo, cause-icon, cause-chip, asset-kind-badge, mode-badge, price-change, fee-split-bar, trade-panel, liquidity-panel, cause-pool-card, ballot-option, ballot-list, vote-flow-dialog, curator-agent-card, takeover-card, activity-ticker, activity-feed, privacy-pill, tx-toast (pending → success/error transaction toasts), market-status (US session from New York time), liquidity-meter, price-impact-ladder, stock-market-card, stock-market-list (Ondo explorer and launch pair picker), watercolour (Wash, PaperGrain, BrushUnderline), painted-image |
+| `src/components/motion/` | marquee, number-ticker, step-transition, confetti, loading-screen / PageLoader, ink-button, text-reveal, flip-words, decrypt-text, ink-text, scroll-reveal / ScrollWordReveal, scroll-progress, tilt-card, spotlight-card, animated-beam, orbit, animated-list, ink-ripple, dock |
+| `src/components/mobile/` | bottom-tab-bar (raised Launch), mobile-header, mobile-search-sheet, swipe-row, mobile-trade-sheet, mobile-vote-sheet, mobile-pair-picker, filter-sheet, sticky-action-bar, token-carousel, pull-to-refresh |
+| `src/components/varada/` | Shell and brand: site-header, logo-mark, privacy-pill, painted-image, watercolour (Wash, PaperGrain, BrushUnderline), hero-home / hero-token / hero-cause / hero-launch. Coins and trading: token-card, token-row, pair-chip, price-change, mode-badge, fee-split-bar, trade-panel (buy presets, sell percentages), tx-toast, trading-metrics-bar, kpi-tile, holder-distribution, buy-sell-pressure, volume-bars, activity-ticker, activity-feed. Pairs: quote-asset (crypto, stock, ETF, RWA model), quote-asset-card, quote-asset-list, pair-picker, asset-kind-badge, stock-logo, market-status, liquidity-meter, liquidity-panel, price-impact-ladder (stock-market-card / stock-market-list remain as aliases). Causes and giving: cause-icon, cause-chip, cause-pool-card, pool-meter, raised-counter, donation-goal, impact-breakdown, donation-timeline, cause-leaderboard. Voting: ballot-option, ballot-list, vote-flow-dialog, takeover-card, curator-agent-card. ENS: ens-name, ens-claim, ens-address, ens-profile-card, ens-record-list, subname-tree |
 | `src/lib/` | `cn`, `AssetProvider` / `useAssetUrl` |
 
 Each component file starts with a comment naming its source (`Adapted from 21st.dev @author/name (id N)`,
@@ -54,6 +55,10 @@ Each component file starts with a comment naming its source (`Adapted from 21st.
    file, and a test in `test/`.
 
 ## Rules worth knowing
+
+- Components lay out by their own width (Tailwind container queries: `@container` on the root, `@sm:`/`@md:`/`@lg:` inside), not the viewport. Give each one its width from its parent (a block, grid cell or `flex-1` item); an auto-width flex item shrinks to nothing.
+- Quote-asset logos: `quoteAssetLogo(config, symbol, resolve)` in apps/web returns the stocks pack image when published, else the bundled stock or crypto mark; StockLogo falls back to letters.
+- Mobile sheets take `inline` (render in place, non-modal) for previews: vaul always makes drawers modal underneath, so several open drawers would block each other.
 
 - Gains and losses always carry ▲ / ▼ (and spoken text), not colour alone.
 - `PriceChart` uses TradingView Lightweight Charts with its logo turned off, because the logo links
