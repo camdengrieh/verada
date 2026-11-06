@@ -27,7 +27,6 @@ const inEpoch = (n: bigint) => () => Number((EPOCH_ZERO + n * WEEK + 3600n) * 10
 
 declare global {
   interface Response {
-    // biome-ignore lint/suspicious/noExplicitAny: test convenience for JSON bodies
     json(): Promise<any>;
   }
 }

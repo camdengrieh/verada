@@ -44,17 +44,11 @@ const {
 const collated = (expr: unknown) => sql`${expr} COLLATE "C"`;
 
 interface Spec {
-  // biome-ignore lint/suspicious/noExplicitAny: drizzle table/column types differ per kind
   table: any;
-  // biome-ignore lint/suspicious/noExplicitAny: see above
   ts: any;
-  // biome-ignore lint/suspicious/noExplicitAny: see above
   key: any;
-  // biome-ignore lint/suspicious/noExplicitAny: see above
   token: any;
-  // biome-ignore lint/suspicious/noExplicitAny: see above
   where?: any;
-  // biome-ignore lint/suspicious/noExplicitAny: see above
   toItem(row: any): ActivityItem;
 }
 

@@ -30,6 +30,7 @@
     "@electric-sql/pglite": "0.2.13",
     "@types/node": "^20.17.0",
     "drizzle-orm": "0.41.0",
+    "pg": "^8.23.1",
     "tsx": "^4.19.0",
     "typescript": "^5.9.3",
     "vitest": "^3.2.4"
