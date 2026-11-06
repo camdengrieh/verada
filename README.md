@@ -19,6 +19,9 @@ cause, and holders rotate that cause by private vote every hour, 12 hours, day, 
 
 See `docs/ARCHITECTURE.md` for how the pieces fit together.
 
+Security reviews, their coverage, every finding and its status: [`docs/SECURITY.md`](docs/SECURITY.md).
+The contracts have not had an independent human audit.
+
 ## Uniswap v4 hooks
 
 Varada's pool logic is built from a library of generic Uniswap v4 hooks in

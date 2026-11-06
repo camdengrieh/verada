@@ -256,6 +256,15 @@ Who you trust, per hook:
 The library has extensive tests but **has not had an external audit**. Treat it as you would any
 unaudited code that holds value.
 
+The hooks were covered by one AI-assisted review (a 1-pass Pashov solidity-auditor scan over the
+whole repository). It found one issue in the library: `PoolAdminHook` made the first caller of
+`initialize` the pool admin, so anyone could squat a pool key and set its fees and recipient. That
+is fixed: `_initialPoolAdmin` has no default, so every concrete hook must choose its rule, and every
+example that grants admin powers gates initialization with `PoolInitGateHook`. A squatter can still
+create a pool at a price of their choosing when initialization is not gated, so check the price
+before adding liquidity. Findings, fixes and what was not covered:
+[`../SECURITY.md`](../SECURITY.md).
+
 ## Pages
 
 - [BaseHook.md](BaseHook.md): `BaseHook` and `PoolAdminHook`, the shared lock, merge helpers
