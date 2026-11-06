@@ -119,6 +119,8 @@ export interface EpochRow {
   catalogVersion: number | null;
   poolSize: bigint | null;
   pinnedCount: number | null;
+  /** Ballot size the epoch was prepared with (2..32); null until prepared. */
+  ballotSize: number | null;
   /** Curated picks checked / placed after the pins (`CuratedPicksUsed`); 0 once prepared without any. */
   curatedDrawn: number | null;
   curatedCount: number | null;
@@ -197,6 +199,16 @@ export interface TakeoverRow {
   txHash: Hex;
   /** Token executions when created; behind `takeoverExecutions(token)` means superseded. */
   generation: number;
+}
+
+/** Stored ballot size settings of a token (see `ponder.schema.ts`). */
+export interface BallotSizeSettings {
+  /** Protocol cap (`BallotSizeCapSet`); null when none was indexed (the default, 32). */
+  cap: number | null;
+  /** The token's own size (`BallotSizeSet`): 0 follows the cap; null when never set. */
+  choice: number | null;
+  /** Epoch from which `choice` applies; null when never set. */
+  choiceEffectiveFrom: bigint | null;
 }
 
 /** Stored shortlist schedule (see `ponder.schema.ts`). */
@@ -285,6 +297,7 @@ export interface Repo {
     shortlist: ShortlistSchedule | null;
     focus: FocusRow | null;
     clock: EpochClock | null;
+    ballotSize: BallotSizeSettings;
   } | null>;
   /** Address of the token registered under `label`, if any. */
   findTokenByLabel(label: string): Promise<Hex | null>;

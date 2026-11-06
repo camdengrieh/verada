@@ -298,6 +298,12 @@ export const epoch = onchainTable(
     poolSize: t.bigint(),
     pinnedCount: t.integer(),
     /**
+     * Ballot size the epoch was prepared with: the token's choice bounded by the protocol cap, as
+     * in force at `BallotPrepared` (the governor reads both then; `ballotSizeFor`). The ballot holds
+     * up to this many options (fewer on a small pool). Null until prepared.
+     */
+    ballotSize: t.integer(),
+    /**
      * Curated phase (`CuratedPicksUsed`, emitted just before `BallotPrepared`): picks checked
      * (`curatedDrawn`) and placed on the ballot (`curatedCount`), right after the pins. Null until
      * known; `BallotPrepared` sets both to 0 when no curated phase ran (no event is emitted then).
@@ -401,6 +407,28 @@ export const shortlist = onchainTable("shortlist", (t) => ({
   effectiveFrom: t.bigint(),
   previousCauseIds: t.hex().array().notNull(),
   scheduled: t.boolean().notNull(),
+  updatedAt: t.bigint().notNull(),
+}));
+
+/**
+ * The epoch governor's protocol ballot size cap (`BallotSizeCapSet`, 2..32; also emitted at
+ * deployment). Absent: the default of 32.
+ */
+export const ballotSizeCap = onchainTable("ballot_size_cap", (t) => ({
+  id: t.text().primaryKey(),
+  cap: t.integer().notNull(),
+  setAt: t.bigint().notNull(),
+}));
+
+/**
+ * A token's own ballot size (`BallotSizeSet`): `choice` 0 follows the protocol cap, otherwise
+ * 2..32 bounded by the cap. Like pins it is read when a ballot is prepared: it applies from epoch
+ * `effectiveFrom` (the current one when its ballot was not prepared yet, else the next).
+ */
+export const tokenBallotSize = onchainTable("token_ballot_size", (t) => ({
+  token: t.hex().primaryKey(),
+  choice: t.integer().notNull(),
+  effectiveFrom: t.bigint().notNull(),
   updatedAt: t.bigint().notNull(),
 }));
 

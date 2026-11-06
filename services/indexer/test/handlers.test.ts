@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   ballot,
+  ballotSizeCap,
   cause,
   causePoolAttribution,
   consolidationFailure,
@@ -25,6 +26,7 @@ import {
   takeoverToken,
   takeoverVote,
   token,
+  tokenBallotSize,
   tokenFocus,
   tokenProfile,
   tokenTextRecord,
@@ -41,6 +43,8 @@ import {
 } from "../src/handlers/fees";
 import {
   onBallotPrepared,
+  onBallotSizeCapSet,
+  onBallotSizeSet,
   onCuratedPicksUsed,
   onCurationSkipRequested,
   onDonated,
@@ -126,6 +130,8 @@ const pkMap = () =>
       [epochClock, ["id"]],
       [epochOption, ["token", "epoch", "index"]],
       [shortlist, ["token"]],
+      [ballotSizeCap, ["id"]],
+      [tokenBallotSize, ["token"]],
       [catalogVersion, ["version"]],
       [tokenFocus, ["token"]],
       [poll, ["governor", "token", "scope"]],
@@ -586,6 +592,31 @@ describe("epoch lifecycle", () => {
     await run(onEpochOpened, { token: T1, epoch: 3n, options: opts }, "eo", block(20, zero + 3 * WEEK + 60));
     expect(h.rows(epochOption)).toHaveLength(2);
     expect(h.rows(epochClock)).toHaveLength(1);
+  });
+
+  it("stores the protocol cap and each token's ballot size, and the size a ballot was prepared with", async () => {
+    const b = block(20, zero + 3 * WEEK + 60);
+    const prepare = (token: `0x${string}`, epochNo: bigint, id: string) =>
+      run(onBallotPrepared, { token, epoch: epochNo, catalogVersion: 2, poolSize: 120n, pinned: 0, orgIds: [CAUSE, C2] }, id, b);
+    // Nothing indexed yet: the default of 32.
+    await prepare(T1, 2n, "bp0");
+    await run(onBallotSizeCapSet, { cap: 32 }, "cap0", block(1, 100));
+    await run(onBallotSizeCapSet, { cap: 12 }, "cap1", block(2, 200));
+    expect(h.rows(ballotSizeCap)).toEqual([{ id: "epoch_governor", cap: 12, setAt: 200n }]);
+    await run(onBallotSizeSet, { token: T1, size: 16, effectiveFrom: 3n }, "s1", block(3, 300));
+    await run(onBallotSizeSet, { token: T1, size: 8, effectiveFrom: 3n }, "s2", block(4, 400));
+    await run(onBallotSizeSet, { token: T2, size: 0, effectiveFrom: 4n }, "s3", block(4, 400));
+    expect(h.rows(tokenBallotSize)).toEqual([
+      { token: T1, choice: 8, effectiveFrom: 3n, updatedAt: 400n },
+      { token: T2, choice: 0, effectiveFrom: 4n, updatedAt: 400n },
+    ]);
+    await prepare(T1, 3n, "bp1");
+    await prepare(T2, 3n, "bp2");
+    const sizeOf = (t: string, e: bigint) => h.rows(epoch).find((r) => r.token === t && r.epoch === e)?.ballotSize;
+    expect(sizeOf(T1, 2n)).toBe(32);
+    expect(sizeOf(T1, 3n)).toBe(8);
+    // T2 follows the cap.
+    expect(sizeOf(T2, 3n)).toBe(12);
   });
 
   it("keeps the curated counts of CuratedPicksUsed when BallotPrepared follows in the same tx", async () => {
