@@ -20,6 +20,10 @@ import { ImpactBreakdown, breakdownShares } from "@verada/ui/components/varada/i
 import { formatUsd, useThrottledAnnouncement } from "@verada/ui/components/varada/impact-shared";
 import { PoolMeter, epochElapsed } from "@verada/ui/components/varada/pool-meter";
 import { RaisedCounter } from "@verada/ui/components/varada/raised-counter";
+import { HeroCause } from "@verada/ui/components/varada/hero-cause";
+import { HeroHome } from "@verada/ui/components/varada/hero-home";
+import { HeroLaunch } from "@verada/ui/components/varada/hero-launch";
+import { HeroToken } from "@verada/ui/components/varada/hero-token";
 
 beforeAll(() => {
   MotionGlobalConfig.skipAnimations = true;
@@ -230,5 +234,76 @@ describe("PoolMeter", () => {
     expect(screen.getByText("50%")).toBeInTheDocument();
     expect(screen.getByText("61% of $30K")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Vote privately" })).toBeInTheDocument();
+  });
+});
+
+describe("Heroes", () => {
+  const art = <img src="assets/scenes/harambe-v1-960.webp" alt="Painted gorilla in a jungle" />;
+
+  it("HeroHome is a region named by its h1, with the brush word, actions and stats", () => {
+    const onLaunch = vi.fn();
+    render(
+      <HeroHome
+        headline="Memecoins that give back"
+        highlight="give"
+        lead="90% of every trading fee goes to charity."
+        art={art}
+        actions={[{ label: "Launch a coin", onClick: onLaunch }, { label: "Explore coins", href: "/explore" }]}
+        stats={[
+          { label: "Raised for causes", value: 48210, format: { style: "currency", currency: "USD", maximumFractionDigits: 0 }, live: true },
+          { label: "Coins", value: "1,284" },
+        ]}
+      />,
+    );
+    const region = screen.getByRole("region", { name: "Memecoins that give back" });
+    expect(within(region).getByRole("heading", { level: 1 })).toHaveTextContent("Memecoins that give back");
+    expect(within(region).getByRole("img", { name: "Painted gorilla in a jungle" })).toBeInTheDocument();
+    expect(within(region).getByRole("link", { name: "Explore coins" })).toHaveAttribute("href", "/explore");
+    act(() => within(region).getByRole("button", { name: "Launch a coin" }).click());
+    expect(onLaunch).toHaveBeenCalled();
+    expect(within(region).getByText("Raised for causes")).toHaveTextContent("(live)");
+    expect(within(region).getAllByText("$48,210").length).toBeGreaterThan(0);
+  });
+
+  it("HeroToken shows name, ENS, price with direction, mode and cause", () => {
+    render(
+      <HeroToken
+        name="Harambe"
+        symbol="HARAMBE"
+        ens="harambe.varada.eth"
+        art={art}
+        price="$0.000412"
+        change24h={18.4}
+        cause="wildlife"
+        giving={{ mode: "live", cadence: "24h" }}
+        headingLevel={2}
+        actions={[{ label: "Buy" }, { label: "Sell", variant: "soft" }]}
+      />,
+    );
+    const region = screen.getByRole("region", { name: /Harambe/ });
+    expect(within(region).getByRole("heading", { level: 2 })).toHaveTextContent("Harambe $HARAMBE");
+    expect(within(region).getByText("Up 18.4% in 24h")).toBeInTheDocument();
+    expect(within(region).getByText("Live donation · 24h")).toBeInTheDocument();
+    expect(within(region).getByText("Wildlife")).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Copy harambe.varada.eth" })).toBeInTheDocument();
+    expect(within(region).getByRole("button", { name: "Sell" })).toBeInTheDocument();
+  });
+
+  it("HeroCause names the category and its curator agent", () => {
+    render(<HeroCause cause="wildlife" raised={21480} charities={6} coins={14} curator={{ ens: "wildlife.agent.varada.eth", agentId: 7, status: "active" }} />);
+    const region = screen.getByRole("region", { name: "Wildlife & endangered species" });
+    expect(within(region).getByRole("heading", { level: 1 })).toBeInTheDocument();
+    expect(within(region).getByText("Charities")).toBeInTheDocument();
+    expect(within(region).getByText(/ERC-8004 #7/)).toBeInTheDocument();
+    expect(within(region).getByText("Active")).toBeInTheDocument();
+  });
+
+  it("HeroLaunch lists the three steps under a labelled list", () => {
+    render(<HeroLaunch stickers={[art]} actions={[{ label: "Start launch", href: "/launch" }]} />);
+    const region = screen.getByRole("region", { name: "Launch a coin that gives" });
+    const steps = within(region).getByRole("list", { name: "Three steps" });
+    expect(within(steps).getAllByRole("listitem")).toHaveLength(3);
+    expect(within(steps).getAllByRole("listitem")[0]).toHaveTextContent("Step 1: Name it");
+    expect(within(region).getByRole("link", { name: "Start launch" })).toHaveAttribute("href", "/launch");
   });
 });
