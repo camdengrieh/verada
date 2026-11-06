@@ -4,10 +4,10 @@
  */
 import type { Address } from "viem";
 import { ondoTokensIn, checkOndoTradable, type ComplianceOptions, type ComplianceReport } from "./compliance.js";
-import { SwapError, type SwapReason } from "./errors.js";
+import { SwapError, mapSwapError, type SwapReason } from "./errors.js";
 import { readVaradaFee } from "./fee.js";
 import { poolIdOf, varadaPoolKey, type ReadClient } from "./pool.js";
-import { applySlippage, pickBestQuote, type QuoteContext } from "./quote.js";
+import { applySlippage, pickBestQuote, type BestQuote, type QuoteContext } from "./quote.js";
 import { describeRoute, discoverPools, enumerateRoutes, rankRoutes, resolveRoutingConfig, routingNodes, type RoutingConfig } from "./routing.js";
 import { VARADA_TOKEN_DECIMALS } from "./constants.js";
 import type { PoolState, QuoteMode, RouteQuote, SwapAsset, TradeSide, VaradaFeeInfo, VaradaMarketToken } from "./types.js";
@@ -24,8 +24,13 @@ export interface TradeRequest {
   slippageBps: number;
 }
 
+/** Trades that would move the price by this much or more are blocked (`price-impact`), in percent. */
+export const DEFAULT_MAX_PRICE_IMPACT_PCT = 30;
+
 export interface TradeContext {
   routing?: RoutingConfig;
+  /** Block trades whose price impact (net of fees) reaches this percent. Default {@link DEFAULT_MAX_PRICE_IMPACT_PCT}. */
+  maxImpactPct?: number;
   /** Extra Ondo / compliance inputs; see {@link ComplianceOptions}. */
   compliance?: ComplianceOptions;
 }
@@ -58,6 +63,28 @@ export interface TradeQuote {
   quotedAt: number;
   /** What the quote was made with; lets callers quote more sizes on the same route (`quoteRoute`). */
   context: QuoteContext;
+}
+
+/**
+ * Ondo checks for the tokens of a route. A paused token blocks the trade when it is the one the user pays or
+ * receives or the token's quote asset (the pool prices against it, and the live hook converts fees in it). An Ondo
+ * token that is only an intermediate hop never moves as an ERC-20 (the pool manager nets its flow to zero inside the
+ * swap, checked on a fork), so a pause there is reported as a warning and the user's blocklist status does not matter.
+ */
+async function checkRouteOndo(client: ReadClient, routeCurrencies: readonly Address[], binding: readonly Address[], opts?: ComplianceOptions): Promise<ComplianceReport> {
+  const bindingSet = new Set(binding.map((a) => a.toLowerCase()));
+  const all = ondoTokensIn(routeCurrencies);
+  const direct = all.filter((a) => bindingSet.has(a.toLowerCase()));
+  const intermediate = all.filter((a) => !bindingSet.has(a.toLowerCase()));
+  const report = await checkOndoTradable(client, direct, opts);
+  if (intermediate.length > 0) {
+    const passing = await checkOndoTradable(client, intermediate);
+    for (const b of passing.blockers) {
+      report.warnings.push({ ...b, message: `${b.symbol ?? "A token"} on the route is paused by Ondo; the trade passes through it without moving it` });
+    }
+    report.checked.push(...passing.checked);
+  }
+  return report;
 }
 
 /**
@@ -95,9 +122,6 @@ export async function quoteTrade(client: ReadClient, req: TradeRequest, ctx: Tra
   if (candidates.length === 0) throw new SwapError("no-route");
 
   const states = new Map(pools.map((p) => [p.poolId, p] as const));
-  // Each quoter call simulates the whole route, which is costly over a slow RPC: estimate every candidate
-  // from the pools' liquidity and price first and quote only the most promising ones.
-  const routes = rankRoutes(candidates, states, req.amount, mode, cfg.quoteTop, new Map([[tokenPoolId, fee.feeBps]]));
   const context: QuoteContext = {
     env: cfg.env,
     tokenIn: payAsset,
@@ -105,11 +129,29 @@ export async function quoteTrade(client: ReadClient, req: TradeRequest, ctx: Tra
     states,
     feeBps: new Map([[tokenPoolId, fee.feeBps]]),
   };
-  const { best, all } = await pickBestQuote(client, routes, mode, req.amount, context);
+  // Each quoter call simulates the whole route, which is costly over a slow RPC: estimate every candidate
+  // from the pools' liquidity and price first and quote the most promising few. If none of them can fill
+  // the size (a thin pool runs out of liquidity), the next few are tried.
+  const ranked = rankRoutes(candidates, states, req.amount, mode, candidates.length, context.feeBps);
+  let picked: BestQuote | null = null;
+  let firstError: unknown;
+  for (let i = 0; i < ranked.length && !picked; i += cfg.quoteTop) {
+    try {
+      picked = await pickBestQuote(client, ranked.slice(i, i + cfg.quoteTop), mode, req.amount, context);
+    } catch (e) {
+      const err = e instanceof SwapError ? e : mapSwapError(e);
+      if (err.reason === "rpc-unavailable") throw err;
+      if (firstError === undefined || (firstError instanceof SwapError && firstError.reason === "insufficient-liquidity" && err.reason !== "insufficient-liquidity")) firstError = err;
+    }
+  }
+  if (!picked) throw firstError;
+  const { best, all } = picked;
 
   const limits = applySlippage(best, req.slippageBps);
   const currencies = best.route.steps.flatMap((s) => [s.currencyIn, s.currencyOut]);
-  const compliance = await checkOndoTradable(client, ondoTokensIn(currencies), ctx.compliance);
+  const compliance = await checkRouteOndo(client, currencies, [payAsset.address, receiveAsset.address, token.quote.address], ctx.compliance);
+  const blockers: SwapReason[] = compliance.blockers.map((b) => b.reason);
+  if (best.priceImpactPct >= (ctx.maxImpactPct ?? DEFAULT_MAX_PRICE_IMPACT_PCT)) blockers.push("price-impact");
 
   const symbols = new Map<string, string>([tokenAsset, token.quote, req.asset, ...cfg.hubs, ...cfg.extraHubs].map((x) => [x.address.toLowerCase(), x.symbol] as [string, string]));
   const routeLabel = describeRoute(best.route, (a) => symbols.get(a.toLowerCase()) ?? `${a.slice(0, 6)}…${a.slice(-4)}`);
@@ -128,7 +170,7 @@ export async function quoteTrade(client: ReadClient, req: TradeRequest, ctx: Tra
     fee,
     feeFraction: fee.feeBps / 10_000,
     compliance,
-    blockers: compliance.blockers.map((b) => b.reason),
+    blockers,
     tokenPool,
     quotedAt: Date.now(),
     context,

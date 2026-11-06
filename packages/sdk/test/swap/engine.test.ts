@@ -142,6 +142,46 @@ describe("quoteTrade", () => {
     expect(q.best.route.steps.map((s) => s.kind)).toEqual(["pool", "wrap", "pool"]);
   });
 
+  it("tries the next routes when the most promising ones cannot fill the size", async () => {
+    // a thin WETH/USDC pool looks fine by its reserves but its quote runs out of liquidity
+    const thin = fakePool(weth, USDC.address, 500, 10, 10n ** 30n);
+    world.pools.push(thin);
+    world.rate = (id) => (id === tokenId ? 1000 : 1);
+    const client = mockClient(world);
+    const real = client.readContract.bind(client);
+    client.readContract = async (a) => {
+      if (a.functionName === "quoteExactInputSingle" && poolIdOf((a.args as any[])[0].poolKey) === thin.poolId) throw new Error("UnexpectedRevertBytes NotEnoughLiquidity 0x7a5ed734");
+      if (a.functionName === "quoteExactInput" && JSON.stringify((a.args as any[])[0].path.map((p: any) => p.fee)).includes("500")) {
+        const path = (a.args as any[])[0].path;
+        if (path.length === 2 && path[0].intermediateCurrency === weth) throw new Error("NotEnoughLiquidity 0x7a5ed734");
+      }
+      return real(a);
+    };
+    // quote one route at a time so the failure of the first forces a second round
+    const q = await quoteTrade(client as never, { token, side: "buy", asset: USDC, amount: 1_000_000n, slippageBps: 50 }, { routing: { quoteTop: 1 } });
+    expect(q.best.route.steps.map((s) => s.kind)).toEqual(["pool", "wrap", "pool"]);
+  });
+
+  it("reports the liquidity error when no route can fill the size", async () => {
+    world.rate = () => 1;
+    const client = mockClient(world);
+    client.readContract = async (a) => {
+      if (String(a.functionName).startsWith("quote")) throw new Error("UnexpectedRevertBytes NotEnoughLiquidity 0x7a5ed734");
+      return mockClient(world).readContract(a);
+    };
+    await expect(quoteTrade(client as never, { token, side: "buy", asset: WETH, amount: 10n ** 18n, slippageBps: 50 })).rejects.toMatchObject({ reason: "insufficient-liquidity" });
+    // a dead network stops the search at once instead of trying every route
+    const dead = mockClient(world);
+    let calls = 0;
+    const real = dead.readContract.bind(dead);
+    dead.readContract = async (a) => {
+      if (String(a.functionName).startsWith("quote")) { calls++; throw new Error("HTTP request failed."); }
+      return real(a);
+    };
+    await expect(quoteTrade(dead as never, { token, side: "buy", asset: USDC, amount: 1_000_000n, slippageBps: 50 }, { routing: { quoteTop: 1 } })).rejects.toMatchObject({ reason: "rpc-unavailable" });
+    expect(calls).toBe(1);
+  });
+
   it("sells to ETH: pool then unwrap", async () => {
     world.rate = (id) => (id === tokenId ? 0.001 : 1);
     const q = await quoteTrade(mockClient(world) as never, { token, side: "sell", asset: { address: NATIVE_CURRENCY, symbol: "ETH", decimals: 18 }, amount: 500n * 10n ** 18n, slippageBps: 100 });
@@ -170,6 +210,39 @@ describe("quoteTrade", () => {
     clearDiscoveryCache();
     await expect(quoteTrade(mockClient(world) as never, { token, side: "buy", asset: WETH, amount: 10n ** 18n, slippageBps: 50 })).rejects.toMatchObject({ reason: "pool-not-initialized" });
     await expect(quoteTrade(mockClient(world) as never, { token, side: "buy", asset: { ...WETH, address: TOKEN }, amount: 1n, slippageBps: 50 })).rejects.toMatchObject({ reason: "unsupported-asset" });
+  });
+
+  it("blocks a trade whose price impact reaches the limit", async () => {
+    // the pool's mid price is 1 but the quote only returns 0.2: a 79% shortfall net of the 3% fee
+    world.rate = (id) => (id === tokenId ? 0.2 : 1);
+    const q = await quoteTrade(mockClient(world) as never, { token, side: "buy", asset: WETH, amount: 10n ** 18n, slippageBps: 50 });
+    expect(q.best.priceImpactPct).toBeGreaterThan(75);
+    expect(q.blockers).toEqual(["price-impact"]);
+    expect(() => buildTradeTransaction(q)).toThrow(expect.objectContaining({ reason: "price-impact" }));
+    // the limit is configurable
+    const lax = await quoteTrade(mockClient(world) as never, { token, side: "buy", asset: WETH, amount: 10n ** 18n, slippageBps: 50 }, { maxImpactPct: 90 });
+    expect(lax.blockers).toEqual([]);
+  });
+
+  it("only warns when the paused Ondo token is an intermediate hop that never moves", async () => {
+    // ETH -> AAPLon -> WETH beats the wrap, and AAPLon is paused
+    world.pools.push(fakePool(NATIVE_CURRENCY, AAPL, 500, 10, 10n ** 20n), fakePool(AAPL, weth, 500, 10, 10n ** 20n));
+    world.rate = (id, zfo) => (id === tokenId ? 1000 : 1);
+    const client = mockClient(world);
+    const real = client.readContract.bind(client);
+    // the AAPLon pools pay out 10% more than the plain wrap, so that route wins
+    client.readContract = async (a) => {
+      if (a.functionName === "quoteExactInput") {
+        const out = (await real(a)) as [bigint, bigint];
+        return [out[0] + out[0] / 10n, out[1]];
+      }
+      return real(a);
+    };
+    world.paused = new Set([AAPL.toLowerCase()]);
+    const q = await quoteTrade(client as never, { token, side: "buy", asset: { address: NATIVE_CURRENCY, symbol: "ETH", decimals: 18 }, amount: 10n ** 18n, slippageBps: 50 }, { routing: { extraHubs: [{ address: AAPL, symbol: "AAPLon", decimals: 18 }] }, compliance: { account: USDC.address, accountClient: { readContract: async () => { throw new Error("must not read the account for an intermediate hop"); } } as never } });
+    expect(q.routeLabel).toContain("AAPL");
+    expect(q.blockers).toEqual([]);
+    expect(q.compliance.warnings).toEqual([expect.objectContaining({ reason: "paused", symbol: "AAPLon" })]);
   });
 
   it("flags a paused Ondo quote asset as a blocker and a closed market as a warning", async () => {

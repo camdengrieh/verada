@@ -1,6 +1,6 @@
-import { toFunctionSelector } from "viem";
+import { encodeAbiParameters, toFunctionSelector, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
-import { KNOWN_ERROR_SELECTORS, REASON_LABEL, REASON_MESSAGE, SwapError, mapSwapError, type SwapReason } from "../../src/index.js";
+import { KNOWN_ERROR_SELECTORS, REASON_LABEL, REASON_MESSAGE, SwapError, mapSwapError, revertSelectors, type SwapReason } from "../../src/index.js";
 
 describe("error selectors", () => {
   it("match their signatures", () => {
@@ -61,5 +61,39 @@ describe("mapSwapError", () => {
       expect(REASON_MESSAGE[r].length).toBeGreaterThan(3);
       expect(REASON_LABEL[r].length).toBeGreaterThan(3);
     }
+  });
+});
+
+describe("wrapped reverts", () => {
+  const wrap = (sel: string, types: readonly { type: string }[], values: readonly unknown[]): Hex => `${sel}${encodeAbiParameters(types as never, values as never).slice(2)}` as Hex;
+  const poolId = `0x${"ab".repeat(32)}` as Hex;
+  const notEnough: Hex = `0x7a5ed734${"ab".repeat(32)}`;
+
+  it("unwraps the quoter's UnexpectedRevertBytes", () => {
+    const data = wrap("0x6190b2b0", [{ type: "bytes" }], [notEnough]);
+    expect(revertSelectors(data)).toEqual(["0x6190b2b0", "0x7a5ed734"]);
+    const err = Object.assign(new Error("reverted"), { cause: { data } });
+    expect(mapSwapError(err).reason).toBe("insufficient-liquidity");
+    void poolId;
+  });
+
+  it("unwraps the router's ExecutionFailed and the pool manager's WrappedError down to the hook's error", () => {
+    const hookError: Hex = "0x1c26714c"; // InsufficientGas()
+    const wrapped = wrap("0x90bfb865", [{ type: "address" }, { type: "bytes4" }, { type: "bytes" }, { type: "bytes" }], ["0x00000000000000000000000000000000000000aa", "0x575e24b4", hookError, "0x"]);
+    const exec = wrap("0x2c4029e9", [{ type: "uint256" }, { type: "bytes" }], [0n, wrapped]);
+    expect(revertSelectors(exec)).toEqual(["0x2c4029e9", "0x90bfb865", "0x1c26714c"]);
+    const e = mapSwapError({ message: "x", data: exec });
+    expect(e.reason).toBe("hook-reverted");
+    expect(e.detail).toBe("0x1c26714c");
+  });
+
+  it("reports Ondo compliance errors hidden inside a swap revert", () => {
+    const exec = wrap("0x2c4029e9", [{ type: "uint256" }, { type: "bytes" }], [0n, "0x8ed6a70e"]);
+    expect(mapSwapError({ message: "x", cause: { data: exec } }).reason).toBe("blocked");
+  });
+
+  it("ignores data that is not a revert and survives truncated data", () => {
+    expect(revertSelectors("nonsense")).toEqual([]);
+    expect(revertSelectors("0x6190b2b0deadbeef")).toEqual(["0x6190b2b0"]);
   });
 });

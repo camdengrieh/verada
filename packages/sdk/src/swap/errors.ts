@@ -2,7 +2,7 @@
  * Typed reasons a swap cannot be quoted or sent, and the mapping from raw errors (viem reverts,
  * wallet rejections) to them. The UI turns each reason into a button label or a note.
  */
-import { BaseError } from "viem";
+import { BaseError, decodeAbiParameters, type Hex } from "viem";
 
 export type SwapReason =
   /** No path of existing pools connects the two assets. */
@@ -22,6 +22,8 @@ export type SwapReason =
   /** The US market is closed: Ondo prices can be stale and the token may refuse to trade. */
   | "market-closed"
   | "zero-amount"
+  /** The route cannot fill this size without moving the price by `maxImpactPct` or more. */
+  | "price-impact"
   | "insufficient-balance"
   /** Output moved past the slippage limit between quote and execution. */
   | "slippage"
@@ -54,6 +56,7 @@ export const REASON_MESSAGE: Record<SwapReason, string> = {
   sanctioned: "This address cannot trade this asset",
   "market-closed": "The US market is closed",
   "zero-amount": "Enter an amount",
+  "price-impact": "Price impact is too high for this size; try a smaller amount",
   "insufficient-balance": "Insufficient balance",
   slippage: "Price moved beyond your slippage limit",
   "deadline-expired": "The quote expired",
@@ -76,6 +79,7 @@ export const REASON_LABEL: Record<SwapReason, string> = {
   sanctioned: "Address restricted",
   "market-closed": "Market closed",
   "zero-amount": "Enter an amount",
+  "price-impact": "Price impact too high",
   "insufficient-balance": "Insufficient balance",
   slippage: "Slippage too tight",
   "deadline-expired": "Quote expired",
@@ -102,6 +106,46 @@ export const KNOWN_ERROR_SELECTORS: Record<string, SwapReason> = {
   "0x19f9fbb7": "hook-reverted", // SwapReentered() of VaradaLiveHook
   "0xa9e35b2f": "hook-reverted", // HookCallFailed()
 };
+
+const UNEXPECTED_REVERT_BYTES = "0x6190b2b0"; // V4Quoter: UnexpectedRevertBytes(bytes)
+const EXECUTION_FAILED = "0x2c4029e9"; // UniversalRouter: ExecutionFailed(uint256,bytes)
+const WRAPPED_ERROR = "0x90bfb865"; // v4-core CustomRevert: WrappedError(address,bytes4,bytes,bytes)
+
+/**
+ * Selectors found in revert data, outermost first, unwrapping the three wrappers around a pool's or hook's
+ * own error: the quoter's `UnexpectedRevertBytes`, the router's `ExecutionFailed` and the pool manager's
+ * `WrappedError` (whose selector argument is the hook function that failed, and whose reason is the hook's error).
+ */
+export function revertSelectors(data: string, depth = 0): string[] {
+  const d = data.toLowerCase();
+  if (!/^0x[0-9a-f]{8}/.test(d) || depth > 5) return [];
+  const sel = d.slice(0, 10);
+  const out = [sel];
+  const body = `0x${d.slice(10)}` as Hex;
+  try {
+    if (sel === UNEXPECTED_REVERT_BYTES) {
+      const [inner] = decodeAbiParameters([{ type: "bytes" }], body);
+      out.push(...revertSelectors(inner, depth + 1));
+    } else if (sel === EXECUTION_FAILED) {
+      const [, inner] = decodeAbiParameters([{ type: "uint256" }, { type: "bytes" }], body);
+      out.push(...revertSelectors(inner, depth + 1));
+    } else if (sel === WRAPPED_ERROR) {
+      const [, , reason] = decodeAbiParameters([{ type: "address" }, { type: "bytes4" }, { type: "bytes" }, { type: "bytes" }], body);
+      out.push(...revertSelectors(reason, depth + 1));
+    }
+  } catch {
+    // truncated or foreign data: keep what was found
+  }
+  return out;
+}
+
+/** Hex revert data found anywhere in an error and its causes. */
+function revertData(err: unknown, depth = 0): string[] {
+  if (depth > 8 || typeof err !== "object" || err === null) return [];
+  const e = err as Record<string, unknown>;
+  const own = typeof e.data === "string" && e.data.startsWith("0x") ? [e.data] : typeof (e.data as { data?: unknown } | undefined)?.data === "string" ? [(e.data as { data: string }).data] : [];
+  return [...own, ...revertData(e.cause, depth + 1)];
+}
 
 function collectText(err: unknown, depth = 0): string {
   if (depth > 6 || err === null || err === undefined) return "";
@@ -133,6 +177,14 @@ export function mapSwapError(err: unknown): SwapError {
   }
   if (lower.includes("insufficient funds") || lower.includes("exceeds the balance of the account")) {
     return new SwapError("insufficient-gas-funds", undefined, { cause: err });
+  }
+  // decode wrapped reverts first: the innermost known error says why
+  for (const data of revertData(err)) {
+    const selectors = revertSelectors(data);
+    for (const selector of selectors.slice().reverse()) {
+      const reason = KNOWN_ERROR_SELECTORS[selector];
+      if (reason) return new SwapError(reason, undefined, { detail: selector, cause: err });
+    }
   }
   for (const [selector, reason] of Object.entries(KNOWN_ERROR_SELECTORS)) {
     if (lower.includes(selector)) return new SwapError(reason, undefined, { detail: selector, cause: err });

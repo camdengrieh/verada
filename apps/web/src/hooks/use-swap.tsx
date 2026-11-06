@@ -75,7 +75,7 @@ export function useSwap() {
       try {
         if (!address || !clients.accountClient) throw new SwapError("unknown", "Connect your wallet first");
         if (Date.now() - quote.quotedAt > MAX_QUOTE_AGE_MS) throw new SwapError("deadline-expired");
-        if (quote.blockers.length > 0) throw new SwapError(quote.blockers[0]!, quote.compliance.blockers[0]?.message);
+        if (quote.blockers.length > 0) throw new SwapError(quote.blockers[0]!, quote.compliance.blockers.find((b) => b.reason === quote.blockers[0])?.message);
         setState({ ...INITIAL, phase: "planning", busy: true });
 
         const plan = await planExecution(clients.accountClient, quote, { account: address, chainId: chainId ?? 1 });
