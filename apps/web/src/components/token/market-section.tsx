@@ -140,7 +140,7 @@ export function MarketSection({ address, symbol, quote, market, loading, error, 
   if (error && !market) {
     return (
       <div role="alert" className="rounded-2xl border border-line bg-card">
-        <EmptyState size="compact" title="Market data is not available" body="The indexer could not be reached or has no market data for this pool. Prices and volume come from it." action={<Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>} />
+        <EmptyState size="compact" headingLevel={2} title="Market data is not available" body="The indexer could not be reached or has no market data for this pool. Prices and volume come from it." action={<Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>} />
       </div>
     );
   }

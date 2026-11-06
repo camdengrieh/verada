@@ -17,7 +17,7 @@ import { readTokenAddress } from "@/lib/token-address";
 function Notice({ role, title, body, action }: { role: "status" | "alert"; title: string; body?: ReactNode; action?: ReactNode }) {
   return (
     <section role={role} className="rounded-[32px] border border-line bg-card">
-      <EmptyState headingLevel={2} title={title} body={body} action={action} />
+      <EmptyState headingLevel={1} title={title} body={body} action={action} />
     </section>
   );
 }
