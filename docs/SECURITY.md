@@ -25,6 +25,48 @@ All fixes from review 3 are in the commits listed in [Fix commits](#fix-commits)
 full test suite passes: 1,371 Foundry tests (including the mainnet-fork suites against the real
 Uniswap v4, Zama, Endaoment and ENS contracts), 315 hook tests and every TypeScript package.
 
+## Review status
+
+Varada is deployed **without a third-party audit**, because of time. This section says exactly what
+that means. It does not claim more than the rest of this page shows.
+
+### What was reviewed
+
+- **Automated adversarial review.** Three AI-assisted reviews run by the team (the table above), with
+  the findings fixed and regression-tested. See [How the reviews work](#how-the-reviews-work).
+- **Forge tests.** Unit and integration tests for every contract in `contracts/test`.
+- **Fuzz and invariant tests.** Foundry invariant suites in `contracts/test`: consolidator
+  (`ConsolidatorInvariants.t.sol`), live donations (`LiveInvariants.t.sol`,
+  `LiveFactoryInvariants.t.sol`), vaults (`VaultInvariants.t.sol`), governance
+  (`GovernanceInvariants.t.sol`, `RotationInvariants.t.sol`) and profiles (`ProfileInvariants.t.sol`).
+- **Fork tests.** Suites against the real mainnet Uniswap v4, Zama, Endaoment and ENS contracts
+  (`contracts/test/fork`) and the swap engine on an anvil fork ([SWAP.md](SWAP.md)).
+
+### What was not reviewed
+
+- **No external audit** of any kind: no audit firm, no contest, no bug bounty.
+- **No review at all of the Uniswap v3 hops added to the quote registry and fee consolidator, beyond
+  the same automated review, tests and fork tests.** Reviews 1 to 3 ran on commits before that change
+  (`19b050a`, `e3b7d39`, `c1d3c4c`); [Chapter 5](chapters/05-quote-assets-pricing-and-routing.md) records it.
+  The same holds for the v3 and v2 swap engine and the Ondo reference pricing, which are off-chain or
+  display code.
+- Everything listed under [Not yet covered](#not-yet-covered).
+
+### Mitigations that exist in the code
+
+| Mitigation | Where it is | Limit |
+| --- | --- | --- |
+| Hard ceilings on tunable parameters | `FeeConsolidator.MAX_SLIPPAGE_CEILING_BPS` (2000) and `MAX_HOP_FEE_BPS` (1000); `VaradaFactory.MAX_FEE_BPS` (500); `LiveDonationVault.MAX_DONATION_THRESHOLD` | Caps bound a setting, not a logic bug. |
+| Price guards that fail closed | `FeeConsolidator._hop`: deviation from a reference or TWAP and a minimum output on every hop; tighter in-swap bounds | A bad reference seeded by the owner is still trusted. |
+| Held-fee retry | A failed conversion keeps the raw amount, emits `ConsolidationFailed` or `FeeTaken(converted = false)`, and anyone can call `retry`, `retryAmount` or `VaradaLiveHook.retryHeld` | Fees may stay held for a long time if a route stays broken. |
+| Settlement grace | `FeeVault.settle` waits up to `SETTLE_GRACE` (7 days) for outstanding fees, then pays what is there | Late fees roll into a later epoch. |
+| No owner custody of donations | `LiveDonationVault`: the owner can only call `setHook` once; no pause, redirect or arbitrary rescue; `skim` pays only the platform treasury and never owed USDC. `FeeVault.withdrawPlatform` pays only the treasury | `FeeConsolidator.rescueExcess` lets the owner send balances **not owed to any token** (dust, accidental transfers) to any address. |
+| Two-step ownership | `Ownable2Step` on admin contracts such as `FeeConsolidator` and `QuoteRegistry`; hand-over to a multisig ([DEPLOYMENT.md](DEPLOYMENT.md)) | A multisig is operational, not enforced by the code. |
+| Stoppable automation | The keeper and curator agents are separate processes and can be stopped; `AgentVault.setPaused(true)` stops gifts and `setActive(false)` stops an agent ([agents/README.md](../agents/README.md)) | **The consolidator, fee vaults and hooks have no pause switch.** Stopping the keeper does not stop fee conversion, which is permissionless. |
+
+The mitigations lower the damage of a mistake; they are not a substitute for the audit that was not
+done.
+
 ## How the reviews work
 
 The Pashov solidity-auditor runs twelve attacker agents over the whole in-scope source. Each agent has
