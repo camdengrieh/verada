@@ -4,6 +4,7 @@ pragma solidity ^0.8.26;
 import {Ownable, Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {Currency} from "v4-core/types/Currency.sol";
+import {LPFeeLibrary} from "v4-core/libraries/LPFeeLibrary.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
@@ -41,6 +42,11 @@ contract QuoteRegistry is IQuoteRegistry, Ownable2Step {
     error RouteDoesNotSettle(address endsIn);
     error AssetIsSettlement();
     error InvalidDecimals(address asset);
+    error HopFeeTooHigh(uint256 hop, uint24 fee);
+
+    /// @notice Highest static pool fee (pips) a route hop may charge; matches the consolidator's
+    ///         `MAX_HOP_FEE_BPS` (1000 bps), above which every conversion would revert.
+    uint24 public constant MAX_HOP_FEE_PIPS = 100_000;
 
     constructor(address owner_, address settlementAsset_, address weth_) Ownable(owner_) {
         if (settlementAsset_ == address(0) || weth_ == address(0)) revert ZeroAddress();
@@ -145,6 +151,9 @@ contract QuoteRegistry is IQuoteRegistry, Ownable2Step {
         delete _routes[asset];
         for (uint256 i; i < length; ++i) {
             PoolKey calldata key = route[i];
+            if (!LPFeeLibrary.isDynamicFee(key.fee) && key.fee > MAX_HOP_FEE_PIPS) {
+                revert HopFeeTooHigh(i, key.fee);
+            }
             address c0 = Currency.unwrap(key.currency0);
             address c1 = Currency.unwrap(key.currency1);
             if (current == c0) {
