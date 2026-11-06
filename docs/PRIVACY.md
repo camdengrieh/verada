@@ -86,6 +86,28 @@ Measured in headless Chrome on 2026-11-07 through Nox (`pnpm --filter @varada/we
   design and the user can load public data directly. `workerConfig: { "tls": "preferred" }` would
   fall back to plaintext at the exit, which lets the exit read the request, so it is not the default.
 
+### Verified end to end (headless Chrome, 2026-11-07)
+
+`pnpm --filter @varada/web check:private-rpc` (worker boot, no wallet) and
+`pnpm --filter @varada/web check:private-rpc-session` (an injected EIP-6963 wallet with a fresh
+random key, walks `/`, `/causes/`, `/governance/`, `/launch/`, `/agent/`, logs every request and
+searches URLs, bodies and headers for the address as checksummed, lower case, bare and 32-byte
+padded hex). Run against `next dev`:
+
+| Check | Result |
+| --- | --- |
+| Nox (default): pill reaches "Private RPC on · Nox mixnet" | Yes, 16 to 27 s after load (wallet connected / switch on) |
+| Nym (`NEXT_PUBLIC_ANON_RPC_NETWORK=nym`) | Yes, 92 s on a loaded machine. Besides the RPC and the jsdelivr bundle, the worker reads the Nym validator API (`validator.nymtech.net`) directly: that reveals this IP is starting a Nym client, nothing more |
+| Tor (`tor-js`) without `workerConfig.gateways` | Pill "Private RPC failed" after 16 s, fails closed. A working Tor run needs a gateway we do not operate: not verified |
+| Bootstrap RPCs unreachable | Pill "Private RPC failed", "Load public data directly" offered; no direct mainnet RPC request before the opt-in; after it the note "Public data is loading directly for this visit. Account data still only loads privately." shows |
+| Viewer address in any request, Nox and failed-bootstrap runs | 0 of 205 and 0 of 227 requests. Hosts contacted: the app, the indexer, the Sepolia bootstrap RPCs, the worker bundle host |
+
+Not covered by these runs: a full swap and vote on a mainnet fork. The environment has no upstream
+RPC key, so the chain contracts cannot be reached, and traffic inside the mixnet is encrypted so a
+network log cannot show what the exit sends. The swap balance, allowance and Ondo reads are covered
+by unit tests (`use-swap`, `connected-trade-panel`) and by code reading: every address-keyed read
+goes through `createAccountClient`. Transactions go through the wallet's RPC (see below).
+
 ### What it does not protect
 
 - **Transactions.** Votes, launches and donations are signed and broadcast by the user's wallet
