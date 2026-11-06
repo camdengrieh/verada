@@ -139,6 +139,137 @@ export const veradaFactoryAbi = [
   },
   {
     "type": "function",
+    "name": "configureLiveMode",
+    "inputs": [
+      {
+        "name": "liveHook_",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "liveVault_",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "deployLiveToken",
+    "inputs": [
+      {
+        "name": "params",
+        "type": "tuple",
+        "internalType": "struct IVeradaFactory.DeployParams",
+        "components": [
+          {
+            "name": "name",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "symbol",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "metadataURI",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "salt",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "baseFeeBps",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "sniperFeeStartBps",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "sniperDecaySeconds",
+            "type": "uint32",
+            "internalType": "uint32"
+          },
+          {
+            "name": "startTick",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "quoteAsset",
+            "type": "address",
+            "internalType": "address"
+          },
+          {
+            "name": "label",
+            "type": "string",
+            "internalType": "string"
+          },
+          {
+            "name": "logoRef",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "categoryMask",
+            "type": "uint64",
+            "internalType": "uint64"
+          },
+          {
+            "name": "regionMask",
+            "type": "uint16",
+            "internalType": "uint16"
+          }
+        ]
+      },
+      {
+        "name": "live",
+        "type": "tuple",
+        "internalType": "struct IVeradaFactory.LiveParams",
+        "components": [
+          {
+            "name": "initialCause",
+            "type": "bytes32",
+            "internalType": "bytes32"
+          },
+          {
+            "name": "rotationPeriod",
+            "type": "uint8",
+            "internalType": "enum RotationPeriod"
+          },
+          {
+            "name": "donationThreshold",
+            "type": "uint96",
+            "internalType": "uint96"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "lpTokenId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "payable"
+  },
+  {
+    "type": "function",
     "name": "deployToken",
     "inputs": [
       {
@@ -230,6 +361,19 @@ export const veradaFactoryAbi = [
   },
   {
     "type": "function",
+    "name": "deployer",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "feeVault",
     "inputs": [],
     "outputs": [
@@ -282,6 +426,32 @@ export const veradaFactoryAbi = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "liveHook",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "liveVault",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "stateMutability": "view"
@@ -518,6 +688,25 @@ export const veradaFactoryAbi = [
   },
   {
     "type": "event",
+    "name": "LiveModeConfigured",
+    "inputs": [
+      {
+        "name": "liveHook",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      },
+      {
+        "name": "liveVault",
+        "type": "address",
+        "indexed": false,
+        "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TokenCreated",
     "inputs": [
       {
@@ -578,6 +767,22 @@ export const veradaFactoryAbi = [
   },
   {
     "type": "error",
+    "name": "InvalidLiveMode",
+    "inputs": [
+      {
+        "name": "liveHook",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "liveVault",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "InvalidSniperFee",
     "inputs": [
       {
@@ -611,6 +816,37 @@ export const veradaFactoryAbi = [
         "name": "maxPerTick",
         "type": "uint128",
         "internalType": "uint128"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "LiveModeAlreadyConfigured",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "LiveModeNotConfigured",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "NotDeployer",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "PoolTooSmall",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "poolSize",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },

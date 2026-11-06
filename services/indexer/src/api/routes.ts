@@ -29,6 +29,7 @@ import {
 } from "./security";
 import { currentEpochAt, resolveSchedule } from "./shortlist";
 import { toProposal } from "./takeover";
+import { type LiveRepo, toLiveView } from "./live";
 import type { FacilitatorClient } from "@x402/core/server";
 import { mountX402 } from "./x402";
 import {
@@ -50,6 +51,8 @@ export interface ApiDeps {
   catalog?: CatalogStore;
   /** Curator agents; `/api/agents/*` answers 503 without it. */
   agents?: AgentsRepo;
+  /** Live-donation tokens; `/api/live/*` answers 503 without it. */
+  live?: LiveRepo;
   /** Weekly reports on Swarm. */
   reports?: ReportFetcher;
   bus?: ActivityBus;
@@ -769,6 +772,20 @@ export function createApi(deps: ApiDeps): Hono {
     if (!row || row.token !== t.data) return send(c, { error: "not_found" }, CACHE.none, 404);
     const executions = await repo.takeoverExecutions(row.token);
     return send(c, toProposal(row, nowSeconds(), executions), CACHE.detail);
+  });
+
+  // ---- live-donation tokens
+
+  app.get("/api/live/:token", async (c) => {
+    if (!deps.live) {
+      c.header("Cache-Control", CACHE.none);
+      return c.json({ error: "live_unavailable" }, 503);
+    }
+    const t = parse(c, addressSchema, c.req.param("token"));
+    if (!t.ok) return t.res;
+    const [found, donations] = await Promise.all([deps.live.getLiveToken(t.data), deps.live.donations(t.data, 50)]);
+    if (!found) return send(c, { error: "not_found" }, CACHE.none, 404);
+    return send(c, { ...toLiveView(found, nowSeconds()), recentDonations: donations }, CACHE.detail);
   });
 
   app.get("/api/polls/:governor/:token/:scope", async (c) => {

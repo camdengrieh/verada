@@ -1,5 +1,5 @@
 import type { Address } from "viem";
-import { isAddress } from "viem";
+import { isAddress, zeroAddress } from "viem";
 
 export const MAINNET_CHAIN_ID = 1;
 
@@ -18,6 +18,8 @@ export type IndexerEnv = {
   tokenRegistry: Address;
   votingScheme: Address;
   takeoverGovernor: Address;
+  /** Live-donation rotation governor; the zero address when live mode is not deployed. */
+  rotationGovernor: Address;
   startBlock: number;
 };
 
@@ -61,6 +63,7 @@ export function readEnv(env: Record<string, string | undefined>): IndexerEnv {
     tokenRegistry: address(env, "TOKEN_REGISTRY_ADDRESS"),
     votingScheme: address(env, "VOTING_SCHEME_ADDRESS"),
     takeoverGovernor: address(env, "TAKEOVER_GOVERNOR_ADDRESS"),
+    rotationGovernor: env.ROTATION_GOVERNOR_ADDRESS ? address(env, "ROTATION_GOVERNOR_ADDRESS") : zeroAddress,
     startBlock: start,
   };
 }

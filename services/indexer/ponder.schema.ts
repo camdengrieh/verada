@@ -613,6 +613,210 @@ export const takeoverVote = onchainTable(
   }),
 );
 
+// ---- live-donation mode
+
+/** The factory's live-donation mode (`LiveModeConfigured`, emitted once). */
+export const liveMode = onchainTable("live_mode", (t) => ({
+  id: t.text().primaryKey(),
+  liveHook: t.hex().notNull(),
+  liveVault: t.hex().notNull(),
+  configuredAt: t.bigint().notNull(),
+  txHash: t.hex().notNull(),
+}));
+
+/**
+ * A live-donation token. Created by whichever launch event comes first: the hook's
+ * `TokenConfigured`, then the vault's `LiveTokenRegistered`, then the hook's `PoolRegistered`, all
+ * before the factory's `TokenCreated` in the same transaction. Totals are in `live_cause_total`.
+ */
+export const liveToken = onchainTable("live_token", (t) => ({
+  token: t.hex().primaryKey(),
+  /** Hook fee configuration (`TokenConfigured`). */
+  baseFeeBps: t.integer(),
+  launchSurchargeBps: t.integer(),
+  surchargeDecaySeconds: t.integer(),
+  launchTimestamp: t.bigint(),
+  /** Vault registration (`LiveTokenRegistered`): cause credit at which a swap pushes; 0 = every swap. */
+  threshold: t.bigint(),
+  initialCause: t.hex(),
+  /** `RotationPeriod` chosen at launch (0 = 1h, 1 = 12h, 2 = 1d, 3 = 3d, 4 = 1w). */
+  initialPeriod: t.integer(),
+  registeredAt: t.bigint(),
+  /** Pool (`PoolRegistered`). */
+  quote: t.hex(),
+  poolId: t.hex(),
+  createdAt: t.bigint().notNull(),
+  txHash: t.hex().notNull(),
+}));
+
+/**
+ * Per (token, cause) ledger: `causeShare` credited (`Credited`), `donated` sent to the org
+ * (`Donated`), `pending = causeShare - donated` still in the vault, and the quote held by the
+ * hook for that cause (`FeeTaken` not converted, minus `HeldRetried`).
+ */
+export const liveCauseTotal = onchainTable(
+  "live_cause_total",
+  (t) => ({
+    token: t.hex().notNull(),
+    causeId: t.hex().notNull(),
+    gross: t.bigint().notNull(),
+    platform: t.bigint().notNull(),
+    causeShare: t.bigint().notNull(),
+    credits: t.integer().notNull(),
+    donated: t.bigint().notNull(),
+    donations: t.integer().notNull(),
+    heldQuote: t.bigint().notNull(),
+    deferrals: t.integer().notNull(),
+    lastDeferReason: t.hex(),
+    lastCreditedAt: t.bigint(),
+    lastDonatedAt: t.bigint(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.token, table.causeId] }),
+    tokenIdx: index().on(table.token),
+  }),
+);
+
+/** One swap fee of a live token (`FeeTaken`): converted to `usdcOut`, or held (`failure`). */
+export const liveFee = onchainTable(
+  "live_fee",
+  (t) => ({
+    id: t.text().primaryKey(),
+    token: t.hex().notNull(),
+    causeId: t.hex().notNull(),
+    rotation: t.bigint().notNull(),
+    quote: t.hex().notNull(),
+    quoteAmount: t.bigint().notNull(),
+    usdcOut: t.bigint().notNull(),
+    converted: t.boolean().notNull(),
+    failure: t.hex().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    tokenIdx: index().on(table.token, table.timestamp),
+  }),
+);
+
+/** A held fee converted later (`HeldRetried`). */
+export const liveHeldRetry = onchainTable(
+  "live_held_retry",
+  (t) => ({
+    id: t.text().primaryKey(),
+    token: t.hex().notNull(),
+    causeId: t.hex().notNull(),
+    caller: t.hex().notNull(),
+    quoteIn: t.bigint().notNull(),
+    usdcOut: t.bigint().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    tokenIdx: index().on(table.token),
+  }),
+);
+
+/** A donation from the live vault to a cause's org (`Donated`), in a swap or by `flush`. */
+export const liveDonation = onchainTable(
+  "live_donation",
+  (t) => ({
+    id: t.text().primaryKey(),
+    token: t.hex().notNull(),
+    causeId: t.hex().notNull(),
+    org: t.hex().notNull(),
+    amount: t.bigint().notNull(),
+    orgDeployed: t.boolean().notNull(),
+    inSwap: t.boolean().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    tokenIdx: index().on(table.token, table.timestamp),
+    causeIdx: index().on(table.causeId),
+  }),
+);
+
+/** Live vault platform share: accrued from `Credited`, withdrawn by `PlatformWithdrawn`. */
+export const liveVaultTotal = onchainTable("live_vault_total", (t) => ({
+  id: t.text().primaryKey(),
+  platformAccrued: t.bigint().notNull(),
+  platformWithdrawn: t.bigint().notNull(),
+  withdrawals: t.integer().notNull(),
+  skims: t.integer().notNull(),
+}));
+
+/** `FeeConsolidator.ClaimsConverted`: a source's ERC-6909 claims paid out as USDC. */
+export const claimsConversion = onchainTable(
+  "claims_conversion",
+  (t) => ({
+    id: t.text().primaryKey(),
+    source: t.hex().notNull(),
+    currency: t.hex().notNull(),
+    to: t.hex().notNull(),
+    amountIn: t.bigint().notNull(),
+    settlementOut: t.bigint().notNull(),
+    timestamp: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    sourceIdx: index().on(table.source),
+  }),
+);
+
+/**
+ * Rotation schedule of a live token, mirroring `RotationScheduleLib.Schedule` (RotationGovernor
+ * `TokenRegistered` and `PeriodChangeScheduled`). Rotation `n` starts at `startOf(n)`.
+ */
+export const liveSchedule = onchainTable("live_schedule", (t) => ({
+  token: t.hex().primaryKey(),
+  anchorTime: t.bigint().notNull(),
+  anchorIndex: t.bigint().notNull(),
+  period: t.integer().notNull(),
+  hasPending: t.boolean().notNull(),
+  pendingPeriod: t.integer().notNull(),
+  pendingFrom: t.bigint().notNull(),
+  /** Start of rotation `pendingFrom` (null without a pending change). */
+  switchAt: t.bigint(),
+  periodChanges: t.integer().notNull(),
+}));
+
+/**
+ * The cause that receives a live token's fees from rotation `fromRotation` on (`startsAt`): the
+ * initial cause at rotation 0 (`TokenRegistered`), then each `CauseScheduled`. A later schedule
+ * for the same rotation replaces the row.
+ */
+export const liveCauseSchedule = onchainTable(
+  "live_cause_schedule",
+  (t) => ({
+    token: t.hex().notNull(),
+    fromRotation: t.bigint().notNull(),
+    causeId: t.hex().notNull(),
+    startsAt: t.bigint().notNull(),
+    scheduledAt: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.token, table.fromRotation] }),
+  }),
+);
+
+/** Outcome of a rotation poll (`RoundFinalized`). `status` is the `RoundStatus` name. */
+export const liveRound = onchainTable(
+  "live_round",
+  (t) => ({
+    token: t.hex().notNull(),
+    target: t.bigint().notNull(),
+    status: t.text().notNull(),
+    winner: t.hex().notNull(),
+    effectiveFrom: t.bigint().notNull(),
+    finalizedAt: t.bigint().notNull(),
+    txHash: t.hex().notNull(),
+  }),
+  (table) => ({
+    pk: primaryKey({ columns: [table.token, table.target] }),
+  }),
+);
+
 export const tokenRelations = relations(token, ({ many, one }) => ({
   feeTotals: many(feeTotal),
   epochs: many(epoch),

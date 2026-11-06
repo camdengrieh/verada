@@ -60,6 +60,26 @@ import {
   onTakeoverVoteCast,
 } from "./handlers/takeover";
 import { onTokenCreated } from "./handlers/token";
+import {
+  onClaimsConverted,
+  onCredited,
+  onDonationDeferred,
+  onFeeTaken,
+  onHeldRetried,
+  onLiveDonated,
+  onLiveModeConfigured,
+  onLivePoolRegistered,
+  onLiveTokenConfigured,
+  onLiveTokenRegistered,
+  onPlatformWithdrawn,
+  onSkimmed,
+} from "./handlers/live";
+import {
+  onCauseScheduled,
+  onPeriodChangeScheduled,
+  onRotationTokenRegistered,
+  onRoundFinalized,
+} from "./handlers/rotation";
 
 ponder.on("Factory:TokenCreated", onTokenCreated);
 ponder.on("FeeVault:FeesAttributed", onFeesAttributed);
@@ -116,3 +136,22 @@ ponder.on("CuratorRegistry:CurationSet", onCurationSet);
 ponder.on("CuratorRegistry:CurationsSubmitted", onCurationsSubmitted);
 ponder.on("AgentVault:Donated", onVaultDonated);
 ponder.on("AgentVault:Given", onVaultGiven);
+
+// Live-donation mode.
+ponder.on("Factory:LiveModeConfigured", onLiveModeConfigured);
+ponder.on("FeeConsolidator:ClaimsConverted", onClaimsConverted);
+ponder.on("VeradaLiveHook:TokenConfigured", onLiveTokenConfigured);
+ponder.on("VeradaLiveHook:PoolRegistered", onLivePoolRegistered);
+ponder.on("VeradaLiveHook:FeeTaken", onFeeTaken);
+ponder.on("VeradaLiveHook:HeldRetried", onHeldRetried);
+ponder.on("LiveDonationVault:LiveTokenRegistered", onLiveTokenRegistered);
+ponder.on("LiveDonationVault:Credited", onCredited);
+ponder.on("LiveDonationVault:Donated", onLiveDonated);
+ponder.on("LiveDonationVault:DonationDeferred", onDonationDeferred);
+ponder.on("LiveDonationVault:PlatformWithdrawn", onPlatformWithdrawn);
+ponder.on("LiveDonationVault:Skimmed", onSkimmed);
+// RotationGovernor: designated-cause and period changes only (see handlers/rotation.ts).
+ponder.on("RotationGovernor:TokenRegistered", onRotationTokenRegistered);
+ponder.on("RotationGovernor:CauseScheduled", onCauseScheduled);
+ponder.on("RotationGovernor:RoundFinalized", onRoundFinalized);
+ponder.on("RotationGovernor:PeriodChangeScheduled", onPeriodChangeScheduled);
