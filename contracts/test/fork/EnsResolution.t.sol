@@ -48,7 +48,7 @@ contract EnsResolutionForkTest is Test, Deploy {
     address internal tokenAddr;
     bytes32 internal tokenNode;
 
-    function setUp() public {
+    function setUp() public virtual {
         string memory rpc = vm.envOr("ETH_RPC_URL", string(""));
         if (bytes(rpc).length == 0) vm.skip(true);
         vm.createSelectFork(rpc);
