@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { IndexerClient, toHolderSummary, toMarketTrade } from "@/lib/indexer";
+import { IndexerClient, toHolderSummary, toMarketSnapshot, toMarketTrade, toTokenDetail } from "@/lib/indexer";
 
 const res = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
 const T = "0x00000000000000000000000000000000000000a1";
@@ -53,5 +53,32 @@ describe("market client", () => {
     expect(await c.holderSummary(T)).toBeNull();
     expect(toMarketTrade({ id: "x", side: "buy" })).toBeNull();
     expect(toHolderSummary({})).toBeNull();
+  });
+
+  it("keeps each hour's ticks and the lifetime totals for the chart", () => {
+    const m = toMarketSnapshot({
+      quote: "0xq",
+      quoteDecimals: 18,
+      price: 0.5,
+      lastTradeAt: "99",
+      lifetime: { trades: 7, buys: 5, sells: 2, volumeQuote: "900" },
+      window: { hours: 24, trades: 0, buys: 0, sells: 0, buyQuote: "0", sellQuote: "0", volumeQuote: "0", buyShare: null },
+      hourly: [
+        { hour: "3600", buys: 1, sells: 0, buyQuote: "5", sellQuote: "0", openTick: -69000, highTick: -68900, lowTick: -69000, closeTick: -68900, closePrice: 0.5 },
+        { hour: "7200", buys: 1, sells: 0, buyQuote: "5", sellQuote: "0" },
+      ],
+    });
+    expect(m!.lifetime).toEqual({ trades: 7, buys: 5, sells: 2, volumeQuote: 900n });
+    expect(m!.hourly[0]).toMatchObject({ hour: 3600, openTick: -69000, highTick: -68900, lowTick: -69000, closeTick: -68900 });
+    // Rows from an older indexer carry no ticks.
+    expect(m!.hourly[1]).toMatchObject({ openTick: null, closeTick: null });
+    expect(toMarketSnapshot({ window: {}, hourly: [] })!.lifetime).toBeNull();
+  });
+
+  it("reads a token's fee totals", () => {
+    const d = toTokenDetail({ address: T, name: "A", symbol: "A", feeTotals: { token: T, settlementAsset: "0xu", platformAmount: "100", causeAmount: "900", collections: 3, lastCollectedAt: "1700" } });
+    expect(d!.feeTotals).toEqual({ platformAmount: "100", causeAmount: "900", collections: 3, lastCollectedAt: 1700 });
+    expect(toTokenDetail({ address: T, feeTotals: null })!.feeTotals).toBeNull();
+    expect(toTokenDetail({ address: T })!.feeTotals).toBeNull();
   });
 });

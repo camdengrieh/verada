@@ -55,7 +55,18 @@ export interface TokenBallotSize {
   choiceEffectiveFrom: string | null;
 }
 
+/** Fees collected for a token, in USDC base units (6 decimals) as decimal strings. */
+export interface TokenFeeTotals {
+  platformAmount: string;
+  causeAmount: string;
+  /** Number of deposits into the fee vault. */
+  collections: number;
+  lastCollectedAt: number | null;
+}
+
 export interface TokenDetail extends TokenSummary {
+  /** Absent or null from the chain fallback and for tokens that never collected fees. */
+  feeTotals?: TokenFeeTotals | null;
   profile: TokenProfile | null;
   /** Causes the controller pinned (they lead every ballot); null when none. */
   shortlist: string[] | null;
@@ -336,7 +347,17 @@ export function toTokenDetail(v: unknown): TokenDetail | null {
       textRecords: {},
     };
   }
-  return { ...t, profile, shortlist: strList(v.shortlist), focus: toFocus(v.focus), ballotSize: toBallotSize(v.ballotSize) };
+  return { ...t, feeTotals: toFeeTotals(v.feeTotals), profile, shortlist: strList(v.shortlist), focus: toFocus(v.focus), ballotSize: toBallotSize(v.ballotSize) };
+}
+
+function toFeeTotals(v: unknown): TokenFeeTotals | null {
+  if (!isRecord(v)) return null;
+  return {
+    platformAmount: dec(v.platformAmount),
+    causeAmount: dec(v.causeAmount),
+    collections: num(v.collections) ?? 0,
+    lastCollectedAt: toSeconds(v.lastCollectedAt) ?? null,
+  };
 }
 
 function toBallotSize(v: unknown): TokenBallotSize | null {
@@ -549,6 +570,11 @@ export interface MarketHour {
   sells: number;
   buyQuote: bigint;
   sellQuote: bigint;
+  /** Pool ticks at the hour's first trade, highest, lowest and last (see `candlesFromHours`). */
+  openTick: number | null;
+  highTick: number | null;
+  lowTick: number | null;
+  closeTick: number | null;
   closePrice: number | null;
 }
 
@@ -557,6 +583,8 @@ export interface MarketSnapshot {
   quoteDecimals: number | null;
   price: number | null;
   lastTradeAt: number | null;
+  /** Totals since the first trade; null before it (older indexers omit it). */
+  lifetime: { trades: number; buys: number; sells: number; volumeQuote: bigint } | null;
   window: { hours: number; trades: number; buys: number; sells: number; buyQuote: bigint; sellQuote: bigint; volumeQuote: bigint; buyShare: number | null };
   hourly: MarketHour[];
 }
@@ -629,6 +657,9 @@ export function toMarketSnapshot(v: unknown): MarketSnapshot | null {
     quoteDecimals: finite(v.quoteDecimals),
     price: finite(v.price),
     lastTradeAt: toSeconds(v.lastTradeAt) ?? null,
+    lifetime: isRecord(v.lifetime)
+      ? { trades: num(v.lifetime.trades) ?? 0, buys: num(v.lifetime.buys) ?? 0, sells: num(v.lifetime.sells) ?? 0, volumeQuote: big(v.lifetime.volumeQuote) }
+      : null,
     window: {
       hours: num(w.hours) ?? 0,
       trades: num(w.trades) ?? 0,
@@ -642,7 +673,20 @@ export function toMarketSnapshot(v: unknown): MarketSnapshot | null {
     hourly: (Array.isArray(v.hourly) ? v.hourly.filter(isRecord) : []).flatMap((h) => {
       const hour = toSeconds(h.hour);
       if (hour === undefined) return [];
-      return [{ hour, buys: num(h.buys) ?? 0, sells: num(h.sells) ?? 0, buyQuote: big(h.buyQuote), sellQuote: big(h.sellQuote), closePrice: finite(h.closePrice) }];
+      return [
+        {
+          hour,
+          buys: num(h.buys) ?? 0,
+          sells: num(h.sells) ?? 0,
+          buyQuote: big(h.buyQuote),
+          sellQuote: big(h.sellQuote),
+          openTick: finite(h.openTick),
+          highTick: finite(h.highTick),
+          lowTick: finite(h.lowTick),
+          closeTick: finite(h.closeTick),
+          closePrice: finite(h.closePrice),
+        },
+      ];
     }),
   };
 }

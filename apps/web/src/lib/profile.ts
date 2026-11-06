@@ -9,6 +9,8 @@ export interface PinDraft {
   index: number;
   proof: Hex[];
   name: string;
+  /** The org's catalogue category slugs, for its icon. */
+  categories?: string[];
 }
 
 /**
