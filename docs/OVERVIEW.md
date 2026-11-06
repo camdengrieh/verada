@@ -153,7 +153,9 @@ node apps/web/scripts/serve-static.mjs 8080 /bzz/abc123                 # http:/
 **Real indexer** (Ponder, Node 22.12+): `cp services/indexer/.env.example services/indexer/.env.local`,
 fill `PONDER_RPC_URL_1`, every contract address and `START_BLOCK`, then
 `pnpm --filter @varada/indexer dev` (API on port 42069, PGlite database). `codegen`, `start` and
-`serve` are also scripts. Optional `CATALOG_SOURCE` enables `/api/catalog/*`.
+`serve` are also scripts. Optional `CATALOG_SOURCE` enables `/api/catalog/*`. Run `pnpm install` with
+Node 22.12 or newer if you will run Ponder: an install under Node 20 does not fetch Rolldown's native
+binding, and `ponder` then stops with "Cannot find native binding".
 
 **Publisher:** `pnpm --filter @varada/publisher dev` (port 42070). Everything is off until its
 variables are set; see its README.
