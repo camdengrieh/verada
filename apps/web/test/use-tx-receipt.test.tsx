@@ -38,7 +38,7 @@ describe("useTx reads the receipt through the public client", () => {
     render(<Probe label="Launch" />);
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(`Launch reverted (${HASH})`));
     expect(screen.queryByText(/Could not read the receipt/)).toBeNull();
-    expect(txToast.error).toHaveBeenCalledWith("t1", expect.objectContaining({ title: "Transaction reverted", description: expect.stringContaining("Nothing was spent beyond gas") }));
+    await waitFor(() => expect(txToast.error).toHaveBeenCalledWith("t1", expect.objectContaining({ title: "Transaction reverted", description: expect.stringContaining("Nothing was spent beyond gas") })));
     expect(txToast.success).not.toHaveBeenCalled();
   });
 

@@ -17,6 +17,7 @@ vi.mock("@/components/providers", () => ({
   useAppConfig: () => ({ governorAddress: "0x00000000000000000000000000000000000000d1", chainId: 1 }),
   useDeps: () => deps,
 }));
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: undefined, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: "0x00000000000000000000000000000000000000C0", chainId: 1, isConnected: true }),
   useSwitchChain: () => ({ switchChain: vi.fn(), isPending: false }),
