@@ -15,3 +15,4 @@ export * from "./transaction.js";
 export * from "./market-math.js";
 export * from "./usd.js";
 export * from "./usd-discover.js";
+export * from "./community-v3.js";
