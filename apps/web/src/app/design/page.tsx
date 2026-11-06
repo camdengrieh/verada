@@ -5,6 +5,7 @@ import { FoundationsSection } from "./sections/foundations";
 import { HeroesSection } from "./sections/heroes";
 import { ImpactSection } from "./sections/impact";
 import { MarketsSection } from "./sections/markets";
+import { MetricsSection } from "./sections/metrics";
 import { MotionSection } from "./sections/motion";
 import { NavigationSection } from "./sections/navigation";
 import { PrimitivesSection } from "./sections/primitives";
@@ -18,7 +19,8 @@ const TOC = [
   { id: "primitives", label: "Primitives & overlays" },
   { id: "navigation", label: "Tabs, tooltips & dividers" },
   { id: "data", label: "Data, motion & trading" },
-  { id: "markets", label: "Ondo stocks & liquidity" },
+  { id: "markets", label: "Pairs, stocks & liquidity" },
+  { id: "metrics", label: "Trading metrics" },
   { id: "ens", label: "ENS names" },
   { id: "impact", label: "Raised for causes" },
   { id: "varada", label: "Varada components" },
@@ -62,6 +64,7 @@ export default function DesignPage() {
           <NavigationSection />
           <DataSection />
           <MarketsSection />
+          <MetricsSection />
           <EnsSection />
           <ImpactSection />
           <VaradaSection />
