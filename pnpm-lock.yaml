@@ -410,9 +410,15 @@ importers:
         specifier: ^3.23.8
         version: 3.25.76
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.2.13
+        version: 0.2.13
       '@types/node':
         specifier: ^20.17.0
         version: 20.19.43
+      drizzle-orm:
+        specifier: 0.41.0
+        version: 0.41.0(@electric-sql/pglite@0.2.13)(@opentelemetry/api@1.10.0)(pg@8.23.1)
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
