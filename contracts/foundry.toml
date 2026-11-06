@@ -34,6 +34,7 @@ fuzz = { runs = 1_000 }
 [profile.hooks]
 src = "src/hooks"
 test = "test/hooks"
+script = "script/hooks"
 out = "out-hooks"
 cache_path = "cache-hooks"
 via_ir = false
