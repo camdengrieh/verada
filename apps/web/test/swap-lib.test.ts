@@ -151,7 +151,7 @@ describe("loadPoolMarket", () => {
           { hour: 2, buys: 1, sells: 0, buyQuote: 0n, sellQuote: 0n, closePrice: 0.002 },
         ],
       }),
-    };
+    } as never;
     const m = await loadPoolMarket({ chain, indexer, token, quoteUsd: 2500 });
     expect(m.priceInQuote).toBeCloseTo(0.002, 9);
     expect(m.priceUsd).toBeCloseTo(5, 6);
