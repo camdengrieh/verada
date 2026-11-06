@@ -221,11 +221,16 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   voided the curation. The first failure for each agent, region and epoch logs at `error`, which
   pages the owner. The web app's button runs the same plan and, with picks missing, sends nothing
   and explains the wait.
-- Voting weight is the holder's `VaradaToken.getPastVotes` one second before the epoch start,
-  counted in whole tokens. In the epoch a token launches in, that time predates the token, so its
-  weights are read at a launch snapshot one day after registration instead (halfway to the
-  epoch's end when less than two days remain; `snapshotFor`, `launchSnapshotOf`). The voter and
-  weight are public; the choice is not.
+- Voting weight is the holder's lowest vote checkpoint over a hold window ending one second
+  before the epoch start (`snapshotFor`), counted in whole tokens. The window is one epoch
+  (`HOLD_WINDOW`, 7 days, the same rule as a weekly rotation), so it is exactly the previous
+  epoch: tokens bought during an epoch count from the epoch after next, and a position held only
+  around the public snapshot carries nothing (no buy-vote-sell, flash loans or one-block holds).
+  In the epoch a token launches in, the regular snapshot predates the token, so its weights are
+  read at a launch snapshot one day after registration instead (halfway to the epoch's end when
+  less than two days remain; `launchSnapshotOf`), over the later half of that delay. The epoch
+  after launch starts its window there too, as its regular start predates the token
+  (`holdFromFor`). The voter and weight are public; the choice is not.
 - Ballots go to the voting scheme directly (`IVotingScheme.castBallot(governor, token, epoch,
   ballot)`), because encrypted inputs are bound to the transaction sender. The scheme calls back
   `EpochGovernor.authorizeBallot`, which checks eligibility, records the voter and emits `VoteCast`.
@@ -252,10 +257,14 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
 Holders can replace an absent or unwanted profile controller. `TakeoverGovernor.propose` needs a
 minimum token age, a per-proposer cooldown and a proposer weight above a threshold; it opens a
 two-option poll (AGAINST, FOR) on the scheme. Several proposals for one token may run at once;
-executing one supersedes the older ones. Voting weight is the smaller of a holder's votes at the
-snapshot (the second before the proposal) and at `lookback` earlier (one week by default), so
-tokens bought for a single block carry no weight. Quorum and threshold are basis points of the
-circulating supply at the snapshot, which excludes the Uniswap pool manager's locked balance.
+executing one supersedes the older ones. Voting weight is a holder's lowest vote checkpoint over
+the whole lookback, from `lookback` before the snapshot (one week by default) to the snapshot (the
+second before the proposal), so tokens bought, or lent out, for part of it carry no weight
+(`HoldWeightLib`, below). The proposer's own weight is read in the `propose` transaction, whose
+snapshot is that second, so it cannot be scanned ahead; a proposer whose lookback holds more
+checkpoints than one block can read (over 10k) cannot propose, and another holder can. Quorum
+and threshold are basis points of the circulating supply at the snapshot, which excludes the
+Uniswap pool manager's locked balance.
 After the voting period the proposal is closed and tallied; it succeeds when FOR reaches the
 quorum and beats AGAINST, and `execute` within the execution window (at least two days, to leave
 room for decryption) calls `TokenProfileRegistry.setController`. Only the proposer, or the owner
@@ -389,6 +398,15 @@ conversion failed -> heldRaw[token][activeCause] --retryHeld--> FeeConsolidator 
   1 day)`, in whole tokens. Tokens bought during the rotation carry nothing, and a position held
   only around the public snapshot instant carries nothing either (no buy-vote-sell, flash loans or
   one-block holds). Polls in a token's first day therefore carry no weight.
+- All three governors compute hold weights with `HoldWeightLib`, which reads every checkpoint in
+  the window. There is no scan cap: a cap would let a holder hide a dip behind enough later
+  checkpoints, and since anyone can add checkpoints to an account (a transfer to it writes one),
+  zeroing or rejecting a capped scan would let a third party cancel a holder's vote with a few
+  hundred dust transfers. Dust only makes the scan longer, about 4.4k gas per checkpoint, while
+  each checkpoint costs its sender a transfer at a distinct second (at most one per block). So
+  that no amount of dust pushes a ballot past the block gas limit, anyone can run the scan ahead
+  in chunks with `advanceHoldScan`; the progress is cached per window (a past window never
+  changes) and the ballot then reads only what is left.
 - Privacy: polls run on the same pluggable `IVotingScheme` (`ZamaVotingScheme`), but are closed
   with `requestOutcome`, which computes the argmax under FHE and makes only the winning option index
   publicly decryptable. Per-option tallies are never decrypted: in small polls whose voters and

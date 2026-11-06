@@ -210,7 +210,9 @@ contract GovernanceInvariants is Test {
     bytes32[] internal causes;
 
     function setUp() public {
-        vm.warp(T0);
+        // Holders are funded two weeks before the epoch governor exists, so they hold through
+        // epoch 0's whole hold window.
+        vm.warp(T0 - WEEK);
         token = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", makeAddr("creator"), factory);
         // Six holders with 1% .. 6% of the supply each; the factory keeps the rest.
         for (uint256 i; i < 6; ++i) {

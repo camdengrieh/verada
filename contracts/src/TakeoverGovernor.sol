@@ -8,12 +8,13 @@ import {SafeCast} from "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import {ITakeoverGovernor} from "./interfaces/ITakeoverGovernor.sol";
 import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
 import {IBallotGovernor, IVotingScheme} from "./interfaces/IVotingScheme.sol";
+import {HoldWeightLib} from "./libraries/HoldWeightLib.sol";
 
 /// @title TakeoverGovernor
 /// @notice Lets a token's holders replace the controller of its profile. A proposal is a
 ///         two-option poll (AGAINST / FOR) on the pluggable voting scheme; a voter's weight is
-///         the smaller of their vote checkpoints at the proposal snapshot and `lookback` seconds
-///         earlier, in whole tokens, so voting power cannot be bought just for the vote.
+///         their lowest vote checkpoint over the whole lookback `[snapshot - lookback, snapshot]`,
+///         in whole tokens, so voting power cannot be bought or borrowed just for the vote.
 /// @dev Timing, quorum and scheme are captured per proposal when it is created, so parameter or
 ///      scheme changes never affect proposals already running. Quorum and the proposal threshold
 ///      are fractions of the circulating supply at the snapshot: the total supply minus the votes
@@ -71,6 +72,8 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
     mapping(address token => mapping(address proposer => uint256)) public latestProposalOf;
     /// @inheritdoc ITakeoverGovernor
     mapping(address token => mapping(address proposer => uint256)) public cooldownAnchorOf;
+    /// @dev Hold-window scans run ahead of a ballot (`advanceHoldScan`).
+    mapping(bytes32 window => HoldWeightLib.Scan) private _holdScans;
 
     /// @param initialOwner Admin allowed to change parameters and the scheme, and to cancel
     ///        active proposals.
@@ -379,6 +382,18 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
         return _weightAt(p.token, account, p.snapshot, p.lookbackSnapshot);
     }
 
+    /// @inheritdoc ITakeoverGovernor
+    function advanceHoldScan(uint256 proposalId, address account, uint256 maxReads)
+        external
+        returns (bool done)
+    {
+        Proposal storage p = _proposals[proposalId];
+        if (p.token == address(0)) revert UnknownProposal(proposalId);
+        return HoldWeightLib.advance(
+            _holdScans, p.token, account, p.lookbackSnapshot, p.snapshot, maxReads
+        );
+    }
+
     // ------------------------------------------------------------------ internals
 
     function _setParams(Params memory p) private {
@@ -408,16 +423,15 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
         return uint256(_proposals[proposalId].start) + _PENDING_HORIZON < block.timestamp;
     }
 
-    /// @dev Voting weight: the smaller of the whole-token checkpoints at `snapshot` and at
-    ///      `lookbackSnapshot`, so only votes held through the lookback count.
+    /// @dev Voting weight: the whole-token lowest vote checkpoint over
+    ///      `[lookbackSnapshot, snapshot]` (`HoldWeightLib`), so only votes held through the
+    ///      whole lookback count.
     function _weightAt(address token, address account, uint48 snapshot, uint48 lookbackSnapshot)
         private
         view
         returns (uint64)
     {
-        uint64 atSnapshot = _votesAt(token, account, snapshot);
-        uint64 atLookback = _votesAt(token, account, lookbackSnapshot);
-        return atSnapshot < atLookback ? atSnapshot : atLookback;
+        return HoldWeightLib.lowest(_holdScans, token, account, lookbackSnapshot, snapshot);
     }
 
     /// @dev Circulating supply at `snapshot` in whole tokens: total supply minus the PoolManager's
@@ -427,21 +441,6 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
         uint256 pooled = IVotes(token).getPastVotes(_poolManager, snapshot);
         uint256 whole = (total > pooled ? total - pooled : 0) / 1e18;
         // Capped, so the cast cannot truncate.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return whole > type(uint64).max ? type(uint64).max : uint64(whole);
-    }
-
-    /// @dev Whole-token vote checkpoint of `account` at `snapshot`, capped to 64 bits; zero while
-    ///      the snapshot is not yet in the past.
-    function _votesAt(address token, address account, uint48 snapshot)
-        private
-        view
-        returns (uint64)
-    {
-        // forge-lint: disable-next-line(block-timestamp)
-        if (snapshot >= block.timestamp) return 0;
-        uint256 whole = IVotes(token).getPastVotes(account, snapshot) / 1e18;
-        // Capped just above, so the cast cannot truncate.
         // forge-lint: disable-next-line(unsafe-typecast)
         return whole > type(uint64).max ? type(uint64).max : uint64(whole);
     }

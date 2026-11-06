@@ -348,7 +348,7 @@ contract RotationGovernorTest is RotationGovernorBase {
         scheme.castBallot(address(gov), address(token), _rot(2), abi.encode(uint8(0)));
         vm.prank(dave);
         token.transfer(alice, 20e9 * 1e18);
-        assertEq(gov.weightAt(address(token), t0 + 1 days - 1, dave), 0);
+        assertEq(token.getPastVotes(dave, t0 + 1 days - 1), 0);
     }
 
     function test_ballot_checks() public {

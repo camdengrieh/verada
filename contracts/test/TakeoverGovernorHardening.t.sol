@@ -7,6 +7,7 @@ import {TakeoverGovernor} from "../src/TakeoverGovernor.sol";
 import {VaradaToken} from "../src/VaradaToken.sol";
 import {ITakeoverGovernor} from "../src/interfaces/ITakeoverGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
+import {HoldWeightLib} from "../src/libraries/HoldWeightLib.sol";
 import {MockProfileRegistryLite, MockVotingScheme} from "./mocks/GovernanceMocks.sol";
 
 /// @notice Regressions for the takeover governor: snapshot-only voting power, proposal slots that
@@ -130,6 +131,87 @@ contract TakeoverGovernorHardeningTest is Test {
         vm.prank(holder);
         uint256 id2 = gov.propose(token, newController);
         assertEq(gov.weightOf(id2, holder), 3_000_000_000);
+    }
+
+    /// Audit #9: a balance held at the lookback snapshot and at the snapshot, but lent out in
+    /// between, used to count in full (the weight read those two instants only). The weight is now
+    /// the lowest checkpoint over the whole lookback, so it is zero.
+    function test_holdOnlyAtBothInstants_hasNoWeight() public {
+        _distribute();
+        address attacker = makeAddr("attacker");
+        // A constant, not `block.timestamp`: via_ir may re-read the timestamp after a warp.
+        uint256 boughtAt = T0 + 2 days;
+        _give(attacker, 15_000_000_000 * WHOLE); // 15%: above quorum on its own
+        vm.warp(boughtAt + 1 hours);
+        vm.prank(attacker);
+        assertTrue(tokenContract.transfer(nobody, 15_000_000_000 * WHOLE));
+        vm.warp(boughtAt + 23 hours);
+        vm.prank(nobody);
+        assertTrue(tokenContract.transfer(attacker, 15_000_000_000 * WHOLE));
+
+        // Proposals now read the snapshot `boughtAt + lookback` and the lookback `boughtAt`,
+        // both with the full balance.
+        vm.warp(boughtAt + P.lookback + 1);
+        uint64 required = uint64((tokenContract.totalSupply() / WHOLE) * 100 / 10_000);
+        vm.prank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(ITakeoverGovernor.BelowProposalThreshold.selector, 0, required)
+        );
+        gov.propose(token, attacker);
+
+        vm.prank(proposer);
+        uint256 id = gov.propose(token, newController);
+        assertEq(gov.getProposal(id).lookbackSnapshot, boughtAt);
+        assertEq(gov.weightOf(id, attacker), 0);
+        assertEq(gov.weightOf(id, nobody), 0);
+        assertEq(gov.weightOf(id, whale), 10_000_000_000, "held all along");
+        vm.prank(attacker);
+        vm.expectRevert(ITakeoverGovernor.InvalidVote.selector);
+        scheme.castBallot(address(gov), token, id, abi.encode(FOR));
+    }
+
+    /// A partial sale inside the lookback lowers the weight to the balance kept.
+    function test_dipInsideLookback_lowersWeight() public {
+        _distribute();
+        uint256 at = T0 + 2 days;
+        vm.prank(whale);
+        assertTrue(tokenContract.transfer(nobody, 6_000_000_000 * WHOLE));
+        vm.warp(at + 1 hours);
+        vm.prank(nobody);
+        assertTrue(tokenContract.transfer(whale, 6_000_000_000 * WHOLE));
+        vm.warp(at + 12 hours);
+        vm.prank(proposer);
+        uint256 id = gov.propose(token, newController);
+        assertEq(gov.weightOf(id, whale), 4_000_000_000);
+        vm.prank(whale);
+        scheme.castBallot(address(gov), token, id, abi.encode(FOR));
+        assertEq(scheme.liveCounts(address(gov), token, id)[FOR], 4_000_000_000);
+    }
+
+    /// Dust sent to a voter cannot block its ballot: anyone runs the scan ahead in chunks and the
+    /// weight is unchanged.
+    function test_advanceHoldScan_dustCannotBlockTheBallot() public {
+        _distribute();
+        uint256 at = T0 + 2 days;
+        for (uint256 i; i < 300; ++i) {
+            vm.warp(at + 10 + i);
+            vm.prank(mid);
+            assertTrue(tokenContract.transfer(whale, 1));
+        }
+        vm.warp(at + P.lookback + 5); // the window starts before the dust
+        vm.prank(proposer);
+        uint256 id = gov.propose(token, newController);
+
+        vm.expectRevert(abi.encodeWithSelector(ITakeoverGovernor.UnknownProposal.selector, 99));
+        gov.advanceHoldScan(99, whale, 10);
+        vm.prank(nobody);
+        assertFalse(gov.advanceHoldScan(id, whale, 100));
+        assertTrue(gov.advanceHoldScan(id, whale, 250));
+        uint256 g = gasleft();
+        assertEq(gov.weightOf(id, whale), 10_000_000_000);
+        assertLt(g - gasleft(), 30_000, "cached");
+        _vote(id, whale, AGAINST);
+        assertEq(scheme.liveCounts(address(gov), token, id)[AGAINST], 10_000_000_000);
     }
 
     // ---- proposal slots: a holder cannot keep others out, and proposing needs a stake

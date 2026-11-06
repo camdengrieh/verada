@@ -20,17 +20,9 @@ import {
     NO_WINNER
 } from "./interfaces/IVotingScheme.sol";
 import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
+import {HoldWeightLib} from "./libraries/HoldWeightLib.sol";
 import {PollScopeLib} from "./libraries/PollScopeLib.sol";
 import {RotationScheduleLib} from "./libraries/RotationScheduleLib.sol";
-
-/// @dev Vote checkpoint accessors of `ERC20TimestampVotes` (live tokens are `VaradaToken`s).
-interface ICheckpointVotes {
-    function numCheckpoints(address account) external view returns (uint32);
-    function checkpoints(address account, uint32 pos)
-        external
-        view
-        returns (uint48 key, uint208 value);
-}
 
 /// @dev `CuratorRegistry`'s weekly clock: the epoch governor its curations follow.
 interface ICuratorClock {
@@ -132,9 +124,6 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     uint16 internal constant MAX_QUORUM_BPS = 5000;
     /// @notice Shortest hold window a weight is measured over.
     uint256 public constant MIN_HOLD_LOOKBACK = 1 days;
-    /// @notice Most checkpoints read inside a hold window (newest first); older ones are covered
-    ///         by the window-start checkpoint only. Bounds the cost of a ballot.
-    uint256 public constant MAX_HOLD_SCAN = 128;
     /// @notice Largest `minVoters`.
     uint32 public constant MAX_MIN_VOTERS = 100;
 
@@ -231,6 +220,8 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     mapping(address token => uint40) public lastExecutedEnd;
     /// @notice Number of executed period changes of the token (supersedes older proposals).
     mapping(address token => uint32) public executions;
+    /// @dev Hold-window scans run ahead of a ballot (`advanceHoldScan`).
+    mapping(bytes32 window => HoldWeightLib.Scan) internal _holdScans;
 
     /// @param initialOwner Admin: scheme, params, minVoters, vault and curator registry (once).
     /// @param causeRegistry_ Cause registry (this governor must be one of its materializers).
@@ -738,15 +729,6 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         return _periodVoted[id][voter];
     }
 
-    /// @notice Whole-token weight of `account` at `snapshot` (zero while the snapshot is not past).
-    function weightAt(address token, uint256 snapshot, address account)
-        external
-        view
-        returns (uint64)
-    {
-        return _weightAt(token, snapshot, account);
-    }
-
     /// @notice Whole-token hold weight of `account`: its lowest vote checkpoint over
     ///         `[holdFrom, snapshot]` (zero while the snapshot is not past).
     function holdWeightAt(address token, uint256 holdFrom, uint256 snapshot, address account)
@@ -755,6 +737,21 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         returns (uint64)
     {
         return _holdWeight(token, holdFrom, snapshot, account);
+    }
+
+    /// @notice Reads at most `maxReads` more vote checkpoints of `account` over
+    ///         `[holdFrom, snapshot]` and caches the progress, so a ballot over a window with
+    ///         very many checkpoints fits in a block. Anyone may call it; it never changes a
+    ///         weight. Windows: `roundHoldWindow`, `getProposal`.
+    /// @return done Whether the whole window has been read.
+    function advanceHoldScan(
+        address token,
+        uint256 holdFrom,
+        uint256 snapshot,
+        address account,
+        uint256 maxReads
+    ) external returns (bool done) {
+        return HoldWeightLib.advance(_holdScans, token, account, holdFrom, snapshot, maxReads);
     }
 
     /// @notice Hold window `[holdFrom, snapshot]` of the rotation poll for `target` (zero if the
@@ -1081,21 +1078,6 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         return total > pooled ? (total - pooled) / 1e18 : 0;
     }
 
-    /// @dev Whole-token vote checkpoint of `account` at `snapshot`, capped to 64 bits; zero while
-    ///      the snapshot is not yet in the past (same rule as the epoch governor).
-    function _weightAt(address token, uint256 snapshot, address account)
-        private
-        view
-        returns (uint64)
-    {
-        // forge-lint: disable-next-line(block-timestamp)
-        if (snapshot >= block.timestamp) return 0;
-        uint256 whole = IVotes(token).getPastVotes(account, snapshot) / 1e18;
-        // Capped just above, so the cast cannot truncate.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return whole > type(uint64).max ? type(uint64).max : uint64(whole);
-    }
-
     /// @dev Start of the hold window ending at `snapshot` for a rotation of `p`.
     function _holdFrom(uint256 snapshot, RotationPeriod p) private pure returns (uint256) {
         uint256 lookback = RotationScheduleLib.length(p);
@@ -1103,46 +1085,14 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         return snapshot > lookback ? snapshot - lookback : 0;
     }
 
-    /// @dev Whole-token lowest vote checkpoint of `account` over `[holdFrom, snapshot]`, capped
-    ///      to 64 bits; zero while the snapshot is not yet in the past. Reads the value in effect
-    ///      at `holdFrom` and at `snapshot`, then the checkpoints in between from the newest down,
-    ///      at most `MAX_HOLD_SCAN` of them.
+    /// @dev Whole-token lowest vote checkpoint of `account` over `[holdFrom, snapshot]`
+    ///      (`HoldWeightLib`: every checkpoint in the window is read).
     function _holdWeight(address token, uint256 holdFrom, uint256 snapshot, address account)
         private
         view
         returns (uint64)
     {
-        // forge-lint: disable-next-line(block-timestamp)
-        if (snapshot >= block.timestamp) return 0;
-        uint256 low = IVotes(token).getPastVotes(account, snapshot);
-        if (low == 0) return 0;
-        uint256 atStart = IVotes(token).getPastVotes(account, holdFrom);
-        if (atStart < low) low = atStart;
-        if (low == 0) return 0;
-
-        ICheckpointVotes cv = ICheckpointVotes(token);
-        // Index one past the last checkpoint with `key <= snapshot`.
-        uint256 lo;
-        uint256 hi = cv.numCheckpoints(account);
-        while (lo < hi) {
-            uint256 mid = (lo + hi) / 2;
-            (uint48 key,) = cv.checkpoints(account, uint32(mid));
-            if (key > snapshot) hi = mid;
-            else lo = mid + 1;
-        }
-        for (uint256 scanned; lo != 0 && scanned < MAX_HOLD_SCAN; ++scanned) {
-            --lo;
-            (uint48 key, uint208 value) = cv.checkpoints(account, uint32(lo));
-            if (key <= holdFrom) break;
-            if (value < low) {
-                low = value;
-                if (low == 0) return 0;
-            }
-        }
-        uint256 whole = low / 1e18;
-        // Capped just below, so the cast cannot truncate.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return whole > type(uint64).max ? type(uint64).max : uint64(whole);
+        return HoldWeightLib.lowest(_holdScans, token, account, holdFrom, snapshot);
     }
 
     function _setParams(Params memory p) private {

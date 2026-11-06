@@ -52,8 +52,9 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
 
     function setUp() public {
         _recordBallots();
-        // The token predates the governor by a week, so epoch 0 has a regular snapshot.
-        vm.warp(T0);
+        // The token predates the governor by two weeks, so epoch 0 has a regular snapshot and its
+        // holders hold through epoch 0's whole hold window.
+        vm.warp(T0 - WEEK);
         tokenContract = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(tokenContract);
         _give(tokenContract, v1, 100e18);
@@ -189,8 +190,51 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
         assertEq(gov.tally(ta, 1, causeB), 300);
         assertEq(gov.tally(ta, 1, causeA), 200);
 
-        // The next epoch reads the regular snapshot again.
-        assertEq(gov.weightOf(ta, 2, late), 1000);
+        // The next epoch reads the regular snapshot again, over a window that starts with the
+        // launch window (its regular start predates the token): launch holders keep their
+        // weight, and the later buyer counts from the epoch after.
+        assertEq(gov.snapshotFor(ta, 2), gov.snapshotOf(2));
+        assertEq(gov.holdFromFor(ta, 2), gov.holdFromFor(ta, 1));
+        assertEq(gov.weightOf(ta, 2, v1), 300);
+        assertEq(gov.weightOf(ta, 2, late), 0);
+        vm.warp(gov.epochStart(3));
+        assertEq(gov.holdFromFor(ta, 3), gov.snapshotOf(2));
+        assertEq(gov.weightOf(ta, 3, late), 1000);
+    }
+
+    /// Audit #5/#6 in the launch epoch: a balance held only across the public launch snapshot
+    /// carries no weight. Weights there are the lowest balance over the later half of the
+    /// launch delay.
+    function test_launchEpoch_holdOnlyAroundSnapshot_hasNoWeight() public {
+        uint256 launchedAt = gov.epochStart(1) + 2 days;
+        vm.warp(launchedAt);
+        VaradaToken t = _launch();
+        address ta = address(t);
+        _prepare(ta, 1);
+        uint256 snap = gov.launchSnapshotOf(ta);
+        assertEq(snap, launchedAt + 1 days);
+        assertEq(gov.holdFromFor(ta, 1), snap - 12 hours);
+
+        vm.warp(launchedAt + 1 hours);
+        _give(t, v1, 300e18);
+        // Bought in the later half of the delay: not held through the window.
+        vm.warp(snap - 1 hours);
+        _give(t, v2, 200e18);
+        // Bought the second before the snapshot and sold right after.
+        vm.warp(snap);
+        _give(t, late, 1000e18);
+        vm.warp(snap + 1);
+        vm.prank(late);
+        assertTrue(t.transfer(v1, 1000e18));
+        vm.warp(snap + 10);
+
+        assertEq(gov.weightOf(ta, 1, late), 0);
+        assertEq(gov.weightOf(ta, 1, v2), 0);
+        assertEq(gov.weightOf(ta, 1, v1), 300, "held from before the window; later gains ignored");
+        vm.prank(late);
+        vm.expectRevert(IEpochGovernor.InvalidVote.selector);
+        scheme.castBallot(address(gov), ta, 1, abi.encode(uint8(0)));
+        _vote(ta, v1, 1, 1);
     }
 
     function test_launchSnapshot_dayAfterRegistration_emitted() public {
@@ -209,6 +253,10 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
         assertEq(gov.snapshotFor(address(t), 1), block.timestamp + 1 days);
         assertEq(gov.snapshotFor(address(t), 2), gov.snapshotOf(2));
         assertEq(gov.snapshotFor(address(t), 0), gov.snapshotOf(0));
+        // The launch window is the later half of the delay, for the launch epoch and the next.
+        assertEq(gov.holdFromFor(address(t), 1), block.timestamp + 12 hours);
+        assertEq(gov.holdFromFor(address(t), 2), block.timestamp + 12 hours);
+        assertEq(gov.holdFromFor(address(t), 3), gov.snapshotOf(2));
     }
 
     /// With less than two days left the launch snapshot sits halfway to the epoch's end, so it
@@ -219,6 +267,8 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
         assertEq(gov.launchSnapshotOf(address(t)), block.timestamp + 5 hours);
         assertEq(gov.snapshotFor(address(t), 1), block.timestamp + 5 hours);
         assertEq(gov.snapshotFor(address(t), 2), gov.snapshotOf(2));
+        // Half of the 5-hour delay.
+        assertEq(gov.holdFromFor(address(t), 1), block.timestamp + 5 hours - 2.5 hours);
     }
 
     /// A token that already had supply at the epoch's snapshot keeps the regular snapshot.

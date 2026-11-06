@@ -83,19 +83,6 @@ export const rotationGovernorAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_HOLD_SCAN",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "MAX_MIN_VOTERS",
     "inputs": [],
     "outputs": [
@@ -263,6 +250,45 @@ export const rotationGovernorAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "advanceHoldScan",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "holdFrom",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "snapshot",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "maxReads",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "done",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -1671,35 +1697,6 @@ export const rotationGovernorAbi = [
     "stateMutability": "view"
   },
   {
-    "type": "function",
-    "name": "weightAt",
-    "inputs": [
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      },
-      {
-        "name": "snapshot",
-        "type": "uint256",
-        "internalType": "uint256"
-      },
-      {
-        "name": "account",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint64",
-        "internalType": "uint64"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
     "type": "event",
     "name": "BallotPrepared",
     "inputs": [
@@ -2371,6 +2368,17 @@ export const rotationGovernorAbi = [
     "type": "error",
     "name": "CuratorRegistryAlreadySet",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "HoldWindowOpen",
+    "inputs": [
+      {
+        "name": "snapshot",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",

@@ -9,8 +9,9 @@ pragma solidity ^0.8.26;
 ///      `IVotingScheme.castBallot(address(governor), token, proposalId, ballot)` on the scheme the
 ///      proposal was opened with; the scheme calls back `IBallotGovernor.authorizeBallot`, which
 ///      checks the proposal is active, the voter has not voted and returns their weight in whole
-///      tokens: the smaller of their votes at the snapshot (the second before the proposal was
-///      created) and at `snapshot - lookback`, so votes must have been held through the lookback.
+///      tokens: their lowest vote checkpoint over `[snapshot - lookback, snapshot]` (the snapshot
+///      is the second before the proposal was created), so votes must have been held through
+///      the whole lookback.
 ///      Quorum and the proposal threshold are fractions of the circulating supply at the
 ///      snapshot, which excludes the Uniswap PoolManager's balance. Several proposals may run
 ///      for the same token at once (at most one pending per proposer, with a per-proposer
@@ -46,8 +47,8 @@ interface ITakeoverGovernor {
         ///      At least 1 and at most `quorumBps`; the required weight is never below one
         ///      whole token, so an account without voting weight cannot propose.
         uint16 proposalThresholdBps;
-        /// @dev Seconds before the snapshot at which votes must already have been held: weights
-        ///      are the minimum of the two checkpoints.
+        /// @dev Seconds before the snapshot from which votes must have been held: weights are
+        ///      the lowest checkpoint over the whole lookback.
         uint32 lookback;
     }
 
@@ -65,7 +66,7 @@ interface ITakeoverGovernor {
         uint64 forWeight;
         uint64 againstWeight;
         bool tallied;
-        /// @dev `snapshot - lookback`: the second checkpoint weights are read at.
+        /// @dev `snapshot - lookback`: the start of the window weights are read over.
         uint48 lookbackSnapshot;
         /// @dev Circulating supply at the snapshot in whole tokens (total supply minus the
         ///      PoolManager's votes); quorum and threshold are fractions of it.
@@ -176,7 +177,14 @@ interface ITakeoverGovernor {
     function isClosed(uint256 proposalId) external view returns (bool);
     /// @notice Whether `voter` cast a ballot in the proposal.
     function hasVoted(uint256 proposalId, address voter) external view returns (bool);
-    /// @notice Voting weight of `account` for `proposalId`: whole tokens, the smaller of the
-    ///         checkpoints at the snapshot and at the lookback snapshot.
+    /// @notice Voting weight of `account` for `proposalId`: whole tokens, the lowest checkpoint
+    ///         over `[lookbackSnapshot, snapshot]`.
     function weightOf(uint256 proposalId, address account) external view returns (uint64);
+    /// @notice Reads at most `maxReads` more vote checkpoints of `account`'s hold window for the
+    ///         proposal and caches the progress, so a ballot over a window with very many
+    ///         checkpoints fits in a block. Anyone may call it; it never changes a weight.
+    /// @return done Whether the whole window has been read.
+    function advanceHoldScan(uint256 proposalId, address account, uint256 maxReads)
+        external
+        returns (bool done);
 }

@@ -11,15 +11,18 @@ import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {ITokenProfileRegistry} from "./interfaces/ITokenProfileRegistry.sol";
 import {IBallotGovernor, IVotingScheme} from "./interfaces/IVotingScheme.sol";
 import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
+import {HoldWeightLib} from "./libraries/HoldWeightLib.sol";
 
 /// @title EpochGovernor
 /// @notice Weekly epochs in which holders pick the cause that receives a token's cause pool.
 /// @dev The governor owns eligibility, weights and ballot composition; the pluggable
 ///      `IVotingScheme` owns the ballots and the tally. An epoch is a poll keyed
 ///      `(this, token, epoch)` on the scheme it was opened with, so swapping the scheme only
-///      affects epochs opened afterwards. Weights are the token's vote checkpoints at
-///      `snapshotFor(token, epoch)` in whole tokens: `snapshotOf(epoch)`, except in the epoch a
-///      token launches in, which predates the token and uses its launch snapshot instead.
+///      affects epochs opened afterwards. Weights are the token's lowest vote checkpoint over
+///      the hold window `[holdFromFor, snapshotFor]` in whole tokens (`HoldWeightLib`). The
+///      snapshot is `snapshotOf(epoch)`, except in the epoch a token launches in, which predates
+///      the token and uses its launch snapshot instead. The window is the whole previous epoch
+///      (`HOLD_WINDOW`), so no buy-before, sell-after around the public snapshot.
 ///      Ballots come from the token's cause focus over `CauseCatalog`: the controller's pins plus
 ///      deterministic rotation draws (see `IEpochGovernor`). The catalogue version is the one in
 ///      effect at the epoch's start; pins and the ballot size are read when the ballot is
@@ -55,6 +58,9 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
 
     /// @inheritdoc IEpochGovernor
     uint256 public constant CURATION_GRACE = 6 hours;
+
+    /// @inheritdoc IEpochGovernor
+    uint256 public constant HOLD_WINDOW = EPOCH_LENGTH;
 
     /// @inheritdoc IEpochGovernor
     uint256 public immutable epochZeroStart;
@@ -131,6 +137,8 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
     mapping(address token => mapping(uint256 epoch => EpochState)) private _epochs;
     mapping(address token => mapping(uint256 epoch => mapping(bytes32 causeId => uint256))) private
         _tally;
+    /// @dev Hold-window scans run ahead of a ballot (`advanceHoldScan`).
+    mapping(bytes32 window => HoldWeightLib.Scan) private _holdScans;
 
     /// @param initialOwner Admin allowed to set the factory once, swap the scheme and set the
     ///        fallback cause.
@@ -311,7 +319,7 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         }
 
         if (s.voted[voter]) revert AlreadyVoted(voter);
-        weight = _weightAt(token, snapshotFor(token, scope), voter);
+        weight = _weightOf(token, scope, voter);
         if (weight == 0) revert InvalidVote();
 
         s.voted[voter] = true;
@@ -424,6 +432,20 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         uint256 launch = launchSnapshotOf[token];
         if (launch != 0 && epoch == (launch - epochZeroStart) / EPOCH_LENGTH) return launch;
         return snapshotOf(epoch);
+    }
+
+    /// @inheritdoc IEpochGovernor
+    /// @dev A token with a launch snapshot starts the window of its launch epoch, and of the next
+    ///      one (whose regular window predates the token), at the later half of its launch delay.
+    function holdFromFor(address token, uint256 epoch) public view returns (uint256 holdFrom) {
+        uint256 snapshot = snapshotFor(token, epoch);
+        holdFrom = snapshot > HOLD_WINDOW ? snapshot - HOLD_WINDOW : 0;
+        uint256 launch = launchSnapshotOf[token];
+        if (launch == 0 || launch > snapshot) return holdFrom;
+        uint256 delay = epochStart((launch - epochZeroStart) / EPOCH_LENGTH + 1) - launch;
+        if (delay > LAUNCH_SNAPSHOT_DELAY) delay = LAUNCH_SNAPSHOT_DELAY;
+        uint256 launchFrom = launch - delay / 2;
+        if (holdFrom < launchFrom) holdFrom = launchFrom;
     }
 
     /// @inheritdoc IEpochGovernor
@@ -569,7 +591,22 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         view
         returns (uint64)
     {
-        return _weightAt(token, snapshotFor(token, epoch), account);
+        return _weightOf(token, epoch, account);
+    }
+
+    /// @inheritdoc IEpochGovernor
+    function advanceHoldScan(address token, uint256 epoch, address account, uint256 maxReads)
+        external
+        returns (bool done)
+    {
+        return HoldWeightLib.advance(
+            _holdScans,
+            token,
+            account,
+            holdFromFor(token, epoch),
+            snapshotFor(token, epoch),
+            maxReads
+        );
     }
 
     // ------------------------------------------------------------------ internals
@@ -674,19 +711,16 @@ contract EpochGovernor is IEpochGovernor, IBallotGovernor, Ownable2Step {
         }
     }
 
-    /// @dev Whole-token vote checkpoint of `account` at `snapshot`, capped to 64 bits; zero while
-    ///      the snapshot is not yet in the past.
-    function _weightAt(address token, uint256 snapshot, address account)
+    /// @dev Whole-token lowest vote checkpoint of `account` over the epoch's hold window; zero
+    ///      while the snapshot is not yet in the past.
+    function _weightOf(address token, uint256 epoch, address account)
         private
         view
         returns (uint64)
     {
-        // forge-lint: disable-next-line(block-timestamp)
-        if (snapshot >= block.timestamp) return 0;
-        uint256 whole = IVotes(token).getPastVotes(account, snapshot) / 1e18;
-        // Capped just above, so the cast cannot truncate.
-        // forge-lint: disable-next-line(unsafe-typecast)
-        return whole > type(uint64).max ? type(uint64).max : uint64(whole);
+        return HoldWeightLib.lowest(
+            _holdScans, token, account, holdFromFor(token, epoch), snapshotFor(token, epoch)
+        );
     }
 
     /// @dev Whether `token` reports a non-zero total supply at `timepoint`. A token that cannot

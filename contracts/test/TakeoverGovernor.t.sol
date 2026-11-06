@@ -1201,7 +1201,8 @@ contract TakeoverGovernorTest is Test {
         scheme.castBallot(address(gov), token, id, abi.encode(FOR));
     }
 
-    /// M-1: weight is the smaller of the checkpoints at the snapshot and the lookback snapshot.
+    /// M-1: weight is the lowest checkpoint over the lookback (here: the balance kept after a
+    /// sale, and the balance before a top-up).
     function test_weight_isMinOfSnapshotAndLookback() public {
         _give(mid, 5_000_000_000 * WHOLE); // mid tops up inside the lookback
         vm.prank(whale);

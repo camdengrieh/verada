@@ -8,6 +8,7 @@ import {Test} from "forge-std/Test.sol";
 import {CauseRegistry} from "../src/CauseRegistry.sol";
 import {EpochGovernor} from "../src/EpochGovernor.sol";
 import {VaradaToken} from "../src/VaradaToken.sol";
+import {HoldWeightLib} from "../src/libraries/HoldWeightLib.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../src/interfaces/ICauseRegistry.sol";
 import {IEpochGovernor} from "../src/interfaces/IEpochGovernor.sol";
@@ -26,8 +27,9 @@ import {CatalogFixture} from "./utils/CatalogFixture.sol";
 ///      Rotation itself is covered by `EpochGovernorRotationTest`.
 contract EpochGovernorTest is BallotLog {
     uint256 internal constant WEEK = 7 days;
-    // Token launch time (mid-week); the governor is deployed one week later so that epoch 0's
-    // snapshot falls after the holders received their balances.
+    // The governor is deployed at T0 + WEEK (mid-week). The token launches and the holders are
+    // funded a week before T0, so they hold through epoch 0's whole hold window (the week before
+    // its snapshot).
     uint256 internal constant T0 = 1_750_000_123;
 
     uint64 internal constant HUNGER = uint64(1) << 2;
@@ -71,7 +73,7 @@ contract EpochGovernorTest is BallotLog {
 
     function setUp() public {
         _recordBallots();
-        vm.warp(T0);
+        vm.warp(T0 - WEEK);
         tokenContract = new VaradaToken("Varada Test", "VTEST", "ipfs://meta", creator, factory);
         token = address(tokenContract);
         _give(v1, 100e18);
@@ -614,12 +616,89 @@ contract EpochGovernorTest is BallotLog {
         assertEq(gov.weightOf(token, 0, factory), 99_999_999_549);
         // Future epochs have no weight yet.
         assertEq(gov.weightOf(token, 1, v1), 0);
-        // Tokens received after the snapshot do not count for this epoch.
+        // Tokens received after the snapshot do not count for this epoch, nor for the next one,
+        // whose hold window (all of epoch 0) they were not held through.
         _give(nobody, 1000e18);
         vm.warp(block.timestamp + 1);
         assertEq(gov.weightOf(token, 0, nobody), 0);
         _endEpoch(0);
-        assertEq(gov.weightOf(token, 1, nobody), 1000);
+        assertEq(gov.weightOf(token, 1, nobody), 0);
+        _endEpoch(1);
+        assertEq(gov.weightOf(token, 2, nobody), 1000);
+    }
+
+    // ---- hold window (audit #5, #6)
+
+    function test_holdWindow_isThePreviousEpoch() public view {
+        assertEq(gov.HOLD_WINDOW(), gov.EPOCH_LENGTH());
+        assertEq(gov.holdFromFor(token, 1), gov.snapshotOf(0));
+        assertEq(gov.holdFromFor(token, 3), gov.snapshotOf(2));
+        assertEq(gov.holdFromFor(token, 0), gov.snapshotOf(0) - WEEK);
+    }
+
+    /// The attack: borrow (or buy) a balance for the public snapshot second only and hand it
+    /// back right after. The single-instant weight was the full balance; the hold weight is zero.
+    function test_holdOnlyAroundSnapshot_hasNoWeight() public {
+        address renter = makeAddr("renter");
+        uint256 snap = gov.snapshotOf(1);
+        vm.warp(snap);
+        vm.prank(v2);
+        tokenContract.transfer(renter, 250e18);
+        vm.warp(snap + 1);
+        vm.prank(renter);
+        tokenContract.transfer(v2, 250e18);
+        vm.warp(snap + 10);
+        assertEq(gov.weightOf(token, 1, renter), 0);
+        assertEq(gov.weightOf(token, 1, v2), 0, "v2 lent its balance across the snapshot");
+        _open(1);
+        vm.prank(renter);
+        vm.expectRevert(IEpochGovernor.InvalidVote.selector);
+        scheme.castBallot(address(gov), token, 1, abi.encode(uint8(0)));
+        // v1 held all week and votes in full.
+        _vote(v1, 1, 0);
+        assertEq(scheme.liveCounts(address(gov), token, 1)[0], 100);
+    }
+
+    /// A dip anywhere in the hold window lowers the weight to the lowest balance held.
+    function test_dipInsideHoldWindow_lowersWeight() public {
+        vm.prank(v2);
+        tokenContract.transfer(v3, 200e18);
+        vm.warp(block.timestamp + 1 days);
+        vm.prank(v3);
+        tokenContract.transfer(v2, 200e18);
+        _endEpoch(0);
+        assertEq(gov.weightOf(token, 1, v2), 50, "250 - 200");
+        assertEq(gov.weightOf(token, 1, v3), 100, "its own balance only");
+        _vote(v2, 1, 1);
+        assertEq(scheme.liveCounts(address(gov), token, 1)[1], 50);
+    }
+
+    /// Dust sent to a holder adds checkpoints to its window. The scan can be run ahead in
+    /// chunks by anyone; the weight is unchanged and the ballot then reads one cached slot.
+    function test_advanceHoldScan_dustCannotBlockTheBallot() public {
+        uint256 at = gov.epochStart(1) - 1 days;
+        for (uint256 i; i < 300; ++i) {
+            vm.warp(at + i);
+            vm.prank(v2);
+            tokenContract.transfer(v1, 1);
+        }
+        _endEpoch(0);
+        vm.expectRevert(
+            abi.encodeWithSelector(HoldWeightLib.HoldWindowOpen.selector, gov.snapshotOf(2))
+        );
+        gov.advanceHoldScan(token, 2, v1, 100);
+
+        uint256 g = gasleft();
+        assertEq(gov.weightOf(token, 1, v1), 100);
+        uint256 uncached = g - gasleft();
+        vm.prank(makeAddr("anyone"));
+        assertFalse(gov.advanceHoldScan(token, 1, v1, 150));
+        assertTrue(gov.advanceHoldScan(token, 1, v1, 200));
+        g = gasleft();
+        assertEq(gov.weightOf(token, 1, v1), 100);
+        assertLt(g - gasleft(), uncached / 10, "cached");
+        _vote(v1, 1, 0);
+        assertEq(scheme.liveCounts(address(gov), token, 1)[0], 100);
     }
 
     function test_castBallot_recordsAndEmits() public {
@@ -1184,7 +1263,7 @@ contract EpochGovernorTest is BallotLog {
 
     /// Winner always has the max count among the options; stored tallies equal the ballots.
     function testFuzz_winnerIsMaxTally(uint64[8] calldata amounts, uint8[8] calldata picks) public {
-        // Fresh holders funded before the snapshot of epoch 1.
+        // Fresh holders funded in epoch 0, so they hold through epoch 2's whole hold window.
         uint256 sumA;
         uint256 sumB;
         address[8] memory voters;
@@ -1195,19 +1274,19 @@ contract EpochGovernorTest is BallotLog {
             if (picks[i] % 2 == 0) sumA += whole;
             else sumB += whole;
         }
-        _endEpoch(0);
-        for (uint256 i; i < 8; ++i) {
-            _vote(voters[i], 1, picks[i] % 2);
-        }
         _endEpoch(1);
-        gov.closeEpoch(token, 1);
-        scheme.finalizeFromBallots(address(gov), token, 1);
-        gov.finalizeEpoch(token, 1, _orgIds(address(gov), token, 1));
+        for (uint256 i; i < 8; ++i) {
+            _vote(voters[i], 2, picks[i] % 2);
+        }
+        _endEpoch(2);
+        gov.closeEpoch(token, 2);
+        scheme.finalizeFromBallots(address(gov), token, 2);
+        gov.finalizeEpoch(token, 2, _orgIds(address(gov), token, 2));
 
-        assertEq(gov.tally(token, 1, causeA), sumA);
-        assertEq(gov.tally(token, 1, causeB), sumB);
-        assertEq(gov.voterCount(token, 1), 8);
-        bytes32 winner = gov.winningCause(token, 1);
+        assertEq(gov.tally(token, 2, causeA), sumA);
+        assertEq(gov.tally(token, 2, causeB), sumB);
+        assertEq(gov.voterCount(token, 2), 8);
+        bytes32 winner = gov.winningCause(token, 2);
         if (sumA >= sumB) assertEq(winner, causeA);
         else assertEq(winner, causeB);
     }

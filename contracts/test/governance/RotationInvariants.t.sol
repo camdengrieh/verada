@@ -132,7 +132,7 @@ contract RotationHandler is Test {
             voted[scope][voter] = true;
             ++ballots[scope];
             uint64 w = gov.holdWeightAt(address(token), holdFrom, snap, voter);
-            assertLe(w, gov.weightAt(address(token), snap, voter), "G5 hold weight <= snapshot");
+            assertLe(w, token.getPastVotes(voter, snap) / 1e18, "G5 hold weight <= snapshot");
             authorizedWeight[scope] += w;
         } catch {}
         _observe();

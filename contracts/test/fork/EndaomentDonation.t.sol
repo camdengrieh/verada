@@ -61,15 +61,15 @@ contract EndaomentDonationForkTest is BallotLog {
         if (bytes(rpc).length == 0) vm.skip(true);
         vm.createSelectFork(rpc);
 
-        // Launch the token and fund a holder a week before the governor exists, so the holder has
-        // weight at epoch 0's snapshot.
+        // Launch the token and fund a holder two weeks before the governor exists, so the holder
+        // holds through epoch 0's whole hold window (the week before its snapshot).
         VaradaToken tokenContract = new VaradaToken(
             "Varada Test", "VTEST", "ipfs://meta", makeAddr("creator"), launchFactory
         );
         token = address(tokenContract);
         vm.prank(launchFactory);
         tokenContract.transfer(voter, 1000e18);
-        vm.warp(block.timestamp + WEEK);
+        vm.warp(block.timestamp + 2 * WEEK);
 
         registry = new CauseRegistry(owner, eFactory);
         scheme = new MockVotingScheme();

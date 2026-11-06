@@ -34,10 +34,15 @@ import {ICuratorRegistry} from "./ICuratorRegistry.sol";
 ///      `prepareBallot` or `openEpoch`), and their option index refers to the ballot order of
 ///      `BallotPrepared`. The governor stores only a commitment to that ballot
 ///      (`ballotCommitment`); finalizing an epoch with ballots takes the org ids back. Weight is
-///      the voter's vote checkpoint at `snapshotFor(token, epoch)`, in whole tokens:
+///      the voter's lowest vote checkpoint over the hold window
+///      `[holdFromFor(token, epoch), snapshotFor(token, epoch)]`, in whole tokens. The snapshot is
 ///      `snapshotOf(epoch)` (the second before the epoch starts), except in the epoch a token
-///      launches in, which predates the token and uses its `launchSnapshotOf` instead. The voter and
-///      weight are public; the choice is as private as the scheme makes it.
+///      launches in, which predates the token and uses its `launchSnapshotOf` instead. The window
+///      is `HOLD_WINDOW` (the whole previous epoch), so a position held only around the public
+///      snapshot carries no weight. A token's launch epoch and the epoch after it start the window
+///      at `launchSnapshotOf - min(LAUNCH_SNAPSHOT_DELAY, launch epoch end - launchSnapshotOf) / 2`
+///      instead, the later half of the launch delay. The voter and weight are public; the choice
+///      is as private as the scheme makes it.
 interface IEpochGovernor {
     /// @notice A pinned cause: catalogue entry `(bucket, index, orgId)` and its Merkle proof
     ///         against the latest catalogue version.
@@ -249,6 +254,13 @@ interface IEpochGovernor {
     ///         token had supply at that epoch's snapshot and uses the regular one).
     function launchSnapshotOf(address token) external view returns (uint256);
 
+    /// @notice Length of the hold window ending at an epoch's snapshot: one epoch.
+    function HOLD_WINDOW() external view returns (uint256);
+
+    /// @notice Start of `token`'s hold window for `epoch`: weights are the lowest vote checkpoint
+    ///         over `[holdFromFor, snapshotFor]`.
+    function holdFromFor(address token, uint256 epoch) external view returns (uint256);
+
     /// @notice Voting scheme used for epochs opened from now on.
     function scheme() external view returns (address);
 
@@ -383,7 +395,16 @@ interface IEpochGovernor {
     /// @notice Number of ballots authorized in the epoch.
     function voterCount(address token, uint256 epoch) external view returns (uint256);
 
-    /// @notice Voting weight of `account` in `epoch`, in whole tokens at `snapshotFor(token, epoch)`
-    ///         (zero while the snapshot is still in the future).
+    /// @notice Voting weight of `account` in `epoch`: its lowest vote checkpoint over
+    ///         `[holdFromFor(token, epoch), snapshotFor(token, epoch)]`, in whole tokens (zero
+    ///         while the snapshot is still in the future).
     function weightOf(address token, uint256 epoch, address account) external view returns (uint64);
+
+    /// @notice Reads at most `maxReads` more vote checkpoints of `account`'s hold window for
+    ///         `epoch` and caches the progress, so a ballot over a window with very many
+    ///         checkpoints fits in a block. Anyone may call it; it never changes a weight.
+    /// @return done Whether the whole window has been read.
+    function advanceHoldScan(address token, uint256 epoch, address account, uint256 maxReads)
+        external
+        returns (bool done);
 }

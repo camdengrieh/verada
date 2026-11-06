@@ -44,15 +44,16 @@ contract DonationDistributorTest is BallotLog {
 
     function setUp() public {
         _recordBallots();
-        // The token launches mid-week and a holder is funded; the governor is deployed a week
-        // later so epoch 0's snapshot falls after the holder received its balance.
+        // The token launches mid-week and a holder is funded; the governor is deployed two weeks
+        // later so the holder holds through epoch 0's whole hold window (the week before its
+        // snapshot).
         vm.warp(1_750_000_123);
         VaradaToken tokenContract =
             new VaradaToken("Varada Test", "VTEST", "ipfs://meta", makeAddr("creator"), factory);
         token = address(tokenContract);
         vm.prank(factory);
         tokenContract.transfer(voter, 1000e18);
-        vm.warp(block.timestamp + WEEK);
+        vm.warp(block.timestamp + 2 * WEEK);
 
         usdc = new MockUSDC();
         eReg = new MockEndaomentRegistry(address(usdc), treasury);

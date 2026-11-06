@@ -205,7 +205,7 @@ contract RotationGovernorAuditTest is RotationGovernorBase {
         vm.prank(dave);
         token.transfer(alice, 10e9 * 1e18);
         vm.warp(snapshot + 100);
-        assertEq(gov.weightAt(address(token), snapshot, dave), 10e9, "single-instant weight");
+        assertEq(token.getPastVotes(dave, snapshot) / 1e18, 10e9, "single-instant votes");
         assertEq(gov.holdWeightAt(address(token), snapshot - 1 days, snapshot, dave), 0);
         _prep(address(token), 3);
         vm.prank(dave);
@@ -240,7 +240,7 @@ contract RotationGovernorAuditTest is RotationGovernorBase {
         assertEq(scheme.liveCounts(address(gov), address(token), _rot(3))[1], 1e9, "carol's own");
     }
 
-    /// @dev Many checkpoints inside the window keep a ballot's cost bounded.
+    /// @dev Many checkpoints inside the window are all read; the cost stays linear and modest.
     function test_manyCheckpoints_boundedScan() public {
         uint256 start = t0 + 1 days + 10;
         for (uint256 i; i < 200; ++i) {
@@ -254,6 +254,73 @@ contract RotationGovernorAuditTest is RotationGovernorBase {
         uint256 used = g - gasleft();
         assertLt(used, 1_500_000, "bounded");
         assertEq(scheme.liveCounts(address(gov), address(token), _rot(3))[2], 9e9 - 200);
+    }
+
+    /// @dev Audit #1: bob sells out mid-window, buys back, then adds 130 one-wei top-ups. The
+    ///      scan used to stop after 128 checkpoints, miss the zero and keep the full 9e9 weight;
+    ///      every checkpoint in the window is now read.
+    function test_dipHiddenBehindManyCheckpoints_hasNoWeight() public {
+        uint256 start = t0 + 1 days + 100;
+        vm.warp(start);
+        vm.prank(bob);
+        token.transfer(carol, 9e9 * 1e18);
+        vm.warp(start + 1);
+        vm.prank(carol);
+        token.transfer(bob, 9e9 * 1e18);
+        for (uint256 i; i < 130; ++i) {
+            vm.warp(start + 2 + i);
+            vm.prank(carol);
+            token.transfer(bob, 1);
+        }
+        uint256 snapshot = t0 + 2 days - 1;
+        vm.warp(t0 + 2 days + 10);
+        assertEq(gov.holdWeightAt(address(token), snapshot - 1 days, snapshot, bob), 0);
+        _prep(address(token), 3);
+        vm.prank(bob);
+        vm.expectRevert(IRotationGovernor.InvalidVote.selector);
+        scheme.castBallot(address(gov), address(token), _rot(3), abi.encode(uint8(1)));
+    }
+
+    /// @dev Checkpoints a third party adds (dust sent to a holder) cannot zero or block the
+    ///      holder's weight: they only add reads, which the sender pays for many times over.
+    function test_dustToAHolder_cannotZeroItsWeight() public {
+        uint256 start = t0 + 1 days + 100;
+        for (uint256 i; i < 300; ++i) {
+            vm.warp(start + i);
+            vm.prank(carol);
+            token.transfer(alice, 1);
+        }
+        uint256 snapshot = t0 + 2 days - 1;
+        vm.warp(t0 + 2 days + 10);
+        assertEq(gov.holdWeightAt(address(token), snapshot - 1 days, snapshot, alice), 20e9);
+        _prep(address(token), 3);
+        uint256 g = gasleft();
+        _vote(alice, 3, 1);
+        assertLt(g - gasleft(), 1_500_000, "300 extra checkpoints");
+        assertEq(scheme.liveCounts(address(gov), address(token), _rot(3))[1], 20e9);
+    }
+
+    /// @dev The scan of a dusted window can be run ahead in chunks by anyone, so no number of
+    ///      dust checkpoints pushes the ballot past the block gas limit.
+    function test_advanceHoldScan_thenVote() public {
+        uint256 start = t0 + 1 days + 100;
+        for (uint256 i; i < 400; ++i) {
+            vm.warp(start + i);
+            vm.prank(carol);
+            token.transfer(alice, 1);
+        }
+        vm.warp(t0 + 2 days + 10);
+        _prep(address(token), 3);
+        (uint40 holdFrom, uint40 snapshot) = gov.roundHoldWindow(address(token), 3);
+        assertEq(snapshot, t0 + 2 days - 1);
+        vm.prank(dave);
+        assertFalse(gov.advanceHoldScan(address(token), holdFrom, snapshot, alice, 200));
+        assertTrue(gov.advanceHoldScan(address(token), holdFrom, snapshot, alice, 250));
+        uint256 g = gasleft();
+        assertEq(gov.holdWeightAt(address(token), holdFrom, snapshot, alice), 20e9);
+        assertLt(g - gasleft(), 30_000, "cached");
+        _vote(alice, 3, 1);
+        assertEq(scheme.liveCounts(address(gov), address(token), _rot(3))[1], 20e9);
     }
 
     function test_holdWindow_followsThePeriod() public {

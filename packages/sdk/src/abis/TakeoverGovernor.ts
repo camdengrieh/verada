@@ -271,6 +271,35 @@ export const takeoverGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "advanceHoldScan",
+    "inputs": [
+      {
+        "name": "proposalId",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "account",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "maxReads",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "done",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "authorizeBallot",
     "inputs": [
       {
@@ -1225,6 +1254,17 @@ export const takeoverGovernorAbi = [
       },
       {
         "name": "availableAt",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "HoldWindowOpen",
+    "inputs": [
+      {
+        "name": "snapshot",
         "type": "uint256",
         "internalType": "uint256"
       }
