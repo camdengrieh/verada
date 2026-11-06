@@ -9,12 +9,15 @@ import {PoolKey} from "v4-core/types/PoolKey.sol";
 
 import {DonationAsset} from "./interfaces/IDonationAsset.sol";
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
+import {V3RouteLib} from "./libraries/V3RouteLib.sol";
 
 /// @title QuoteRegistry
 /// @notice Owner-managed allowlist of assets a token's pool may be paired against (any ERC-20 with a route to USDC: WETH, other liquid crypto and
 ///         verified Ondo tokens; `Kind` is only a label), plus the Uniswap v4 route that converts each asset into the
 ///         settlement asset (USDC).
-/// @dev A route is an ordered list of pool keys. Starting from the quote asset, every hop
+/// @dev A hop is a v4 pool key, or a Uniswap v3 pool encoded as a key with tick spacing zero
+///      (`V3RouteLib`; validated structurally here, its pool is looked up by the consolidator
+///      when it executes). A route is an ordered list of such hops. Starting from the quote asset, every hop
 ///      swaps the current currency for the other currency of the pool, and the last hop must
 ///      end in the settlement asset. One special case is allowed: when the current currency is
 ///      WETH and the next pool is quoted in native ETH (currency address zero) instead, the
@@ -44,6 +47,7 @@ contract QuoteRegistry is IQuoteRegistry, Ownable2Step {
     error RouteTooLong(uint256 length);
     error RouteDisconnected(uint256 hop);
     error RouteDoesNotSettle(address endsIn);
+    error InvalidV3Hop(uint256 hop);
     error AssetIsSettlement();
     error InvalidDecimals(address asset);
     error HopFeeTooHigh(uint256 hop, uint24 fee);
@@ -213,6 +217,9 @@ contract QuoteRegistry is IQuoteRegistry, Ownable2Step {
             }
             address c0 = Currency.unwrap(key.currency0);
             address c1 = Currency.unwrap(key.currency1);
+            if (key.tickSpacing == V3RouteLib.TICK_SPACING && !V3RouteLib.isValidV3(key)) {
+                revert InvalidV3Hop(i);
+            }
             if (current == c0) {
                 current = c1;
             } else if (current == c1) {

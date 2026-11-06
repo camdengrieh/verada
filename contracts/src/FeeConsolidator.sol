@@ -25,6 +25,7 @@ import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
 import {IVaradaHook} from "./interfaces/IVaradaHook.sol";
+import {V3RouteLib} from "./libraries/V3RouteLib.sol";
 
 interface IConsolidatorRegistry is IQuoteRegistry {
     function routeOf(address asset) external view returns (PoolKey[] memory);
@@ -214,6 +215,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     error AmountExceedsHeld(uint256 amount, uint256 held);
     error InvalidDeviation(uint256 ticks);
     error InvalidDrift(uint256 ticks);
+    error V3Unsupported();
 
     modifier onlySelf() {
         if (msg.sender != address(this)) revert NotAuthorized();
@@ -323,7 +325,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     function seedReferences(PoolKey[] calldata keys) external onlyOwner {
         for (uint256 i; i < keys.length; ++i) {
             PoolId id = keys[i].toId();
-            (uint160 sqrtPriceX96, int24 tick,,) = poolManager.getSlot0(id);
+            (uint160 sqrtPriceX96, int24 tick) = _spot(keys[i], id);
             if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
             references[id] =
                 Reference(tick, uint40(block.timestamp), true, tick, uint40(block.timestamp));
@@ -346,7 +348,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     function syncReference(PoolKey calldata key) external nonReentrant returns (int24 tick) {
         PoolId id = key.toId();
         if (!references[id].set) revert ReferenceNotSet(id);
-        (uint160 sqrtPriceX96, int24 spot,,) = poolManager.getSlot0(id);
+        (uint160 sqrtPriceX96, int24 spot) = _spot(key, id);
         if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
         _moveReference(id, spot);
         tick = references[id].tick;
@@ -885,8 +887,32 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         bool zeroForOne = current == c0;
         if (!zeroForOne && current != c1) revert NoRoute(current);
 
+        bool v3 = V3RouteLib.isV3(key);
+        (uint256 minOut, int24 tick) =
+            _prepare(key, v3, amount, zeroForOne, token, tokenHop, inSwap);
+
+        out = v3 ? _hopV3(key, zeroForOne, amount) : _swapV4(key, zeroForOne, amount);
+        if (out < minOut) revert SlippageTooHigh(out, minOut);
+
+        if (!tokenHop) _moveReference(key.toId(), tick);
+        next = zeroForOne ? c1 : c0;
+    }
+
+    /// @dev Reads the pool, runs the deviation guard of a hop and returns the least output the hop
+    ///      may produce together with the spot tick.
+    function _prepare(
+        PoolKey memory key,
+        bool v3,
+        uint256 amount,
+        bool zeroForOne,
+        address token,
+        bool tokenHop,
+        bool inSwap
+    ) private view returns (uint256 minOut, int24 tick) {
         PoolId id = key.toId();
-        (uint160 sqrtPriceX96, int24 tick,, uint24 lpFee) = poolManager.getSlot0(id);
+        uint160 sqrtPriceX96;
+        uint24 lpFee;
+        (sqrtPriceX96, tick, lpFee) = _slot0(key, id, v3);
         if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
 
         uint256 slippage = maxSlippageBps;
@@ -903,8 +929,27 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         uint256 atReference = _quote(amount, TickMath.getSqrtPriceAtTick(referenceTick), zeroForOne);
         if (atReference > expected) expected = atReference;
         uint256 tolerance = slippage + _hopFeeBps(key, lpFee, token, tokenHop);
-        uint256 minOut = (expected * (BPS - tolerance)) / BPS;
+        minOut = (expected * (BPS - tolerance)) / BPS;
+    }
 
+    /// @dev Spot state of the pool of a hop (a v3 hop has no dynamic fee, so `lpFee` is zero).
+    function _slot0(PoolKey memory key, PoolId id, bool v3)
+        private
+        view
+        returns (uint160 sqrtPriceX96, int24 tick, uint24 lpFee)
+    {
+        if (v3) {
+            (sqrtPriceX96, tick) = _v3Spot(key);
+        } else {
+            (sqrtPriceX96, tick,, lpFee) = poolManager.getSlot0(id);
+        }
+    }
+
+    /// @dev Exact-input swap through a v4 pool inside the unlock; requires a full fill.
+    function _swapV4(PoolKey memory key, bool zeroForOne, uint256 amount)
+        private
+        returns (uint256 out)
+    {
         BalanceDelta delta = poolManager.swap(
             key,
             SwapParams({
@@ -922,10 +967,48 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
             revert PartialFill(spent >= 0 ? 0 : uint256(uint128(-spent)), amount);
         }
         out = received > 0 ? uint256(uint128(received)) : 0;
-        if (out < minOut) revert SlippageTooHigh(out, minOut);
+    }
 
-        if (!tokenHop) _moveReference(id, tick);
-        next = zeroForOne ? c1 : c0;
+    /// @dev Spot of a route pool, v3 or v4 (a v3 hop has no pool manager state).
+    function _spot(PoolKey memory key, PoolId id)
+        private
+        view
+        returns (uint160 sqrtPriceX96, int24 tick)
+    {
+        if (V3RouteLib.isV3(key)) return _v3Spot(key);
+        (sqrtPriceX96, tick,,) = poolManager.getSlot0(id);
+    }
+
+    /// @dev A v3 hop inside the pool manager flow. The input is a credit of this contract at the
+    ///      pool manager: it is taken out, swapped on the v3 pool, and the output is paid back in
+    ///      as a credit, so the next hop (or the final `take`) sees the same accounting as after a
+    ///      v4 hop. Every delta of this contract at the pool manager is unchanged by the pair
+    ///      except for the swapped currency pair, exactly as after a v4 swap.
+    function _hopV3(PoolKey memory key, bool zeroForOne, uint256 amount)
+        private
+        returns (uint256 out)
+    {
+        address tokenIn = Currency.unwrap(zeroForOne ? key.currency0 : key.currency1);
+        address tokenOut = Currency.unwrap(zeroForOne ? key.currency1 : key.currency0);
+        poolManager.take(Currency.wrap(tokenIn), address(this), amount);
+        out = _v3Swap(key, zeroForOne, amount);
+        if (out != 0) {
+            poolManager.sync(Currency.wrap(tokenOut));
+            IERC20(tokenOut).safeTransfer(address(poolManager), out);
+            poolManager.settle();
+        }
+    }
+
+    /// @dev Spot of a v3 pool as `(sqrtPriceX96, tick)`; zero when the pool does not exist.
+    ///      Overridden by `FeeConsolidatorV3`; the base contract routes through v4 only.
+    function _v3Spot(PoolKey memory) internal view virtual returns (uint160, int24) {
+        revert V3Unsupported();
+    }
+
+    /// @dev Exact-input swap of `amount` on the v3 pool of `key`; reverts unless the whole amount
+    ///      is spent, and returns the output received. Overridden by `FeeConsolidatorV3`.
+    function _v3Swap(PoolKey memory, bool, uint256) internal virtual returns (uint256) {
+        revert V3Unsupported();
     }
 
     /// @dev Output of `amount` at price `sqrtPriceX96`, before fees and impact.
