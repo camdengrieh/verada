@@ -181,7 +181,7 @@ export interface QuoteAssetRow {
   decimals?: number;
 }
 
-export const ACTIVITY_KINDS = ["launch", "fees", "consolidated", "donation", "vote", "epoch", "trade"] as const;
+export const ACTIVITY_KINDS = ["launch", "fees", "consolidated", "donation", "vote", "epoch", "trade", "live_donation"] as const;
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 
 export interface ActivityItem {

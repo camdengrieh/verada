@@ -808,7 +808,7 @@ strings: `/health`, `/api/tokens` (rows now carry `name`, `symbol` and the ENS p
 `label`, `controller`, `editor`, `logoRef`, `suppressed`), `/api/tokens/:address`
 (plus `profile` with text records, `shortlist` (pinned causes) and `focus`), `/api/tokens/by-label/:label`,
 `/api/activity` (filterable, newest first; kinds include `token_registered`, `profile_updated`,
-`epoch_opened`, `epoch_closed`, `takeover_proposed`, `takeover_executed`, `tally_submitted`),
+`epoch_opened`, `epoch_closed`, `takeover_proposed`, `takeover_executed`, `tally_submitted`, `live_donation`),
 `/api/activity/stream` (Server-Sent Events with `Last-Event-ID` resume), `/api/causes`,
 `/api/causes/search` (cached server-side proxy of Endaoment search, never returning image URLs),
 `/api/epochs/:token[/:epoch]` (with the frozen `options`, the scheme `poll` state and counts, `start`,

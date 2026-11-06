@@ -299,6 +299,21 @@ const SPECS: Record<ActivityKind, Spec> = {
       },
     }),
   },
+  live_donation: {
+    table: liveDonation,
+    ts: liveDonation.timestamp,
+    key: liveDonation.id,
+    token: liveDonation.token,
+    toItem: (r) => ({
+      id: `live_donation:${r.id}`,
+      kind: "live_donation",
+      timestamp: r.timestamp,
+      token: r.token,
+      txHash: r.txHash,
+      // The vault's `Donated` carries no donor, so nothing here identifies a wallet.
+      data: { causeId: r.causeId, org: r.org, amount: r.amount, orgDeployed: r.orgDeployed, inSwap: r.inSwap },
+    }),
+  },
 };
 
 function cursorCondition(kind: ActivityKind, spec: Spec, before?: Cursor) {

@@ -151,7 +151,7 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/tokens?cursor&limit` | `{ items: Token[], nextCursor }`; each item has every `token` column plus `feeTotals` |
 | `/api/tokens/:address` | `Token & { feeTotals, profile, shortlist, shortlistPending, ballotSize, focus }` |
 | `/api/tokens/by-label/:label` | Same as the detail; 400 unless the label passes `isValidLabel`, 404 if unregistered |
-| `/api/activity?kind&token&cursor&limit` | `{ items: ActivityItem[], nextCursor }` |
+| `/api/activity?kind&token&cursor&limit` | `{ items: ActivityItem[], nextCursor }`; kind `live_donation` is a live-vault `Donated` (data: `causeId`, `org`, `amount`, `orgDeployed`, `inSwap`; no donor) |
 | `/api/activity/stream?token` | Server-Sent Events, `Last-Event-ID` resume |
 | `/api/causes`, `/api/causes/search?q` | Causes and the Endaoment search proxy |
 | `/api/causes/leaderboard?cursor&limit` | Money given per cause, largest first: `totals` (`causes`, `donations`, `donated`), `items` (`rank`, `causeId`, `donated`, `donations`, `tokens`, and `org` with name, EIN, country, categories and regions once the catalogue is loaded; weekly `donation` and live `live_donation` gifts summed, USDC base units), `byCategory` (donated per category slug through the catalogue; an org in several categories counts in each; empty without the catalogue) and an offset `nextCursor`. 503 `cause_totals_unavailable` without the repo |

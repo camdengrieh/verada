@@ -271,6 +271,7 @@ export const activity: ActivityItem[] = [
   item("vote", "v1", 1700, T1, { epoch: 0n }),
   item("vote", "v2", 1700, T1, { epoch: 0n }),
   item("donation", "d1", 2050, T1, { amount: 5_000_000n }),
+  item("live_donation", "ld1", 2060, T1, { causeId: "0xca", org: "0x00000000000000000000000000000000000000a1", amount: 3_000_000n, orgDeployed: true, inSwap: true }),
   item("epoch", `${T1}:0`, 2000, T1, { epoch: 0n }),
   item("token_registered", T1, 1000, T1, { label: "alpha" }),
   item("token_registered", T2, 1010, T2, { label: "beta" }),

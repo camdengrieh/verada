@@ -358,6 +358,11 @@ describe("activity", () => {
     const t2 = await (await get(app, `/api/activity?token=${T2}`)).json();
     expect(t2.items.every((i: { token: string }) => i.token === T2)).toBe(true);
     expect((await get(app, "/api/activity?kind=bogus")).status).toBe(400);
+    const live = await (await get(app, "/api/activity?kind=live_donation")).json();
+    expect(live.items).toHaveLength(1);
+    expect(live.items[0]).toMatchObject({ id: "live_donation:ld1", kind: "live_donation", timestamp: "2060" });
+    expect(live.items[0].data).toMatchObject({ amount: "3000000", inSwap: true, orgDeployed: true });
+    expect(Object.keys(live.items[0].data)).not.toContain("donor");
     const gov = await (
       await get(app, "/api/activity?kind=token_registered,profile_updated,epoch_opened,epoch_closed,takeover_proposed,takeover_executed,tally_submitted")
     ).json();

@@ -141,6 +141,14 @@ starts on the first chain read, or straight away once a wallet connects.
 - Donating is a wallet transaction like any other write, so the wallet's RPC sees it (see
   "What it does not protect").
 
+### Live-donation feed entries
+
+- `LiveDonationVault.Donated(token, causeId, org, amount, orgDeployed, inSwap)` names no donor: the
+  vault pays from the swap fees of a token, not from a person. The `live_donation` activity kind
+  (`/api/activity`, `/api/activity/stream`) carries only the token, cause, org, amount and flags,
+  so it adds no address of anyone who traded. The swapper stays visible only in the separate
+  public `trade` rows, which already exist.
+
 ### x402 payers
 
 - **No accounts.** Buyers of the paid routes need no sign-up, API key or session; each request
