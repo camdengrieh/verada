@@ -59,13 +59,21 @@ in `totalHeld`), and the pool manager is unlocked.
 4. Otherwise `try this.convertInline{gas: _conversionGasBudget()}(...)` with a bare `catch`. On
    failure the claims are held, and `FeeHeld.reason` carries the first 4 bytes of the revert
    data.
+5. Whenever a fee is held (step 3 or 4), `_onFeeHeld(bucket, currency, amount, reason)` runs
+   after `FeeHeld` (no-op by default). It runs inside the swap within
+   `_conversionFallbackReserve()`, so keep it cheap: an event in your own schema, a transient
+   note.
 
 `convertInline` is self-only (`NotSelf()`) and runs `_convert(inSwap = true)`:
 
-- burn the hook's own claims,
-- swap exact-input hop by hop. For each hop, `minOut = _hopMinOutput(...)`. A hop that does not
-  consume all of its input reverts `PartialFill()`. A short output reverts
-  `SlippageExceeded(out, minOut)`. A zero result also reverts `SlippageExceeded`.
+- `_executeConversion(bucket, currency, amount, inSwap)` turns the claims into `out` of the
+  target. The default burns the hook's own claims and swaps exact-input hop by hop along the
+  stored route. For each hop, `minOut = _hopMinOutput(...)`. A hop that does not consume all of
+  its input reverts `PartialFill()`. A short output reverts `SlippageExceeded(out, minOut)`.
+  Override it to delegate to an external converter (it burns the claims as the hook's ERC-6909
+  operator and pays the target itself); pair that with a `_settleConverted` that does not take
+  again.
+- A zero `out` reverts `SlippageExceeded(0, 1)`.
 - `_settleConverted(bucket, out)`. By default this calls `poolManager.take(conversionTarget,
   _conversionRecipient(bucket), out)`, and a zero recipient reverts `ZeroConversionRecipient()`.
 - `_onFeeConverted(bucket, currency, amountIn, out, inSwap)` (no-op by default), then
@@ -83,6 +91,10 @@ Anyone can call it. It is `hookNonReentrant` and accepts chunks.
   requires `msg.sender == poolManager` (`NotPoolManager`) and `_hookLockState() == LOCK_CALL`
   (`UnexpectedUnlock`), then runs `_convert(inSwap = false)`.
 - If the conversion fails, the whole retry reverts and the held amounts are unchanged.
+- The body is `_retryHeld(bucket, currency, amount)` (internal). A concrete hook that wants its
+  own retry entry point (a different key, different errors) holds the lock in `LOCK_CALL` itself
+  and calls `_retryHeld`; see `VeradaLiveHook.retryHeld(token, causeId, amount)` in
+  [Verada.md](Verada.md).
 - Emits `HeldFeeRetried(bucket, currency, caller, amountIn, amountOut)`.
 
 ## Price guard
@@ -156,6 +168,9 @@ the merged set adds `beforeInitialize`, `afterSwap` and `afterSwapReturnDelta`.
 - Customize the payout through `_settleConverted` (for example, mint claims to a vault instead of
   taking tokens) and `_onFeeConverted` (for example, credit a ledger). Both run inside the try
   frame, so if either reverts, the fee is held.
+- Replace the converter with `_executeConversion` (an aggregator or a protocol router instead of
+  the stored route), react to holds with `_onFeeHeld`, and expose your own retry with
+  `_retryHeld`. Verada's live hook uses all three ([Verada.md](Verada.md)).
 - `unlockCallback` is `virtual`. A concrete hook that also inherits another feature implementing
   `IUnlockCallback` must override it and dispatch on its own data.
 - The feature does not read `hookData`.

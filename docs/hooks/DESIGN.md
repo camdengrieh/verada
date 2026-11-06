@@ -1,8 +1,9 @@
 # Generic Uniswap v4 hooks: design
 
-Status: base and spec landed (`contracts/src/hooks/base`). Feature modules below are specified for
-parallel implementation. Everything here targets Ethereum mainnet, Solidity 0.8.26, `cancun`, and
-the Uniswap v4 core and periphery in `contracts/lib`.
+Status: implemented. This is the spec the base, the six feature modules, the examples and the
+Verada rebuild were built against; the user-facing docs start at [README.md](README.md).
+Everything here targets Ethereum mainnet, Solidity 0.8.26, `cancun`, and the Uniswap v4 core and
+periphery in `contracts/lib`.
 
 ## Why
 
@@ -16,8 +17,8 @@ on its own and combinable with the others into one concrete hook (a v4 pool has 
 address). The protocol-specific parts (token factory, locked launch liquidity, charity fee routing,
 governance) stay as thin glue on top.
 
-The production hooks are **not changed** by this work. A later step can rebuild them on the generic
-modules (see "Verada as a composition").
+The production hooks were then rebuilt as compositions of the generic modules, keeping their
+external interfaces and address flags (see "Verada as a composition" and [Verada.md](Verada.md)).
 
 ## Layout
 
@@ -35,7 +36,8 @@ contracts/test/hooks/
   utils/HookTest.sol                                  shared test base
   base/ fee/ oracle/ access/ conversion/ examples/ integration/
 docs/hooks/
-  DESIGN.md (this file), one <Module>.md per module
+  README.md (catalogue, install, gas, trust), DESIGN.md (this file), one <Module>.md per module,
+  BaseHook.md, ComposeYourOwn.md (tutorial), Composition.md (reference), Verada.md (case study)
 ```
 
 Build and test only the hooks (no `via_ir`, separate `out-hooks/` and `cache-hooks/`, a few
@@ -404,8 +406,10 @@ hook fee to a recipient, TWAP).
 
 ## Verada as a composition
 
-How the production hooks map onto the generic modules (for the follow-up rebuild; not part of this
-batch):
+How the production hooks map onto the generic modules. This table was the plan; the rebuild as
+implemented differs in places (the live fee stays glue rather than `SwapFeeHook`, conversion is
+delegated to the consolidator through `_executeConversion`, pools have no admin, the locker alone
+keeps the liquidity locked). [Verada.md](Verada.md) documents the implemented composition.
 
 | Production behaviour | Generic module | Verada glue |
 | --- | --- | --- |

@@ -19,6 +19,29 @@ cause, and holders rotate that cause by private vote every hour, 12 hours, day, 
 
 See `docs/ARCHITECTURE.md` for how the pieces fit together.
 
+## Uniswap v4 hooks
+
+Verada's pool logic is built from a library of generic Uniswap v4 hooks in
+[`contracts/src/hooks`](contracts/src/hooks), usable by any LP or protocol. Each hook does one
+thing, works on its own through a minimal deployable example, and combines with the others into
+a single hook by inheritance (a v4 pool has one hook address):
+
+| Hook | Does |
+| --- | --- |
+| `DecayingFeeHook` | dynamic LP fee that decays from a launch fee to a base fee |
+| `SwapFeeHook` | hook fee on every swap, paid to a recipient as ERC-6909 claims or tokens |
+| `TwapOracleHook` | per pool time-weighted average tick |
+| `PoolInitGateHook` | only allowed initializers create pools, with an overridable key rule |
+| `LiquidityGateHook` | per pool allowlist for adding and removing liquidity (locked liquidity) |
+| `FeeConversionHook` | converts fee claims to one currency inside the swap, holds and retries on failure |
+| `BondingCurveHook` | reference custom-curve example (not used in production) |
+
+`VeradaHook` and `VeradaLiveHook` are compositions of these plus Verada glue. Docs, install
+(`forge install` plus a remapping, or copy the folder; MIT), gas and trust assumptions:
+[`docs/hooks/README.md`](docs/hooks/README.md). Tutorial:
+[`docs/hooks/ComposeYourOwn.md`](docs/hooks/ComposeYourOwn.md). Case study:
+[`docs/hooks/Verada.md`](docs/hooks/Verada.md).
+
 ## Getting started
 
 The original artwork in `apps/web/assets-src/` is stored with [Git LFS](https://git-lfs.com).
