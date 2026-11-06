@@ -28,6 +28,7 @@ import {
   token,
   tokenBallotSize,
   tokenFocus,
+  tokenMarket,
   tokenProfile,
   tokenTextRecord,
   vote,
@@ -88,6 +89,7 @@ import * as abis from "../src/abis";
 import { type ReadContract, createFakeContext } from "./fakeDb";
 
 const T1 = "0x00000000000000000000000000000000000000a1" as const;
+const QUOTE_WETH = "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2" as const;
 const T2 = "0x00000000000000000000000000000000000000a2" as const;
 const WETH = "0x00000000000000000000000000000000000000b1" as const;
 const USDC = "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48" as const;
@@ -110,6 +112,7 @@ const run = (fn: any, args: object, id = "e1", b = block(1, 100), address: strin
 const pkMap = () =>
   new Map<object, string[]>([
       [token, ["address"]],
+      [tokenMarket, ["token"]],
       [feeTotal, ["token"]],
       [feeCollection, ["id"]],
       [feeAttribution, ["id"]],
@@ -172,6 +175,7 @@ describe("TokenCreated", () => {
       calls.push(`${functionName}@${address}`);
       if (functionName === "name") return "Clean Water";
       if (functionName === "symbol") return "WATER";
+      if (functionName === "quoteAssetOf") return QUOTE_WETH;
       throw new Error("unexpected");
     });
     const logo = `0x${"77".repeat(32)}` as const;
@@ -179,7 +183,8 @@ describe("TokenCreated", () => {
     await run(onTokenRegistered, { token: T1, labelhash, label: "water", controller: T2, logoRef: logo }, "r1", block(1, 100), REGISTRY);
     await run(onLogoChanged, { token: T1, logoRef: logo }, "r2", block(1, 100), REGISTRY);
     await run(onTokenCreated, launch, "c1");
-    expect(calls.sort()).toEqual([`name@${T1}`, `symbol@${T1}`]);
+    expect(calls.map((c) => c.split("@")[0]).sort()).toEqual(["name", "quoteAssetOf", "symbol"]);
+    expect(h.rows(tokenMarket)).toEqual([expect.objectContaining({ token: T1, quote: QUOTE_WETH, tokenIsCurrency0: true })]);
     expect(h.rows(token)[0]).toMatchObject({
       name: "Clean Water",
       symbol: "WATER",

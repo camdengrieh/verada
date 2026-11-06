@@ -1,6 +1,6 @@
 import type { Context, Event } from "ponder:registry";
-import { token, tokenFocus, tokenProfile } from "ponder:schema";
-import { VaradaTokenAbi } from "../abis";
+import { token, tokenFocus, tokenMarket, tokenProfile } from "ponder:schema";
+import { VaradaFactoryAbi, VaradaTokenAbi } from "../abis";
 
 /** Reads `name()` or `symbol()` at the launch block; empty on any failure. */
 async function readString(
@@ -58,4 +58,22 @@ export async function onTokenCreated({
       regionMask: f?.regionMask ?? null,
     })
     .onConflictDoNothing();
+  // The quote asset is known from launch, so Discover can filter by pair before the first trade.
+  // The first trade resolves it again (and keeps this row) if the read fails here.
+  try {
+    const quote = (await context.client.readContract({
+      abi: VaradaFactoryAbi,
+      address: context.contracts.Factory.address as `0x${string}`,
+      functionName: "quoteAssetOf",
+      args: [a.token],
+    })) as `0x${string}`;
+    if (quote.toLowerCase() !== "0x0000000000000000000000000000000000000000") {
+      await context.db
+        .insert(tokenMarket)
+        .values({ token: a.token, pool: a.pool, quote, tokenIsCurrency0: a.token.toLowerCase() < quote.toLowerCase() })
+        .onConflictDoNothing();
+    }
+  } catch {
+    // resolved on the first trade
+  }
 }

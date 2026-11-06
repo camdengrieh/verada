@@ -8,6 +8,7 @@ import { swarmReportFetcher } from "./agents";
 import { agentsRepo } from "./agents-repo";
 import { liveRepo } from "./live-repo";
 import { createMarketRepo } from "./market-repo";
+import { createDiscoverRepo } from "./discover-repo";
 import { createCatalogStore } from "./catalog";
 import { createCauseSearch } from "./search";
 
@@ -47,6 +48,7 @@ const app = createApi({
       (a): a is string => !!a && /^0x[0-9a-fA-F]{40}$/.test(a),
     ),
   ),
+  discover: createDiscoverRepo(),
   reports: swarmReportFetcher(config.swarmGatewayUrl),
 });
 

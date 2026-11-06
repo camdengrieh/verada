@@ -33,6 +33,7 @@ import {
 import { currentEpochAt, resolveSchedule } from "./shortlist";
 import { toProposal } from "./takeover";
 import { type LiveRepo, toLiveView } from "./live";
+import { DISCOVER_SORTS, filterAndPage, type DiscoverRepo } from "./discover";
 import {
   type HolderLabel,
   type MarketRepo,
@@ -69,6 +70,8 @@ export interface ApiDeps {
   live?: LiveRepo;
   /** Trades and holders; `/api/tokens/:address/{trades,holders,market}` answer 503 without it. */
   market?: MarketRepo;
+  /** Token list with market summaries; `/api/discover` answers 503 without it. */
+  discover?: DiscoverRepo;
   /** Weekly reports on Swarm. */
   reports?: ReportFetcher;
   bus?: ActivityBus;
@@ -634,6 +637,78 @@ export function createApi(deps: ApiDeps): Hono {
       CACHE.detail,
     );
   };
+
+  // ---- discover: tokens with their market summary in one request
+
+  const DiscoverQuery = z.object({
+    sort: z.preprocess(blank, z.enum(DISCOVER_SORTS).default("trending")),
+    mode: z.preprocess(blank, z.enum(["weekly", "live"]).optional()),
+    quotes: z.preprocess(
+      blank,
+      z
+        .string()
+        .max(2000)
+        .optional()
+        .transform((s, ctx) => {
+          if (!s) return undefined;
+          const list = [...new Set(s.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean))];
+          if (list.length > 40 || list.some((x) => !/^0x[0-9a-f]{40}$/.test(x))) {
+            ctx.addIssue({ code: "custom", message: "must be up to 40 comma-separated addresses" });
+            return z.NEVER;
+          }
+          return list as `0x${string}`[];
+        }),
+    ),
+    tokens: z.preprocess(
+      blank,
+      z
+        .string()
+        .max(2400)
+        .optional()
+        .transform((s, ctx) => {
+          if (!s) return undefined;
+          const list = [...new Set(s.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean))];
+          if (list.length > 50 || list.some((x) => !/^0x[0-9a-f]{40}$/.test(x))) {
+            ctx.addIssue({ code: "custom", message: "must be up to 50 comma-separated addresses" });
+            return z.NEVER;
+          }
+          return list as `0x${string}`[];
+        }),
+    ),
+    categories: slugList(CATEGORIES, "category"),
+    regions: slugList(REGIONS, "region"),
+    q: z.preprocess(blank, z.string().trim().max(100).optional()),
+    cursor: cursorSchema,
+    limit: limitSchema,
+  });
+
+  app.get("/api/discover", async (c) => {
+    if (!deps.discover) {
+      c.header("Cache-Control", CACHE.none);
+      return c.json({ error: "discover_unavailable" }, 503);
+    }
+    const p = parse(c, DiscoverQuery, c.req.query());
+    if (!p.ok) return p.res;
+    let offset = 0;
+    if (p.data.cursor) {
+      const o = decodeOffset(p.data.cursor);
+      if (o === null) return bad(c, [{ path: "cursor", message: "invalid cursor" }]);
+      offset = o;
+    }
+    const all = await deps.discover.items();
+    const r = filterAndPage(all, {
+      sort: p.data.sort,
+      mode: p.data.mode,
+      quotes: p.data.quotes,
+      categoryMask: p.data.categories ? categoryMaskOf(p.data.categories) : undefined,
+      regionMask: p.data.regions ? regionMaskOf(p.data.regions) : undefined,
+      q: p.data.q,
+      tokens: p.data.tokens,
+      offset,
+      limit: p.data.limit,
+    });
+    return send(c, { items: r.items, nextCursor: r.nextOffset === null ? null : encodeOffset(r.nextOffset), total: r.total }, CACHE.list);
+  });
 
   app.get("/api/tokens/by-label/:label", async (c) => {
     const label = c.req.param("label");
