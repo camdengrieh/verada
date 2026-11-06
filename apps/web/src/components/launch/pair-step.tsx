@@ -36,9 +36,10 @@ export function PairStep({
   patch,
   assets,
   loading,
+  marketsLoading = false,
   failed,
   retry,
-}: StepProps & { assets: AppQuoteAsset[]; loading: boolean; failed: boolean; retry(): void }) {
+}: StepProps & { assets: AppQuoteAsset[]; loading: boolean; marketsLoading?: boolean; failed: boolean; retry(): void }) {
   const now = useNow();
   const selected = findQuote(assets, state.input.quoteAsset);
   const { quoteFor } = useUsdQuotes([selected?.address]);
@@ -98,7 +99,10 @@ export function PairStep({
             )}
           </TabsContent>
           <TabsContent value="stock">
-            {tokenized.length === 0 ? (
+            {marketsLoading && tokenized.length > 0 ? (
+              // Depth is read from the chain; until it answers every RWA would look unrouted, so show placeholders instead.
+              <QuoteAssetList mode="select" assets={[]} loading now={now} value={null} onValueChange={() => undefined} title="Stocks, ETFs and tokenized assets" headingLevel={3} hideControls />
+            ) : tokenized.length === 0 ? (
               <EmptyState size="compact" icon={<Coins />} title="No tokenized assets allowed" body="The quote registry has no active Ondo stock, ETF or tokenized asset right now." />
             ) : (
               <QuoteAssetList

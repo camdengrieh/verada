@@ -193,6 +193,8 @@ const PAIRS_STOCKS: PairOption[] = [
   stock("QQQon", "Nasdaq 100 ETF (Ondo)", 66, "$230K deep", "etf"),
   stock("COINon", "Coinbase (Ondo)", 30, "$64K deep"),
   stock("GLDon", "Gold ETF (Ondo)", 38, "$90K deep", "etf"),
+  { ...stock("HOODon", "Robinhood (Ondo)", 6, "$6K deep"), fill: "thin" },
+  { ...stock("BRK.Bon", "Berkshire Hathaway (Ondo)", 0, "No route to USDC"), fill: "cant-fill", disabled: true },
 ];
 
 /* ---------- frame and demo links ---------- */

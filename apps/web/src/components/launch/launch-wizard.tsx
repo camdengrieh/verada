@@ -258,7 +258,7 @@ export function LaunchWizard() {
     },
     {
       ...STEPS[2],
-      content: <PairStep {...stepProps(2)} assets={quotes.assets} loading={quotes.isLoading} failed={Boolean(quotes.error)} retry={quotes.refetch} />,
+      content: <PairStep {...stepProps(2)} assets={quotes.assets} loading={quotes.isLoading} marketsLoading={quotes.marketsLoading} failed={Boolean(quotes.error)} retry={quotes.refetch} />,
     },
     { ...STEPS[3], content: <FocusStep {...stepProps(3)} summary={summaryQuery.data} /> },
     { ...STEPS[4], content: <FeesStep {...stepProps(4)} /> },

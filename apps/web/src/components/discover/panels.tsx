@@ -108,6 +108,8 @@ export function PairsPanel({ assets, selected, onPick, loading, marketsLoading }
     return <EmptyState size="compact" icon={<Coins />} title="No tokenized stocks yet" body="Ondo stocks and ETFs appear here once the quote registry allowlists them as pairs." />;
   }
   if (!now) return <Skeleton className="h-48 rounded-[24px]" />;
+  // Depth comes from the chain: until it answers every RWA would read as unrouted, so show placeholders.
+  if (marketsLoading) return <QuoteAssetList title="Pairs" headingLevel={3} assets={[]} loading now={now} hideControls getHref={() => "#"} />;
   const marketsUnavailable = !marketsLoading && stocks.every((a) => a.route === undefined && a.price === undefined);
   return (
     <div className="flex flex-col gap-2">
