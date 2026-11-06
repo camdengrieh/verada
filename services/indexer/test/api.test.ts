@@ -63,6 +63,12 @@ describe("tokens", () => {
     expect(b2.nextCursor).toBeNull();
   });
 
+  it("names the donation asset of a token", async () => {
+    const { app } = mkApp();
+    const b = await (await get(app, `/api/tokens/${T1}`)).json();
+    expect(b.donationAsset).toBe("usdc");
+  });
+
   it("returns a token, 404 for unknown, 400 for bad address", async () => {
     const { app } = mkApp();
     expect((await get(app, `/api/tokens/${T1}`)).status).toBe(200);

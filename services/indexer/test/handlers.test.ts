@@ -1,6 +1,6 @@
 import { keccak256 } from "viem";
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ballot,
   ballotSizeCap,
@@ -148,6 +148,32 @@ const reset = (readContract?: ReadContract) => {
 
 beforeEach(() => reset());
 
+describe("TokenCreated donation asset", () => {
+  const args = { token: T1, creator: T2, pool: `0x${"22".repeat(32)}`, hook: T2, lpTokenId: 7n, feeBps: 300, metadataURI: "" };
+  afterEach(() => reset());
+
+  it("defaults to USDC when the factory has no donationAssetOf", async () => {
+    reset();
+    await run(onTokenCreated, args);
+    expect(h.rows(token)[0]).toMatchObject({ donationAsset: 0 });
+  });
+
+  it("reads the choice from the factory", async () => {
+    reset(async ({ functionName }) => {
+      if (functionName === "donationAssetOf") return 1;
+      throw new Error("execution reverted");
+    });
+    await run(onTokenCreated, args);
+    expect(h.rows(token)[0]).toMatchObject({ donationAsset: 1 });
+  });
+
+  it("prefers the event field when the event carries it", async () => {
+    reset();
+    await run(onTokenCreated, { ...args, donationAsset: 1 });
+    expect(h.rows(token)[0]).toMatchObject({ donationAsset: 1 });
+  });
+});
+
 describe("TokenCreated", () => {
   it("stores the token and ignores a replayed event", async () => {
     const args = {
@@ -182,7 +208,7 @@ describe("TokenCreated", () => {
     await run(onTokenRegistered, { token: T1, labelhash, label: "water", controller: T2, logoRef: logo }, "r1", block(1, 100), REGISTRY);
     await run(onLogoChanged, { token: T1, logoRef: logo }, "r2", block(1, 100), REGISTRY);
     await run(onTokenCreated, launch, "c1");
-    expect(calls.map((c) => c.split("@")[0]).sort()).toEqual(["name", "quoteAssetOf", "symbol"]);
+    expect(calls.map((c) => c.split("@")[0]).sort()).toEqual(["donationAssetOf", "name", "quoteAssetOf", "symbol"]);
     expect(h.rows(tokenMarket)).toEqual([expect.objectContaining({ token: T1, quote: QUOTE_WETH, tokenIsCurrency0: true })]);
     expect(h.rows(token)[0]).toMatchObject({
       name: "Clean Water",

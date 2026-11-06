@@ -1,6 +1,7 @@
 import { db } from "ponder:api";
 import * as rawSchema from "ponder:schema";
 import { and, asc, count, desc, eq, gt, gte, inArray, isNotNull, lt, lte, or, sql } from "ponder";
+import { donationAssetOrDefault } from "@varada/sdk";
 import type { Hex } from "viem";
 import type { Cursor } from "./cursor";
 import {
@@ -70,6 +71,7 @@ const SPECS: Record<ActivityKind, Spec> = {
         hook: r.hook,
         lpTokenId: r.lpTokenId,
         feeBps: r.feeBps,
+        donationAsset: donationAssetOrDefault(r.donationAsset),
         metadataUri: r.metadataUri,
         blockNumber: r.createdBlock,
       },

@@ -13,6 +13,12 @@ export const token = onchainTable(
     createdAt: t.bigint().notNull(),
     createdBlock: t.bigint().notNull(),
     txHash: t.hex().notNull(),
+    /**
+     * Asset the token's fees are consolidated into and donated in, fixed at launch: 0 USDC
+     * (6 decimals), 1 ETH (WETH, 18 decimals). Every fee, credit and donation amount of the token
+     * is in this asset's units.
+     */
+    donationAsset: t.integer().notNull().default(0),
     /** ERC-20 metadata read at launch; empty when the read failed. */
     name: t.text().notNull().default(""),
     symbol: t.text().notNull().default(""),

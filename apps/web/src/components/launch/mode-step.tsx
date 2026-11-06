@@ -9,7 +9,7 @@ import { RadioCard, RadioGroup } from "@varada/ui/components/ui/radio-group";
 import { Heart } from "@varada/ui/components/ui/icons";
 import { ToggleGroup, ToggleGroupItem } from "@varada/ui/components/ui/toggle-group";
 import { ModeBadge, type LiveCadence } from "@varada/ui/components/varada/mode-badge";
-import { DEFAULT_DONATION_THRESHOLD_USDC, ROTATIONS, rotationOf, type GivingModeKey } from "@/lib/launch";
+import { DEFAULT_DONATION_THRESHOLD, DONATION_THRESHOLD_PRESETS, ROTATIONS, rotationOf, type GivingModeKey } from "@/lib/launch";
 import type { StepProps } from "./types";
 
 export interface ActiveCause {
@@ -17,8 +17,6 @@ export interface ActiveCause {
   name: string;
 }
 
-/** USDC amounts offered as one-tap thresholds. */
-const THRESHOLD_PRESETS = ["10", "25", "100", "500"] as const;
 
 export function ModeStep({
   state,
@@ -39,6 +37,8 @@ export function ModeStep({
     return (causes ?? []).filter((c) => !q || c.name.toLowerCase().includes(q)).slice(0, 50);
   }, [causes, filter]);
   const cadence = rotation as LiveCadence;
+  const asset = state.input.donationAsset ?? "usdc";
+  const sym = asset === "eth" ? "ETH" : "USDC";
 
   return (
     <div className="flex flex-col gap-5">
@@ -62,7 +62,7 @@ export function ModeStep({
               Live donation <ModeBadge giving={{ mode: "live", cadence }} />
             </span>
           }
-          description="Each swap's cause share is converted to USDC and donated as trading happens. Holders rotate the charity by private vote on the schedule you pick."
+          description="Each swap's cause share is converted to your donation asset (USDC or ETH, chosen on the Fees step) and donated as trading happens. Holders rotate the charity by private vote on the schedule you pick."
         />
       </RadioGroup>
       {err("mode") ? (
@@ -93,17 +93,17 @@ export function ModeStep({
                 <Input
                   inputMode="decimal"
                   className="num"
-                  value={state.input.donationThreshold ?? DEFAULT_DONATION_THRESHOLD_USDC}
+                  value={state.input.donationThreshold ?? DEFAULT_DONATION_THRESHOLD[asset]}
                   onChange={(e) => setInput({ donationThreshold: e.target.value })}
                   onBlur={() => touch("donationThreshold")}
                 />
               </FieldControl>
-              <InputAddon>USDC</InputAddon>
+              <InputAddon>{sym}</InputAddon>
             </InputGroup>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Threshold presets">
-              {THRESHOLD_PRESETS.map((p) => (
+              {DONATION_THRESHOLD_PRESETS[asset].map((p) => (
                 <Button key={p} size="sm" variant={state.input.donationThreshold === p ? "primary" : "outline"} onClick={() => setInput({ donationThreshold: p })}>
-                  <span className="num">{p}</span> USDC
+                  <span className="num">{p}</span> {sym}
                 </Button>
               ))}
             </div>
