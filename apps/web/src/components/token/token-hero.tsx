@@ -156,9 +156,11 @@ export function TokenHero({
   );
 }
 
-export function TokenHeroSkeleton() {
+export function TokenHeroSkeleton({ title = "Loading token" }: { title?: string }) {
   return (
-    <div role="status" aria-label="Loading token" className="grid gap-6 rounded-[32px] border border-line bg-card p-5 @lg:grid-cols-[15rem_1fr] sm:p-7">
+    <div role="status" aria-label={title} className="grid gap-6 rounded-[32px] border border-line bg-card p-5 @lg:grid-cols-[15rem_1fr] sm:p-7">
+      {/* The page has no other heading until the token loads. */}
+      <h1 className="sr-only">{title}</h1>
       <Skeleton className="mx-auto aspect-square w-full max-w-[15rem] rounded-[28px]" />
       <div className="flex flex-col gap-4">
         <Skeleton className="h-6 w-48" />

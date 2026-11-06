@@ -65,7 +65,7 @@ export function TokenDetail({ label: labelProp }: { label?: string | null }) {
 
   const home = <Button variant="outline" onClick={() => (window.location.href = rel(""))}>See all tokens</Button>;
   if (label) {
-    if (resolved.isLoading) return <div role="status" aria-label={`Resolving ${label}.${config.ensParentName}`}><span className="sr-only">Resolving {label}.{config.ensParentName}</span><TokenHeroSkeleton /></div>;
+    if (resolved.isLoading) return <TokenHeroSkeleton title={`Resolving ${label}.${config.ensParentName}`} />;
     if (resolved.error)
       return (
         <Notice

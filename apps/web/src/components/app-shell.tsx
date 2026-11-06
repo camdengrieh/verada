@@ -79,7 +79,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         privacy={<PrivacyMenu />}
         wallet={<ConnectButton />}
       />
-      <main id="main" className="mx-auto w-full max-w-[1400px] px-4 pb-[calc(var(--tab-h)+1.5rem)] pt-6 @container md:px-8 md:pb-12" style={{ "--tab-h": `${BOTTOM_TAB_BAR_HEIGHT}px` } as React.CSSProperties}>
+      <main id="main" tabIndex={-1} className="mx-auto outline-none w-full max-w-[1400px] px-4 pb-[calc(var(--tab-h)+1.5rem)] pt-6 @container md:px-8 md:pb-12" style={{ "--tab-h": `${BOTTOM_TAB_BAR_HEIGHT}px` } as React.CSSProperties}>
         {children}
       </main>
       <footer className="mx-auto w-full max-w-[1400px] px-4 pb-48 md:px-8 md:pb-10">

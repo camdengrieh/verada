@@ -16,7 +16,7 @@ const groupVariants = cva("inline-flex w-fit items-center gap-1 rounded-full bg-
 const itemVariants = cva(
   "relative inline-flex shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-4 font-semibold text-ink-muted outline-none transition-colors hover:text-ink focus-visible:ring-[3px] focus-visible:ring-ring/35 disabled:pointer-events-none disabled:opacity-50 data-[state=on]:text-ink [&_svg]:size-4",
   {
-    variants: { size: { sm: "h-8 px-3 text-sm", md: "h-11 text-[15px]" }, block: { true: "flex-1", false: "" } },
+    variants: { size: { sm: "h-8 px-3 text-sm max-md:h-11", md: "h-11 text-[15px]" }, block: { true: "flex-1", false: "" } },
     defaultVariants: { size: "md", block: false },
   },
 );

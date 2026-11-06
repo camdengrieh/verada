@@ -235,7 +235,8 @@ function wrap(node: ReactNode) {
 }
 
 const openTab = (name: string) => fireEvent.mouseDown(screen.getByRole("tab", { name }));
-const heading = () => screen.findByRole("heading", { level: 1 });
+/** The token's own h1: the loading skeleton carries a placeholder h1 until the token is in. */
+const heading = () => screen.findByRole("heading", { level: 1, name: (n) => !/^(Loading token|Resolving )/.test(n) });
 
 describe("token page", () => {
   beforeEach(() => {

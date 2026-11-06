@@ -180,6 +180,7 @@ export function GovernancePanel() {
       )}
       {tokens.data && board.length === 0 && (
         <EmptyState
+          headingLevel={2}
           icon={<Vote />}
           title="No tokens have launched yet"
           body="Ballots appear here as soon as a token exists. Launch one and its holders vote on where its fees go."
