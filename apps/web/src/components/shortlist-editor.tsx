@@ -34,10 +34,15 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
   const ballot = detail.ballotSize?.size ?? MAX_BALLOT_OPTIONS;
 
   // Rebuild the draft from the pins on chain: each needs its in-focus entry and proof to be saved again.
+  // Keyed on the pins' and focus' content: a refetch hands back new but equal objects, and rebuilding on
+  // those would throw away pins the controller has added and not saved yet.
+  const pinsKey = (detail.shortlist ?? []).join(",");
+  const focusKey = focus ? `${focus.categoryMask}:${focus.regionMask}` : "";
   useEffect(() => {
     let cancelled = false;
-    const pins = detail.shortlist ?? [];
-    if (!focus || pins.length === 0) {
+    const pins = pinsKey ? pinsKey.split(",") : [];
+    const [categoryMask, regionMask] = focusKey.split(":");
+    if (!focusKey || pins.length === 0) {
       setDraft([]);
       return;
     }
@@ -45,7 +50,7 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
       const out: PinDraft[] = [];
       for (const causeId of pins) {
         const found = await deps.indexer.catalogOrg(causeId).catch(() => null);
-        const entry = found && entryInFocus(found.entries, BigInt(focus.categoryMask), focus.regionMask);
+        const entry = found && entryInFocus(found.entries, BigInt(categoryMask!), Number(regionMask));
         if (found && entry) out.push(toDraft(found.org, entry));
       }
       if (!cancelled) setDraft(out);
@@ -53,7 +58,7 @@ export function ShortlistEditor({ token, detail }: { token: Address; detail: Tok
     return () => {
       cancelled = true;
     };
-  }, [detail.shortlist, focus, deps.indexer]);
+  }, [pinsKey, focusKey, deps.indexer]);
 
   if (!sameAddress(account, detail.profile?.controller)) return null;
   const governor = config.governorAddress;
