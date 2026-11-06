@@ -128,18 +128,19 @@ export interface LiveActivity {
   error: boolean;
 }
 
-export function useLiveActivity(max = 40): LiveActivity {
+export function useLiveActivity(max = 40, token?: string): LiveActivity {
   const deps = useDeps();
   const [prefs] = usePrivacyPrefs();
   const [items, setItems] = useState<ActivityItem[]>([]);
   const [fresh, setFresh] = useState<ReadonlySet<string>>(new Set());
   const [mode, setMode] = useState<"sse" | "polling" | null>(null);
-  const first = useQuery({ queryKey: ["activity", "latest"], queryFn: () => deps.indexer.activity({ limit: 30 }), retry: false, staleTime: 15_000 });
+  const first = useQuery({ queryKey: ["activity", "latest", token?.toLowerCase() ?? null], queryFn: () => deps.indexer.activity({ limit: 30, token }), retry: false, staleTime: 15_000 });
   useEffect(() => {
     if (first.data) setItems((prev) => mergeActivity(prev, first.data.items, max));
   }, [first.data, max]);
   useEffect(() => {
     const stop = subscribeActivity(deps.indexer, {
+      token,
       sse: !prefs.routeIndexer,
       onMode: setMode,
       onItems: (incoming) => {
@@ -148,7 +149,7 @@ export function useLiveActivity(max = 40): LiveActivity {
       },
     });
     return stop;
-  }, [deps.indexer, prefs.routeIndexer, max]);
+  }, [deps.indexer, prefs.routeIndexer, max, token]);
   return { items, fresh, mode, loading: first.isLoading, error: Boolean(first.error) };
 }
 

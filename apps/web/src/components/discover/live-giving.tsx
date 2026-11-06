@@ -12,9 +12,9 @@ import { findQuote, type AppQuoteAsset } from "@/lib/quote-assets";
 import { useCauseLookup, useNow, useRel, useTokenSymbols, type LiveActivity } from "./hooks";
 
 /** Lookups the ticker and feed need, built from the activity itself. */
-function useActivityContext(items: readonly ActivityItem[], assets: readonly AppQuoteAsset[], nowSeconds: number): ActivityContext {
+export function useActivityContext(items: readonly ActivityItem[], assets: readonly AppQuoteAsset[], nowSeconds: number): ActivityContext {
   const symbols = useTokenSymbols(useMemo(() => items.map((i) => i.token), [items]));
-  const causeOf = useCauseLookup(useMemo(() => items.filter((i) => i.kind === "donation").map((i) => (typeof i.data.causeId === "string" ? i.data.causeId : undefined)), [items]));
+  const causeOf = useCauseLookup(useMemo(() => items.filter((i) => i.kind === "donation" || i.kind === "live_donation").map((i) => (typeof i.data.causeId === "string" ? i.data.causeId : undefined)), [items]));
   return useMemo(
     () => ({
       symbolOf: (t) => (t ? symbols.get(t.toLowerCase()) || undefined : undefined),

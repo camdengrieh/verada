@@ -541,6 +541,24 @@ describe("token page", () => {
     expect(screen.queryByRole("tab", { name: "Manage" })).toBeNull();
   });
 
+  it("lists live gifts and trades on the Activity tab, naming the cause", async () => {
+    account.address = undefined;
+    fixtures["/api/catalog/causes"] = { items: [{ orgId: `0x${"b1".repeat(32)}`, causeId: CAUSE_B, ein: "100000002", name: "Beta Trust", country: "KEN", categories: ["hunger"], regions: ["africa"] }] };
+    fixtures["/api/activity"] = {
+      items: [
+        { id: "live_donation:l1", kind: "live_donation", token: TOKEN, timestamp: String(HOUR), txHash: `0x${"d2".repeat(32)}`, data: { causeId: CAUSE_B, org: "0x00000000000000000000000000000000000000a1", amount: "2500000", inSwap: true } },
+        { id: "trade:t1", kind: "trade", token: TOKEN, timestamp: String(HOUR - 60), txHash: `0x${"d3".repeat(32)}`, data: { side: "buy", trader: TRADER, quote: WETH, quoteAmount: "5000000000000000" } },
+      ],
+      nextCursor: null,
+    };
+    wrap(<TokenDetail />);
+    await heading();
+    openTab("Activity");
+    const list = await screen.findByRole("list", { name: "Activity" });
+    expect(await within(list).findByText("Donated to Beta Trust")).toBeInTheDocument();
+    expect(within(list).getByText("Bought $MCAT")).toBeInTheDocument();
+  });
+
   it("shows the manage tab to the controller: edit profile and pinned causes", async () => {
     account.address = CONTROLLER.toLowerCase();
     wrap(<TokenDetail />);
