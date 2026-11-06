@@ -24,6 +24,7 @@ import { type Cursor, decodeCursor, decodeOffset, encodeCursor, encodeOffset } f
 import { pickProofs, verifyReport, type AgentsRepo, type ReportFetcher } from "./agents";
 import type { CatalogStore } from "./catalog";
 import type { CauseSearch } from "./search";
+import { type CauseTotalsRepo, rankCauseTotals, totalsByCategory } from "./cause-totals";
 import {
   corsMiddleware,
   RateLimiter,
@@ -67,6 +68,8 @@ export interface ApiDeps {
   agents?: AgentsRepo;
   /** Live-donation tokens; `/api/live/*` answers 503 without it. */
   live?: LiveRepo;
+  /** Donations per cause; `/api/causes/leaderboard` answers 503 without it. */
+  causeTotals?: CauseTotalsRepo;
   /** Trades and holders; `/api/tokens/:address/{trades,holders,market}` answer 503 without it. */
   market?: MarketRepo;
   /** Weekly reports on Swarm. */
@@ -760,6 +763,58 @@ export function createApi(deps: ApiDeps): Hono {
     }
     const nextCursor = items.length === p.data.limit ? encodeOffset(offset + items.length) : null;
     return send(c, { items, nextCursor }, CACHE.search);
+  });
+
+  app.get("/api/causes/leaderboard", async (c) => {
+    if (!deps.causeTotals) {
+      c.header("Cache-Control", CACHE.none);
+      return c.json({ error: "cause_totals_unavailable" }, 503);
+    }
+    const p = parse(c, ListQuery, c.req.query());
+    if (!p.ok) return p.res;
+    let offset = 0;
+    if (p.data.cursor) {
+      const o = decodeOffset(p.data.cursor);
+      if (o === null) return bad(c, [{ path: "cursor", message: "invalid cursor" }]);
+      offset = o;
+    }
+    const ranked = rankCauseTotals(await deps.causeTotals.totals());
+    const pageRows = ranked.slice(offset, offset + p.data.limit);
+    const orgs = new Map(
+      (deps.catalog?.causes(pageRows.map((r) => r.causeId)) ?? []).map((o) => [o.causeId.toLowerCase(), o]),
+    );
+    const allOrgs = deps.catalog?.causes(ranked.map((r) => r.causeId));
+    const byId = new Map((allOrgs ?? []).map((o) => [o.causeId.toLowerCase(), o]));
+    const next = offset + pageRows.length;
+    return send(
+      c,
+      {
+        decimals: 6,
+        currency: "USDC",
+        totals: {
+          causes: ranked.length,
+          donations: ranked.reduce((n, r) => n + r.donations, 0),
+          donated: ranked.reduce((n, r) => n + r.donated, 0n),
+        },
+        items: pageRows.map((r, i) => {
+          const o = orgs.get(r.causeId.toLowerCase());
+          return {
+            rank: offset + i + 1,
+            causeId: r.causeId,
+            donated: r.donated,
+            donations: r.donations,
+            tokens: r.tokens,
+            org: o
+              ? { orgId: o.orgId, name: o.name, ein: o.ein, country: o.country, categories: o.categories, regions: o.regions }
+              : null,
+          };
+        }),
+        // Per category through the catalogue; empty while the catalogue is not loaded.
+        byCategory: allOrgs ? totalsByCategory(ranked, (id) => byId.get(id.toLowerCase())) : [],
+        nextCursor: next < ranked.length ? encodeOffset(next) : null,
+      },
+      CACHE.causes,
+    );
   });
 
   app.get("/api/epochs/:token", async (c) => {

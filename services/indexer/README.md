@@ -154,6 +154,7 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/activity?kind&token&cursor&limit` | `{ items: ActivityItem[], nextCursor }` |
 | `/api/activity/stream?token` | Server-Sent Events, `Last-Event-ID` resume |
 | `/api/causes`, `/api/causes/search?q` | Causes and the Endaoment search proxy |
+| `/api/causes/leaderboard?cursor&limit` | Money given per cause, largest first: `totals` (`causes`, `donations`, `donated`), `items` (`rank`, `causeId`, `donated`, `donations`, `tokens`, and `org` with name, EIN, country, categories and regions once the catalogue is loaded; weekly `donation` and live `live_donation` gifts summed, USDC base units), `byCategory` (donated per category slug through the catalogue; an org in several categories counts in each; empty without the catalogue) and an offset `nextCursor`. 503 `cause_totals_unavailable` without the repo |
 | `/api/epochs/:token?cursor&limit` | `{ items: Epoch[], nextCursor }` |
 | `/api/epochs/:token/:epoch` | `Epoch & { start, end, snapshot, options, optionOrgIds, poll, donations, causePool }` |
 | `/api/takeovers/:token` | `{ items: Proposal[] }`, newest first (at most 100) |
