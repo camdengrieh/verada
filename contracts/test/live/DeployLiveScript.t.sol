@@ -19,8 +19,11 @@ import {ModifyLiquidityParams, SwapParams} from "v4-core/types/PoolOperation.sol
 import {PositionManager} from "v4-periphery/PositionManager.sol";
 
 import {DeployLive} from "../../script/DeployLive.s.sol";
+import {CatalogBallotBuilder} from "../../src/CatalogBallotBuilder.sol";
 import {CauseCatalog} from "../../src/CauseCatalog.sol";
 import {CauseRegistry} from "../../src/CauseRegistry.sol";
+import {CuratorRegistry} from "../../src/CuratorRegistry.sol";
+import {EpochGovernor} from "../../src/EpochGovernor.sol";
 import {FeeConsolidator} from "../../src/FeeConsolidator.sol";
 import {LiveDonationVault} from "../../src/LiveDonationVault.sol";
 import {QuoteRegistry} from "../../src/QuoteRegistry.sol";
@@ -185,6 +188,19 @@ contract DeployLiveScriptTest is Test, DeployLive {
         assertEq(RotationGovernor(l.rotationGovernor).owner(), owner);
         assertEq(LiveDonationVault(l.liveVault).owner(), owner);
         assertEq(FeeConsolidator(payable(d.feeConsolidator)).owner(), owner);
+    }
+
+    function test_script_wiresCurationClock() public view {
+        CatalogBallotBuilder b = RotationGovernor(l.rotationGovernor).ballotBuilder();
+        EpochGovernor eg = EpochGovernor(d.epochGovernor);
+        assertEq(address(CuratorRegistry(d.curatorRegistry).governor()), d.epochGovernor);
+        assertEq(address(b.curators()), d.curatorRegistry);
+        assertEq(uint256(b.curationZero()), eg.epochZeroStart());
+        assertEq(uint256(b.curationLength()), eg.EPOCH_LENGTH());
+        assertEq(b.CURATION_GRACE(), eg.CURATION_GRACE());
+        // Weekly-or-longer rounds get the full 6h grace; short rounds a third of the vote window.
+        assertEq(b.curationGraceEnd(1000, 1000 + 7 days), 1000 + 6 hours);
+        assertEq(b.curationGraceEnd(1000, 1000 + 45 minutes), 1000 + 15 minutes);
     }
 
     function test_script_liveAndWeeklyLaunches() public {

@@ -73,11 +73,11 @@ contract CatalogBallotBuilder {
 
     constructor(
         ICauseCatalog catalog_,
-        ICauseRegistry curatorRegistry,
+        ICauseRegistry causeRegistry,
         ITokenProfileRegistry profiles_
     ) {
         catalog = catalog_;
-        registry = curatorRegistry;
+        registry = causeRegistry;
         profiles = profiles_;
         governor = msg.sender;
     }
