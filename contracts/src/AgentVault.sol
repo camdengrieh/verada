@@ -29,6 +29,10 @@ contract AgentVault is IERC1271, ReentrancyGuard {
 
     uint16 internal constant REGION_SLOTS = 16;
     bytes4 internal constant ERC1271_MAGIC = 0x1626ba7e;
+    /// @dev Transient slot: the address allowed to check a signature, set only during
+    ///      `CuratorRegistry.linkAgentWallet`. keccak256("verada.AgentVault.walletLinkVerifier")
+    bytes32 internal constant _LINK_VERIFIER_SLOT =
+        0xee9ca1a551eadfaca15bfdd16b8efb633291c04f880540fe3162cca058b8cbd0;
 
     ICuratorRegistry public immutable curators;
     uint8 public immutable categoryBit;
@@ -55,6 +59,8 @@ contract AgentVault is IERC1271, ReentrancyGuard {
 
     error NotSigner(address caller);
     error NotPlatform(address caller);
+    error NotCurators(address caller);
+    error AgentInactive();
     error Paused();
     error ZeroAmount();
     error InvalidRegion(uint8 regionBit);
@@ -105,9 +111,9 @@ contract AgentVault is IERC1271, ReentrancyGuard {
         bytes32[] calldata proof,
         uint256 amount
     ) external nonReentrant returns (address org) {
-        if (msg.sender != curators.signerOf(categoryBit)) {
-            revert NotSigner(msg.sender);
-        }
+        ICuratorRegistry.Agent memory agent = curators.agentOf(categoryBit);
+        if (msg.sender != agent.signer) revert NotSigner(msg.sender);
+        if (!agent.active) revert AgentInactive();
         if (paused) revert Paused();
         if (amount == 0) revert ZeroAmount();
         if (regionBit >= REGION_SLOTS) revert InvalidRegion(regionBit);
@@ -143,19 +149,35 @@ contract AgentVault is IERC1271, ReentrancyGuard {
     }
 
     /// @inheritdoc IERC1271
-    /// @dev Valid when the agent's current signer signed `hash` (used to link this vault as the
-    ///      agent's ERC-8004 wallet).
+    /// @dev Valid only for the ERC-8004 wallet link: the caller must be the verifier that
+    ///      `CuratorRegistry.linkAgentWallet` set for this transaction, the vault must not be
+    ///      paused, and the agent's current signer must have signed `hash`. Any other caller
+    ///      (a token checking a permit, for example) gets the invalid value.
     function isValidSignature(bytes32 hash, bytes calldata signature)
         external
         view
         returns (bytes4)
     {
+        address verifier;
+        assembly ("memory-safe") {
+            verifier := tload(_LINK_VERIFIER_SLOT)
+        }
+        if (verifier == address(0) || msg.sender != verifier || paused) return 0xffffffff;
         (address recovered, ECDSA.RecoverError err,) = ECDSA.tryRecover(hash, signature);
         if (
             err == ECDSA.RecoverError.NoError && recovered != address(0)
                 && recovered == curators.signerOf(categoryBit)
         ) return ERC1271_MAGIC;
         return 0xffffffff;
+    }
+
+    /// @notice Sets the one address allowed to check a signature for the rest of this transaction.
+    ///         Zero closes it. Only the curator registry, around its wallet-link call.
+    function setWalletLinkVerifier(address verifier) external {
+        if (msg.sender != address(curators)) revert NotCurators(msg.sender);
+        assembly ("memory-safe") {
+            tstore(_LINK_VERIFIER_SLOT, verifier)
+        }
     }
 
     // ------------------------------------------------------------------ platform

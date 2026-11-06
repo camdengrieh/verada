@@ -16,6 +16,7 @@ import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol
 import {IERC8004IdentityRegistry} from "../src/interfaces/external/IERC8004IdentityRegistry.sol";
 import {IEndaomentOrgFundFactory} from "../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {MockEndaomentRegistry, MockOrg, MockOrgFactory, MockUSDC} from "./mocks/EndaomentMocks.sol";
+import {Erc1271PermitTokenMock} from "./mocks/Erc1271PermitTokenMock.sol";
 import {IdentityRegistryMock} from "./mocks/IdentityRegistryMock.sol";
 import {CatalogFixture} from "./utils/CatalogFixture.sol";
 
@@ -276,6 +277,26 @@ contract CuratorRegistryTest is CuratorBase {
         curators.linkAgentWallet(HUNGER, deadline, abi.encodePacked(r, s, v));
     }
 
+    /// @dev A paused vault cannot be linked, and the link window closes after the call.
+    function test_linkAgentWallet_refusedWhilePaused_andClosedAfter() public {
+        (uint256 agentId, address vault) = _register();
+        uint256 deadline = block.timestamp + 60;
+        bytes32 digest = identity.walletDigest(agentId, vault, address(curators), deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        bytes memory sig = abi.encodePacked(r, s, v);
+        vm.startPrank(owner);
+        AgentVault(vault).setPaused(true);
+        vm.expectRevert(bytes("invalid wallet sig"));
+        curators.linkAgentWallet(HUNGER, deadline, sig);
+        AgentVault(vault).setPaused(false);
+        curators.linkAgentWallet(HUNGER, deadline, sig);
+        vm.stopPrank();
+        assertEq(identity.getAgentWallet(agentId), vault);
+        // Even the identity registry gets the invalid value outside the link call.
+        vm.prank(address(identity));
+        assertEq(AgentVault(vault).isValidSignature(digest, sig), bytes4(0xffffffff));
+    }
+
     function test_onERC721Received_onlyFromIdentityRegistry() public {
         vm.expectRevert(ICuratorRegistry.ZeroAddress.selector);
         curators.onERC721Received(address(this), address(0), 1, "");
@@ -384,16 +405,80 @@ contract AgentVaultTest is CuratorBase {
         vault.setPaused(true);
     }
 
-    function test_isValidSignature_followsTheCurrentSigner() public {
+    function test_give_refusesAnInactiveAgent() public {
+        vm.prank(donor);
+        vault.donate(50e6, false);
+        (bytes32 orgId, uint32 index, bytes32[] memory proof) = _proof(0);
+        vm.prank(owner);
+        curators.setActive(HUNGER, false);
+        vm.prank(signer);
+        vm.expectRevert(AgentVault.AgentInactive.selector);
+        vault.give(AFRICA, orgId, index, proof, 1e6);
+        vm.prank(owner);
+        curators.setActive(HUNGER, true);
+        vm.prank(signer);
+        vault.give(AFRICA, orgId, index, proof, 1e6);
+        assertEq(vault.givenIn(5), 1e6);
+    }
+
+    /// @dev Valid only for the verifier the registry set, while unpaused, for the current signer.
+    function test_isValidSignature_onlyForTheLinkVerifier() public {
         bytes32 h = keccak256("hello");
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, h);
-        assertEq(vault.isValidSignature(h, abi.encodePacked(r, s, v)), bytes4(0x1626ba7e));
+        bytes memory sig = abi.encodePacked(r, s, v);
+        // Closed by default, for every caller.
+        assertEq(vault.isValidSignature(h, sig), bytes4(0xffffffff));
+        vm.prank(address(identity));
+        assertEq(vault.isValidSignature(h, sig), bytes4(0xffffffff));
+        // Only the curator registry can open it.
+        vm.expectRevert(abi.encodeWithSelector(AgentVault.NotCurators.selector, address(this)));
+        vault.setWalletLinkVerifier(address(this));
+        vm.prank(address(curators));
+        vault.setWalletLinkVerifier(address(identity));
+
+        vm.prank(address(identity));
+        assertEq(vault.isValidSignature(h, sig), bytes4(0x1626ba7e));
+        assertEq(vault.isValidSignature(h, sig), bytes4(0xffffffff), "other caller");
         (v, r, s) = vm.sign(0xB0B, h);
-        assertEq(vault.isValidSignature(h, abi.encodePacked(r, s, v)), bytes4(0xffffffff));
+        bytes memory bob = abi.encodePacked(r, s, v);
+        vm.prank(address(identity));
+        assertEq(vault.isValidSignature(h, bob), bytes4(0xffffffff), "not the signer");
+        vm.prank(address(identity));
         assertEq(vault.isValidSignature(h, hex"00"), bytes4(0xffffffff));
         vm.prank(owner);
         curators.setSigner(HUNGER, vm.addr(0xB0B));
-        assertEq(vault.isValidSignature(h, abi.encodePacked(r, s, v)), bytes4(0x1626ba7e));
+        vm.prank(address(identity));
+        assertEq(vault.isValidSignature(h, bob), bytes4(0x1626ba7e), "follows the signer");
+        vm.prank(owner);
+        vault.setPaused(true);
+        vm.prank(address(identity));
+        assertEq(vault.isValidSignature(h, bob), bytes4(0xffffffff), "paused");
+        vm.prank(owner);
+        vault.setPaused(false);
+        vm.prank(address(curators));
+        vault.setWalletLinkVerifier(address(0));
+        vm.prank(address(identity));
+        assertEq(vault.isValidSignature(h, bob), bytes4(0xffffffff), "closed");
+    }
+
+    /// @dev Regression: the agent signer signs a USDC-style permit for the vault. The token must
+    ///      not accept it, so the signer cannot move funds past the epoch cap or the pause.
+    function test_isValidSignature_rejectsAPermitSignedByTheAgent() public {
+        Erc1271PermitTokenMock token = new Erc1271PermitTokenMock();
+        token.mint(address(vault), 500e6);
+        address thief = makeAddr("thief");
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes32 digest = token.permitDigest(address(vault), thief, 500e6, deadline);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(signerKey, digest);
+        bytes memory sig = abi.encodePacked(r, s, v);
+
+        vm.prank(address(token));
+        assertEq(vault.isValidSignature(digest, sig), bytes4(0xffffffff));
+        vm.prank(thief);
+        vm.expectRevert(bytes("invalid signature"));
+        token.permit(address(vault), thief, 500e6, deadline, sig);
+        assertEq(token.allowance(address(vault), thief), 0);
+        assertEq(token.balanceOf(address(vault)), 500e6);
     }
 
     /// @dev Funds only ever leave through `give`, to the org the Endaoment factory computes.

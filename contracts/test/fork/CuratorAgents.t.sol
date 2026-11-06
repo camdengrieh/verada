@@ -116,6 +116,17 @@ contract CuratorAgentsForkTest is Test, Deploy {
             vault,
             "live registry accepted the vault's ERC-1271 check"
         );
+        // Outside the link call the vault accepts no signature, for USDC or the registry.
+        vm.prank(USDC);
+        assertEq(
+            AgentVault(vault).isValidSignature(digest, abi.encodePacked(r, s, v)),
+            bytes4(0xffffffff)
+        );
+        vm.prank(ERC8004_IDENTITY);
+        assertEq(
+            AgentVault(vault).isValidSignature(digest, abi.encodePacked(r, s, v)),
+            bytes4(0xffffffff)
+        );
     }
 
     function test_fork_agentNameResolvesThroughTheUniversalResolver() public {

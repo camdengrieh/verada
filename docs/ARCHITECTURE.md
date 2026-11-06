@@ -542,8 +542,9 @@ they leave empty. Operating them is described in [`agents/README.md`](../agents/
   contract depends on its state after registration.
 - `linkAgentWallet` makes the vault the identity's ERC-8004 agent wallet. The Identity Registry
   checks the signer's EIP-712 `AgentWalletSet(agentId, newWallet, owner, deadline)` signature
-  through the vault's ERC-1271 `isValidSignature`, which accepts the agent's current signer. The
-  deadline may be at most 5 minutes ahead.
+  through the vault's ERC-1271 `isValidSignature`. The vault accepts the agent's current signer
+  only for the Identity Registry, only during `linkAgentWallet`, and never while paused, so the
+  signer cannot approve a USDC permit for the vault. The deadline may be at most 5 minutes ahead.
 - The signer is a 1Claw HSM key. The owner can replace it (`setSigner`), pause or resume the agent
   (`setActive`), and update the agent URI and description. A paused agent cannot submit, its
   curations are ignored by the governor, and the publisher rejects its reports.
@@ -614,7 +615,8 @@ they leave empty. Operating them is described in [`agents/README.md`](../agents/
   (`deployOrgAndDonate` for an org without a contract yet, the org's `donate` otherwise), checks
   the org's computed address and clears the allowance. A gift need not be one of the agent's picks.
 - There is no withdrawal, no arbitrary call and no owner of its own. The platform (the registry's
-  owner) sets the per-epoch cap and can pause gifts. Replacing the signer moves gift rights and the
+  owner) sets the per-epoch cap and can pause gifts. A vault gives only while its agent is
+  active (`setActive`). Replacing the signer moves gift rights and the
   ERC-1271 check to the new key at once.
 
 ### Runtime and web

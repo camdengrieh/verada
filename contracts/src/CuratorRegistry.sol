@@ -155,13 +155,17 @@ contract CuratorRegistry is ICuratorRegistry, Ownable2Step, IERC721Receiver {
 
     /// @notice Links the agent's vault as its ERC-8004 agent wallet. `signature` is the agent
     ///         signer's EIP-712 signature of `AgentWalletSet(agentId, vault, owner = this, deadline)`
-    ///         in the Identity Registry's domain; the vault validates it by ERC-1271.
+    ///         in the Identity Registry's domain; the vault validates it by ERC-1271, and only for
+    ///         the Identity Registry during this call.
     function linkAgentWallet(uint8 categoryBit, uint256 deadline, bytes calldata signature)
         external
         onlyOwner
     {
         Agent storage a = _agent(categoryBit);
-        identityRegistry.setAgentWallet(a.agentId, a.vault, deadline, signature);
+        AgentVault vault = AgentVault(a.vault);
+        vault.setWalletLinkVerifier(address(identityRegistry));
+        identityRegistry.setAgentWallet(a.agentId, address(vault), deadline, signature);
+        vault.setWalletLinkVerifier(address(0));
         emit AgentWalletLinked(categoryBit, a.vault);
     }
 

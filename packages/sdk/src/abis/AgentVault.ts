@@ -255,6 +255,19 @@ export const agentVaultAbi = [
   },
   {
     "type": "function",
+    "name": "setWalletLinkVerifier",
+    "inputs": [
+      {
+        "name": "verifier",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "usdc",
     "inputs": [],
     "outputs": [
@@ -356,6 +369,11 @@ export const agentVaultAbi = [
   },
   {
     "type": "error",
+    "name": "AgentInactive",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "AllowanceNotCleared",
     "inputs": [
       {
@@ -394,6 +412,17 @@ export const agentVaultAbi = [
         "name": "regionBit",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "NotCurators",
+    "inputs": [
+      {
+        "name": "caller",
+        "type": "address",
+        "internalType": "address"
       }
     ]
   },

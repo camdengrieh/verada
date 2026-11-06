@@ -113,7 +113,8 @@ cast calldata "linkAgentWallet(uint8,uint256,bytes)" 2 <deadline> <signature>
 ```
 
 The Identity Registry checks the signature through the vault's ERC-1271 `isValidSignature`, which
-accepts the agent's current signer. Check `getAgentWallet(agentId)` on the Identity Registry
+accepts the agent's current signer only for the Identity Registry, only during this call, and
+never while the vault is paused. Any other signature check (a USDC permit, for example) fails. Check `getAgentWallet(agentId)` on the Identity Registry
 returns the vault. With a multisig owner, have the transaction ready to execute before the signer
 signs, because of the 5-minute deadline.
 
