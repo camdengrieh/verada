@@ -16,6 +16,7 @@ import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
 import { useCastBallot } from "@/components/use-cast-ballot";
 import { errorText, formatTime, sameAddress, shortAddress, TxStatus, useTx } from "@/components/use-tx";
 import { createAccountClient } from "@/lib/account-reads";
+import { runHoldScanStep } from "@/lib/hold-scan";
 import { loadTakeovers } from "@/lib/data";
 import type { TakeoverItem } from "@/lib/indexer";
 import { untilText } from "@/lib/token-view";
@@ -157,7 +158,7 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
   const total = BigInt(p.forWeight) + BigInt(p.againstWeight);
   const pct = (w: string) => (total > 0n ? Number(((BigInt(w) * 10_000n) / total)) / 100 : undefined);
   const tallyKnown = p.tallied && circulating !== undefined && /^\d+$/.test(circulating) && BigInt(circulating) > 0n;
-  const busy = ballot.phase === "encrypting" || ballot.tx.isPending;
+  const busy = ballot.phase === "scanning" || ballot.phase === "encrypting" || ballot.tx.isPending;
 
   return (
     <div className="flex flex-col gap-3">
@@ -174,7 +175,7 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
         forPct={p.tallied ? pct(p.forWeight) : undefined}
         againstPct={p.tallied ? pct(p.againstWeight) : undefined}
         endsIn={p.end !== undefined && p.state === "Active" ? `ends in ${untilText(p.end, Date.now()) || "moments"}` : undefined}
-        onVote={account ? (v) => void ballot.cast({ governor, token, scope: id, choice: v === "for" ? TAKEOVER_FOR : TAKEOVER_AGAINST }) : undefined}
+        onVote={account ? (v) => void ballot.cast({ governor, token, scope: id, choice: v === "for" ? TAKEOVER_FOR : TAKEOVER_AGAINST, holdScan: { kind: "takeover", proposalId: id } }) : undefined}
         disabledReason={!account ? "Connect a wallet to vote." : voted ? "You have voted on this proposal." : busy ? "Your ballot is being sent." : undefined}
       />
       <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
@@ -226,6 +227,11 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
         </p>
       )}
       {mine.error && <p role="alert" className="m-0 text-sm text-destructive">Could not read your weight: {errorText(mine.error)}</p>}
+      {ballot.phase === "scanning" && (
+        <p role="status" className="m-0 text-sm">
+          Reading your hold history ahead of the ballot{ballot.scan ? ` (step ${ballot.scan.done + 1} of ${ballot.scan.total})` : ""}
+        </p>
+      )}
       {ballot.phase === "encrypting" && <p role="status" className="m-0 text-sm">Encrypting your ballot</p>}
       {ballot.error && <p role="alert" className="m-0 text-sm text-destructive">{ballot.error}</p>}
       <TxStatus tx={ballot.tx} label="Ballot" />
@@ -259,18 +265,49 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
 
 function ProposeForm({ governor, token }: { governor: Address; token: Address }) {
   const config = useAppConfig();
+  const rpc = usePrivateRpc();
   const { address: account } = useAccount();
   const tx = useTx();
   const [newController, setNewController] = useState("");
   const [error, setError] = useState<string>();
+  const [scan, setScan] = useState<{ done: number; total: number } | null>(null);
+
+  async function submit(v: Address) {
+    if (!account) return;
+    tx.reset();
+    const client = createAccountClient(rpc, account);
+    // A recent snapshot fixes the threshold window, so a long scan (dust sent to the proposer)
+    // can run ahead; `proposeAt` then reads the cached result.
+    const snapshot = (await client.getBlock()).timestamp - 1n;
+    setScan({ done: 0, total: 0 });
+    const chunks = await runHoldScanStep({
+      client,
+      governor,
+      token,
+      voter: account,
+      target: { kind: "takeoverPropose", token, snapshot },
+      chainId: config.chainId,
+      write: (c) => tx.send(c as never),
+      onChunk: (done, total) => setScan({ done, total }),
+    });
+    setScan(null);
+    if (chunks > 0) tx.reset();
+    await tx.send(
+      chunks > 0
+        ? { address: governor, abi: takeoverGovernorAbi, functionName: "proposeAt", args: [token, v, Number(snapshot)], chainId: config.chainId }
+        : { address: governor, abi: takeoverGovernorAbi, functionName: "propose", args: [token, v], chainId: config.chainId },
+    );
+  }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
     setError(undefined);
     const v = newController.trim();
     if (!isAddress(v)) return setError("New controller must be an address");
-    tx.reset();
-    void tx.send({ address: governor, abi: takeoverGovernorAbi, functionName: "propose", args: [token, v], chainId: config.chainId }).catch(() => {});
+    void submit(v).catch((err) => {
+      setScan(null);
+      setError(errorText(err));
+    });
   }
 
   return (
@@ -284,9 +321,14 @@ function ProposeForm({ governor, token }: { governor: Address; token: Address })
           </FieldControl>
           <FieldHint>The address that would control the token&apos;s profile if holders pass the vote.</FieldHint>
         </Field>
+        {scan && scan.total > 0 && (
+          <p role="status" className="m-0 text-sm">
+            Reading your hold history ahead of the proposal (step {scan.done + 1} of {scan.total})
+          </p>
+        )}
         {error && <p role="alert" className="m-0 text-sm font-medium text-destructive">{error}</p>}
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="submit" variant="outline" disabled={!account || tx.isPending}>
+          <Button type="submit" variant="outline" disabled={!account || tx.isPending || scan !== null}>
             Propose takeover
           </Button>
           {!account && <span className="text-sm text-ink-soft">Connect a wallet to propose.</span>}

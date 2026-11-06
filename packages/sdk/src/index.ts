@@ -11,3 +11,4 @@ export * from "./catalog.js";
 export * from "./agents.js";
 export * from "./ballot-prep.js";
 export * from "./swap/index.js";
+export * from "./hold-scan.js";

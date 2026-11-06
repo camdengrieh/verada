@@ -182,7 +182,7 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
   const failedStep = useRef<0 | 1 | 2>(1);
   const lastPhase = useRef(ballot.phase);
   useEffect(() => {
-    if (ballot.phase === "error") failedStep.current = lastPhase.current === "encrypting" ? 0 : lastPhase.current === "sent" ? 2 : 1;
+    if (ballot.phase === "error") failedStep.current = lastPhase.current === "encrypting" || lastPhase.current === "scanning" ? 0 : lastPhase.current === "sent" ? 2 : 1;
     lastPhase.current = ballot.phase;
   }, [ballot.phase]);
 
@@ -214,13 +214,14 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
   function confirm() {
     if (epoch === undefined || index === null) return;
     const scheme = ed?.poll?.scheme as Address | undefined;
-    void ballot.cast({ governor: config.governorAddress!, token, scope: epoch, choice: index, scheme });
+    void ballot.cast({ governor: config.governorAddress!, token, scope: epoch, choice: index, scheme, holdScan: { kind: "epoch", token, epoch } });
   }
 
   const counts = ed?.poll?.isFinal ? ed.poll.counts : null;
   const leader = counts ? argmax(counts.map((c) => BigInt(c))) : -1;
   const voteOpen = frozen && options.length > 1 && !ed?.poll?.closed && !mine.data?.voted;
-  const flow: VoteFlowState = ballot.phase === "encrypting" ? "encrypting" : ballot.phase === "signing" ? "wallet" : ballot.phase === "sent" ? "sent" : ballot.phase === "error" ? "error" : "confirm";
+  // The hold scan runs ahead of encryption, in the same "prepare" step.
+  const flow: VoteFlowState = ballot.phase === "encrypting" || ballot.phase === "scanning" ? "encrypting" : ballot.phase === "signing" ? "wallet" : ballot.phase === "sent" ? "sent" : ballot.phase === "error" ? "error" : "confirm";
   const chosen = index !== null ? ballotData[index] : undefined;
   const closesIn = ed?.end !== undefined && !ed.poll?.closed ? untilText(ed.end, Date.now()) : "";
 
@@ -331,8 +332,8 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
                     <p className="m-0 text-sm text-ink-soft">
                       Ballot: {ballot.adapter.label}. Your choice is encrypted in this browser; nobody sees it before the tally.
                     </p>
-                    <Button type="submit" variant="cause" disabled={ballot.phase === "encrypting" || ballot.tx.isPending}>
-                      {ballot.phase === "encrypting" ? "Encrypting" : ballot.tx.isPending ? "Confirm in wallet" : "Vote privately"}
+                    <Button type="submit" variant="cause" disabled={ballot.phase === "scanning" || ballot.phase === "encrypting" || ballot.tx.isPending}>
+                      {ballot.phase === "scanning" ? `Reading hold history${ballot.scan ? ` ${ballot.scan.done + 1}/${ballot.scan.total}` : ""}` : ballot.phase === "encrypting" ? "Encrypting" : ballot.tx.isPending ? "Confirm in wallet" : "Vote privately"}
                     </Button>
                   </div>
                 }
