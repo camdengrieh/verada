@@ -193,6 +193,22 @@ through ENS (`getTokenAddressByLabel`, public-scope private RPC), then the regis
 - Uploads and logo images go to the configured publisher and Swarm gateway (operator-run), which see the
   IP, like the indexer. The Zama relayer is the one third-party service contacted directly (see Voting).
 
+## Checking the private RPC
+
+The header pill shows the read path: "Connecting privately" until the anon-rpc worker is started
+(it starts on the first chain read, when a wallet connects, or when "Also route Varada API
+requests" is turned on in the pill's popover), then "Private RPC on · <network>", or
+"Private RPC failed" with a Retry. The worker's boot log is in the browser console under
+`[worker]`. To run that check without a browser session, start the app (`pnpm dev`) and run
+
+```sh
+pnpm --filter @varada/web check:private-rpc            # BASE_URL=http://127.0.0.1:3000/ by default
+```
+
+It drives headless Chrome (`CHROME_PATH`, needs `playwright-core` like `scripts/e2e.mjs`), turns the
+routing switch on, prints the worker log and exits 0 once the pill reads "Private RPC on". The
+configured network is `privateRpc.network` (Nox by default, see `docs/PRIVACY.md`).
+
 ## Art and assets
 
 Three places, each with one job:
