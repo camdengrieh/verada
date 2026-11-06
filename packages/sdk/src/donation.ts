@@ -12,7 +12,7 @@
  * viem or wagmi writer.
  */
 import { ContractFunctionRevertedError, zeroAddress, type Abi, type Address, type Hex } from "viem";
-import { donationDistributorAbi, epochGovernorAbi, feeVaultAbi, zamaVotingSchemeAbi } from "./abis/index.js";
+import { causeRegistryAbi, donationDistributorAbi, epochGovernorAbi, feeVaultAbi, zamaVotingSchemeAbi } from "./abis/index.js";
 import { ballotCommitment } from "./catalog.js";
 
 // ---------------------------------------------------------------- governor part (shared with the keeper)
@@ -100,6 +100,12 @@ export interface DonationState {
   tallyGrace: bigint;
   /** `EpochGovernor.defaultCause`: wins an epoch nobody voted in (zero: none set). */
   defaultCause: Hex;
+  /**
+   * `CauseRegistry.isActive(defaultCause)`: `finalizeEpoch` reverts `NoVotes` on an inactive
+   * default cause as on a zero one. Read while the epoch is not finalized and a default is set;
+   * undefined (not read) counts as active.
+   */
+  defaultCauseActive?: boolean;
   /** `EpochGovernor.winningCause` (zero until finalized). */
   winningCause: Hex;
   /** `EpochGovernor.ballotCommitment`: hash and count of the ballot's org ids. */
@@ -156,7 +162,18 @@ export type BlockedReason =
   | "distribute-reverts";
 
 export type DonationStep =
-  | { type: "send"; stage: DonationStage; contract: DonationContract; functionName: string; args: readonly unknown[] }
+  | {
+      type: "send";
+      stage: DonationStage;
+      contract: DonationContract;
+      functionName: string;
+      args: readonly unknown[];
+      /**
+       * `"tally-timeout"`: a `finalizeEpoch` past `TALLY_GRACE` without a final tally. The votes are
+       * not counted and the default cause wins (`TallyTimeoutFallbackApplied`).
+       */
+      fallback?: "tally-timeout";
+    }
   | { type: "decrypt"; stage: "tally"; scheme: Address; token: Address; scope: bigint }
   | { type: "wait"; stage: DonationStage; reason: WaitReason; until?: bigint }
   | { type: "done"; reason: "donated" | "nothing-to-donate" }
@@ -182,10 +199,12 @@ const isZero32 = (h: Hex) => /^0x0*$/.test(h);
  * - Distributed: done ("donated").
  * - Not registered with the governor: blocked. The epoch still running: wait for its end.
  * - Not finalized: the governor step ({@link planEpochGovernor}). A close the scheme refused
- *   (`closeFailed`) is sent again. After `TALLY_GRACE` past the epoch's end without a final tally
- *   the governor applies its default cause, so the plan finalizes instead of waiting longer.
- *   Finalizing with no winning vote needs a default cause (blocked otherwise, `NoVotes`), and
- *   finalizing with ballots needs org ids matching the ballot commitment.
+ *   (`closeFailed`) is sent again. Once `TALLY_GRACE` has passed since the epoch's end without a
+ *   final tally (unclosed, close refused, or never decrypted), the governor discards the votes and
+ *   applies its default cause, so the plan finalizes (`fallback: "tally-timeout"`) instead of
+ *   closing or waiting longer. Finalizing with no winning vote needs an active default cause
+ *   (blocked otherwise, `NoVotes`), and finalizing with ballots needs org ids matching the ballot
+ *   commitment.
  * - Finalized, not settled: `settle` when its simulation passes. `FeesPending` waits until
  *   `SETTLE_GRACE` after the epoch's end. `NothingToSettle` means the epoch's pool is empty: done
  *   ("nothing-to-donate").
@@ -200,45 +219,42 @@ export function planDonation(s: DonationState, ctx: PlanDonationContext): Donati
 
   const g = s.governor;
   if (!g.finalized) {
-    const governor = (functionName: string, args: readonly unknown[], stage: DonationStage): DonationStep => ({
+    const governor = (functionName: string, args: readonly unknown[], stage: DonationStage): Extract<DonationStep, { type: "send" }> => ({
       type: "send",
       stage,
       contract: "governor",
       functionName,
       args,
     });
+    const close = () => governor("closeEpoch", [token, epoch], "close");
+    // `finalizeEpoch` falls back to the default cause and reverts `NoVotes` when it is unset or inactive.
+    const noDefault = isZero32(s.defaultCause) || s.defaultCauseActive === false;
+    const noDefaultBlocked: DonationStep = { type: "blocked", stage: "finalize", reason: "no-default-cause" };
+    const hasBallots = epochFinalizeNeedsOptions(g);
     const tallyTimedOut = s.now >= s.epochEnd + s.tallyGrace;
-    const finalize = (needsOptions: boolean, timedOut: boolean): DonationStep => {
-      if (!needsOptions) {
-        if (isZero32(s.defaultCause)) return { type: "blocked", stage: "finalize", reason: "no-default-cause" };
-        return governor("finalizeEpoch", [token, epoch, []], "finalize");
-      }
-      // A final tally with no vote counted falls back to the default cause too.
-      if (!timedOut && s.tally && s.tally.counts.every((c) => c === 0n) && isZero32(s.defaultCause)) {
-        return { type: "blocked", stage: "finalize", reason: "no-default-cause" };
-      }
-      if (timedOut) {
-        // The governor ignores orgIds once the tally grace has passed without a valid tally.
-        if (isZero32(s.defaultCause)) return { type: "blocked", stage: "finalize", reason: "no-default-cause" };
-        return governor("finalizeEpoch", [token, epoch, matchingOrgIds(s, ctx.orgIds) ?? []], "finalize");
-      }
-      const orgIds = matchingOrgIds(s, ctx.orgIds);
-      if (!orgIds) return { type: "blocked", stage: "finalize", reason: "ballot-options-unavailable" };
-      return governor("finalizeEpoch", [token, epoch, orgIds], "finalize");
-    };
 
-    if (g.opened && g.voterCount > 0n && g.closed && g.closeFailed) return governor("closeEpoch", [token, epoch], "close");
+    if (hasBallots && tallyTimedOut && s.tally?.isFinal !== true) {
+      // No final tally by the grace's end: the governor ignores orgIds and applies the default
+      // cause, closed or not. Matching org ids still go along in case the tally lands first.
+      if (noDefault) return noDefaultBlocked;
+      return { ...governor("finalizeEpoch", [token, epoch, matchingOrgIds(s, ctx.orgIds) ?? []], "finalize"), fallback: "tally-timeout" };
+    }
+    if (hasBallots && g.closed && g.closeFailed) return close();
     const step = planEpochGovernor(g, s.tally, ctx);
     switch (step.type) {
       case "closeEpoch":
-        return governor("closeEpoch", [token, epoch], "close");
-      case "finalizeEpoch":
-        return finalize(step.needsOptions, false);
+        return close();
+      case "finalizeEpoch": {
+        if (!step.needsOptions) return noDefault ? noDefaultBlocked : governor("finalizeEpoch", [token, epoch, []], "finalize");
+        // A final tally with no vote counted falls back to the default cause too.
+        if (s.tally && s.tally.counts.every((c) => c === 0n) && noDefault) return noDefaultBlocked;
+        const orgIds = matchingOrgIds(s, ctx.orgIds);
+        if (!orgIds) return { type: "blocked", stage: "finalize", reason: "ballot-options-unavailable" };
+        return governor("finalizeEpoch", [token, epoch, orgIds], "finalize");
+      }
       case "decrypt":
-        if (tallyTimedOut) return finalize(true, true);
         return { type: "decrypt", stage: "tally", scheme: step.scheme, token, scope: epoch };
       case "none":
-        if (tallyTimedOut) return finalize(true, true);
         return {
           type: "wait",
           stage: "tally",
@@ -357,8 +373,8 @@ export interface DonationReader {
 
 /**
  * Reads exactly the state {@link planDonation} needs: one batch of views (concurrent, so a client
- * with JSON-RPC or multicall batching sends it at once), then, depending on it, the epoch's tally
- * and a simulated `settle` or `distribute` (`eth_call`, so the plan sees exactly what the
+ * with JSON-RPC or multicall batching sends it at once), then, depending on it, whether the default
+ * cause is active, the epoch's tally, and a simulated `settle` or `distribute` (`eth_call`, so the plan sees exactly what the
  * transaction would hit, including fees `settle` would bring in first).
  */
 export function createDonationReader(client: DonationReadClient, addrs: DonationAddresses): DonationReader {
@@ -396,6 +412,7 @@ export function createDonationReader(client: DonationReadClient, addrs: Donation
         defaultCause,
         winningCause,
         commitment,
+        registry,
         feeVaultRegistered,
         settled,
         epochPool,
@@ -418,6 +435,7 @@ export function createDonationReader(client: DonationReadClient, addrs: Donation
         gov("defaultCause") as Promise<Hex>,
         gov("winningCause", te) as Promise<Hex>,
         gov("ballotCommitment", te) as Promise<readonly [Hex, number | bigint]>,
+        gov("registry") as Promise<Address>,
         read<boolean>(fv, feeVaultAbi as Abi, "isRegistered", [token]),
         read<boolean>(fv, feeVaultAbi as Abi, "settled", te),
         read<bigint>(fv, feeVaultAbi as Abi, "causePoolOf", te),
@@ -448,14 +466,34 @@ export function createDonationReader(client: DonationReadClient, addrs: Donation
       };
       if (distributed || !registered || epoch >= currentEpoch) return state;
 
-      if (epochNeedsTally(governor) && scheme !== zeroAddress) {
-        const [isFinal, counts] = await read<readonly [boolean, readonly bigint[]]>(scheme, zamaVotingSchemeAbi as Abi, "tallyOf", [eg, token, epoch]);
-        state.tally = { isFinal, counts };
-      } else if (finalized && !settled && feeVaultRegistered) {
-        state.settleCheck = await check(fv, feeVaultAbi as Abi, "settle", te);
-      } else if (finalized && settled && pending > 0n) {
-        state.distributeCheck = await check(dd, donationDistributorAbi as Abi, "distribute", te);
+      // Follow-ups, concurrent so they batch too.
+      const more: Promise<void>[] = [];
+      if (!finalized && !isZero32(state.defaultCause) && registry && registry !== zeroAddress) {
+        more.push(
+          read<boolean>(registry, causeRegistryAbi as Abi, "isActive", [state.defaultCause]).then((active) => {
+            state.defaultCauseActive = active;
+          }),
+        );
       }
+      if (epochNeedsTally(governor) && scheme !== zeroAddress) {
+        more.push(
+          read<readonly [boolean, readonly bigint[]]>(scheme, zamaVotingSchemeAbi as Abi, "tallyOf", [eg, token, epoch]).then(
+            ([isFinal, counts]) => {
+              state.tally = { isFinal, counts };
+            },
+            (err: unknown) => {
+              // The governor reads a reverting scheme as "not final" (`_finalCounts`); so does the plan.
+              if (!isRevertError(err)) throw err;
+              state.tally = { isFinal: false, counts: [] };
+            },
+          ),
+        );
+      } else if (finalized && !settled && feeVaultRegistered) {
+        more.push(check(fv, feeVaultAbi as Abi, "settle", te).then((c) => void (state.settleCheck = c)));
+      } else if (finalized && settled && pending > 0n) {
+        more.push(check(dd, donationDistributorAbi as Abi, "distribute", te).then((c) => void (state.distributeCheck = c)));
+      }
+      await Promise.all(more);
       return state;
     },
   };

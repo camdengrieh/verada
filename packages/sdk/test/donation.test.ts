@@ -23,6 +23,7 @@ const FV = "0x00000000000000000000000000000000000000f1" as Address;
 const DD = "0x00000000000000000000000000000000000000d1" as Address;
 const ZAMA = "0x00000000000000000000000000000000000000c1" as Address;
 const OTHER = "0x00000000000000000000000000000000000000c2" as Address;
+const REG = "0x00000000000000000000000000000000000000b1" as Address;
 const CAUSE = `0x${"aa".repeat(32)}` as Hex;
 const ZERO32 = `0x${"0".repeat(64)}` as Hex;
 const ORGS = [`0x${"01".repeat(32)}`, `0x${"02".repeat(32)}`] as Hex[];
@@ -130,12 +131,49 @@ describe("planDonation", () => {
 
   it("finalizes on the default cause after the tally grace instead of waiting on a decryption", () => {
     const closed = { ...voted, closed: true };
-    const step = send(planDonation(state({ governor: closed, tally: { isFinal: false, counts: [] }, now: END + 15n * DAY }), ctx, ));
-    expect(step.functionName).toBe("finalizeEpoch");
+    const step = send(planDonation(state({ governor: closed, tally: { isFinal: false, counts: [] }, now: END + 15n * DAY }), ctx));
+    expect(step).toMatchObject({ functionName: "finalizeEpoch", fallback: "tally-timeout" });
     expect(planDonation(state({ governor: closed, tally: { isFinal: false, counts: [] }, now: END + 15n * DAY, defaultCause: ZERO32 }), ctx)).toMatchObject({
       type: "blocked",
       reason: "no-default-cause",
     });
+  });
+
+  it("finalizes on the fallback after the tally grace when the scheme keeps refusing the close", () => {
+    const failed = { ...voted, closed: true, closeFailed: true };
+    const tally = { isFinal: false, counts: [] };
+    const late = send(planDonation(state({ governor: failed, tally, now: END + 14n * DAY }), ctx));
+    expect(late).toMatchObject({ stage: "finalize", functionName: "finalizeEpoch", args: [T, 4n, []], fallback: "tally-timeout" });
+  });
+
+  it("finalizes an epoch nobody closed on the fallback after the tally grace", () => {
+    const step = send(planDonation(state({ governor: voted, now: END + 14n * DAY }), ctx));
+    expect(step).toMatchObject({ functionName: "finalizeEpoch", fallback: "tally-timeout" });
+    expect(send(planDonation(state({ governor: voted }), ctx)).functionName).toBe("closeEpoch");
+  });
+
+  it("applies a tally that is final after the grace, without the fallback", () => {
+    const closed = { ...voted, closed: true };
+    const step = send(planDonation(state({ governor: closed, tally: { isFinal: true, counts: [1n, 2n] }, now: END + 20n * DAY }), { ...ctx, orgIds: ORGS }));
+    expect(step).toMatchObject({ args: [T, 4n, ORGS] });
+    expect(step.fallback).toBeUndefined();
+  });
+
+  it("treats an inactive default cause like a missing one (NoVotes)", () => {
+    const inactive = { defaultCauseActive: false };
+    expect(planDonation(state({ governor: unopened, ...inactive }), ctx)).toMatchObject({ type: "blocked", stage: "finalize", reason: "no-default-cause" });
+    const closed = { ...voted, closed: true };
+    expect(planDonation(state({ governor: closed, tally: { isFinal: false, counts: [] }, now: END + 15n * DAY, ...inactive }), ctx)).toMatchObject({
+      type: "blocked",
+      reason: "no-default-cause",
+    });
+    expect(planDonation(state({ governor: closed, tally: { isFinal: true, counts: [0n, 0n] }, ...inactive }), { ...ctx, orgIds: ORGS })).toMatchObject({
+      type: "blocked",
+      reason: "no-default-cause",
+    });
+    // A vote that counted still wins without the default cause.
+    expect(send(planDonation(state({ governor: closed, tally: { isFinal: true, counts: [1n, 2n] }, ...inactive }), { ...ctx, orgIds: ORGS })).functionName).toBe("finalizeEpoch");
+    expect(send(planDonation(state({ governor: unopened, defaultCauseActive: true }), ctx)).functionName).toBe("finalizeEpoch");
   });
 
   it("finalizes a final tally with the ballot's org ids, checked against the commitment", () => {
@@ -241,6 +279,11 @@ describe("createDonationReader", () => {
         if (functionName === "tallyOf") {
           expect(address).toBe(ZAMA);
           expect(args).toEqual([EG, T, 4n]);
+          if (values.tallyOf instanceof Error) throw values.tallyOf;
+        }
+        if (functionName === "isActive") {
+          expect(address).toBe(REG);
+          expect(args).toEqual([CAUSE]);
         }
         if (!(functionName in values)) throw new Error(`unexpected read ${functionName}`);
         return values[functionName];
@@ -268,6 +311,7 @@ describe("createDonationReader", () => {
     defaultCause: CAUSE,
     winningCause: CAUSE,
     ballotCommitment: [ballotCommitment(ORGS), 2],
+    registry: REG,
     settled: false,
     causePoolOf: 100n,
     SETTLE_GRACE: 7n * DAY,
@@ -284,11 +328,27 @@ describe("createDonationReader", () => {
   });
 
   it("reads the tally of a closed epoch and simulates nothing", async () => {
-    const c = client({ ...base, isFinalized: false, tallyOf: [false, []] });
+    const c = client({ ...base, isFinalized: false, isActive: true, tallyOf: [false, []] });
     const s = await createDonationReader(c, { epochGovernor: EG, feeVault: FV, distributor: DD }).read(T, 4n);
     expect(s.tally).toEqual({ isFinal: false, counts: [] });
     expect(c.sims).toEqual([]);
     expect(planDonation(s, ctx)).toMatchObject({ type: "decrypt" });
+  });
+
+  it("reads whether the default cause is active while the epoch is not finalized", async () => {
+    const c = client({ ...base, isOpened: false, isClosed: false, voterCount: 0n, isFinalized: false, isActive: false });
+    const s = await createDonationReader(c, { epochGovernor: EG, feeVault: FV, distributor: DD }).read(T, 4n);
+    expect(s.defaultCauseActive).toBe(false);
+    expect(planDonation(s, ctx)).toMatchObject({ type: "blocked", reason: "no-default-cause" });
+    const fin = client(base, () => undefined);
+    await createDonationReader(fin, { epochGovernor: EG, feeVault: FV, distributor: DD }).read(T, 4n);
+    expect(fin.reads).not.toContain("isActive");
+  });
+
+  it("reads a reverting tally as not final, as the governor does", async () => {
+    const c = client({ ...base, isFinalized: false, isActive: true, tallyOf: revert(feeVaultAbi as Abi, "NothingToSettle", [T, 4n]) });
+    const s = await createDonationReader(c, { epochGovernor: EG, feeVault: FV, distributor: DD }).read(T, 4n);
+    expect(s.tally).toEqual({ isFinal: false, counts: [] });
   });
 
   it("simulates distribute once settled and decodes org errors", async () => {
