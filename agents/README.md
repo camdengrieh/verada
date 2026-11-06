@@ -343,7 +343,12 @@ picks in that token's focus (up to their pick counts) and then to rotation. Run 
 there is time before Thursday 00:00 UTC.
 
 **Catalogue version set mid-week:** run every routine again before Thursday 00:00 UTC, with the
-new `--catalog-version` and a `CATALOG_SOURCE` serving that version.
+new `--catalog-version` and a `CATALOG_SOURCE` serving that version. Live-mode rotation rounds
+keep the version in effect at the start of the current weekly epoch until the next epoch starts,
+so the indexer must serve the previous snapshot too until then: set its `CATALOG_SOURCE` to
+`<new>,<previous>` (the first one is served everywhere, the second only by
+`/api/catalog/entries?root=`), and drop the previous one after the next epoch starts. Without it
+the keeper prepares none of that week's remaining rounds (`CatalogMismatch`).
 
 **Routine platform or 1Claw outage:** agents miss the week and ballots use rotation. With 1Claw up,
 an operator can run the same CLI steps from a workstation with the agent's 1Claw credentials.

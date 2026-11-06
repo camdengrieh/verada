@@ -107,6 +107,10 @@ export interface PlanBallotInput {
   regionMask: number;
   /** Unblocked pins in effect for the epoch (cause ids), in order. */
   pinned: readonly Hex[];
+  /**
+   * `EpochGovernor.ballotSizeFor(token, epoch)` (2..32; see `effectiveBallotSize`). Pins past it are
+   * dropped in order and the curated quotas split `ballotSize - pins` slots, possibly zero.
+   */
   ballotSize: number;
   /**
    * Usable curations of the focus buckets, ascending by bucket: submitted for this epoch by an

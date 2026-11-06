@@ -1,6 +1,7 @@
 /** Data loaders: indexer first, chain reads as the fallback for core reads. */
 import { getAddress, isAddress, type Address, type PublicClient } from "viem";
 import {
+  chainBallotSizeCap,
   chainCurrentEpoch,
   chainEpochDetail,
   chainTakeovers,
@@ -68,6 +69,10 @@ export async function loadToken(cfg: AppConfig, deps: DataDeps, address: string)
 
 export async function loadCurrentEpoch(cfg: AppConfig, deps: DataDeps): Promise<bigint> {
   return chainCurrentEpoch(deps.chain(), cfg);
+}
+
+export async function loadBallotSizeCap(cfg: AppConfig, deps: DataDeps): Promise<number> {
+  return chainBallotSizeCap(deps.chain(), cfg);
 }
 
 /** Indexer first; the chain when every indexer URL fails. Rethrows the indexer error if both fail. */

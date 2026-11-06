@@ -1,6 +1,6 @@
 import type { Hex } from "viem";
 import { z } from "zod";
-import type { EntryWithProof, PickWithProof } from "./keeper/ballot.js";
+import { CatalogMismatch, type EntryWithProof, type PickWithProof } from "./keeper/ballot.js";
 import {
   IndexerCausePageSchema,
   IndexerCauseSchema,
@@ -14,8 +14,11 @@ import {
 export interface IndexerClient {
   listTokens(): Promise<{ items: IndexerToken[]; rejected: number }>;
   listCauses(): Promise<{ items: IndexerCause[]; rejected: number }>;
-  /** Catalogue entries with proofs (`/api/catalog/entries`), at most 100 per call. */
-  catalogEntries(at: { bucket: number; index: number }[]): Promise<{ root: Hex; items: EntryWithProof[] }>;
+  /**
+   * Catalogue entries with proofs (`/api/catalog/entries`), at most 100 per call. With `root`,
+   * from the indexer's snapshot of that catalogue version (`?root=`).
+   */
+  catalogEntries(at: { bucket: number; index: number }[], root?: Hex): Promise<{ root: Hex; items: EntryWithProof[] }>;
   /** A curator agent's pick leaves with proofs; null when the report is missing or does not match the chain. */
   agentPicks(label: string, epoch: bigint, region: string): Promise<{ picksRoot: Hex; items: PickWithProof[] } | null>;
   /** Org ids of an epoch's ballot (`/api/epochs/:token/:epoch` `optionOrgIds`); null when unknown. Unverified. */
@@ -113,11 +116,19 @@ export function createIndexerClient(baseUrl: string, opts: { fetch?: typeof fetc
       }
       throw new Error("indexer token listing exceeded maxPages");
     },
-    async catalogEntries(at) {
+    async catalogEntries(at, root) {
       if (at.length === 0) throw new Error("no catalogue entries requested");
       if (at.length > 100) throw new Error("at most 100 catalogue entries per request");
+      if (root !== undefined && !/^0x[0-9a-fA-F]{64}$/.test(root)) throw new Error("invalid catalogue root");
       const q = new URLSearchParams({ at: at.map((e) => `${e.bucket}:${e.index}`).join(",") });
-      return CatalogEntriesSchema.parse(await getJson(`/api/catalog/entries?${q}`));
+      if (root) q.set("root", root);
+      const path = `/api/catalog/entries?${q}`;
+      const res = await f(`${base}${path}`, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20_000) });
+      if (res.status === 404 && root) {
+        throw new CatalogMismatch(`indexer serves no catalogue snapshot with root ${root} (list it in the indexer's CATALOG_SOURCE)`);
+      }
+      if (!res.ok) throw new Error(`indexer /api/catalog/entries returned HTTP ${res.status}`);
+      return CatalogEntriesSchema.parse(await res.json());
     },
     async agentPicks(label, epoch, region) {
       if (!/^[a-z-]{1,32}$/.test(label) || !/^[a-z-]{1,32}$/.test(region)) throw new Error("invalid agent label or region");

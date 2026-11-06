@@ -6,6 +6,7 @@ import { getAddress, isAddress, type Address } from "viem";
 import { CATEGORIES, isValidLabel, REGIONS } from "@verada/sdk";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { categoryLabel, regionLabel } from "@/components/catalog-browser";
+import { BallotSizeEditor } from "@/components/ballot-size-editor";
 import { EditProfilePanel } from "@/components/edit-profile-panel";
 import { EpochPanel } from "@/components/epoch-panel";
 import { AppLink } from "@/components/nav";
@@ -85,6 +86,7 @@ export function TokenDetail({ label: labelProp }: { label?: string | null }) {
           <EpochPanel token={tokenAddress} detail={token} />
           <EditProfilePanel token={tokenAddress} profile={token.profile} />
           <ShortlistEditor token={tokenAddress} detail={token} />
+          <BallotSizeEditor token={tokenAddress} detail={token} />
           <TakeoverPanel token={tokenAddress} controller={token.profile?.controller ?? null} />
         </>
       )}

@@ -180,7 +180,7 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
           {!frozen && (
             <p role="note">
               This epoch&apos;s ballot is not prepared yet. {options.length > 0 ? "The pinned causes below lead it; " : ""}up to{" "}
-              {MAX_BALLOT_OPTIONS} options are filled from the curator agents&apos; picks and then in rotation from the token&apos;s focus pool
+              {detail.ballotSize?.size ?? MAX_BALLOT_OPTIONS} options are filled from the curator agents&apos; picks and then in rotation from the token&apos;s focus pool
               when it is prepared, and voting opens then.
             </p>
           )}

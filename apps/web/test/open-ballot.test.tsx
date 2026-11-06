@@ -51,7 +51,7 @@ const chainRead = vi.fn(async ({ functionName }: { functionName: string }) => {
       return [chain.pool > 0 ? 1 : 0, BigInt(chain.pool)];
     case "shortlistFor":
       return [];
-    case "ballotSize":
+    case "ballotSizeFor":
       return 32n;
     case "profileRegistry":
       return PROFILES;

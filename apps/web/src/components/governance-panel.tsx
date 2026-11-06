@@ -6,7 +6,8 @@ import { isAddress } from "viem";
 import { useRel } from "@/components/nav";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText } from "@/components/use-tx";
-import { loadCurrentEpoch } from "@/lib/data";
+import { MAX_BALLOT_OPTIONS } from "@verada/sdk";
+import { loadBallotSizeCap, loadCurrentEpoch } from "@/lib/data";
 
 /** Epoch overview. Ballots are cast per token, on the token's page. */
 export function GovernancePanel() {
@@ -22,6 +23,17 @@ export function GovernancePanel() {
     enabled: Boolean(config.governorAddress),
     retry: false,
   });
+
+  const cap = useQuery({
+    queryKey: ["ballot-size-cap"],
+    queryFn: () => loadBallotSizeCap(config, deps),
+    enabled: Boolean(config.governorAddress),
+    retry: false,
+  });
+  const capText =
+    cap.data !== undefined
+      ? `up to ${cap.data} charities (the platform's current ballot size; at most ${MAX_BALLOT_OPTIONS})`
+      : `up to the platform's ballot size (at most ${MAX_BALLOT_OPTIONS} charities)`;
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -44,8 +56,9 @@ export function GovernancePanel() {
       </p>
       <p>
         Each week, holders of a token vote with an encrypted ballot on which charity receives that token&apos;s cause pool. The
-        ballot holds up to 32 charities from the token&apos;s cause focus: any the token&apos;s controller pinned, and the rest drawn
-        in rotation from every matching charity in the catalogue. Only totals are decrypted after the epoch ends. Vote from a
+        ballot holds {capText} from the token&apos;s cause focus, or fewer if the token&apos;s controller chose a smaller ballot: any
+        the controller pinned, then the curator agents&apos; picks, and the rest drawn in rotation from every matching charity in the
+        catalogue. Only totals are decrypted after the epoch ends. Vote from a
         token&apos;s page.
       </p>
       <form onSubmit={onSubmit}>

@@ -126,7 +126,10 @@ describe("token profiles", () => {
       regions: ["africa", "asia"],
     });
     expect(d.feeTotals.causeAmount).toBe("90000000");
+    expect(d.ballotSize).toEqual({ cap: 30, choice: 9, size: 9, choiceEffectiveFrom: "6" });
     const u = await (await get(app, `/api/tokens/${T3}`)).json();
+    // Nothing indexed: the default cap of 32, followed.
+    expect(u.ballotSize).toEqual({ cap: 32, choice: 0, size: 32, choiceEffectiveFrom: null });
     expect(u.profile).toBeNull();
     expect(u.shortlist).toBeNull();
     expect(u.shortlistPending).toBeNull();
@@ -135,6 +138,8 @@ describe("token profiles", () => {
     const cleared = await (await get(app, `/api/tokens/${T2}`)).json();
     expect(cleared.shortlist).toBeNull();
     expect(cleared.shortlistPending).toBeNull();
+    // A choice above the cap gets the cap.
+    expect(cleared.ballotSize).toEqual({ cap: 30, choice: 32, size: 30, choiceEffectiveFrom: "2" });
   });
 
   it("applies a scheduled shortlist once its epoch starts", async () => {
@@ -419,7 +424,7 @@ describe("epochs, causes, stats", () => {
   it("labels ballot options pinned, curated or rotation and lists the curated counts", async () => {
     const { app } = mkApp();
     const e2 = await (await get(app, `/api/epochs/${T1}/2`)).json();
-    expect(e2).toMatchObject({ pinnedCount: 1, curatedDrawn: 2, curatedCount: 1, optionSources: ["pinned", "curated"] });
+    expect(e2).toMatchObject({ pinnedCount: 1, ballotSize: 32, curatedDrawn: 2, curatedCount: 1, optionSources: ["pinned", "curated"] });
     const list = await (await get(app, `/api/epochs/${T1}`)).json();
     expect(list.items.map((e: { epoch: string; curatedCount: number | null }) => [e.epoch, e.curatedCount])).toEqual([
       ["2", 1],
