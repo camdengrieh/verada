@@ -4,11 +4,12 @@ import { Popover, PopoverContent, PopoverTrigger } from "@varada/ui/components/u
 import { Badge } from "@varada/ui/components/ui/badge";
 import { Button } from "@varada/ui/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@varada/ui/components/ui/dialog";
-import { ShieldCheck } from "@varada/ui/components/ui/icons";
+import { Settings2, ShieldCheck } from "@varada/ui/components/ui/icons";
 import { Switch } from "@varada/ui/components/ui/switch";
 import { PrivacyPill, type PrivacyState } from "@varada/ui/components/varada/privacy-pill";
 import { useCallback, useEffect, useId, useState, useSyncExternalStore } from "react";
 import { useAccount } from "wagmi";
+import { ConnectionSettingsDialog } from "@/components/connection-settings";
 import { usePrivacyPrefs, usePrivateRpc } from "@/components/providers";
 import { PRIVACY_ROUTES, PRIVACY_SUMMARY, type RouteKind } from "@/lib/privacy-routes";
 
@@ -32,6 +33,7 @@ export function usePrivacyState(): { state: PrivacyState; network: string; direc
     () => rpc.directPublicAllowed,
     () => false,
   );
+  if (status.state === "direct") return { state: "direct", network: "your RPC", direct: true };
   const state: PrivacyState =
     status.state === "failed" ? (direct ? "direct" : "failed") : status.state === "ready" ? (rpc.network.anonymizes ? "private" : "direct") : "connecting";
   return { state, network: rpc.network.label, direct };
@@ -43,7 +45,7 @@ export function usePrivacyState(): { state: PrivacyState; network: string; direc
  * chain read; once a wallet is connected, or Varada API routing is on, this panel
  * starts it straight away so the network bootstraps before it is needed.
  */
-export function PrivacyStatus({ onDetails }: { onDetails?: () => void }) {
+export function PrivacyStatus({ onDetails, onSettings }: { onDetails?: () => void; onSettings?: () => void }) {
   const rpc = usePrivateRpc();
   const [prefs, setPrefs] = usePrivacyPrefs();
   const { isConnected } = useAccount();
@@ -59,7 +61,7 @@ export function PrivacyStatus({ onDetails }: { onDetails?: () => void }) {
   );
 
   useEffect(() => {
-    if (isConnected || prefs.routeIndexer) void rpc.start().catch(() => {});
+    if (!rpc.directMode && (isConnected || prefs.routeIndexer)) void rpc.start().catch(() => {});
   }, [rpc, isConnected, prefs.routeIndexer]);
 
   const net = rpc.network.label;
@@ -70,6 +72,9 @@ export function PrivacyStatus({ onDetails }: { onDetails?: () => void }) {
       break;
     case "failed":
       text = `Private RPC unavailable (${status.message}). Account data will not load until it reconnects.`;
+      break;
+    case "direct":
+      text = "Direct to your RPC: chain reads, account data included, go straight to your own endpoint. Not private.";
       break;
     case "connecting":
       text = `Connecting to ${net}…`;
@@ -94,27 +99,44 @@ export function PrivacyStatus({ onDetails }: { onDetails?: () => void }) {
           )}
         </div>
       )}
-      {direct && (
+      {status.state === "failed" && (
+        <p className="m-0 text-ink-soft">
+          If it stays down, add your own RPC in Connection settings to keep going.
+        </p>
+      )}
+      {direct && !rpc.directMode && (
         <p role="note" className="m-0 rounded-md bg-ochre-tint px-3 py-2 text-ochre-ink">
           Public data is loading directly for this visit. Account data still only loads privately.
         </p>
       )}
-      <div className="flex items-start gap-3">
-        <Switch
-          id={switchId}
-          checked={prefs.routeIndexer}
-          onCheckedChange={(on) => setPrefs({ ...prefs, routeIndexer: on })}
-          aria-label={`Also route Varada API requests through ${net}`}
-        />
-        <label htmlFor={switchId} className="text-ink-soft">
-          Also route Varada API requests through {net} (slower; Varada never sees your IP)
-        </label>
-      </div>
-      {onDetails && (
-        <Button size="sm" variant="soft" onClick={onDetails} className="justify-self-start">
-          <ShieldCheck aria-hidden="true" />
-          What goes where
-        </Button>
+      {!rpc.directMode && (
+        <div className="flex items-start gap-3">
+          <Switch
+            id={switchId}
+            checked={prefs.routeIndexer}
+            onCheckedChange={(on) => setPrefs({ ...prefs, routeIndexer: on })}
+            aria-label={`Also route Varada API requests through ${net}`}
+          />
+          <label htmlFor={switchId} className="text-ink-soft">
+            Also route Varada API requests through {net} (slower; Varada never sees your IP)
+          </label>
+        </div>
+      )}
+      {(onDetails || onSettings) && (
+        <div className="flex flex-wrap gap-2">
+          {onDetails && (
+            <Button size="sm" variant="soft" onClick={onDetails}>
+              <ShieldCheck aria-hidden="true" />
+              What goes where
+            </Button>
+          )}
+          {onSettings && (
+            <Button size="sm" variant="soft" onClick={onSettings}>
+              <Settings2 aria-hidden="true" />
+              Connection settings
+            </Button>
+          )}
+        </div>
       )}
     </aside>
   );
@@ -160,9 +182,13 @@ export function PrivacyDetails({ network }: { network: string }) {
 /** Header pill showing the private-RPC state; opens the full privacy controls. */
 export function PrivacyMenu() {
   const { state, network } = usePrivacyState();
-  const anonymizes = usePrivateRpc().network.anonymizes;
+  const privateRpc = usePrivateRpc();
+  const anonymizes = privateRpc.network.anonymizes;
+  const rpcDirect = privateRpc.directMode;
   const [prefs, setPrefs] = usePrivacyPrefs();
   const [details, setDetails] = useState(false);
+  const [settings, setSettings] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [intro, setIntro] = useState(false);
 
   // Offered once per browser, after the page has mounted so the static export never renders it.
@@ -186,14 +212,22 @@ export function PrivacyMenu() {
 
   return (
     <>
-      <Popover>
+      <Popover open={menu} onOpenChange={setMenu}>
         <PopoverTrigger asChild>
-          <PrivacyPill state={state} network={network} />
+          <PrivacyPill state={state} network={network} label={rpcDirect ? "Direct to your RPC" : undefined} />
         </PopoverTrigger>
         <PopoverContent align="end" className="w-[min(22rem,calc(100vw-2rem))]">
-          <PrivacyStatus onDetails={() => setDetails(true)} />
+          <PrivacyStatus
+            onDetails={() => setDetails(true)}
+            onSettings={() => {
+              setMenu(false);
+              setSettings(true);
+            }}
+          />
         </PopoverContent>
       </Popover>
+
+      <ConnectionSettingsDialog open={settings} onOpenChange={setSettings} />
 
       <Dialog open={details} onOpenChange={setDetails}>
         <DialogContent size="lg" aria-describedby={undefined}>
