@@ -8,8 +8,8 @@ user looks at private, what it cannot protect, and where each CROPS property sta
 
 Every chain read the web app makes goes through [anon-rpc](https://github.com/ethereum/anon-rpc).
 anon-rpc runs an anonymizing network client inside a sandboxed worker in the browser, and the app
-sends its RPC requests through that client. The default client is Hisoka's Nox mixnet; Nym and Tor
-are a configuration switch.
+sends its RPC requests through that client. The default client is the Nym mixnet; Hisoka's Nox
+mixnet and Tor are a configuration switch.
 
 ### What it protects
 
@@ -51,13 +51,13 @@ Configure it in `config.json` under `privateRpc`, or with the `NEXT_PUBLIC_ANON_
 ```json
 {
   "privateRpc": {
-    "network": "nox",
+    "network": "nym",
     "rpcUrls": ["https://ethereum-rpc.publicnode.com", "https://ethereum.reth.rs/rpc"]
   }
 }
 ```
 
-For Nym, set `"network": "nym"`. For Tor, set `"network": "tor-js"` and give a `workerConfig` with
+For Nox, set `"network": "nox"`. For Tor, set `"network": "tor-js"` and give a `workerConfig` with
 `gateways`; run your own gateway, the published one is a demonstration.
 
 Nox's specifier contract lives on Sepolia (Hisoka has not published a mainnet one yet), so for Nox
@@ -97,8 +97,8 @@ padded hex). Run against `next dev`:
 
 | Check | Result |
 | --- | --- |
-| Nox (default): pill reaches "Private RPC on · Nox mixnet" | Yes, 16 to 27 s after load (wallet connected / switch on) |
-| Nym (`NEXT_PUBLIC_ANON_RPC_NETWORK=nym`) | Yes, 92 s on a loaded machine. Besides the RPC and the jsdelivr bundle, the worker reads the Nym validator API (`validator.nymtech.net`) directly: that reveals this IP is starting a Nym client, nothing more |
+| Nox (`NEXT_PUBLIC_ANON_RPC_NETWORK=nox`): pill reaches "Private RPC on · Nox mixnet" | Yes, 16 to 27 s after load (wallet connected / switch on) |
+| Nym (default) | Yes, 92 s on a loaded machine. Besides the RPC and the jsdelivr bundle, the worker reads the Nym validator API (`validator.nymtech.net`) directly: that reveals this IP is starting a Nym client, nothing more |
 | Tor (`tor-js`) without `workerConfig.gateways` | Pill "Private RPC failed" after 16 s, fails closed. A working Tor run needs a gateway we do not operate: not verified |
 | Bootstrap RPCs unreachable | Pill "Private RPC failed", "Load public data directly" offered; no direct mainnet RPC request before the opt-in; after it the note "Public data is loading directly for this visit. Account data still only loads privately." shows |
 | Viewer address in any request, Nox and failed-bootstrap runs | 0 of 205 and 0 of 227 requests. Hosts contacted: the app, the indexer, the Sepolia bootstrap RPCs, the worker bundle host |
@@ -127,8 +127,8 @@ goes through `createAccountClient`. Transactions go through the wallet's RPC (se
   mainnet for Nym and Tor), and the worker bundle is downloaded from the specifier's resolver.
   These reveal only that this IP is starting an anon-rpc worker.
 - **The worker itself.** The worker sees every read it carries, and it could lie or drop requests.
-  Trust rests with whoever controls the specifier contract (Hisoka for the default Nox, the Nym
-  project for Nym).
+  Trust rests with whoever controls the specifier contract (the Nym project for the default Nym,
+  Hisoka for Nox).
   The pinned hash makes that code auditable and stops silent substitution.
 - **Site delivery.** The ENS or Swarm gateway that serves the page sees the page load. Token
   logos and asset packs (such as stock logos) load from the configured Swarm read gateway, which
@@ -307,7 +307,7 @@ Status as of 2026-11-07. Gaps are listed with the change that would close each o
 | Walk-away test: the app keeps working if the default network or public RPCs disappear | Met: users add their own RPCs, switch network or go direct to their own RPC from Connection settings, with no new build |
 | Indexer runs on a single AWS account | Gap: publish the indexer image and config so others can run mirrors, and list them in `indexerUrls` |
 | The anon-rpc worker bundle is served from the resolvers the specifier owner lists | Gap, upstream: the specifier owner controls resolvers. We could publish our own specifier with extra resolvers |
-| The default network's specifier (Nox) is on Sepolia and its node registry on Arbitrum Sepolia | Partial, upstream: testnet state can be reset. Users can switch to Nym or Tor (mainnet specifiers), or go direct to their own RPC, from Connection settings; `specifier` can point at a mainnet pin once Hisoka publishes one |
+| Nox's specifier is on Sepolia and its node registry on Arbitrum Sepolia | Met for the default: the default network is Nym, whose specifier is on mainnet. Nox stays selectable; its testnet state can be reset upstream, and `specifier` can point at a mainnet pin once Hisoka publishes one |
 | Curator picks cannot keep an epoch closed: picks that are never served block that epoch's ballots in the agent's focus until the registry owner voids them (`voidCurations`), and then ballots open with rotation; a paused agent's picks are ignored. Published picks cannot be left off by the first preparer (no permissionless skip) | Partial: unblocking needs the owner within the epoch; an epoch left unprepared pays its fees to the default cause |
 | Curator agents run on one account's scheduled routines with one key custodian (1Claw); only the registry owner registers signers | Gap: pins and rotation keep ballots working without the agents; the report schema and pick format are public, so an independent curator could be registered later |
 | Curator data is free per epoch; x402 sells only packaged views of it | Met |

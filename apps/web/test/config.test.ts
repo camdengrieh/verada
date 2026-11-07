@@ -59,9 +59,9 @@ describe("dev stack (pnpm dev:up)", () => {
 });
 
 describe("private RPC config", () => {
-  it("defaults to Nox and follows a runtime rpcUrl", () => {
+  it("defaults to Nym and follows a runtime rpcUrl", () => {
     const d = envDefaults();
-    expect(d.privateRpc.network).toBe("nox");
+    expect(d.privateRpc.network).toBe("nym");
     expect(d.privateRpc.rpcUrls.length).toBeGreaterThan(0);
     const m = mergeRuntimeConfig(d, { rpcUrl: "https://my-rpc.example" });
     expect(m.privateRpc.rpcUrls[0]).toBe("https://my-rpc.example");
@@ -75,9 +75,9 @@ describe("private RPC config", () => {
     expect(m.privateRpc).toMatchObject({ network: "tor-js", rpcUrls: ["https://a.example", "https://b.example"], workerConfig: { gateways: ["g"] } });
   });
 
-  it("switches to Nym by config", () => {
-    const m = mergeRuntimeConfig(envDefaults(), { privateRpc: { network: "nym" } });
-    expect(m.privateRpc.network).toBe("nym");
+  it("switches to Nox by config", () => {
+    const m = mergeRuntimeConfig(envDefaults(), { privateRpc: { network: "nox" } });
+    expect(m.privateRpc.network).toBe("nox");
     expect(m.privateRpc.bootstrapRpcUrl).toBeUndefined();
   });
 
