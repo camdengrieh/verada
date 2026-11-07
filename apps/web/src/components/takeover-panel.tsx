@@ -129,7 +129,7 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
   const rpc = usePrivateRpc();
   const { address: account } = useAccount();
   const ballot = useCastBallot();
-  const tx = useTx();
+  const tx = useTx({ kind: "vote", confetti: "vote" });
   const id = BigInt(p.proposalId);
 
   const accountClient = useMemo(() => (account ? createAccountClient(rpc, account) : null), [rpc, account]);

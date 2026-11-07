@@ -34,9 +34,23 @@ export function LiveTicker({ live, assets }: { live: LiveActivity; assets: reado
   const { items } = live;
   const now = useNow(60_000);
   const ctx = useActivityContext(items, assets, now ? Math.floor(now.getTime() / 1000) : 0);
-  const rows = useMemo(() => items.map((i) => toTickerItem(i, ctx)).filter((r): r is NonNullable<typeof r> => r !== null).slice(0, 20), [items, ctx]);
+  const rows = useMemo(() => items.map((i) => toTickerItem(i, ctx)).filter((r): r is NonNullable<typeof r> => r !== null).slice(0, 30), [items, ctx]);
+  const { market, giving } = useMemo(() => splitTicker(rows), [rows]);
   if (rows.length === 0) return null;
-  return <ActivityTicker items={rows} className="rounded-2xl border" label="Live activity on Varada" />;
+  // Two strips running opposite ways: the market on top, giving and votes underneath.
+  if (market.length === 0 || giving.length === 0) return <ActivityTicker items={rows} className="rounded-2xl border" label="Live activity on Varada" />;
+  return (
+    <div className="flex flex-col overflow-hidden rounded-2xl border border-line">
+      <ActivityTicker items={market} tag="Market" label="Live trades and launches" className="border-b" />
+      <ActivityTicker items={giving} tag="Giving" direction="right" duration={46} label="Live gifts and votes" className="border-b-0" />
+    </div>
+  );
+}
+
+/** Trades and launches in one strip, gifts and votes in the other. */
+export function splitTicker<T extends { kind: string }>(rows: readonly T[]): { market: T[]; giving: T[] } {
+  const giving = rows.filter((r) => r.kind === "GIVE" || r.kind === "VOTE");
+  return { market: rows.filter((r) => !giving.includes(r)), giving };
 }
 
 /** Total raised next to the latest donations. */

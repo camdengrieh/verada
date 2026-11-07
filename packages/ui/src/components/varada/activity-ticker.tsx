@@ -32,6 +32,10 @@ export interface ActivityTickerProps extends Omit<ComponentProps<"section">, "ch
   label?: string;
   /** Hold the loop still (e.g. while a dialog opened from it is up). */
   paused?: boolean;
+  /** Which way the strip runs; pair a left and a right strip for a two-way ticker. */
+  direction?: "left" | "right";
+  /** The badge at the start of the strip. */
+  tag?: string;
 }
 
 /**
@@ -39,7 +43,7 @@ export interface ActivityTickerProps extends Omit<ComponentProps<"section">, "ch
  * of the items; the copy is hidden from assistive tech and can't take focus. It pauses on hover and
  * keyboard focus, and with prefers-reduced-motion it stops and scrolls by hand instead.
  */
-export function ActivityTicker({ items, duration = 40, gap = "1.75rem", label = "Live activity", paused, className, style, ...props }: ActivityTickerProps) {
+export function ActivityTicker({ items, duration = 40, gap = "1.75rem", label = "Live activity", paused, direction = "left", tag = "Live", className, style, ...props }: ActivityTickerProps) {
   const group = (copy: number) => (
     <ul
       key={copy}
@@ -65,7 +69,7 @@ export function ActivityTicker({ items, duration = 40, gap = "1.75rem", label = 
     >
       <span className="z-10 inline-flex flex-none items-center gap-1.5 bg-ink px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.1em] text-paper">
         <span aria-hidden="true" className="size-[7px] rounded-full bg-sage-tint" />
-        Live
+        {tag}
       </span>
       <div
         tabIndex={0}
@@ -79,7 +83,7 @@ export function ActivityTicker({ items, duration = 40, gap = "1.75rem", label = 
             "flex w-max shrink-0 gap-(--marquee-gap) py-2.5",
             "animate-marquee group-hover/ticker:[animation-play-state:paused] group-focus-within/ticker:[animation-play-state:paused] motion-reduce:animate-none",
           )}
-          style={{ animationPlayState: paused ? "paused" : undefined }}
+          style={{ animationPlayState: paused ? "paused" : undefined, animationDirection: direction === "right" ? "reverse" : undefined }}
         >
           {group(0)}
           {group(1)}

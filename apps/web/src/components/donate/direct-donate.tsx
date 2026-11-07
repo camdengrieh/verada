@@ -182,7 +182,7 @@ export function DirectDonate({ org, amount, invalid }: { org: DirectOrg; amount:
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="cause" size="lg" onClick={start} disabled={Boolean(blocker) || Boolean(invalid) || busy}>
+        <Button type="button" variant="cause" size="lg" effect="wash" onClick={start} disabled={Boolean(blocker) || Boolean(invalid) || busy}>
           <HandHeart aria-hidden="true" />
           {amount ? `Donate ${usdcText(amount)}` : "Donate"}
         </Button>

@@ -10,6 +10,7 @@ import { HandHeart, Search, SlidersHorizontal, X } from "@varada/ui/components/u
 import { Input, InputAddon, InputGroup } from "@varada/ui/components/ui/input";
 import { Label } from "@varada/ui/components/ui/label";
 import { Skeleton } from "@varada/ui/components/ui/skeleton";
+import { TextReveal } from "@varada/ui/components/motion/text-reveal";
 import { HeroCause } from "@varada/ui/components/varada/hero-cause";
 import { HeroStats } from "@varada/ui/components/varada/hero-shared";
 import { usdFormatOptions } from "@varada/ui/components/varada/impact-shared";
@@ -150,7 +151,7 @@ export function CausesExplorer() {
         <header className="@container flex flex-col gap-5 rounded-[32px] border border-line bg-card p-5 @lg:p-8">
           <div className="flex max-w-2xl flex-col gap-3">
             <span className="kicker">Causes</span>
-            <h1 className="m-0 font-display text-4xl leading-[1.05] @md:text-5xl">Where the fees go</h1>
+            <TextReveal as="h1" text="Where the fees go" trigger="mount" className="m-0 font-display text-4xl leading-[1.05] @md:text-5xl" />
             <p className="m-0 text-[17px] leading-relaxed text-ink-soft">
               Every compliant Endaoment organization is in the Varada cause catalogue, grouped by cause and region. Coins choose a focus at launch and their ballots draw from the matching charities.
             </p>

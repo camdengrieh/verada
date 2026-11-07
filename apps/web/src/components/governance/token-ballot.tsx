@@ -2,6 +2,7 @@
 
 import { useQuery, useQueries, useQueryClient } from "@tanstack/react-query";
 import { Badge } from "@varada/ui/components/ui/badge";
+import { InkRippleButton } from "@varada/ui/components/motion/ink-ripple";
 import { Button } from "@varada/ui/components/ui/button";
 import { ArrowUpRight, ExternalLink, Info, Vote } from "@varada/ui/components/ui/icons";
 import { Skeleton } from "@varada/ui/components/ui/skeleton";
@@ -240,10 +241,10 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
       Switch to Ethereum
     </Button>
   ) : (
-    <Button variant="cause" size="lg" disabled={!selected || Boolean(voteBlocker)} onClick={() => selected && startVote(selected.id)}>
+    <InkRippleButton variant="cause" size="lg" disabled={!selected || Boolean(voteBlocker)} onClick={() => selected && startVote(selected.id)}>
       <Vote aria-hidden="true" />
       <span className="min-w-0 truncate">{selected ? `Vote for ${selected.org}` : "Choose a charity to vote"}</span>
-    </Button>
+    </InkRippleButton>
   );
 
   const loading = view.isLoading || detail.isLoading;

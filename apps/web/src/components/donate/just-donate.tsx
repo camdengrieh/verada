@@ -4,6 +4,11 @@ import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { CATEGORIES, causeIdOfOrg } from "@varada/sdk";
 import type { Hex } from "viem";
+import { FlipWords } from "@varada/ui/components/motion/flip-words";
+import { Marquee } from "@varada/ui/components/motion/marquee";
+import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
+import { ScrollReveal } from "@varada/ui/components/motion/scroll-reveal";
+import { SpotlightCard } from "@varada/ui/components/motion/spotlight-card";
 import { Badge } from "@varada/ui/components/ui/badge";
 import { Button } from "@varada/ui/components/ui/button";
 import { Checkbox } from "@varada/ui/components/ui/checkbox";
@@ -216,6 +221,11 @@ export function JustDonate() {
             <h1 id="jd-h" className="m-0 font-display text-4xl font-semibold leading-[1.04] @md:text-[56px]">
               Give where it&apos;s needed this week
             </h1>
+            {shownTrends.length > 1 && (
+              <p className="m-0 font-display text-2xl text-ink-soft">
+                Most urgent now: <FlipWords words={shownTrends.slice(0, 5).map((t) => t.agent.name.toLowerCase())} className="font-semibold text-ink" />
+              </p>
+            )}
             <p className="m-0 max-w-[34em] text-[17px] leading-relaxed text-ink-soft">
               Choose an amount, and a place on the globe if you like. Let Varada&apos;s curator agents route it to the charities they rank most urgent, or give it
               straight to one charity yourself. Every gift is USDC on chain.
@@ -327,7 +337,7 @@ export function JustDonate() {
                     <>
                       The curators choose among{" "}
                       <a href={catalogueHref} className="font-semibold text-ink underline underline-offset-4">
-                        {pool.data.toLocaleString("en-US")} charities in the catalogue
+                        <NumberTicker value={pool.data} /> charities in the catalogue
                       </a>{" "}
                       for {place}.
                     </>
@@ -402,6 +412,28 @@ export function JustDonate() {
         </div>
       </section>
 
+      {shownTrends.length > 0 && featured.length > 0 && (
+        <div className="-mx-4 flex flex-col gap-2 overflow-hidden md:mx-0 md:rounded-2xl md:border md:border-line md:bg-card md:py-2">
+          <Marquee label="Trending causes this week" duration={38} gap="0.75rem" fade>
+            {shownTrends.map((t) => (
+              <span key={t.slug} className="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-sand py-1 pl-1 pr-3 text-sm font-semibold text-ink">
+                <CauseIcon cause={agentCause(t.agent.label)} size={24} decorative />
+                {t.agent.name}
+                <span className="text-xs font-normal text-ink-muted">{heatWord(t.weight)}</span>
+              </span>
+            ))}
+          </Marquee>
+          <Marquee label="Charities the curators feature" direction="right" duration={44} gap="0.75rem" fade>
+            {featured.map((p) => (
+              <span key={`${p.agentLabel}-${p.orgId}`} className="inline-flex items-center gap-2 whitespace-nowrap rounded-full border border-line px-3 py-1 text-sm text-ink-soft">
+                <span className="font-semibold text-ink">{p.name}</span>
+                <span className="text-xs">{regionName(p.region)}</span>
+              </span>
+            ))}
+          </Marquee>
+        </div>
+      )}
+
       <section aria-labelledby="tr-h" className="@container flex flex-col gap-4">
         <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
           <div className="flex flex-col gap-1">
@@ -421,6 +453,7 @@ export function JustDonate() {
         ) : shownTrends.length === 0 ? (
           <p className="m-0 rounded-2xl border border-line bg-card px-4 py-3 text-sm text-ink-soft">No curator agent is taking donations yet.</p>
         ) : (
+          <ScrollReveal>
           <ol className="m-0 grid list-none grid-cols-1 gap-3.5 p-0 @xl:grid-cols-2 @4xl:grid-cols-3">
             {shownTrends.map((t, i) => (
               <TrendCard
@@ -435,6 +468,7 @@ export function JustDonate() {
               />
             ))}
           </ol>
+          </ScrollReveal>
         )}
       </section>
 
@@ -610,7 +644,8 @@ function CharityCard({
   credit?: React.ReactNode;
 }) {
   return (
-    <li className={cn("flex min-w-0 flex-col gap-2.5 rounded-[20px] border bg-card p-4", selected ? "border-sage shadow-paper" : "border-line")}>
+    <SpotlightCard asChild pigment={selected ? "var(--sage)" : "var(--ochre)"} size={260}>
+      <li className={cn("flex min-w-0 flex-col gap-2.5 rounded-[20px] border bg-card p-4", selected ? "border-sage shadow-paper" : "border-line")}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h3 className="m-0 font-display text-lg font-semibold leading-snug [overflow-wrap:anywhere]">{name}</h3>
@@ -649,7 +684,8 @@ function CharityCard({
           </Button>
         )}
       </div>
-    </li>
+      </li>
+    </SpotlightCard>
   );
 }
 
@@ -706,7 +742,8 @@ function TrendCard({
 }) {
   const heat = heatWord(t.weight);
   return (
-    <li className={cn("flex min-w-0 flex-col gap-3 rounded-[22px] border-[1.5px] p-4 transition-colors", inGift ? "border-sage bg-sage-tint/50" : "border-line bg-card")}>
+    <SpotlightCard asChild pigment={heat === "Urgent" ? "var(--terracotta)" : "var(--ochre)"} size={260}>
+      <li className={cn("flex min-w-0 flex-col gap-3 rounded-[22px] border-[1.5px] p-4 transition-colors", inGift ? "border-sage bg-sage-tint/50" : "border-line bg-card")}>
       <div className="flex items-center gap-3">
         <span className="num w-6 text-[13px] font-semibold text-ink-muted">{String(rank).padStart(2, "0")}</span>
         <CauseIcon cause={agentCause(t.agent.label)} size={44} decorative />
@@ -736,6 +773,7 @@ function TrendCard({
           {chosenByVisitor ? "In your gift" : inGift ? "Trending pick" : full ? `${MAX_SPLIT} max` : "Add to gift"}
         </Button>
       </div>
-    </li>
+      </li>
+    </SpotlightCard>
   );
 }

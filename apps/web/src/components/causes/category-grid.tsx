@@ -1,6 +1,7 @@
 "use client";
 
 import { CATEGORIES } from "@varada/sdk";
+import { SpotlightCard } from "@varada/ui/components/motion/spotlight-card";
 import { CauseIcon } from "@varada/ui/components/varada/cause-icon";
 import { formatUsd } from "@varada/ui/components/varada/impact-shared";
 import { cn } from "@varada/ui/lib/utils";
@@ -39,7 +40,10 @@ export function CategoryGrid({
         const agent = agentLabelOfSlug(c.slug);
         return (
           <li key={c.slug} className="min-w-0">
-            <div
+            <SpotlightCard
+              pigment={on ? "var(--sage)" : "var(--ochre)"}
+              size={220}
+              ring={false}
               className={cn(
                 "flex h-full flex-col rounded-[20px] border bg-card transition-[border-color,box-shadow] focus-within:border-line-strong hover:shadow-paper",
                 on ? "border-sage bg-sage-tint/50 shadow-paper" : "border-line",
@@ -69,7 +73,7 @@ export function CategoryGrid({
                   <span className="sr-only"> for {c.label}</span>
                 </a>
               ) : null}
-            </div>
+            </SpotlightCard>
           </li>
         );
       })}

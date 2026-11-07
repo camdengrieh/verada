@@ -57,6 +57,7 @@ export function SendDonation({ token }: { token: Address }) {
     kind: sent?.stage === "distribute" ? "donation" : "transaction",
     description: sent?.label,
     titles: sent?.stage === "distribute" ? { pending: "Sending the donation…", success: "Donation sent", error: "Donation not sent" } : undefined,
+    confetti: sent?.stage === "distribute" ? "donation" : false,
   });
   const addrs = donationAddresses(config);
   const [planning, setPlanning] = useState(false);

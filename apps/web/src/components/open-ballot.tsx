@@ -21,6 +21,7 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
     kind: "transaction",
     description: `Epoch ${epoch}`,
     titles: { pending: "Opening this week's ballot…", success: "Ballot opened", error: "Ballot not opened" },
+    confetti: "vote",
   });
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string>();

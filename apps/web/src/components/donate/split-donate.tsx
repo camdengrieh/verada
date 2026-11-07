@@ -218,7 +218,7 @@ export function SplitDonate({ targets, credit, invalid }: { targets: readonly Sp
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant="cause" size="lg" onClick={start} disabled={Boolean(blocker) || Boolean(invalid) || busy}>
+        <Button type="button" variant="cause" size="lg" effect="wash" onClick={start} disabled={Boolean(blocker) || Boolean(invalid) || busy}>
           <HandHeart aria-hidden="true" />
           {total > 0n ? `Donate ${usdcText(total)}` : "Donate"}
         </Button>

@@ -131,7 +131,7 @@ describe("Just donate", () => {
     await waitFor(() => expect(trendNames()[0]).toMatch(/Hunger/));
     expect(screen.getByRole("heading", { name: "Most urgent causes in Africa" })).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Where your gift goes" })).toHaveTextContent(/Hunger/);
-    expect(screen.getByText("Food Aid africa")).toBeInTheDocument();
+    expect(within(screen.getByRole("list", { name: "Featured charities" })).getByText("Food Aid africa")).toBeInTheDocument();
     expect(screen.queryByText("Wells asia")).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: "42 charities in the catalogue" })).toHaveAttribute("href", "./causes/?category=hunger&region=africa#catalogue");
     await waitFor(() => expect(window.location.search).toBe("?amount=25&region=africa"));
