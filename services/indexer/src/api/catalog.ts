@@ -20,6 +20,13 @@ export interface CatalogOrgResult {
   claimed: boolean;
   categories: string[];
   regions: string[];
+  /** ENS label (`<label>.org.<parent>`), when the catalogue build assigned one. */
+  label?: string;
+  /**
+   * The org id Endaoment's factory uses on Ethereum, when the build resolved it. Usually `orgId`;
+   * different when the live entity was created under another id. Absent on older builds.
+   */
+  ethOrgId?: Hex;
 }
 
 export interface CatalogEntryWithProof extends CatalogEntry {
@@ -53,7 +60,25 @@ export interface CatalogStore {
   pool(categoryMask: bigint, regionMask: number): { poolSize: number; buckets: { bucket: number; category: string; region: string; size: number }[] } | null;
 }
 
+/** Fields newer catalogue builds add (names and per-chain org ids); read loosely so older builds load. */
+interface NamedOrg {
+  label?: unknown;
+  chains?: { chainId?: unknown; orgId?: unknown; source?: unknown }[];
+}
+const LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/;
+const HEX32_RE = /^0x[0-9a-fA-F]{64}$/;
+function nameFields(o: CatalogOrg): Pick<CatalogOrgResult, "label" | "ethOrgId"> {
+  const n = o as unknown as NamedOrg;
+  const eth = Array.isArray(n.chains) ? n.chains.find((ch) => ch?.chainId === 1 && ch.source !== "unresolved") : undefined;
+  const ethOrgId = typeof eth?.orgId === "string" && HEX32_RE.test(eth.orgId) && !/^0x0+$/.test(eth.orgId) ? (eth.orgId as Hex) : undefined;
+  return {
+    ...(typeof n.label === "string" && LABEL_RE.test(n.label) ? { label: n.label } : {}),
+    ...(ethOrgId ? { ethOrgId } : {}),
+  };
+}
+
 const toResult = (o: CatalogOrg): CatalogOrgResult => ({
+  ...nameFields(o),
   orgId: o.orgId,
   causeId: o.causeId,
   ein: o.ein,
@@ -74,7 +99,11 @@ export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
   if (!c) {
     return { catalog: () => null, search: () => null, causes: () => null, org: () => null, entries: () => null, entriesOf: () => null, pool: () => null };
   }
-  const names = c.orgs.map((o) => o.name.toLowerCase());
+  // Searchable text: the name, the ENS label and the EIN (digits only, so "52-0907625" matches too).
+  const names = c.orgs.map((o) => {
+    const label = nameFields(o).label;
+    return `${o.name.toLowerCase()}${label ? `\n${label}` : ""}${o.ein ? `\n${o.ein.replace(/-/g, "")}` : ""}`;
+  });
   const masks = c.orgs.map((o) => ({ c: BigInt(o.categoryMask), r: o.regionMask }));
   const byKey = new Map<string, number>();
   c.orgs.forEach((o, i) => {
@@ -98,7 +127,9 @@ export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
   return {
     catalog: () => c,
     search(q) {
-      const needle = q.q?.trim().toLowerCase();
+      const raw = q.q?.trim().toLowerCase();
+      // An EIN typed with its hyphen, or a full ENS name, searches as the stored form.
+      const needle = raw && /^\d{2}-\d{7}$/.test(raw) ? raw.replace("-", "") : raw?.replace(/\.org\.[a-z0-9.-]+$/, "");
       const out: CatalogOrgResult[] = [];
       let total = 0;
       for (let i = 0; i < c.orgs.length; i++) {

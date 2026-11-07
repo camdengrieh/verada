@@ -87,6 +87,10 @@ export interface CatalogOrg {
   nteeCode: string | null;
   categories: string[];
   regions: string[];
+  /** ENS label: the org's name is `<label>.org.<parent>`. Null on catalogue builds without names. */
+  label: string | null;
+  /** The org id Endaoment's factory uses on Ethereum when it differs from `orgId`; else null. */
+  ethOrgId: string | null;
 }
 
 export interface CatalogEntry {
@@ -390,6 +394,8 @@ function toCatalogOrg(v: unknown): CatalogOrg | null {
     nteeCode: str(v.nteeCode) ?? null,
     categories: strList(v.categories) ?? [],
     regions: strList(v.regions) ?? [],
+    label: typeof v.label === "string" && /^[a-z0-9](?:[a-z0-9-]{1,61}[a-z0-9])$/.test(v.label) ? v.label : null,
+    ethOrgId: typeof v.ethOrgId === "string" && /^0x[0-9a-fA-F]{64}$/.test(v.ethOrgId) ? v.ethOrgId.toLowerCase() : null,
   };
 }
 

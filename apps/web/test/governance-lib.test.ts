@@ -24,7 +24,7 @@ import { causeIdOfOrg } from "@varada/sdk";
 import type { ActivityItem, CatalogOrg } from "@/lib/indexer";
 
 const id = (n: number) => `0x${n.toString(16).padStart(2, "0").repeat(32)}`;
-const org = (over: Partial<CatalogOrg> = {}): CatalogOrg => ({ orgId: id(9), causeId: id(1), ein: null, name: "Alpha", country: null, state: null, nteeCode: null, categories: ["homelessness"], regions: ["africa"], ...over });
+const org = (over: Partial<CatalogOrg> = {}): CatalogOrg => ({ orgId: id(9), causeId: id(1), ein: null, name: "Alpha", country: null, state: null, nteeCode: null, categories: ["homelessness"], regions: ["africa"], label: null, ethOrgId: null, ...over });
 
 describe("cause and region labels", () => {
   it("maps catalogue slugs to the library's cause names", () => {

@@ -93,6 +93,50 @@ export function trendingPicks(
 }
 
 /**
+ * Charities to feature: the curators' picks spread across causes and regions. Round by round, each
+ * cause (hottest first) adds its hottest pick in a region not featured yet, falling back to any
+ * region once its own are used; one entry per charity, at most `limit`.
+ */
+export function featuredPicks(
+  trends: readonly CauseTrend[],
+  reports: ReadonlyMap<string, AgentReport | null>,
+  picked: readonly string[],
+  limit = 9,
+): TrendingPick[] {
+  const scope = new Set(regionsInScope(picked));
+  const queues = trends.map((t) => {
+    const all: TrendingPick[] = [];
+    for (const r of reports.get(t.agent.label)?.regions ?? []) {
+      if (!scope.has(r.region)) continue;
+      for (const p of r.picks) {
+        all.push({ ...p, agentLabel: t.agent.label, causeSlug: t.slug, region: r.region, heat: Math.round((r.weight * Math.max(0, Math.min(100, p.score))) / 100) });
+      }
+    }
+    return all.sort((a, b) => b.heat - a.heat || a.name.localeCompare(b.name));
+  });
+  const out: TrendingPick[] = [];
+  const seenOrg = new Set<string>();
+  const seenRegion = new Set<string>();
+  for (let round = 0; out.length < limit; round++) {
+    let added = false;
+    for (const q of queues) {
+      if (out.length >= limit) break;
+      const fresh = q.filter((p) => !seenOrg.has(p.orgId.toLowerCase()));
+      const next = fresh.find((p) => !seenRegion.has(p.region)) ?? fresh[0];
+      if (!next) continue;
+      out.push(next);
+      seenOrg.add(next.orgId.toLowerCase());
+      seenRegion.add(next.region);
+      added = true;
+    }
+    if (!added) break;
+    // Every region featured once: start the next pass over regions afresh.
+    if ([...scope].every((r) => seenRegion.has(r))) seenRegion.clear();
+  }
+  return out;
+}
+
+/**
  * The causes a gift goes to: the visitor's choice when they made one (in their order, at most
  * `MAX_SPLIT`, only causes that can take donations), else the single hottest cause.
  */
@@ -119,6 +163,8 @@ export interface DonateQuery {
   regions: string[];
   causes: string[];
   amount: string;
+  /** A charity to give to directly (32-byte org id), or "" for the curators. */
+  org?: string;
 }
 
 /** Reads `?region=&cause=&amount=`; unknown slugs are dropped and the amount kept only if numeric. */
@@ -129,6 +175,7 @@ export function parseDonateQuery(search: string): DonateQuery {
     regions: pickKnownSlugs(p.get("region"), REGIONS).filter((r) => r !== "global"),
     causes: pickKnownSlugs(p.get("cause"), CATEGORIES).slice(0, MAX_SPLIT),
     amount: /^\d{1,9}(\.\d{1,6})?$/.test(amount) ? amount : "",
+    org: /^0x[0-9a-fA-F]{64}$/.test(p.get("org") ?? "") ? p.get("org")!.toLowerCase() : "",
   };
 }
 
@@ -137,7 +184,8 @@ export function donateQueryString(s: DonateQuery): string {
   const p = new URLSearchParams();
   if (s.amount.trim()) p.set("amount", s.amount.trim());
   if (s.regions.length) p.set("region", s.regions.join(","));
-  if (s.causes.length) p.set("cause", s.causes.join(","));
+  if (s.org) p.set("org", s.org);
+  else if (s.causes.length) p.set("cause", s.causes.join(","));
   const out = p.toString();
   return out ? `?${out}` : "";
 }

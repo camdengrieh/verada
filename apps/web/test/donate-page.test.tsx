@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { getAddress } from "viem";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 class Observer {
@@ -43,12 +44,24 @@ const indexerGet = vi.fn(async (path: string): Promise<unknown> => {
   throw new Error(`unexpected ${path}`);
 });
 
+const ORG_ID = `0x${"0b".repeat(32)}`;
+const ORG_RAW = "0x00000000000000000000000000000000000000cc";
+const ORG_ADDRESS = getAddress(ORG_RAW);
+const FACTORY = "0x10fD9348136dCea154F752fe0B6dB45Fc298A589";
+const catalogOrg = { orgId: ORG_ID, causeId: `0x${"ca".repeat(32)}`, ein: "271661997", name: "Give Well Fund", country: "USA", state: "NY", nteeCode: null, categories: ["poverty"], regions: ["africa"], label: "give-well-fund", ethOrgId: null };
+const orgState = { deployed: false, active: true };
+
 const registryVault: Record<number, string> = { ...VAULTS };
 const chainRead = vi.fn(async ({ functionName, args, address }: { functionName: string; args?: unknown[]; address: string }): Promise<unknown> => {
   if (functionName === "agentOf" && address === REGISTRY) return { vault: registryVault[args![0] as number], active: true };
   if (functionName === "paused") return false;
+  if (functionName === "computeOrgAddress" && address === FACTORY && args![0] === ORG_ID) return ORG_RAW;
+  if (functionName === "isActiveEntity") return orgState.active;
+  if (functionName === "orgId") return ORG_ID;
   throw new Error(`unexpected read ${functionName}`);
 });
+const getCode = vi.fn(async () => (orgState.deployed ? "0x6080" : undefined));
+const catalogSearch = vi.fn<(q: unknown) => Promise<{ items: (typeof catalogOrg)[]; total: number }>>(async () => ({ items: [catalogOrg], total: 1 }));
 const accountRead = vi.fn(async ({ functionName }: { functionName: string }) => (functionName === "balanceOf" ? 100_000_000n : 0n));
 
 let txCount = 0;
@@ -58,7 +71,10 @@ const receipts = new Map<string, { status: "success"; transactionHash: string }>
 
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => config,
-  useDeps: () => ({ indexer: { get: indexerGet, catalogPool: async () => 42 }, chain: () => ({ readContract: chainRead }) }),
+  useDeps: () => ({
+    indexer: { get: indexerGet, catalogPool: async () => 42, catalogSearch, catalogCauses: async () => new Map(), catalogOrg: async () => ({ org: catalogOrg, entries: [] }) },
+    chain: () => ({ readContract: chainRead, getCode }),
+  }),
   usePrivateRpc: () => ({}),
 }));
 vi.mock("@/components/nav", () => ({ useRel: () => (p: string) => `./${p}` }));
@@ -98,6 +114,8 @@ beforeEach(() => {
   writeContractAsync.mockClear();
   receipts.clear();
   Object.assign(registryVault, VAULTS);
+  Object.assign(orgState, { deployed: false, active: true });
+  catalogSearch.mockClear();
   window.history.replaceState(null, "", "/donate/");
 });
 
@@ -107,15 +125,15 @@ describe("Just donate", () => {
     await waitFor(() => expect(screen.getAllByText("Wells asia").length).toBeGreaterThan(0));
     // Everywhere: water's Asia weight (9000) beats hunger's Africa (8800).
     expect(trendNames()[0]).toMatch(/Clean water/);
-    expect(within(screen.getByRole("list", { name: "Where your gift goes" })).getByText(/Clean water/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Where your gift goes" })).toHaveTextContent(/Clean water/);
 
     fireEvent.click(screen.getByRole("button", { name: "Africa" }));
     await waitFor(() => expect(trendNames()[0]).toMatch(/Hunger/));
     expect(screen.getByRole("heading", { name: "Most urgent causes in Africa" })).toBeInTheDocument();
-    expect(within(screen.getByRole("list", { name: "Where your gift goes" })).getByText(/Hunger/)).toBeInTheDocument();
+    expect(screen.getByRole("list", { name: "Where your gift goes" })).toHaveTextContent(/Hunger/);
     expect(screen.getByText("Food Aid africa")).toBeInTheDocument();
     expect(screen.queryByText("Wells asia")).not.toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "42 in the catalogue" })).toHaveAttribute("href", "./causes/?category=hunger&region=africa#catalogue");
+    expect(screen.getByRole("link", { name: "42 charities in the catalogue" })).toHaveAttribute("href", "./causes/?category=hunger&region=africa#catalogue");
     await waitFor(() => expect(window.location.search).toBe("?amount=25&region=africa"));
     expect(screen.getByRole("note")).toHaveTextContent("Connect a wallet to donate.");
   });
@@ -127,7 +145,7 @@ describe("Just donate", () => {
     await waitFor(() => expect(trendNames()[0]).toMatch(/Hunger/));
     const water = screen.getAllByRole("listitem").find((li) => /Clean water/.test(li.textContent ?? "") && within(li).queryByRole("button", { name: /Add to gift/ }))!;
     fireEvent.click(within(water).getByRole("button", { name: /Add to gift/ }));
-    await waitFor(() => expect(screen.getByText("Split evenly across 2 causes")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Split evenly across 2 causes/)).toBeInTheDocument());
 
     const donate = screen.getByRole("button", { name: "Donate 10 USDC" });
     await waitFor(() => expect(donate).toBeEnabled());
@@ -160,5 +178,73 @@ describe("Just donate", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/is not the one registered on chain/));
     expect(screen.getByRole("button", { name: "Donate 25 USDC" })).toBeDisabled();
     expect(writeContractAsync).not.toHaveBeenCalled();
+  });
+  it("gives straight to a searched charity: its ENS name and deposit address, then approve and deploy-and-donate", async () => {
+    account.address = "0x00000000000000000000000000000000000000d1";
+    wrap(<JustDonate />);
+    fireEvent.change(await screen.findByLabelText("Name, ENS name or EIN"), { target: { value: "27-1661997" } });
+    await waitFor(() => expect(catalogSearch).toHaveBeenLastCalledWith(expect.objectContaining({ q: "27-1661997" })));
+    const results = await screen.findByRole("list", { name: "Search results" });
+    expect(within(results).getByText("give-well-fund.org.varada.eth")).toBeInTheDocument();
+    fireEvent.click(within(results).getByRole("button", { name: /Donate directly to Give Well Fund/ }));
+
+    const deposit = await screen.findByRole("group", { name: "Give Well Fund deposit address" });
+    expect(within(deposit).getByText("give-well-fund")).toBeInTheDocument();
+    expect(within(deposit).getByRole("button", { name: "Copy the name give-well-fund.org.varada.eth" })).toBeInTheDocument();
+    expect(within(deposit).getAllByRole("button").length).toBeGreaterThanOrEqual(2); // address copy + name copy
+    expect(within(deposit).getByRole("link", { name: /on Etherscan/ })).toHaveAttribute("href", `https://etherscan.io/address/${ORG_ADDRESS}`);
+    expect(screen.getByText(/Not opened yet/)).toBeInTheDocument();
+    await waitFor(() => expect(window.location.search).toBe(`?amount=25&org=${ORG_ID}`));
+
+    const donate = screen.getAllByRole("button", { name: "Donate 25 USDC" }).at(-1)!;
+    await waitFor(() => expect(donate).toBeEnabled());
+    fireEvent.click(donate);
+    const dialog = await screen.findByRole("dialog");
+    for (const [i, label] of ["Approve 25 USDC", "Donate 25 USDC"].entries()) {
+      const button = (await within(dialog).findAllByRole("button", { name: label })).at(-1)!;
+      await waitFor(() => expect(button).toBeEnabled());
+      fireEvent.click(button);
+      await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(i + 1));
+    }
+    await waitFor(() => expect(within(dialog).getByText("Thank you. 25 USDC is with Give Well Fund.")).toBeInTheDocument());
+    const calls = writeContractAsync.mock.calls.map(([r]) => r as { functionName: string; address: string; args: unknown[] });
+    expect(calls.map((c) => c.functionName)).toEqual(["approve", "deployOrgAndDonate"]);
+    expect(calls[0]!.args).toEqual([FACTORY, 25_000_000n]);
+    expect(calls[1]).toMatchObject({ address: FACTORY, args: [ORG_ID, 25_000_000n] });
+  });
+
+  it("donates to a deployed charity's own contract, and blocks one Endaoment lists as inactive", async () => {
+    account.address = "0x00000000000000000000000000000000000000d1";
+    orgState.deployed = true;
+    window.history.replaceState(null, "", `/donate/?amount=5&org=${ORG_ID}`);
+    const { unmount } = wrap(<JustDonate />);
+    await screen.findByRole("group", { name: "Give Well Fund deposit address" });
+    expect(screen.getByText(/Endaoment account on Ethereum/)).toBeInTheDocument();
+    const donate = screen.getAllByRole("button", { name: "Donate 5 USDC" }).at(-1)!;
+    await waitFor(() => expect(donate).toBeEnabled());
+    fireEvent.click(donate);
+    const dialog = await screen.findByRole("dialog");
+    for (const [i, label] of ["Approve 5 USDC", "Donate 5 USDC"].entries()) {
+      const button = (await within(dialog).findAllByRole("button", { name: label })).at(-1)!;
+      await waitFor(() => expect(button).toBeEnabled());
+      fireEvent.click(button);
+      await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(i + 1));
+    }
+    const calls = writeContractAsync.mock.calls.map(([r]) => r as { functionName: string; address: string; args: unknown[] });
+    expect(calls[0]!.args).toEqual([ORG_ADDRESS, 5_000_000n]);
+    expect(calls[1]).toMatchObject({ functionName: "donate", address: ORG_ADDRESS, args: [5_000_000n] });
+    unmount();
+
+    writeContractAsync.mockClear();
+    orgState.active = false;
+    wrap(<JustDonate />);
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Endaoment does not list this charity as active"));
+    expect(writeContractAsync).not.toHaveBeenCalled();
+  });
+
+  it("shows each curator vault's ENS name with its address", async () => {
+    wrap(<JustDonate />);
+    const vault = await screen.findByRole("group", { name: /curator vault/ });
+    expect(within(vault).getByRole("button", { name: /Copy the name .*\.agent\.varada\.eth/ })).toBeInTheDocument();
   });
 });

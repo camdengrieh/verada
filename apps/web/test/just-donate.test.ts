@@ -3,6 +3,7 @@ import type { AgentReport, AgentSummary } from "@/lib/agents";
 import {
   chosenCauses,
   donateQueryString,
+  featuredPicks,
   heatWord,
   parseDonateQuery,
   placeList,
@@ -10,6 +11,7 @@ import {
   splitAmount,
   trendingPicks,
 } from "@/lib/just-donate";
+import { ENDAOMENT_REGISTRY, ORG_FUND_FACTORY, ethOrgIdOf, orgEnsName, orgGiftRequest, orgRoute, readOrgTarget } from "@/lib/org-donate";
 import { landDots, lonDelta, projectFlat, projectGlobe, regionAt, regionPaths, REGION_CENTRES, MAP_REGIONS } from "@/lib/world-dots";
 
 const VAULT = (n: number) => `0x${n.toString(16).padStart(40, "0")}`;
@@ -118,7 +120,7 @@ describe("chosenCauses and splitAmount", () => {
 describe("donate query", () => {
   it("round-trips known slugs and a numeric amount", () => {
     const q = parseDonateQuery("?amount=12.5&region=africa,global,mars,asia&cause=hunger,nope,clean-water,education,poverty");
-    expect(q).toEqual({ amount: "12.5", regions: ["africa", "asia"], causes: ["hunger", "clean-water", "education"] });
+    expect(q).toEqual({ amount: "12.5", regions: ["africa", "asia"], causes: ["hunger", "clean-water", "education"], org: "" });
     expect(donateQueryString(q)).toBe("?amount=12.5&region=africa%2Casia&cause=hunger%2Cclean-water%2Ceducation");
     expect(parseDonateQuery("?amount=1e9").amount).toBe("");
     expect(donateQueryString({ amount: "", regions: [], causes: [] })).toBe("");
@@ -162,5 +164,56 @@ describe("world dots", () => {
     expect(lonDelta(170, -170)).toBe(20);
     expect(lonDelta(-170, 170)).toBe(-20);
     expect(lonDelta(0, 180)).toBe(180);
+  });
+});
+
+describe("featuredPicks", () => {
+  it("spreads picks across causes and regions before repeating either", () => {
+    const trends = rankTrending([hunger, water], reports, []);
+    // water leads (asia 9000); each cause adds its hottest pick in a region not featured yet.
+    expect(featuredPicks(trends, reports, []).map((p) => [p.name, p.region])).toEqual([
+      ["Well C", "asia"],
+      ["Food A", "africa"],
+      ["Food B", "africa"],
+    ]);
+    expect(featuredPicks(trends, reports, ["africa"], 1).map((p) => p.name)).toEqual(["Food A"]);
+  });
+});
+
+describe("direct gifts", () => {
+  const ID = `0x${"0b".repeat(32)}` as const;
+  it("names orgs and picks the Ethereum org id", () => {
+    expect(orgEnsName("givedirectly", "varada.eth")).toBe("givedirectly.org.varada.eth");
+    expect(orgEnsName(null, "varada.eth")).toBeNull();
+    expect(ethOrgIdOf({ orgId: ID.toUpperCase().replace("0X", "0x") })).toBe(ID);
+    expect(ethOrgIdOf({ orgId: ID, ethOrgId: `0x${"cd".repeat(32)}` })).toBe(`0x${"cd".repeat(32)}`);
+  });
+
+  it("deploys an org with no code, donates to an active one, blocks the rest", async () => {
+    const addr = "0x00000000000000000000000000000000000000cc";
+    const chain = (code: string | undefined, active: boolean, entity: string) => ({
+      readContract: async ({ functionName }: { functionName: string }) =>
+        functionName === "computeOrgAddress" ? addr : functionName === "isActiveEntity" ? active : entity,
+      getCode: async () => code,
+    });
+    const fresh = await readOrgTarget(chain(undefined, true, ID) as never, ID);
+    expect(fresh).toMatchObject({ deployed: false, active: null });
+    expect(orgRoute(fresh)).toEqual({ kind: "deploy", spender: ORG_FUND_FACTORY });
+    expect(orgGiftRequest({ target: fresh, amount: 5n, chainId: 1 })).toMatchObject({ address: ORG_FUND_FACTORY, functionName: "deployOrgAndDonate", args: [ID, 5n] });
+
+    const live = await readOrgTarget(chain("0x60", true, ID) as never, ID);
+    expect(orgRoute(live)).toEqual({ kind: "donate", spender: live.address });
+    expect(orgGiftRequest({ target: live, amount: 5n, chainId: 1 })).toMatchObject({ address: live.address, functionName: "donate", args: [5n] });
+
+    expect(orgRoute(await readOrgTarget(chain("0x60", false, ID) as never, ID)).kind).toBe("blocked");
+    expect(orgRoute(await readOrgTarget(chain("0x60", true, `0x${"ee".repeat(32)}`) as never, ID)).kind).toBe("blocked");
+    expect(ENDAOMENT_REGISTRY).toMatch(/^0x/);
+  });
+
+  it("keeps a direct gift's org in the link instead of the causes", () => {
+    const org = `0x${"0b".repeat(32)}`;
+    expect(parseDonateQuery(`?org=${org.toUpperCase().replace("0X", "0x")}&cause=hunger`)).toMatchObject({ org, causes: ["hunger"] });
+    expect(parseDonateQuery("?org=0x12").org).toBe("");
+    expect(donateQueryString({ amount: "5", regions: [], causes: ["hunger"], org })).toBe(`?amount=5&org=${org}`);
   });
 });

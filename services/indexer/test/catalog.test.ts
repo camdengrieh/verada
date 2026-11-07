@@ -97,6 +97,28 @@ describe("catalogue API", () => {
     expect((await json(app, "/api/catalog/orgs/nope")).status).toBe(400);
   });
 
+  it("passes an org's ENS label and Ethereum org id through, and searches by label or EIN", async () => {
+    const ETH_ID = `0x${"ab".repeat(32)}`;
+    const named = {
+      ...catalog,
+      orgs: catalog.orgs.map((o, i) =>
+        i === 2
+          ? { ...o, label: "rhino-rescue", chains: [{ chainId: 1, orgId: ETH_ID, source: "override" }, { chainId: 10, orgId: o.orgId, source: "default" }] }
+          : i === 1
+            ? { ...o, label: "Not A Label!", chains: [{ chainId: 1, orgId: `0x${"00".repeat(32)}`, source: "unresolved" }] }
+            : o,
+      ),
+    };
+    const app = mkApp(catalogStoreOf(named as typeof catalog));
+    const rhino = (await json(app, "/api/catalog/search?q=rhino-rescue")).body.items;
+    expect(rhino).toEqual([expect.objectContaining({ name: "Rhino Rescue", label: "rhino-rescue", ethOrgId: ETH_ID })]);
+    expect((await json(app, "/api/catalog/search?q=rhino-rescue.org.varada.eth")).body.items.map((o: any) => o.name)).toEqual(["Rhino Rescue"]);
+    expect((await json(app, "/api/catalog/search?q=40-0000003")).body.items.map((o: any) => o.name)).toEqual(["Rhino Rescue"]);
+    const food = (await json(app, "/api/catalog/search?q=city")).body.items[0];
+    expect(food).not.toHaveProperty("label");
+    expect(food).not.toHaveProperty("ethOrgId");
+  });
+
   it("names catalogue orgs by cause id", async () => {
     const app = mkApp();
     const ids = catalog.orgs.slice(0, 2).map((o) => o.causeId);
