@@ -25,7 +25,7 @@ import {ILpLocker} from "./interfaces/ILpLocker.sol";
 ///      result. Settling an epoch first brings in what is still outstanding for it: the LP
 ///      locker's fees are collected (they are split by time, so the epoch gets its share) and
 ///      the consolidator flushes every held balance with a part earned in or before the epoch.
-///      If either cannot complete, settlement reverts until `SETTLE_GRACE` after the epoch's
+///      If either cannot complete, settlement reverts until `settleGrace` after the epoch's
 ///      end, so whoever settles cannot push those fees into a later epoch by settling first.
 ///      Fees that still arrive after their epoch was settled (a route broken past the grace
 ///      period) go to the first unsettled epoch after it, so they are never stranded.
@@ -41,7 +41,15 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
     /// @inheritdoc IFeeVault
-    uint256 public constant SETTLE_GRACE = 7 days;
+    uint256 public settleGrace = 7 days;
+
+    /// @notice Shortest and longest `settleGrace`.
+    uint256 public constant MIN_SETTLE_GRACE = 5 minutes;
+    uint256 public constant MAX_SETTLE_GRACE = 30 days;
+
+    /// @notice `settleGrace` changed.
+    event SettleGraceSet(uint256 grace);
+    error SettleGraceOutOfRange(uint256 grace, uint256 min, uint256 max);
 
     error ZeroAddress();
     error NotFactory();
@@ -249,6 +257,17 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
         return _causePool[token];
     }
 
+    /// @notice Sets `settleGrace` (`MIN_SETTLE_GRACE..MAX_SETTLE_GRACE`). Owner only. Applies at
+    ///         once: it only decides when fees that are still outside the vault stop holding up
+    ///         an epoch's settlement (they then go to a later epoch, never stranded).
+    function setSettleGrace(uint256 grace) external onlyOwner {
+        if (grace < MIN_SETTLE_GRACE || grace > MAX_SETTLE_GRACE) {
+            revert SettleGraceOutOfRange(grace, MIN_SETTLE_GRACE, MAX_SETTLE_GRACE);
+        }
+        settleGrace = grace;
+        emit SettleGraceSet(grace);
+    }
+
     /// @notice Cause pool of `token` attributed to `epoch` and not yet settled.
     function causePoolOf(address token, uint256 epoch) external view returns (uint256) {
         return _epochPool[token][epoch];
@@ -264,7 +283,7 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
 
         uint256 end = governor.epochStart(epoch + 1);
         // forge-lint: disable-next-line(block-timestamp)
-        if (!_bringIn(token, epoch, end) && block.timestamp < end + SETTLE_GRACE) {
+        if (!_bringIn(token, epoch, end) && block.timestamp < end + settleGrace) {
             revert FeesPending(token, epoch);
         }
 
