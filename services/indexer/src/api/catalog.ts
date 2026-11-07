@@ -91,6 +91,36 @@ const toResult = (o: CatalogOrg): CatalogOrgResult => ({
   regions: o.regions,
 });
 
+/** The `<label>.org.<parent>` names a catalogue build registers (`/api/catalog` `names`). */
+export interface NamesSummary {
+  /** Names in the names tree: every org with a label and its three chain records. */
+  count: number;
+  /** `VaradaOrgResolver.root()` for this build. */
+  root: Hex;
+  shardBits: number;
+}
+
+const namesSummaries = new WeakMap<BuiltCatalog, NamesSummary | null>();
+
+/**
+ * The names a build registers, or null for a build without names. Counted the way `namesFromOrgs`
+ * builds the tree, from `orgs.jsonl`, so it does not need `labels.json`. Cached per catalogue.
+ */
+export function namesSummary(c: BuiltCatalog): NamesSummary | null {
+  const hit = namesSummaries.get(c);
+  if (hit !== undefined) return hit;
+  let out: NamesSummary | null = null;
+  if (c.meta.namesRoot && c.meta.namesShardBits) {
+    const count = c.names
+      ? c.names.shards.shards.reduce((n, s) => n + s.length, 0)
+      : c.orgs.filter((o) => o.label && o.chains?.length === 3).length;
+    out = { count, root: c.meta.namesRoot, shardBits: c.meta.namesShardBits };
+  }
+  namesSummaries.set(c, out);
+  return out;
+}
+
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 const slugOfCategory = (bit: number) => CATEGORIES.find((c) => c.bit === bit)?.slug ?? `category-${bit}`;
 const slugOfRegion = (bit: number) => REGIONS.find((r) => r.bit === bit)?.slug ?? `region-${bit}`;
 
@@ -105,6 +135,25 @@ export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
     return `${o.name.toLowerCase()}${label ? `\n${label}` : ""}${o.ein ? `\n${o.ein.replace(/-/g, "")}` : ""}`;
   });
   const masks = c.orgs.map((o) => ({ c: BigInt(o.categoryMask), r: o.regionMask }));
+  // Results come in rank order (highest first, then name); exact matches of the whole query (the
+  // label, the name or the EIN) come before everything else.
+  const order = c.orgs
+    .map((o, i) => i)
+    .sort((a, b) => (c.orgs[b]!.rank ?? 0) - (c.orgs[a]!.rank ?? 0) || cmp(names[a]!, names[b]!) || a - b);
+  const position = new Array<number>(order.length);
+  order.forEach((i, p) => (position[i] = p));
+  const exact = new Map<string, number[]>();
+  const addExact = (k: string, i: number) => {
+    const l = exact.get(k);
+    if (!l) exact.set(k, [i]);
+    else if (!l.includes(i)) l.push(i);
+  };
+  c.orgs.forEach((o, i) => {
+    addExact(o.name.trim().toLowerCase(), i);
+    const label = nameFields(o).label;
+    if (label) addExact(label, i);
+    if (o.ein) addExact(o.ein.replace(/-/g, ""), i);
+  });
   const byKey = new Map<string, number>();
   c.orgs.forEach((o, i) => {
     byKey.set(o.orgId.toLowerCase(), i);
@@ -132,12 +181,18 @@ export function catalogStoreOf(c: BuiltCatalog | null): CatalogStore {
       const needle = raw && /^\d{2}-\d{7}$/.test(raw) ? raw.replace("-", "") : raw?.replace(/\.org\.[a-z0-9.-]+$/, "");
       const out: CatalogOrgResult[] = [];
       let total = 0;
-      for (let i = 0; i < c.orgs.length; i++) {
-        if (q.categoryMask !== undefined && (masks[i]!.c & q.categoryMask) === 0n) continue;
-        if (q.regionMask !== undefined && (masks[i]!.r & q.regionMask) === 0) continue;
-        if (needle && !names[i]!.includes(needle)) continue;
+      const passes = (i: number) =>
+        (q.categoryMask === undefined || (masks[i]!.c & q.categoryMask) !== 0n) && (q.regionMask === undefined || (masks[i]!.r & q.regionMask) !== 0);
+      const take = (i: number) => {
         if (total >= q.offset && out.length < q.limit) out.push(toResult(c.orgs[i]!));
         total++;
+      };
+      const first = new Set(needle ? (exact.get(needle) ?? []).filter(passes).sort((a, b) => position[a]! - position[b]!) : []);
+      for (const i of first) take(i);
+      for (const i of order) {
+        if (first.has(i) || !passes(i)) continue;
+        if (needle && !names[i]!.includes(needle)) continue;
+        take(i);
       }
       return { items: out, total };
     },
