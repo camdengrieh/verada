@@ -22,6 +22,24 @@ export interface HarvestedOrg {
   donationsReceived: number;
   /** The org's chain 1 CREATE2 address as reported by the API (advisory). */
   mainnetAddress: string | null;
+  /** Every chain the API reports (1, 10, 8453): CREATE2 address and advisory deploy state. */
+  deployments?: HarvestedDeployment[];
+  /** Ranking signals from the search listing. */
+  city?: string | null;
+  website?: string | null;
+  nteeDescription?: string | null;
+  featuredIndex?: number;
+  lifetimeContributionsUsdc?: string;
+  grantsReceived?: number;
+  claimedType?: string | null;
+  claimedDateUtc?: string | null;
+}
+
+export interface HarvestedDeployment {
+  chainId: number;
+  address: string;
+  isDeployed: boolean;
+  usdcBalance: string | null;
 }
 
 export interface PartitionState {
@@ -76,6 +94,20 @@ export function toHarvested(o: OrgSearchListing): HarvestedOrg {
     claimed: o.claimed,
     donationsReceived: o.donationsReceived,
     mainnetAddress,
+    deployments: o.deployments.map((d) => ({
+      chainId: d.chainId,
+      address: d.contractAddress.toLowerCase(),
+      isDeployed: d.isDeployed,
+      usdcBalance: d.usdcBalance == null ? null : String(d.usdcBalance),
+    })),
+    city: o.address.city?.trim() || null,
+    website: o.website?.trim() || null,
+    nteeDescription: o.nteeDescription?.trim() || null,
+    featuredIndex: o.featuredIndex,
+    lifetimeContributionsUsdc: o.lifetimeContributionsUsdc,
+    grantsReceived: o.grantsReceived,
+    claimedType: o.claimedType ?? null,
+    claimedDateUtc: o.claimedDateUtc ?? null,
   };
 }
 

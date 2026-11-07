@@ -14,6 +14,27 @@ import {
 import type { Hex } from "viem";
 import { classify, type Overrides, type TagSource } from "./classify.js";
 import type { HarvestedOrg } from "./harvest.js";
+import { assignLabels, type LabelAssignment, type LabelLedger } from "./labels.js";
+import { buildNameShards, SHARD_BITS, type NameShards } from "./names.js";
+import { CHAINS, resolveChainOrgIds, type AddressCache, type ChainOrgId } from "./addresses.js";
+import { rankOrg, type RankSignals } from "./rank.js";
+
+/** Chains Endaoment deploys orgs on. */
+export const ORG_CHAIN_IDS = [1, 10, 8453] as const;
+
+/** One chain of an org: its orgId there and the factory's CREATE2 address for it. */
+export type OrgChain = ChainOrgId;
+
+/** Lists in `stats.addresses` are capped at this many items (the counts are exact). */
+export const ADDRESS_LIST_CAP = 500;
+
+export interface ChainStats {
+  default: number;
+  override: number;
+  unresolved: number;
+  overrides: { endaomentId: string; name: string; orgId: Hex; chainOrgId: Hex; address: Hex | null }[];
+  unresolvedOrgs: { endaomentId: string; name: string; orgId: Hex; apiAddress: Hex | null; deployed: boolean | null }[];
+}
 
 export type Leaf = [number, number, Hex];
 
@@ -36,6 +57,15 @@ export interface CatalogOrg {
   sources: { categories: TagSource[]; regions: TagSource[] };
   /** Every `(bucket, index)` the org occupies. */
   entries: { bucket: number; index: number }[];
+  /** ENS label: `<label>.org.varada.eth` (set by every build since names were added). */
+  label?: string;
+  /** Ethereum address (`chains[0].address`); null when chain 1 is unresolved. */
+  address?: Hex | null;
+  chains?: OrgChain[];
+  website?: string | null;
+  /** 0-1000, see `rank.ts`. */
+  rank?: number;
+  rankSignals?: RankSignals;
 }
 
 export interface Rejection {
@@ -51,6 +81,14 @@ export interface CatalogStats {
   byRegion: Record<string, number>;
   categorySource: Record<TagSource, number>;
   regionSource: Record<TagSource, number>;
+  names?: LabelAssignment["stats"];
+  addresses?: {
+    /** False when `build` ran without the `verify-addresses` cache (every chain: default orgId). */
+    verified: boolean;
+    /** Orgs whose default orgId was not in the cache (treated as default on every chain). */
+    unverifiedOrgs: number;
+    perChain: Record<string, ChainStats>;
+  };
 }
 
 export interface CatalogMeta {
@@ -58,14 +96,37 @@ export interface CatalogMeta {
   builtAt: string;
   sourceAsOf: string | null;
   root: Hex;
+  /** Root of the sharded names tree (`VaradaOrgResolver.root()`). */
+  namesRoot?: Hex;
+  /** Names shard bits: shard = top `namesShardBits` bits of the labelhash. */
+  namesShardBits?: number;
   bucketSizes: number[];
   stats: CatalogStats;
+}
+
+export interface CatalogNames {
+  /** Every label ever assigned (`label -> orgId`), including orgs no longer in the catalogue. */
+  ledger: LabelLedger;
+  /** The orgs of this catalogue, sharded by labelhash, and the tree over all shards. */
+  shards: NameShards;
+}
+
+/** Shards the labelled orgs of a catalogue (deterministic from `orgs`). */
+export function namesFromOrgs(orgs: readonly CatalogOrg[], bits: number = SHARD_BITS): NameShards {
+  return buildNameShards(
+    orgs
+      .filter((o) => o.label && o.chains?.length === 3)
+      .map((o) => ({ label: o.label!, orgIds: { eth: o.chains![0]!.orgId, optimism: o.chains![1]!.orgId, base: o.chains![2]!.orgId } })),
+    bits,
+  );
 }
 
 export interface BuiltCatalog {
   meta: CatalogMeta;
   orgs: CatalogOrg[];
   tree: StandardMerkleTree<Leaf>;
+  /** Absent when reading a catalogue built before names were added. */
+  names?: CatalogNames;
 }
 
 const zeroSources = (): Record<TagSource, number> => ({ ntee: 0, keyword: 0, country: 0, text: 0, override: 0, fallback: 0 });
@@ -77,7 +138,16 @@ const zeroSources = (): Record<TagSource, number> => ({ ntee: 0, keyword: 0, cou
  */
 export function buildCatalog(
   harvested: HarvestedOrg[],
-  opts: { overrides?: Overrides; sourceAsOf?: string | null; now?: Date } = {},
+  opts: {
+    overrides?: Overrides;
+    sourceAsOf?: string | null;
+    now?: Date;
+    previousLabels?: LabelLedger;
+    /** `verify-addresses` output; without it every chain uses the default orgId (unverified). */
+    addresses?: AddressCache | null;
+    /** Names shard bits (default {@link SHARD_BITS}). */
+    namesShardBits?: number;
+  } = {},
 ): { catalog: BuiltCatalog; rejected: Rejection[] } {
   const rejected: Rejection[] = [];
   const byOrgId = new Map<Hex, { h: HarvestedOrg; orgId: Hex }>();
@@ -112,6 +182,13 @@ export function buildCatalog(
     byRegion: Object.fromEntries(REGIONS.map((r) => [r.slug, 0])),
     categorySource: zeroSources(),
     regionSource: zeroSources(),
+    addresses: {
+      verified: Boolean(opts.addresses),
+      unverifiedOrgs: 0,
+      perChain: Object.fromEntries(
+        CHAINS.map((c) => [String(c.chainId), { default: 0, override: 0, unresolved: 0, overrides: [], unresolvedOrgs: [] } as ChainStats]),
+      ),
+    },
   };
   for (const r of rejected) stats.rejected[r.reason]++;
 
@@ -132,6 +209,20 @@ export function buildCatalog(
     for (const s of regions) stats.byRegion[s]!++;
     for (const s of c.sources.categories) stats.categorySource[s]++;
     for (const s of c.sources.regions) stats.regionSource[s]++;
+    const resolution = resolveChainOrgIds(h, opts.addresses ?? null);
+    const chains = CHAINS.map((c) => resolution.chains[c.key]);
+    if (!resolution.verified) stats.addresses!.unverifiedOrgs++;
+    for (const ch of chains) {
+      const cs = stats.addresses!.perChain[String(ch.chainId)]!;
+      cs[ch.source]++;
+      if (ch.source === "override" && cs.overrides.length < ADDRESS_LIST_CAP) {
+        cs.overrides.push({ endaomentId: h.id, name: h.name, orgId, chainOrgId: ch.orgId, address: ch.address });
+      }
+      if (ch.source === "unresolved" && cs.unresolvedOrgs.length < ADDRESS_LIST_CAP) {
+        cs.unresolvedOrgs.push({ endaomentId: h.id, name: h.name, orgId, apiAddress: ch.apiAddress, deployed: ch.deployed });
+      }
+    }
+    const address = resolution.chains.eth.address;
     orgs.push({
       orgId,
       causeId: toCauseId(h),
@@ -148,8 +239,19 @@ export function buildCatalog(
       regions,
       sources: c.sources,
       entries: [],
+      address,
+      chains,
+      website: h.website ?? null,
+      ...rankOrg(h),
     });
   }
+
+  const labels = assignLabels(
+    orgs.map((o) => ({ id: o.id, ein: o.ein, name: o.name, orgId: o.orgId })),
+    opts.previousLabels,
+  );
+  for (const o of orgs) o.label = labels.labelOf.get(o.orgId)!;
+  stats.names = labels.stats;
 
   const orgIndex = new Map(orgs.map((o, i) => [o.orgId, i]));
   const leaves: Leaf[] = [];
@@ -165,6 +267,7 @@ export function buildCatalog(
 
   if (leaves.length === 0) throw new Error("catalogue is empty");
   const tree = StandardMerkleTree.of(leaves, [...CATALOG_LEAF_TYPES]);
+  const shards = namesFromOrgs(orgs, opts.namesShardBits ?? SHARD_BITS);
   return {
     catalog: {
       meta: {
@@ -172,11 +275,14 @@ export function buildCatalog(
         builtAt: (opts.now ?? new Date()).toISOString(),
         sourceAsOf: opts.sourceAsOf ?? null,
         root: tree.root as Hex,
+        namesRoot: shards.tree.root as Hex,
+        namesShardBits: shards.bits,
         bucketSizes: buckets.map((b) => b.length),
         stats,
       },
       orgs,
       tree,
+      names: { ledger: labels.ledger, shards },
     },
     rejected,
   };

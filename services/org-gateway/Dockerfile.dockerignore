@@ -1,0 +1,20 @@
+**/node_modules
+**/.ponder
+**/.next
+**/coverage
+.git
+.claude
+contracts
+infra
+apps
+docs
+agents
+media
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+# The catalogue: only the finished build goes into the image.
+.catalog/*
+!.catalog/build
