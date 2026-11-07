@@ -4,6 +4,7 @@ pragma solidity 0.8.26;
 import {SetupOrgNames} from "../../script/SetupOrgNames.s.sol";
 import {VaradaFactory} from "../../src/VaradaFactory.sol";
 import {VaradaOrgResolver} from "../../src/VaradaOrgResolver.sol";
+import {DonationAsset} from "../../src/interfaces/IDonationAsset.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
 import {IContentHashResolver} from "../../src/interfaces/external/ens/IEnsResolverProfiles.sol";
@@ -39,15 +40,42 @@ contract VaradaNamesV2ForkTest is EnsResolutionForkTest {
         SetupOrgNames script = new SetupOrgNames();
         string[] memory urls = new string[](1);
         urls[0] = "https://names.varada.eth.limo/ccip/{data}.json";
+        address live = _liveOrgResolver();
         org = script.execute(
             nameOwner,
-            address(0),
+            live,
             keccak256("names root"),
             12,
             urls,
             "https://varada.eth.limo/causes?org=",
             address(uint160(uint256(keccak256("VaradaOrgNames on OP"))))
         );
+        _adoptLive(
+            live, nameOwner, keccak256("names root"), 12, "https://varada.eth.limo/causes?org="
+        );
+    }
+
+    /// @dev The org resolver SetupOrgNames already put on mainnet, if the fork is past that point.
+    ///      Reusing it (and pointing it at this test's root and URL prefix as its owner) keeps the
+    ///      test meaningful on the live tree instead of failing with NamespaceTaken.
+    function _liveOrgResolver() internal view returns (address) {
+        address sub = IEnsV2StandardRegistry(0xf60aba43E1f7F3DAB1186Ff03B561401C9Df85E2)
+            .getSubregistry("varada");
+        return sub == address(0) ? address(0) : IEnsV2StandardRegistry(sub).getResolver("org");
+    }
+
+    function _adoptLive(
+        address live,
+        address owner_,
+        bytes32 root_,
+        uint8 bits,
+        string memory prefix
+    ) internal {
+        if (live == address(0)) return;
+        vm.startPrank(owner_);
+        VaradaOrgResolver(live).setRoot(root_, bits);
+        VaradaOrgResolver(live).setSiteUrlPrefix(prefix);
+        vm.stopPrank();
     }
 
     function _found(string memory name) internal view returns (address r) {
@@ -103,7 +131,8 @@ contract VaradaNamesV2ForkTest is EnsResolutionForkTest {
                 label: labels[i],
                 logoRef: bytes32(0),
                 categoryMask: CatalogPublish.CATEGORIES,
-                regionMask: CatalogPublish.REGIONS
+                regionMask: CatalogPublish.REGIONS,
+                donationAsset: DonationAsset.Usdc
             });
             vm.prank(creator);
             vm.expectRevert(

@@ -80,13 +80,38 @@ contract OrgNamesForkTest is Test {
         string[] memory urls = new string[](1);
         urls[0] = "https://org-gateway.varada.example/ccip/{sender}/{data}.json";
         uint256 g = gasleft();
+        address live = _liveOrgResolver();
         r = script.execute(
-            nameOwner, address(0), root, BITS, urls, "https://varada.eth.limo/org/", l2Registry
+            nameOwner, live, root, BITS, urls, "https://varada.eth.limo/org/", l2Registry
         );
+        _adoptLive(live, nameOwner, root, BITS, "https://varada.eth.limo/org/");
         // Names are fresh on Optimism: the verifier proves empty records (mocked here; the live
         // gateway run is in services/org-gateway). getLatestContext stays live.
         _mockL2(bytes32(0), bytes32(0));
         emit log_named_uint("setup gas (all steps)", g - gasleft());
+    }
+
+    /// @dev The org resolver SetupOrgNames already put on mainnet, if the fork is past that point.
+    ///      Reusing it (and pointing it at this test's root and URL prefix as its owner) keeps the
+    ///      test meaningful on the live tree instead of failing with NamespaceTaken.
+    function _liveOrgResolver() internal view returns (address) {
+        address sub = IEnsV2StandardRegistry(0xf60aba43E1f7F3DAB1186Ff03B561401C9Df85E2)
+            .getSubregistry("varada");
+        return sub == address(0) ? address(0) : IEnsV2StandardRegistry(sub).getResolver("org");
+    }
+
+    function _adoptLive(
+        address live,
+        address owner_,
+        bytes32 root_,
+        uint8 bits,
+        string memory prefix
+    ) internal {
+        if (live == address(0)) return;
+        vm.startPrank(owner_);
+        VaradaOrgResolver(live).setRoot(root_, bits);
+        VaradaOrgResolver(live).setSiteUrlPrefix(prefix);
+        vm.stopPrank();
     }
 
     // ------------------------------------------------------------------ CCIP-Read client
