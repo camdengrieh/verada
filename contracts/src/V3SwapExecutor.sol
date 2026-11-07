@@ -29,6 +29,8 @@ contract V3SwapExecutor is IUniswapV3SwapCallback {
 
     IUniswapV3Factory public immutable factory;
     address public immutable consolidator;
+    /// @notice Where the output goes (the consolidator settles it into its pool manager credit).
+    address public immutable poolManager;
 
     /// @dev Transient slots of the callback context (fixed constants, used nowhere else).
     bytes32 private constant _POOL_SLOT =
@@ -44,9 +46,10 @@ contract V3SwapExecutor is IUniswapV3SwapCallback {
     /// @dev Same signature as `FeeConsolidator.PartialFill`, so callers see one selector.
     error PartialFill(uint256 spent, uint256 expected);
 
-    constructor(IUniswapV3Factory factory_, address consolidator_) {
+    constructor(IUniswapV3Factory factory_, address consolidator_, address poolManager_) {
         factory = factory_;
         consolidator = consolidator_;
+        poolManager = poolManager_;
     }
 
     /// @notice The factory's pool of the sorted pair `(token0, token1)` and `fee`; reverts when the
@@ -80,7 +83,7 @@ contract V3SwapExecutor is IUniswapV3SwapCallback {
 
         _setContext(address(pool), tokenIn, amount);
         (int256 amount0, int256 amount1) = pool.swap(
-            consolidator,
+            poolManager,
             zeroForOne,
             amount.toInt256(),
             zeroForOne ? TickMath.MIN_SQRT_PRICE + 1 : TickMath.MAX_SQRT_PRICE - 1,

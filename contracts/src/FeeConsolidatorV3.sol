@@ -50,7 +50,7 @@ contract FeeConsolidatorV3 is FeeConsolidator {
         )
     {
         if (address(v3Factory_) == address(0)) revert ZeroAddress();
-        executor = new V3SwapExecutor(v3Factory_, address(this));
+        executor = new V3SwapExecutor(v3Factory_, address(this), address(poolManager_));
     }
 
     /// @inheritdoc FeeConsolidator
@@ -64,19 +64,21 @@ contract FeeConsolidatorV3 is FeeConsolidator {
     }
 
     /// @inheritdoc FeeConsolidator
-    function _v3Swap(PoolKey memory key, bool zeroForOne, uint256 amount)
+    /// @dev The input goes from the pool manager straight to the executor, the pool pays the
+    ///      output straight into the pool manager (`sync` before, `settle` after), and the output
+    ///      is what `settle` measured at the pool manager: the minimum output applies to what
+    ///      arrived. Every pool manager delta of this contract is unchanged by the pair except
+    ///      for the swapped currency pair, exactly as after a v4 swap.
+    function _hopV3(PoolKey memory key, bool zeroForOne, uint256 amount)
         internal
         override
         returns (uint256 out)
     {
-        address tokenIn = Currency.unwrap(zeroForOne ? key.currency0 : key.currency1);
-        address tokenOut = Currency.unwrap(zeroForOne ? key.currency1 : key.currency0);
-        uint256 balanceBefore = IERC20(tokenOut).balanceOf(address(this));
-
-        IERC20(tokenIn).safeTransfer(address(executor), amount);
-        executor.swap(tokenIn, tokenOut, key.fee, amount);
-
-        // Measured, not taken from the pool's report: the minimum output applies to what arrived.
-        out = IERC20(tokenOut).balanceOf(address(this)) - balanceBefore;
+        (Currency cIn, Currency cOut) =
+            zeroForOne ? (key.currency0, key.currency1) : (key.currency1, key.currency0);
+        poolManager.take(cIn, address(executor), amount);
+        poolManager.sync(cOut);
+        executor.swap(Currency.unwrap(cIn), Currency.unwrap(cOut), key.fee, amount);
+        out = poolManager.settle();
     }
 }
