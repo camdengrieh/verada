@@ -1,4 +1,6 @@
 node_modules/
+# also a node_modules symlink (worktrees), which `node_modules/` does not match
+node_modules
 .env
 .env.*
 !.env.example

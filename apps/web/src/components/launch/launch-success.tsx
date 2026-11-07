@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { coinParentName } from "@varada/sdk";
 import { Button, buttonVariants } from "@varada/ui/components/ui/button";
 import { CopyButton } from "@varada/ui/components/data/copy-button";
 import { ExternalLink, Sparkles } from "@varada/ui/components/ui/icons";
@@ -40,7 +41,8 @@ export function LaunchSuccess({
     fire({ x: 0.5, y: 0.35, unit: "fraction" });
   }, [fire]);
 
-  const ens = `${label}.${config.ensParentName}`;
+  // Shown under coin.<parent>; the page link stays on <label>.<parent>, which resolves today.
+  const ens = `${label}.${coinParentName(config.ensParentName)}`;
   const pageUrl = ensGatewayUrl(label, config.ensParentName);
   const share = shareLinks({ name, symbol, pageUrl });
   const tokenHref = token ? `${siteBase()}token/?address=${token}` : null;

@@ -5,6 +5,11 @@ import {
   dnsEncode,
   isValidLabel,
   labelFromSymbol,
+  labelFromName,
+  coinEnsName,
+  coinParentName,
+  isReservedLabel,
+  isValidLabel as isValidLabelForName,
   parentNode,
   parseGatewayHostname,
   tokenEnsName,
@@ -114,5 +119,42 @@ describe("parseGatewayHostname", () => {
       ensName: "pepe.other.eth",
       label: "pepe",
     });
+  });
+});
+
+describe("labelFromName", () => {
+  it.each([
+    ["Harambe Relief Fund", "harambe-relief-fund"],
+    ["Harambe Fund", "harambe-fund"],
+    ["  Café   Crème!! ", "cafe-creme"],
+    ["Rock & Roll Kids", "rock-and-roll-kids"],
+    ["xn--abc", "xn-abc"],
+    ["42", null],
+    ["!!", null],
+    ["Ab", null],
+  ])("%s -> %s", (name, expected) => {
+    expect(labelFromName(name)).toBe(expected);
+  });
+
+  it("is deterministic and always valid", () => {
+    for (const n of ["A B C", "Ünïcödé Fund", "a".repeat(80), "word ".repeat(30)]) {
+      const l = labelFromName(n);
+      expect(l).toBe(labelFromName(n));
+      if (l) expect(isValidLabelForName(l)).toBe(true);
+    }
+  });
+
+  it("cuts long names at a hyphen boundary within 63", () => {
+    const l = labelFromName("save the whales ".repeat(10))!;
+    expect(l.length).toBeLessThanOrEqual(63);
+    expect(l.endsWith("-")).toBe(false);
+    expect(l.startsWith("save-the-whales")).toBe(true);
+  });
+
+  it("builds coin names and knows the reserved labels", () => {
+    expect(coinParentName()).toBe("coin.varada.eth");
+    expect(coinEnsName("harambe-fund")).toBe("harambe-fund.coin.varada.eth");
+    for (const l of ["org", "coin", "donor", "agent", "names", "endaoment", "varada"]) expect(isReservedLabel(l)).toBe(true);
+    expect(isReservedLabel("harambe")).toBe(false);
   });
 });

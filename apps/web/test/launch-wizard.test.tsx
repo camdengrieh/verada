@@ -113,19 +113,27 @@ describe("FeesStep donation asset", () => {
   });
 });
 
-describe("IdentityStep label errors", () => {
+describe("IdentityStep coin name", () => {
   const identity = (state: WizardState, errors: Record<string, string>) =>
-    render(<IdentityStep {...props(state)} errors={errors} labelLoading={false} labelFailed={false} labelEdited setLabelEdited={vi.fn()} onLogo={vi.fn()} onLogoBusy={vi.fn()} />);
+    render(<IdentityStep {...props(state)} errors={errors} labelLoading={false} labelFailed={false} onLogo={vi.fn()} onLogoBusy={vi.fn()} />);
 
-  it("shows a taken label before the field is left", () => {
-    const taken = { ...base, input: { ...base.input, label: "paws" }, labelStatus: { kind: "taken" as const, token: "0x0000000000000000000000000000000000000001" as const } };
-    identity(taken, { label: "paws is already taken" });
-    expect(screen.getByText("paws is already taken")).toBeInTheDocument();
+  it("shows the name derived from the token name, read-only, under coin.<parent>", () => {
+    identity({ ...base, input: { ...base.input, name: "Harambe Relief Fund", label: "harambe-relief-fund" } }, {});
+    expect(screen.getByTestId("coin-ens-name").textContent).toBe("harambe-relief-fund.coin.varada.eth");
+    // No editable ENS field: the only text inputs are the token name, the ticker and the profile fields.
+    expect(screen.queryByPlaceholderText("harambe")).toBeNull();
+    expect(screen.getByTestId("coin-ens-name").tagName).toBe("P");
   });
 
-  it("keeps a plain format error hidden until the field is touched", () => {
-    identity({ ...base, input: { ...base.input, label: "ab" } }, { label: "Use 3 to 63 characters" });
-    expect(screen.queryByText("Use 3 to 63 characters")).toBeNull();
+  it("shows a taken name as soon as a token name is typed", () => {
+    const taken = { ...base, input: { ...base.input, name: "Paws", label: "paws" }, labelStatus: { kind: "taken" as const, token: "0x0000000000000000000000000000000000000001" as const } };
+    identity(taken, { label: "paws.coin.varada.eth is already taken by 0x0000…0001. Choose a different token name." });
+    expect(screen.getByText(/paws\.coin\.varada\.eth is already taken/)).toBeInTheDocument();
+  });
+
+  it("keeps the error hidden while no token name is typed", () => {
+    identity({ ...base, input: { ...base.input, name: "", label: "" } }, { label: "The ENS name comes from the token name" });
+    expect(screen.queryByText("The ENS name comes from the token name")).toBeNull();
   });
 });
 
@@ -149,7 +157,8 @@ describe("LaunchSuccess", () => {
     expect(screen.getByRole("link", { name: "Open the token page" }).getAttribute("href")).toMatch(/token\/\?address=0x00000000000000000000000000000000000000a1$/);
     expect(screen.getByRole("link", { name: /Share on X/ }).getAttribute("href")).toContain("twitter.com/intent/tweet");
     expect(screen.getByRole("link", { name: /Share on Telegram/ }).getAttribute("href")).toContain("t.me/share/url");
-    expect(screen.getByRole("link", { name: /paws\.varada\.eth/ }).getAttribute("href")).toBe("https://paws.varada.eth.limo/");
+    // Shown as the coin name; the page link stays on <label>.<parent>, which resolves today.
+    expect(screen.getByRole("link", { name: /paws\.coin\.varada\.eth/ }).getAttribute("href")).toBe("https://paws.varada.eth.limo/");
   });
 
   it("copes with a receipt that has no TokenCreated log", () => {

@@ -1,4 +1,4 @@
-import { EXTERNAL_ADDRESSES, isValidLabel, labelFromSymbol } from "@varada/sdk";
+import { ENS_PARENT_NAME, EXTERNAL_ADDRESSES, coinParentName, isReservedLabel, isValidLabel, labelFromName } from "@varada/sdk";
 import type { LabelStatus } from "./chain-reads";
 import {
   buildMetadataDocument,
@@ -50,6 +50,8 @@ export interface WizardState {
   liveReady?: boolean;
   /** Whether the chosen first charity is active in the cause registry; undefined while unknown. */
   causeActive?: boolean;
+  /** ENS parent (config.ensParentName) for coin-name messages; defaults to varada.eth. */
+  ensParentName?: string;
 }
 
 export function initialWizardState(salt: string): WizardState {
@@ -81,8 +83,13 @@ export function initialWizardState(salt: string): WizardState {
   };
 }
 
-/** Label suggested by a ticker; empty when the ticker gives none. */
-export const suggestLabel = (symbol: string): string => labelFromSymbol(symbol) ?? "";
+/**
+ * The coin's ENS label: always derived from the token name (never typed), so a name can only be
+ * launched once and a copycat can't register a look-alike. Empty when the name gives no valid label.
+ */
+export const labelForName = (name: string): string => labelFromName(name) ?? "";
+
+const short = (a: string) => `${a.slice(0, 6)}…${a.slice(-4)}`;
 
 export type StepErrors = Partial<Record<string, string>>;
 
@@ -98,12 +105,20 @@ const PROFILE_FIELD = [
   ["Discord", "discord"],
 ] as const;
 
-/** Why a registry status stops the launch (taken, or reserved for another wallet); undefined when it does not. */
-export function labelBlockedText(label: string, status: LabelStatus, account?: string): string | undefined {
-  if (status.kind === "taken") return `${label} is already taken`;
-  if (status.kind === "reserved" && !sameAddress(status.allowedCreator, account)) return `${label} is reserved`;
+/**
+ * Why a registry status stops the launch: taken, or reserved for another wallet. Undefined when it
+ * does not. `parent` is the ENS parent; the message shows the coin name `<label>.coin.<parent>`.
+ */
+export function labelBlockedText(label: string, status: LabelStatus, account?: string, parent: string = ENS_PARENT_NAME): string | undefined {
+  const name = `${label}.${coinParentName(parent)}`;
+  if (status.kind === "taken") return `${name} is already taken by ${short(status.token)}. Choose a different token name.`;
+  if (status.kind === "reserved" && !sameAddress(status.allowedCreator, account)) return `${name} is reserved. Choose a different token name.`;
   return undefined;
 }
+
+/** Whether the registry reserves `label` for the connected wallet (the one case a reserved label is usable). */
+const reservedForAccount = (status: LabelStatus | undefined, account?: string) =>
+  status?.kind === "reserved" && sameAddress(status.allowedCreator, account);
 
 /** Field errors of the identity step, from the publisher's own rules (one message per field). */
 export function identityErrors(state: WizardState): StepErrors {
@@ -116,11 +131,18 @@ export function identityErrors(state: WizardState): StepErrors {
   }
   if (!input.name.trim() && !errors.name) errors.name = "Name is required";
   if (!input.symbol.trim() && !errors.symbol) errors.symbol = "Ticker is required";
+  // The label is the token name's slug; a stale or hand-edited label (an old draft) never launches.
   const label = input.label.trim();
-  if (!isValidLabel(label)) {
-    errors.label = label ? "Use 3 to 63 characters: a-z, 0-9 and hyphens, not starting or ending with a hyphen" : "Pick an ENS label";
+  const derived = labelForName(input.name);
+  if (!derived) {
+    if (input.name.trim() && !errors.name) errors.label = "This token name can't become an ENS name: use at least 3 letters or numbers";
+    else errors.label = "The ENS name comes from the token name";
+  } else if (label !== derived || !isValidLabel(label)) {
+    errors.label = "The ENS name must follow the token name";
+  } else if (isReservedLabel(label) && !reservedForAccount(state.labelStatus, state.account)) {
+    errors.label = `${label}.${coinParentName(state.ensParentName ?? ENS_PARENT_NAME)} is reserved. Choose a different token name.`;
   } else {
-    const blocked = state.labelStatus ? labelBlockedText(label, state.labelStatus, state.account) : undefined;
+    const blocked = state.labelStatus ? labelBlockedText(label, state.labelStatus, state.account, state.ensParentName ?? ENS_PARENT_NAME) : undefined;
     if (blocked) errors.label = blocked;
   }
   if (state.logoUploading) errors.logo = "Wait for the logo upload to finish";

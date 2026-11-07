@@ -1,13 +1,12 @@
 "use client";
 
-import { isValidLabel } from "@varada/sdk";
+import { coinParentName, isValidLabel } from "@varada/sdk";
 import { Check, CircleAlert } from "@varada/ui/components/ui/icons";
 import { Field, FieldControl, FieldError, FieldHint, FieldLabel } from "@varada/ui/components/ui/field";
-import { Input, InputAddon, InputGroup } from "@varada/ui/components/ui/input";
+import { Input } from "@varada/ui/components/ui/input";
 import { Textarea } from "@varada/ui/components/ui/textarea";
 import { useAppConfig } from "@/components/providers";
 import type { LabelStatus } from "@/lib/chain-reads";
-import { suggestLabel } from "@/lib/launch-steps";
 import type { MetadataFields } from "@/lib/launch";
 import { LogoField } from "./logo-field";
 import type { StepProps } from "./types";
@@ -41,15 +40,15 @@ export function LabelStatusLine({ name, label, status, loading, failed, account 
   );
 }
 
-export function IdentityStep(props: StepProps & { labelLoading: boolean; labelFailed: boolean; onLogo: (ref: string | null) => void; onLogoBusy: (busy: boolean) => void; labelEdited: boolean; setLabelEdited: (v: boolean) => void }) {
-  const { state, errors, err, touch, patch, setInput, labelLoading, labelFailed, onLogo, onLogoBusy, labelEdited, setLabelEdited } = props;
+export function IdentityStep(props: StepProps & { labelLoading: boolean; labelFailed: boolean; onLogo: (ref: string | null) => void; onLogoBusy: (busy: boolean) => void }) {
+  const { state, errors, err, touch, patch, setInput, labelLoading, labelFailed, onLogo, onLogoBusy } = props;
   const config = useAppConfig();
   const { input, fields } = state;
   const label = input.label.trim();
-  // A taken or reserved label is a registry fact, not a typo: show it while typing, not only after the field is left.
-  const registryBlocked = state.labelStatus?.kind === "taken" || state.labelStatus?.kind === "reserved";
-  const labelError = err("label") ?? (registryBlocked ? errors.label : undefined);
-  const ensName = `${label || "your-label"}.${config.ensParentName}`;
+  const coinParent = coinParentName(config.ensParentName);
+  // The name follows the token name, so any problem with it shows as soon as a name is typed.
+  const labelError = input.name.trim() ? errors.label : err("label");
+  const ensName = `${label || "your-coin"}.${coinParent}`;
   const setField = (key: keyof MetadataFields) => (e: { target: { value: string } }) => patch({ fields: { ...fields, [key]: e.target.value } });
 
   return (
@@ -73,7 +72,7 @@ export function IdentityStep(props: StepProps & { labelLoading: boolean; labelFa
               placeholder="HARAMBE"
               onChange={(e) => {
                 const symbol = e.target.value.replace(/^\$/, "");
-                setInput(labelEdited ? { symbol } : { symbol, label: suggestLabel(symbol) });
+                setInput({ symbol });
               }}
               onBlur={() => touch("symbol")}
             />
@@ -82,26 +81,14 @@ export function IdentityStep(props: StepProps & { labelLoading: boolean; labelFa
         </Field>
       </div>
 
-      <Field invalid={!!labelError} required>
+      <Field invalid={!!labelError}>
         <FieldLabel>ENS name</FieldLabel>
-        <InputGroup>
-          <FieldControl>
-            <Input
-              value={input.label}
-              autoComplete="off"
-              autoCapitalize="none"
-              spellCheck={false}
-              placeholder="harambe"
-              onChange={(e) => {
-                setLabelEdited(true);
-                setInput({ label: e.target.value.toLowerCase() });
-              }}
-              onBlur={() => touch("label")}
-            />
-          </FieldControl>
-          <InputAddon>.{config.ensParentName}</InputAddon>
-        </InputGroup>
-        <FieldHint>Your coin&rsquo;s address and page: {ensName}. It follows the ticker until you edit it.</FieldHint>
+        <p data-testid="coin-ens-name" aria-readonly="true" className="m-0 rounded-xl border border-line bg-paper px-3 py-2 font-mono text-sm text-ink">
+          {ensName}
+        </p>
+        <FieldHint>
+          Set from the token name and can&rsquo;t be edited: one name per coin, so nobody can launch a copy of an existing name. It is your coin&rsquo;s address and page.
+        </FieldHint>
         <FieldError>{labelError}</FieldError>
         <div role="status" aria-live="polite">
           <LabelStatusLine name={ensName} label={label} status={state.labelStatus} loading={labelLoading} failed={labelFailed} account={state.account} />

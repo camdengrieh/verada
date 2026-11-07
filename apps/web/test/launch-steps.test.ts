@@ -5,6 +5,7 @@ import {
   firstInvalidStep,
   initialWizardState,
   labelBlockedText,
+  labelForName,
   marketCapError,
   pairErrors,
   toLaunchInput,
@@ -153,6 +154,30 @@ describe("step guards", () => {
     expect(r.ok && r.params.startTick).toBe(-230_200);
     expect(r.ok && r.params.salt).toBe(SALT);
     expect(r.ok && r.params.logoRef).toBe(`0x${"cd".repeat(32)}`);
+  });
+});
+
+describe("coin name from the token name", () => {
+  it("derives the label from the name and blocks a stale, invalid or reserved one", () => {
+    expect(labelForName("Harambe Relief Fund")).toBe("harambe-relief-fund");
+    expect(labelForName("!!")).toBe("");
+    expect(canAdvance("identity", filled())).toBe(true);
+    // A label that doesn't follow the name (an old draft, a hand edit) never launches.
+    expect(validateStep("identity", filled({ input: { ...filled().input, label: "something-else" } })).label).toMatch(/follow the token name/);
+    // A name that gives no valid label.
+    expect(validateStep("identity", filled({ input: { ...filled().input, name: "!!", label: "" } })).label).toMatch(/can't become an ENS name/);
+    // Reserved namespaces are blocked client-side, even with no registry read.
+    for (const name of ["Org", "Coin", "Donor", "Agent", "Names", "Endaoment", "Varada"]) {
+      const st = filled({ input: { ...filled().input, name, label: name.toLowerCase() } });
+      expect(validateStep("identity", st).label).toMatch(/is reserved/);
+      expect(canAdvance("identity", st)).toBe(false);
+    }
+  });
+
+  it("names the coin name and the holder when taken", () => {
+    const t = labelBlockedText("paws", { kind: "taken", token: "0x00000000000000000000000000000000000000a1" });
+    expect(t).toBe("paws.coin.varada.eth is already taken by 0x0000…00a1. Choose a different token name.");
+    expect(canAdvance("identity", filled({ labelStatus: { kind: "taken", token: "0x0000000000000000000000000000000000000001" } }))).toBe(false);
   });
 });
 

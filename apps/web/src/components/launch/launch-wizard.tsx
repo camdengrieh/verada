@@ -20,6 +20,7 @@ import {
   firstInvalidStep,
   initialWizardState,
   labelBlockedText,
+  labelForName,
   STEPS,
   toLaunchInput,
   validateStep,
@@ -55,7 +56,6 @@ export function LaunchWizard() {
 
   const [local, setLocal] = useState<WizardState>(() => initialWizardState(randomSalt()));
   const [index, setIndex] = useState(0);
-  const [labelEdited, setLabelEdited] = useState(false);
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set());
   const [attempted, setAttempted] = useState<ReadonlySet<number>>(new Set());
   const [stage, setStage] = useState<"idle" | "metadata" | "wallet">("idle");
@@ -64,7 +64,11 @@ export function LaunchWizard() {
 
   // ---- reads (public data only: nothing here is keyed by the visitor)
 
-  const label = local.input.label.trim();
+  // The coin's ENS label always follows the token name; it is never typed.
+  const label = labelForName(local.input.name);
+  useEffect(() => {
+    setLocal((s) => (s.input.label === label ? s : { ...s, input: { ...s.input, label } }));
+  }, [label]);
   const [debouncedLabel, setDebouncedLabel] = useState("");
   useEffect(() => {
     const t = setTimeout(() => setDebouncedLabel(label), 400);
@@ -127,13 +131,14 @@ export function LaunchWizard() {
     () => ({
       ...local,
       account,
+      ensParentName: config.ensParentName,
       labelStatus: debouncedLabel === label ? labelQuery.data : undefined,
       pool: poolQuery.isLoading ? undefined : (poolQuery.data ?? null),
       allowedQuotes: quotes.isLoading || quotes.error ? undefined : quotes.assets.map((a) => a.address),
       liveReady: liveQuery.data,
       causeActive: causesQuery.data && local.input.initialCause ? causesQuery.data.some((c) => c.causeId === local.input.initialCause!.toLowerCase()) : undefined,
     }),
-    [local, account, debouncedLabel, label, labelQuery.data, poolQuery.isLoading, poolQuery.data, quotes.isLoading, quotes.error, quotes.assets, liveQuery.data, causesQuery.data],
+    [local, account, config.ensParentName, debouncedLabel, label, labelQuery.data, poolQuery.isLoading, poolQuery.data, quotes.isLoading, quotes.error, quotes.assets, liveQuery.data, causesQuery.data],
   );
 
   // ---- step plumbing
@@ -216,7 +221,7 @@ export function LaunchWizard() {
       const fresh = await chainLabelStatus(deps.chain(), config, parsed.params.label).catch(() => undefined);
       if (fresh) {
         qc.setQueryData(["label-status", config.profileRegistryAddress, parsed.params.label], fresh);
-        if (labelBlockedText(parsed.params.label, fresh, account)) {
+        if (labelBlockedText(parsed.params.label, fresh, account, config.ensParentName)) {
           setAttempted((a) => new Set(a).add(0));
           return goTo(0);
         }
@@ -251,7 +256,6 @@ export function LaunchWizard() {
     setIndex(0);
     setTouched(new Set());
     setAttempted(new Set());
-    setLabelEdited(false);
     setLaunchedAs(undefined);
   };
 
@@ -271,8 +275,6 @@ export function LaunchWizard() {
           {...stepProps(0)}
           labelLoading={labelQuery.isFetching}
           labelFailed={Boolean(labelQuery.error)}
-          labelEdited={labelEdited}
-          setLabelEdited={setLabelEdited}
           onLogo={(ref) => patch({ logoRef: ref })}
           onLogoBusy={(busy) => patch({ logoUploading: busy })}
         />

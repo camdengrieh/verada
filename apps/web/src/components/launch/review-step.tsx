@@ -1,6 +1,6 @@
 "use client";
 
-import { REGIONS } from "@varada/sdk";
+import { REGIONS, coinParentName } from "@varada/sdk";
 import { Button } from "@varada/ui/components/ui/button";
 import { CircleAlert, ShieldCheck } from "@varada/ui/components/ui/icons";
 import { CauseChip } from "@varada/ui/components/varada/cause-chip";
@@ -83,7 +83,7 @@ export function ReviewStep({
           {input.name} <span className="font-normal text-ink-soft">${input.symbol}</span>
         </Row>
         <Row label="ENS name" editStep={0} onEdit={onEdit}>
-          {label}.{config.ensParentName}
+          {label}.{coinParentName(config.ensParentName)}
         </Row>
         <Row label="Logo" editStep={0} onEdit={onEdit}>
           {state.logoRef ? <span className="break-all font-mono text-xs">bzz://{state.logoRef}</span> : "Set by the metadata URI override"}

@@ -72,6 +72,56 @@ export function labelFromSymbol(symbol: string): string | null {
   return isValidLabel(label) ? label : null;
 }
 
+/**
+ * The coin's label, derived from its token name. This is the only label the launch wizard offers,
+ * so a name can't be launched twice (the registry rejects a taken label) and copycats can't pick a
+ * look-alike. Rules mirror `LabelLib.isValid`:
+ * - NFKD with accents stripped, lowercase, and `&` becomes `and`;
+ * - runs of anything outside `[a-z0-9]` become one hyphen, with the edges trimmed;
+ * - the `xn--` slot is fixed up;
+ * - over 63 bytes is cut at a hyphen boundary.
+ * Returns null when fewer than 3 characters remain (the creator must change the name). There is
+ * no padding, so the label is always recognisably the name.
+ */
+export function labelFromName(name: string): string | null {
+  let label = name
+    .normalize("NFKD")
+    .replace(/\p{M}+/gu, "")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (label.length >= 4 && label[2] === "-" && label[3] === "-") {
+    label = `${label.slice(0, 2)}-${label.slice(4)}`.replace(/^-+|-+$/g, "");
+  }
+  if (label.length > LABEL_MAX_LENGTH) {
+    const cut = label.slice(0, LABEL_MAX_LENGTH + 1);
+    const at = cut.lastIndexOf("-");
+    label = (at >= LABEL_MIN_LENGTH ? cut.slice(0, at) : label.slice(0, LABEL_MAX_LENGTH)).replace(/-+$/g, "");
+  }
+  return isValidLabel(label) ? label : null;
+}
+
+/**
+ * Labels no coin may take: the namespaces under the parent (`org.`, `coin.`, `donor.`, `agent.`,
+ * `names.`) and the brand names. The registry reserves the on-chain ones, and the wizard also blocks
+ * them client-side in case the registry read fails.
+ */
+export const RESERVED_LABELS = ["org", "coin", "donor", "agent", "names", "endaoment", "varada"] as const;
+
+export const isReservedLabel = (label: string): boolean => (RESERVED_LABELS as readonly string[]).includes(label);
+
+/** Namespace coins are shown under: `<label>.coin.<parent>`. */
+export const COIN_NAMESPACE = "coin" as const;
+
+/** `coin.<parent>` */
+export const coinParentName = (parent: string = ENS_PARENT_NAME): string => `${COIN_NAMESPACE}.${parent}`;
+
+/** `<label>.coin.<parent>`, the name a coin is shown and resolved under. */
+export function coinEnsName(label: string, parent: string = ENS_PARENT_NAME): string {
+  return `${validateLabel(label)}.${coinParentName(parent)}`;
+}
+
 /** `<label>.<parent>` */
 export function tokenEnsName(label: string, parent: string = ENS_PARENT_NAME): string {
   return `${validateLabel(label)}.${parent}`;
