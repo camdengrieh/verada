@@ -61,6 +61,19 @@ export const liveDonationVaultAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_DONATION_THRESHOLD_ETH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "PLATFORM_SHARE_BPS",
     "inputs": [],
     "outputs": [
@@ -113,6 +126,19 @@ export const liveDonationVaultAbi = [
   },
   {
     "type": "function",
+    "name": "PUSH_GAS_BUDGET_ETH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "acceptOwnership",
     "inputs": [],
     "outputs": [],
@@ -151,6 +177,24 @@ export const liveDonationVaultAbi = [
         "name": "threshold",
         "type": "uint96",
         "internalType": "uint96"
+      },
+      {
+        "name": "asset",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "consolidator",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "contract IFeeConsolidator"
       }
     ],
     "stateMutability": "view"
@@ -182,6 +226,25 @@ export const liveDonationVaultAbi = [
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "donationAssetOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -384,6 +447,19 @@ export const liveDonationVaultAbi = [
   },
   {
     "type": "function",
+    "name": "platformAccruedEth",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "platformTreasury",
     "inputs": [],
     "outputs": [
@@ -407,6 +483,39 @@ export const liveDonationVaultAbi = [
       }
     ],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "registerToken",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "threshold",
+        "type": "uint96",
+        "internalType": "uint96"
+      },
+      {
+        "name": "initialCause",
+        "type": "bytes32",
+        "internalType": "bytes32"
+      },
+      {
+        "name": "period",
+        "type": "uint8",
+        "internalType": "enum RotationPeriod"
+      },
+      {
+        "name": "asset",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   },
   {
     "type": "function",
@@ -509,6 +618,19 @@ export const liveDonationVaultAbi = [
   },
   {
     "type": "function",
+    "name": "totalPendingEth",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "transferOwnership",
     "inputs": [
       {
@@ -523,6 +645,19 @@ export const liveDonationVaultAbi = [
   {
     "type": "function",
     "name": "usdc",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "weth",
     "inputs": [],
     "outputs": [
       {
@@ -585,6 +720,12 @@ export const liveDonationVaultAbi = [
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"
+      },
+      {
+        "name": "asset",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DonationAsset"
       }
     ],
     "anonymous": false
@@ -628,6 +769,18 @@ export const liveDonationVaultAbi = [
         "type": "bool",
         "indexed": false,
         "internalType": "bool"
+      },
+      {
+        "name": "asset",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DonationAsset"
+      },
+      {
+        "name": "usdcAmount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -703,6 +856,12 @@ export const liveDonationVaultAbi = [
         "type": "uint8",
         "indexed": false,
         "internalType": "enum RotationPeriod"
+      },
+      {
+        "name": "asset",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DonationAsset"
       }
     ],
     "anonymous": false
@@ -766,6 +925,25 @@ export const liveDonationVaultAbi = [
   },
   {
     "type": "event",
+    "name": "PlatformWithdrawnEth",
+    "inputs": [
+      {
+        "name": "treasury",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "Skimmed",
     "inputs": [
       {
@@ -804,6 +982,11 @@ export const liveDonationVaultAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "EthUnsupported",
+    "inputs": []
   },
   {
     "type": "error",

@@ -190,6 +190,28 @@ contract QuoteRegistryTest is Test {
         assertEq(registry.routeLength(address(ondo)), 2);
     }
 
+    /// @dev `Kind` is only a label: any ERC20 with sane decimals and a connected route that ends
+    ///      in USDC registers, whatever its kind, and the route length (not the kind) is the limit.
+    function test_arbitraryCryptoAssetNeedsOnlyConfig() public {
+        MockERC20 wbtc = new MockERC20("WBTC", 8);
+        MockERC20 mid = new MockERC20("MID", 18);
+        PoolKey[] memory r = new PoolKey[](3);
+        r[0] = _key(address(wbtc), address(mid), 3000);
+        r[1] = _key(address(mid), address(weth), 500);
+        r[2] = _key(address(weth), address(usdc), 500);
+        vm.prank(owner);
+        registry.addQuoteAssetWithRoute(address(wbtc), IQuoteRegistry.Kind.Native, r);
+        assertTrue(registry.isAllowed(address(wbtc)));
+        assertEq(registry.getQuoteAsset(address(wbtc)).decimals, 8);
+        assertEq(registry.routeLength(address(wbtc)), 3);
+
+        // The same asset under the other label works the same (second registry instance).
+        QuoteRegistry other = new QuoteRegistry(owner, address(usdc), address(weth));
+        vm.prank(owner);
+        other.addQuoteAssetWithRoute(address(wbtc), IQuoteRegistry.Kind.Ondo, r);
+        assertEq(other.routeLength(address(wbtc)), 3);
+    }
+
     function test_routeMustSettleInUsdc() public {
         PoolKey[] memory r = new PoolKey[](1);
         r[0] = _key(address(ondo), address(ondo2), 3000);

@@ -11,6 +11,7 @@ import {EpochGovernor} from "../src/EpochGovernor.sol";
 import {VaradaToken} from "../src/VaradaToken.sol";
 import {ICauseCatalog} from "../src/interfaces/ICauseCatalog.sol";
 import {IDonationDistributor} from "../src/interfaces/IDonationDistributor.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 import {IEpochGovernor} from "../src/interfaces/IEpochGovernor.sol";
 import {ITokenProfileRegistry} from "../src/interfaces/ITokenProfileRegistry.sol";
 import {IEndaomentOrgFundFactory} from "../src/interfaces/external/IEndaomentOrgFundFactory.sol";
@@ -182,7 +183,7 @@ contract DonationDistributorTest is BallotLog {
         address org = _orgA();
 
         vm.expectEmit(true, true, true, true);
-        emit IDonationDistributor.Donated(token, 0, causeA, org, 1000e6);
+        emit IDonationDistributor.Donated(token, 0, causeA, org, 1000e6, DonationAsset.Usdc, 1000e6);
         dist.distribute(token, 0);
 
         // 1.5% fee to treasury, remainder to org.
@@ -232,7 +233,7 @@ contract DonationDistributorTest is BallotLog {
         vm.expectEmit(true, true, false, false);
         emit IDonationDistributor.OrgDeployed(ORG_B, org);
         vm.expectEmit(true, true, true, true);
-        emit IDonationDistributor.Donated(token, 0, causeB, org, 1000e6);
+        emit IDonationDistributor.Donated(token, 0, causeB, org, 1000e6, DonationAsset.Usdc, 1000e6);
         dist.distribute(token, 0);
 
         assertGt(org.code.length, 0);
@@ -357,5 +358,114 @@ contract DonationDistributorTest is BallotLog {
         gov.finalizeEpoch(token, 0, _orgIds(address(gov), token, 0));
         dist.distribute(token, 0);
         assertEq(usdc.balanceOf(_orgA()), 98_500_000);
+    }
+
+    // ---- ETH donation asset (WETH pool converted to USDC before Endaoment)
+
+    function _ethSetup() internal returns (MockUSDC weth, StubEthConsolidator cons) {
+        weth = new MockUSDC();
+        cons = new StubEthConsolidator(weth, usdc);
+        vm.etch(vault, hex"00");
+        vm.mockCall(vault, abi.encodeWithSignature("donationAssetOf(address)", token), abi.encode(uint256(1)));
+        vm.mockCall(vault, abi.encodeWithSignature("weth()"), abi.encode(address(weth)));
+        vm.mockCall(vault, abi.encodeWithSignature("consolidator()"), abi.encode(address(cons)));
+    }
+
+    function _fundEth(MockUSDC weth, uint256 amount) internal {
+        weth.mint(address(dist), amount);
+        vm.prank(vault);
+        dist.receiveFunds(token, 0, amount);
+    }
+
+    function test_eth_distribute_convertsThenDonatesUsdc() public {
+        (MockUSDC weth, StubEthConsolidator cons) = _ethSetup();
+        _fundEth(weth, 2e18);
+        assertEq(dist.reservedEth(), 2e18);
+        assertEq(dist.reserved(), 0);
+        _finalizeEpoch0(causeA);
+        address org = _orgA();
+        uint256 usdcOut = cons.quote(2e18);
+
+        vm.expectEmit(true, true, true, true);
+        emit IDonationDistributor.Donated(token, 0, causeA, org, 2e18, DonationAsset.Eth, usdcOut);
+        dist.distribute(token, 0);
+
+        assertEq(usdc.balanceOf(org) + usdc.balanceOf(treasury), usdcOut);
+        assertEq(weth.balanceOf(address(dist)), 0);
+        assertEq(weth.allowance(address(dist), address(cons)), 0);
+        assertEq(dist.reservedEth(), 0);
+        assertEq(dist.pending(token, 0), 0);
+        assertTrue(dist.distributed(token, 0));
+    }
+
+    function test_eth_undeployedOrg_deployAndDonate() public {
+        (MockUSDC weth,) = _ethSetup();
+        _fundEth(weth, 1e18);
+        _finalizeEpoch0(causeB);
+        dist.distribute(token, 0);
+        assertTrue(dist.distributed(token, 0));
+        assertEq(usdc.balanceOf(address(dist)), 0);
+    }
+
+    function test_eth_conversionFailureKeepsEpochPending() public {
+        (MockUSDC weth, StubEthConsolidator cons) = _ethSetup();
+        _fundEth(weth, 1e18);
+        _finalizeEpoch0(causeA);
+        cons.setFail(true);
+        vm.expectRevert();
+        dist.distribute(token, 0);
+        assertEq(dist.pending(token, 0), 1e18);
+        assertEq(dist.reservedEth(), 1e18);
+        assertFalse(dist.distributed(token, 0));
+        cons.setFail(false);
+        dist.distribute(token, 0);
+        assertTrue(dist.distributed(token, 0));
+    }
+
+    function test_eth_unbackedReceiveReverts() public {
+        _ethSetup();
+        vm.prank(vault);
+        vm.expectRevert(DonationDistributor.InsufficientBalance.selector);
+        dist.receiveFunds(token, 0, 1e18);
+    }
+
+    function testFuzz_eth_reservedMatchesPending(uint96 a, uint96 b) public {
+        a = uint96(bound(a, 1, 1e24));
+        (MockUSDC weth,) = _ethSetup();
+        weth.mint(address(dist), uint256(a));
+        vm.startPrank(vault);
+        dist.receiveFunds(token, 0, a);
+        vm.stopPrank();
+        assertEq(dist.reservedEth(), a);
+        b = uint96(bound(b, 1, 1e24));
+        vm.prank(vault);
+        vm.expectRevert(DonationDistributor.InsufficientBalance.selector);
+        dist.receiveFunds(token, 1, uint256(a) + uint256(b));
+    }
+}
+
+contract StubEthConsolidator {
+    MockUSDC internal weth;
+    MockUSDC internal usdc;
+    bool internal fail;
+
+    constructor(MockUSDC weth_, MockUSDC usdc_) {
+        weth = weth_;
+        usdc = usdc_;
+    }
+
+    function setFail(bool f) external {
+        fail = f;
+    }
+
+    function quote(uint256 amount) public pure returns (uint256) {
+        return (amount * 3000e6) / 1e18;
+    }
+
+    function convertDonation(uint256 amount, address to) external returns (uint256 out) {
+        require(!fail, "route down");
+        weth.transferFrom(msg.sender, address(this), amount);
+        out = quote(amount);
+        usdc.mint(to, out);
     }
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import type { UsdQuote } from "@varada/sdk";
 import { PriceChart, ChartTimeframes } from "@varada/ui/components/data/price-chart";
 import { EmptyState } from "@varada/ui/components/data/empty-state";
 import { Skeleton } from "@varada/ui/components/ui/skeleton";
@@ -12,7 +13,7 @@ import { HandHeart } from "@varada/ui/components/ui/icons";
 import type { HolderSummary, MarketSnapshot, MarketTrade } from "@/lib/indexer";
 import type { QuoteInfo } from "@/lib/quote-info";
 import { candlesFromHours, formatQuotePrice, HOUR, marketStats, percentChange, pressureWindows, quoteNumberFormat, RANGE_HOURS, RANGES, toUnits, tradePoints, TOKEN_DECIMALS, volumeBars, type Range } from "@/lib/token-market";
-import { usdcToUsd } from "@/lib/token-data";
+import { usdcToUsd, type DonationUnit } from "@/lib/token-data";
 import type { TokenFeeTotals } from "@/lib/indexer";
 
 /** Seconds since the epoch, refreshed on an interval so ranges and 24h windows keep moving. */
@@ -44,33 +45,53 @@ export function metricList(opts: {
   figures: ReturnType<typeof useMarketFigures>;
   summary: HolderSummary | null | undefined;
   feeTotals: TokenFeeTotals | null | undefined;
+  /** USD per quote asset from the shared pricing layer; absent or unpriced: the quote asset's own units. */
+  usd?: UsdQuote | null;
+  /** The token's donation asset as a dollar unit; USDC when absent. */
+  donation?: { unit: DonationUnit; symbol: string };
 }): TradingMetric[] {
   const { quote, figures, summary, feeTotals } = opts;
+  const donationUnit = opts.donation?.unit;
   const sym = quote?.symbol ?? "";
-  const usd = Boolean(quote?.usd);
-  const unit = (n: number, compact: boolean): Intl.NumberFormatOptions => (usd ? (compact ? USD_COMPACT : { style: "currency", currency: "USD", ...quoteNumberFormat(n) }) : compact ? COMPACT : quoteNumberFormat(n));
-  const suffix = (label: string) => (usd || !sym ? label : `${label} (${sym})`);
+  // USDC is $1; any other quote is priced by its pools. Without a price the figures stay in quote units.
+  const perQuote = quote?.usd ? 1 : (opts.usd?.priceUsd ?? null);
+  const inUsd = perQuote !== null;
+  const approx = !quote?.usd && inUsd && Boolean(opts.usd && (opts.usd.confidence !== "high" || opts.usd.marketClosed));
+  const k = perQuote ?? 1;
+  const unit = (n: number, compact: boolean): Intl.NumberFormatOptions => (inUsd ? (compact ? USD_COMPACT : { style: "currency", currency: "USD", ...quoteNumberFormat(n) }) : compact ? COMPACT : quoteNumberFormat(n));
+  const suffix = (label: string) => (inUsd || !sym ? label : `${label} (${sym})`);
+  // Quote units stay as the secondary line when the primary is dollars.
+  const secondary = (n: number | null, extra?: string): ReactNode => {
+    if (!inUsd || quote?.usd || n === null) return extra;
+    const q = `${n >= 1000 ? n.toLocaleString("en-US", COMPACT) : n.toLocaleString("en-US", quoteNumberFormat(n))} ${sym}`;
+    return extra ? `${q} · ${extra}` : q;
+  };
   const out: TradingMetric[] = [];
   const s = figures?.stats;
   if (s) {
+    const price = s.price !== null ? s.price * k : null;
     out.push({
       key: "price",
       label: suffix("Price"),
-      value: s.price,
-      format: s.price !== null ? unit(s.price, false) : undefined,
+      value: price,
+      format: price !== null ? unit(price, false) : undefined,
       delta: s.change24h ?? undefined,
       deltaPeriod: s.changeSince,
+      hint: secondary(s.price),
+      approx,
       lead: true,
     });
-    out.push({ key: "mcap", label: suffix("Market cap"), value: figures.marketCap, format: unit(figures.marketCap ?? 1, true) });
+    const cap = figures.marketCap !== null ? figures.marketCap * k : null;
+    out.push({ key: "mcap", label: suffix("Market cap"), value: cap, format: unit(cap ?? 1, true), hint: secondary(figures.marketCap), approx });
     out.push({
       key: "volume",
       label: suffix("Volume 24h"),
-      value: s.volume24h,
-      format: unit(s.volume24h || 1, true),
+      value: s.volume24h * k,
+      format: unit(s.volume24h * k || 1, true),
       delta: percentChange(s.volume24h, s.volumePrior24h),
       deltaPeriod: "vs prior 24h",
-      hint: `${s.trades24h} trade${s.trades24h === 1 ? "" : "s"}`,
+      hint: secondary(s.volume24h, `${s.trades24h} trade${s.trades24h === 1 ? "" : "s"}${inUsd && !quote?.usd ? ", at today's price" : ""}`),
+      approx,
     });
   }
   if (summary) {
@@ -81,11 +102,11 @@ export function metricList(opts: {
     out.push({
       key: "fees",
       label: "Fees to causes",
-      value: usdcToUsd(BigInt(feeTotals.causeAmount)),
+      value: usdcToUsd(BigInt(feeTotals.causeAmount), donationUnit),
       format: USD_COMPACT,
       tone: "cause",
       icon: <HandHeart />,
-      hint: "90% of fees, paid in USDC",
+      hint: `90% of fees, paid in ${opts.donation?.symbol ?? "USDC"}`,
     });
   }
   return out;
@@ -116,16 +137,19 @@ export interface MarketSectionProps {
   onTrade?: () => void;
   /** Extra metrics (the pool's liquidity), when known. */
   extraMetrics?: TradingMetric[];
+  /** USD per quote asset (shared pricing layer). */
+  usd?: UsdQuote | null;
+  donation?: { unit: DonationUnit; symbol: string };
 }
 
-export function MarketSection({ address, symbol, quote, market, loading, error, onRetry, summary, feeTotals, trades, nowSec, onTrade, extraMetrics }: MarketSectionProps) {
+export function MarketSection({ address, symbol, quote, market, loading, error, onRetry, summary, feeTotals, trades, nowSec, onTrade, extraMetrics, usd, donation }: MarketSectionProps) {
   const [range, setRange] = useState<Range>("24H");
   const figures = useMarketFigures(market, address, summary, nowSec);
   const metrics = useMemo(() => {
-    const list = metricList({ quote, figures, summary, feeTotals });
+    const list = metricList({ quote, figures, summary, feeTotals, usd, donation });
     if (extraMetrics?.length) list.splice(Math.min(3, list.length), 0, ...extraMetrics);
     return list;
-  }, [quote, figures, summary, feeTotals, extraMetrics]);
+  }, [quote, figures, summary, feeTotals, extraMetrics, usd, donation]);
 
   const candles = useMemo(() => (market && quote ? candlesFromHours(market, address, nowSec) : []), [market, quote, address, nowSec]);
   const shown = useMemo(() => {
@@ -140,7 +164,7 @@ export function MarketSection({ address, symbol, quote, market, loading, error, 
   if (error && !market) {
     return (
       <div role="alert" className="rounded-2xl border border-line bg-card">
-        <EmptyState size="compact" title="Market data is not available" body="The indexer could not be reached or has no market data for this pool. Prices and volume come from it." action={<Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>} />
+        <EmptyState size="compact" headingLevel={2} title="Market data is not available" body="The indexer could not be reached or has no market data for this pool. Prices and volume come from it." action={<Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>} />
       </div>
     );
   }
@@ -202,7 +226,7 @@ export function MarketSection({ address, symbol, quote, market, loading, error, 
         )}
       </div>
       <div className="grid gap-4 lg:grid-cols-2">
-        <BuySellPressure windows={pressureWindows(market.hourly, market.quoteDecimals, nowSec, Boolean(quote?.usd))} defaultValue="24h" basis="count" title="Buy and sell pressure" headingLevel={2} />
+        <BuySellPressure windows={pressureWindows(market.hourly, market.quoteDecimals, nowSec, quote?.usd ? true : (usd?.priceUsd ?? false))} defaultValue="24h" basis="count" title="Buy and sell pressure" headingLevel={2} />
         <VolumeBars data={bars} title={barRange === "24H" ? `Volume by hour (${unitName}, UTC)` : `Volume by day (${unitName}, UTC)`} headingLevel={2} format={qFormat} height={120} />
       </div>
     </div>

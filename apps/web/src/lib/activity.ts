@@ -2,7 +2,8 @@ import type { ActivityFeedItem } from "@varada/ui/components/varada/activity-fee
 import type { ActivityTickerItem } from "@varada/ui/components/varada/activity-ticker";
 import type { CauseName } from "@varada/ui/components/varada/cause-icon";
 import type { ActivityItem } from "./indexer";
-import { formatQuote, formatUsdc, timeAgo, unitsToNumber } from "./format";
+import { donationAssetOrDefault, EXTERNAL_ADDRESSES, type UsdQuote } from "@varada/sdk";
+import { formatDonation, formatQuoteAsUsd, formatUsdc, timeAgo, unitsToNumber } from "./format";
 
 /** Turns indexer activity into the library's ticker and feed rows. Pure; the page supplies the lookups. */
 export interface ActivityContext {
@@ -10,6 +11,8 @@ export interface ActivityContext {
   symbolOf(token: string | undefined): string | undefined;
   /** Symbol and decimals of a quote asset address. */
   quoteOf(address: string | undefined): { symbol: string; decimals: number } | undefined;
+  /** USD per quote asset (the shared pricing layer); trades show in dollars when it is known. */
+  usdOf?(address: string | undefined): UsdQuote | undefined;
   /** Name and category of the cause behind a cause id. */
   causeOf(causeId: string | undefined): { name: string; cause: CauseName } | undefined;
   nowSeconds: number;
@@ -19,6 +22,12 @@ const dollar = (s: string | undefined) => (s ? `$${s.replace(/^\$/, "")}` : "a c
 const bigOf = (v: unknown): bigint | null =>
   typeof v === "string" && /^\d+$/.test(v) ? BigInt(v) : typeof v === "number" && Number.isInteger(v) && v >= 0 ? BigInt(v) : null;
 
+/** USDC as the plain number the feed has always shown; ETH as dollars (when priced) or in ETH. */
+function giveAmount(a: ActivityItem, amount: bigint, ctx: ActivityContext): string {
+  if (donationAssetOrDefault(a.data.donationAsset) === "usdc") return formatUsdc(amount);
+  return formatDonation(amount, "eth", ctx.usdOf?.(EXTERNAL_ADDRESSES.weth)?.priceUsd ?? null);
+}
+
 export function toTickerItem(a: ActivityItem, ctx: ActivityContext): ActivityTickerItem | null {
   const symbol = dollar(ctx.symbolOf(a.token));
   switch (a.kind) {
@@ -27,13 +36,13 @@ export function toTickerItem(a: ActivityItem, ctx: ActivityContext): ActivityTic
       const amount = bigOf(a.data.quoteAmount);
       const q = ctx.quoteOf(typeof a.data.quote === "string" ? a.data.quote : undefined);
       if (!side || amount === null || !q) return null;
-      return { id: a.id, kind: side, symbol, text: formatQuote(unitsToNumber(amount, q.decimals), q.symbol) };
+      return { id: a.id, kind: side, symbol, text: formatQuoteAsUsd(unitsToNumber(amount, q.decimals), q.symbol, ctx.usdOf?.(typeof a.data.quote === "string" ? a.data.quote : undefined)) };
     }
     case "donation": {
       const amount = bigOf(a.data.amount);
       if (amount === null) return null;
       const cause = ctx.causeOf(typeof a.data.causeId === "string" ? a.data.causeId : undefined);
-      return { id: a.id, kind: "GIVE", symbol, text: `${formatUsdc(amount)}${cause ? ` to ${cause.name}` : " to a cause"}` };
+      return { id: a.id, kind: "GIVE", symbol, text: `${giveAmount(a, amount, ctx)}${cause ? ` to ${cause.name}` : " to a cause"}` };
     }
     case "launch":
       return { id: a.id, kind: "NEW", symbol, text: "just launched" };
@@ -55,7 +64,7 @@ export function toFeedItem(a: ActivityItem, ctx: ActivityContext, fresh = false)
     symbol: dollar(ctx.symbolOf(a.token)),
     text: cause ? `gave to ${cause.name}` : "gave to a cause",
     ago: timeAgo(a.timestamp, ctx.nowSeconds),
-    amount: formatUsdc(amount),
+    amount: giveAmount(a, amount, ctx),
     cause: cause?.cause ?? "other",
     fresh,
   };

@@ -9,7 +9,7 @@ import { RadioCard, RadioGroup } from "@varada/ui/components/ui/radio-group";
 import { Heart } from "@varada/ui/components/ui/icons";
 import { ToggleGroup, ToggleGroupItem } from "@varada/ui/components/ui/toggle-group";
 import { ModeBadge, type LiveCadence } from "@varada/ui/components/varada/mode-badge";
-import { DEFAULT_DONATION_THRESHOLD_USDC, ROTATIONS, rotationOf, type GivingModeKey } from "@/lib/launch";
+import { DEFAULT_DONATION_THRESHOLD, DONATION_THRESHOLD_PRESETS, ROTATIONS, rotationOf, type GivingModeKey } from "@/lib/launch";
 import type { StepProps } from "./types";
 
 export interface ActiveCause {
@@ -17,8 +17,6 @@ export interface ActiveCause {
   name: string;
 }
 
-/** USDC amounts offered as one-tap thresholds. */
-const THRESHOLD_PRESETS = ["10", "25", "100", "500"] as const;
 
 export function ModeStep({
   state,
@@ -29,7 +27,8 @@ export function ModeStep({
   causesLoading,
   causesFailed,
   liveReady,
-}: StepProps & { causes: ActiveCause[] | undefined; causesLoading: boolean; causesFailed: boolean; liveReady: boolean | undefined }) {
+  epochLength,
+}: StepProps & { causes: ActiveCause[] | undefined; causesLoading: boolean; causesFailed: boolean; liveReady: boolean | undefined; epochLength?: string }) {
   const id = useId();
   const mode: GivingModeKey = state.input.mode ?? "weekly";
   const rotation = state.input.rotation ?? "24h";
@@ -39,6 +38,8 @@ export function ModeStep({
     return (causes ?? []).filter((c) => !q || c.name.toLowerCase().includes(q)).slice(0, 50);
   }, [causes, filter]);
   const cadence = rotation as LiveCadence;
+  const asset = state.input.donationAsset ?? "usdc";
+  const sym = asset === "eth" ? "ETH" : "USDC";
 
   return (
     <div className="flex flex-col gap-5">
@@ -49,10 +50,10 @@ export function ModeStep({
           tone="cause"
           title={
             <span className="flex flex-wrap items-center gap-2">
-              Weekly pool
+              Epoch pool
             </span>
           }
-          description="Fees pool for a week. Holders then vote with hidden ballots on which charity from your focus receives the pool."
+          description={`Fees pool for each epoch${epochLength ? ` (currently ${epochLength})` : ""}. Holders then vote with hidden ballots, in the last part of the epoch, on which charity from your focus receives the pool.`}
         />
         <RadioCard
           id={`${id}-live`}
@@ -62,7 +63,7 @@ export function ModeStep({
               Live donation <ModeBadge giving={{ mode: "live", cadence }} />
             </span>
           }
-          description="Each swap's cause share is converted to USDC and donated as trading happens. Holders rotate the charity by private vote on the schedule you pick."
+          description="Each swap's cause share is converted to your donation asset (USDC or ETH, chosen on the Fees step) and donated as trading happens. Holders rotate the charity by private vote on the schedule you pick."
         />
       </RadioGroup>
       {err("mode") ? (
@@ -76,7 +77,7 @@ export function ModeStep({
         <div className="flex flex-col gap-6 rounded-2xl border border-line bg-paper-card p-4 @lg:p-5">
           <Field>
             <FieldLabel id={`${id}-rot`}>Rotation</FieldLabel>
-            <ToggleGroup type="single" aria-labelledby={`${id}-rot`} value={rotation} onValueChange={(v) => setInput({ rotation: v })} className="w-full flex-wrap">
+            <ToggleGroup type="single" aria-labelledby={`${id}-rot`} value={rotation} onValueChange={(v) => v && setInput({ rotation: v })} className="w-full flex-wrap">
               {ROTATIONS.map((r) => (
                 <ToggleGroupItem key={r.key} value={r.key} aria-label={r.label}>
                   {r.key === "week" ? "Weekly" : r.key}
@@ -93,17 +94,17 @@ export function ModeStep({
                 <Input
                   inputMode="decimal"
                   className="num"
-                  value={state.input.donationThreshold ?? DEFAULT_DONATION_THRESHOLD_USDC}
+                  value={state.input.donationThreshold ?? DEFAULT_DONATION_THRESHOLD[asset]}
                   onChange={(e) => setInput({ donationThreshold: e.target.value })}
                   onBlur={() => touch("donationThreshold")}
                 />
               </FieldControl>
-              <InputAddon>USDC</InputAddon>
+              <InputAddon>{sym}</InputAddon>
             </InputGroup>
             <div className="flex flex-wrap gap-2" role="group" aria-label="Threshold presets">
-              {THRESHOLD_PRESETS.map((p) => (
+              {DONATION_THRESHOLD_PRESETS[asset].map((p) => (
                 <Button key={p} size="sm" variant={state.input.donationThreshold === p ? "primary" : "outline"} onClick={() => setInput({ donationThreshold: p })}>
-                  <span className="num">{p}</span> USDC
+                  <span className="num">{p}</span> {sym}
                 </Button>
               ))}
             </div>
@@ -120,7 +121,7 @@ export function ModeStep({
             {causesLoading ? <p className="m-0 text-sm text-ink-soft">Loading active charities</p> : null}
             {causesFailed ? <p role="alert" className="m-0 text-sm font-medium text-destructive">Could not load the cause registry from the indexer. Try again in a moment.</p> : null}
             {causes && causes.length === 0 ? (
-              <EmptyState size="compact" icon={<Heart />} title="No active charities yet" body="A charity becomes active after it wins a weekly vote. Until one has, launch with the weekly pool." />
+              <EmptyState size="compact" icon={<Heart />} title="No active charities yet" body="A charity becomes active after it wins an epoch vote. Until one has, launch with the epoch pool." />
             ) : null}
             {causes && causes.length > 0 ? (
               <>

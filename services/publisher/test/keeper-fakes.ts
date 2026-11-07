@@ -60,6 +60,24 @@ const revert = (name: string) => new KeeperRevert(name, `would revert ${name}`);
 /** In-memory EpochGovernor + TakeoverGovernor + ZamaVotingScheme with the contracts' guards. */
 export class FakeChain {
   current = 10n;
+  /** Epoch length of the fake governor, in seconds; epochs are `EPOCH_ZERO + n * epochLength`. */
+  epochLength = WEEK;
+  /** Seconds at the end of an epoch that accept ballots (default: the whole epoch). */
+  votingWindow = WEEK;
+  tallyGrace = 14n * 86_400n;
+  settleGrace = 7n * 86_400n;
+  /** Seconds into the current epoch for `timing()`. */
+  intoEpoch = 3_600n;
+  /** Serves `reader().timing` (off by default so older tests keep their log lines). */
+  timingEnabled = false;
+  timingError?: Error;
+  /** Sets a short schedule: trading then voting, in seconds. */
+  shortCycle(trading: bigint, voting: bigint) {
+    this.epochLength = trading + voting;
+    this.votingWindow = voting;
+    this.intoEpoch = 600n;
+    return this;
+  }
   registered = new Set<string>();
   defaultCause = true;
   epochs = new Map<string, EpochState>();
@@ -159,7 +177,30 @@ export class FakeChain {
     };
     return {
       currentEpoch: () => r(this.current),
-      epochStart: (e) => r(EPOCH_ZERO + e * WEEK),
+      epochStart: (e) => r(EPOCH_ZERO + e * this.epochLength),
+      ...(this.timingEnabled
+        ? {
+            timing: () => {
+              if (this.timingError) return Promise.reject(this.timingError);
+              const start = EPOCH_ZERO + this.current * this.epochLength;
+              const end = start + this.epochLength;
+              return r({
+                now: start + this.intoEpoch,
+                window: {
+                  epoch: this.current,
+                  start,
+                  end,
+                  votingOpensAt: end - this.votingWindow,
+                  length: this.epochLength,
+                  votingWindow: this.votingWindow,
+                  holdWindow: this.epochLength,
+                },
+                tallyGrace: this.tallyGrace,
+                settleGrace: this.settleGrace,
+              });
+            },
+          }
+        : {}),
       isRegistered: (t) => r(this.registered.has(t.toLowerCase())),
       epoch: (t, e) => {
         const s = this.epochState(t, e);

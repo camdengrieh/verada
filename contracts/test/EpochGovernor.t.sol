@@ -200,7 +200,7 @@ contract EpochGovernorTest is BallotLog {
         assertGt(start + WEEK, block.timestamp);
         // 1970-01-01 was a Thursday, so multiples of a week are Thursday 00:00 UTC.
         assertEq((start / 1 days + 4) % 7, 4);
-        assertEq(gov.EPOCH_LENGTH(), 7 days);
+        assertEq(gov.epochLength(), 7 days);
         assertEq(gov.currentEpoch(), 0);
         assertEq(gov.epochStart(0), start);
         assertEq(gov.epochStart(3), start + 3 * WEEK);
@@ -630,7 +630,7 @@ contract EpochGovernorTest is BallotLog {
     // ---- hold window (audit #5, #6)
 
     function test_holdWindow_isThePreviousEpoch() public view {
-        assertEq(gov.HOLD_WINDOW(), gov.EPOCH_LENGTH());
+        assertEq(gov.holdWindow(), gov.epochLength());
         assertEq(gov.holdFromFor(token, 1), gov.snapshotOf(0));
         assertEq(gov.holdFromFor(token, 3), gov.snapshotOf(2));
         assertEq(gov.holdFromFor(token, 0), gov.snapshotOf(0) - WEEK);
@@ -1115,8 +1115,8 @@ contract EpochGovernorTest is BallotLog {
         assertTrue(gov.isClosed(token, 0));
         assertTrue(gov.closeFailed(token, 0));
 
-        assertEq(gov.TALLY_GRACE(), 14 days);
-        uint256 graceEnd = gov.epochStart(1) + gov.TALLY_GRACE();
+        assertEq(gov.tallyGrace(), 14 days);
+        uint256 graceEnd = gov.epochStart(1) + gov.tallyGrace();
         vm.warp(graceEnd - 1);
         vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.TallyNotFinal.selector, token, 0));
         gov.finalizeEpoch(token, 0, _orgIds(address(gov), token, 0));
@@ -1173,7 +1173,7 @@ contract EpochGovernorTest is BallotLog {
         _vote(v2, 0, 1);
         _endEpoch(0);
         gov.closeEpoch(token, 0);
-        vm.warp(gov.epochStart(1) + gov.TALLY_GRACE() - 1);
+        vm.warp(gov.epochStart(1) + gov.tallyGrace() - 1);
         scheme.finalizeFromBallots(address(gov), token, 0);
         gov.finalizeEpoch(token, 0, _orgIds(address(gov), token, 0));
         assertEq(gov.winningCause(token, 0), causeB);
@@ -1189,7 +1189,7 @@ contract EpochGovernorTest is BallotLog {
         scheme.submitTally(address(gov), token, 0, abi.encode(new uint64[](3)), "");
         vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.InvalidTally.selector, token, 0));
         gov.finalizeEpoch(token, 0, _orgIds(address(gov), token, 0));
-        vm.warp(gov.epochStart(1) + gov.TALLY_GRACE());
+        vm.warp(gov.epochStart(1) + gov.tallyGrace());
         vm.expectEmit(true, true, false, true);
         emit IEpochGovernor.TallyTimeoutFallbackApplied(token, 0, causeC);
         gov.finalizeEpoch(token, 0, _orgIds(address(gov), token, 0));
@@ -1205,7 +1205,7 @@ contract EpochGovernorTest is BallotLog {
         scheme.setFailures(false, false, true);
         vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.TallyNotFinal.selector, token, 0));
         gov.finalizeEpoch(token, 0, _orgIds(address(gov), token, 0));
-        vm.warp(gov.epochStart(1) + gov.TALLY_GRACE());
+        vm.warp(gov.epochStart(1) + gov.tallyGrace());
         // No tally is applied after the grace, so the options are not needed.
         gov.finalizeEpoch(token, 0, new bytes32[](0));
         assertEq(gov.winningCause(token, 0), causeC);
@@ -1213,7 +1213,7 @@ contract EpochGovernorTest is BallotLog {
 
     function test_finalize_afterGrace_needsDefaultCause() public {
         _vote(v1, 0, 0);
-        vm.warp(gov.epochStart(1) + gov.TALLY_GRACE());
+        vm.warp(gov.epochStart(1) + gov.tallyGrace());
         // Never closed and no tally: the fallback still needs a default cause.
         vm.expectRevert(abi.encodeWithSelector(IEpochGovernor.NoVotes.selector, token, 0));
         gov.finalizeEpoch(token, 0, _orgIds(address(gov), token, 0));

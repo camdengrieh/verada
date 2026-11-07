@@ -4,6 +4,7 @@ import {
   feeErrors,
   firstInvalidStep,
   initialWizardState,
+  labelBlockedText,
   marketCapError,
   pairErrors,
   toLaunchInput,
@@ -152,5 +153,16 @@ describe("step guards", () => {
     expect(r.ok && r.params.startTick).toBe(-230_200);
     expect(r.ok && r.params.salt).toBe(SALT);
     expect(r.ok && r.params.logoRef).toBe(`0x${"cd".repeat(32)}`);
+  });
+});
+
+describe("labelBlockedText", () => {
+  const reserved = { kind: "reserved" as const, allowedCreator: "0x00000000000000000000000000000000000000aa" as const };
+  it("blocks taken labels and labels reserved to another wallet, nothing else", () => {
+    expect(labelBlockedText("paws", { kind: "taken", token: "0x0000000000000000000000000000000000000001" })).toMatch(/taken/);
+    expect(labelBlockedText("paws", reserved, "0x00000000000000000000000000000000000000bb")).toMatch(/reserved/);
+    expect(labelBlockedText("paws", reserved, reserved.allowedCreator.toUpperCase().replace("0X", "0x"))).toBeUndefined();
+    expect(labelBlockedText("paws", { kind: "available" })).toBeUndefined();
+    expect(labelBlockedText("paws", { kind: "unknown", reason: "profileRegistryAddress is not configured" })).toBeUndefined();
   });
 });

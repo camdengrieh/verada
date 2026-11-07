@@ -237,6 +237,8 @@ export async function loadRuntimeConfig(
   base: string = siteBase(),
 ): Promise<AppConfig> {
   const defaults = envDefaults();
+  // `pnpm dev:up` points the build-time values at its own services; the tracked config.json must not win.
+  if (process.env.NEXT_PUBLIC_DEV_STACK === "true") return defaults;
   try {
     const res = await fetchImpl(`${base}config.json`, { cache: "no-store" });
     if (!res.ok) return defaults;

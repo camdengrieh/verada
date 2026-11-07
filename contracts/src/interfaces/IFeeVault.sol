@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {DonationAsset} from "./IDonationAsset.sol";
 import {IEpochGovernor} from "./IEpochGovernor.sol";
 
 /// @title IFeeVault
@@ -37,7 +38,7 @@ interface IFeeVault {
     error TokenNotRegistered(address token);
     error FutureEpoch(uint256 epoch, uint256 current);
     /// @notice Fees earned in or before `epoch` are still outside the vault (uncollected LP fees
-    ///         or held fees whose route fails) and `SETTLE_GRACE` has not passed.
+    ///         or held fees whose route fails) and `settleGrace` has not passed.
     error FeesPending(address token, uint256 epoch);
 
     /// @notice Platform share of fees in basis points (single source of the split).
@@ -45,13 +46,25 @@ interface IFeeVault {
 
     /// @notice Time after an epoch's end during which it cannot be settled while fees earned in
     ///         it are still outstanding; afterwards such fees go to a later epoch.
-    function SETTLE_GRACE() external view returns (uint256);
+    function settleGrace() external view returns (uint256);
 
     /// @notice The settlement asset (USDC) held by the vault.
     function settlementAsset() external view returns (address);
 
     /// @notice Registers a token. Callable by the factory only.
     function registerToken(address token) external;
+
+    /// @notice Registers `token` with a donation asset (`registerToken(token)` is `Usdc`).
+    function registerToken(address token, DonationAsset asset) external;
+
+    /// @notice The asset the cause pool of `token` is kept and settled in.
+    function donationAssetOf(address token) external view returns (DonationAsset);
+
+    /// @notice WETH (zero until a consolidator that knows it is set).
+    function weth() external view returns (address);
+
+    /// @notice The consolidator allowed to deposit.
+    function consolidator() external view returns (address);
 
     /// @notice Splits and records the settlement asset already transferred to the vault, given
     ///         as parts by the epoch in which they were earned. Callable by the fee consolidator
@@ -79,7 +92,7 @@ interface IFeeVault {
 
     /// @notice Moves the cause pool of `token` to the distributor once `epoch` has a winner,
     ///         after bringing in the fees still outstanding for it (LP fees, held fees).
-    ///         Reverts with `FeesPending` while those cannot be brought in, until `SETTLE_GRACE`
+    ///         Reverts with `FeesPending` while those cannot be brought in, until `settleGrace`
     ///         after the epoch's end.
     function settle(address token, uint256 epoch) external;
 

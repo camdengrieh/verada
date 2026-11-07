@@ -2,7 +2,8 @@
 
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { CATEGORIES, REGIONS } from "@varada/sdk";
+import { CATEGORIES, EXTERNAL_ADDRESSES, REGIONS } from "@varada/sdk";
+import { useQuoteUsd } from "@/hooks/use-usd-quotes";
 import { FilterSheet, countFilters, type FilterGroup, type FilterValue } from "@varada/ui/components/mobile/filter-sheet";
 import { Badge } from "@varada/ui/components/ui/badge";
 import { Button } from "@varada/ui/components/ui/button";
@@ -21,7 +22,7 @@ import { categoryLabelOf, regionLabelOf } from "@/components/causes/org-card";
 
 import { CauseSearch } from "@/components/cause-search";
 import { CatalogResults, FocusPicker, useDebounced } from "@/components/catalog-browser";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText } from "@/components/use-tx";
 import { agentHref } from "@/components/agent-common";
@@ -31,6 +32,7 @@ import {
   causeNameOfSlug,
   causesQueryString,
   fetchCauseLeaderboard,
+  leaderboardInUsd,
   parseCausesQuery,
   usdcToNumber,
   type CausesQueryState,
@@ -99,8 +101,12 @@ export function CausesExplorer() {
   const stats = useQuery({ queryKey: ["stats"], queryFn: () => deps.indexer.stats(), retry: false, staleTime: 30_000 });
   const agents = useQuery({ queryKey: ["agents"], queryFn: () => listAgents(deps.indexer), retry: false, staleTime: 300_000 });
 
-  const firstBoard = board.data?.pages[0];
-  const rows = useMemo(() => (board.data?.pages ?? []).flatMap((p) => p?.items ?? []), [board.data]);
+  const { quote: ethQuote } = useQuoteUsd(EXTERNAL_ADDRESSES.weth);
+  const ethUsd = ethQuote?.priceUsd ?? null;
+  // Coins donate in USDC or ETH: fold ETH into dollars with the live price before any figure is shown.
+  const pages = useMemo(() => (board.data?.pages ?? []).map((p) => (p ? leaderboardInUsd(p, ethUsd) : p)), [board.data, ethUsd]);
+  const firstBoard = pages[0];
+  const rows = useMemo(() => pages.flatMap((p) => p?.items ?? []), [pages]);
   const byCategory = firstBoard?.byCategory;
 
   const toggleCategory = (slug: string) =>

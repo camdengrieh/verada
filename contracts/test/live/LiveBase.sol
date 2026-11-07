@@ -127,6 +127,19 @@ abstract contract LiveBase is Deployers {
         });
     }
 
+    /// @dev Overridable so a test can run the same fixture against `FeeConsolidatorV3`.
+    function _deployConsolidator() internal virtual returns (FeeConsolidator) {
+        return new FeeConsolidator(
+            address(this),
+            manager,
+            IConsolidatorRegistry(address(registry)),
+            IFeeVault(address(feeVault)),
+            address(weth),
+            MAX_SLIPPAGE_BPS,
+            MAX_DEVIATION_TICKS
+        );
+    }
+
     function _liveSetUp() internal {
         vm.warp(1_700_000_000);
         deployFreshManagerAndRouters();
@@ -146,15 +159,7 @@ abstract contract LiveBase is Deployers {
             address(new MockDistributor()),
             address(usdc)
         );
-        cons = new FeeConsolidator(
-            address(this),
-            manager,
-            IConsolidatorRegistry(address(registry)),
-            IFeeVault(address(feeVault)),
-            address(weth),
-            MAX_SLIPPAGE_BPS,
-            MAX_DEVIATION_TICKS
-        );
+        cons = _deployConsolidator();
         feeVault.setConsolidator(address(cons));
 
         endRegistry = new MockEndaomentRegistry(address(usdc), endTreasury);

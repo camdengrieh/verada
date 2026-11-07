@@ -3,8 +3,9 @@
 import { txToast, type TxKind, type TxToastId } from "@varada/ui/components/varada/tx-toast";
 import type { ConfettiPreset } from "@varada/ui/components/motion/confetti";
 import { useEffect, useRef, type ReactNode } from "react";
-import { useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useWriteContract } from "wagmi";
 import type { Hex, TransactionReceipt } from "viem";
+import { useReceipt } from "@/hooks/use-receipt";
 import { useAppConfig } from "@/components/providers";
 import { txUrl } from "@/lib/explorer";
 import { friendlyTxError, isUserRejection } from "@/lib/tx-errors";
@@ -31,7 +32,7 @@ export interface TxOptions {
 export function useTx(options: TxOptions = {}) {
   const config = useAppConfig();
   const { writeContractAsync, data: hash, isPending, error, reset } = useWriteContract();
-  const receipt = useWaitForTransactionReceipt({ hash, chainId: config.chainId, query: { enabled: Boolean(hash) } });
+  const receipt = useReceipt(hash, config.chainId);
 
   const opts = useRef(options);
   opts.current = options;
@@ -56,8 +57,8 @@ export function useTx(options: TxOptions = {}) {
     const id = toastIds.current.get(hash);
     const base = { kind: o.kind, description: o.description, explorerHref: txUrl(config.chainId, hash) };
     if (settled.status === "success") txToast.success(id, { ...base, title: o.titles?.success, confetti: o.confetti });
-    else txToast.error(id, { ...base, title: o.titles?.error ?? "Transaction reverted", description: "The chain rejected it. Nothing was spent beyond gas." });
-  }, [hash, settled, config.chainId]);
+    else txToast.error(id, { ...base, title: o.titles?.error ?? "Transaction reverted", description: receipt.revertReason ?? "The chain rejected it. Nothing was spent beyond gas." });
+  }, [hash, settled, receipt.revertReason, config.chainId]);
 
   // The wallet declined, or the call failed before it was sent.
   useEffect(() => {
@@ -72,7 +73,7 @@ export function useTx(options: TxOptions = {}) {
     });
   }, [error]);
 
-  return { send: writeContractAsync, hash, isPending, error, receipt: receipt.data, receiptError: receipt.error, refetchReceipt: receipt.refetch, reset };
+  return { send: writeContractAsync, hash, isPending, error, receipt: receipt.data, receiptError: receipt.error, revertReason: receipt.revertReason, refetchReceipt: receipt.refetch, reset };
 }
 
 export type Tx = ReturnType<typeof useTx>;
@@ -90,7 +91,7 @@ export function errorText(e: unknown): string {
 
 const NOTE = "m-0 rounded-xl px-3 py-2 text-sm";
 
-export function TxStatus({ tx, label = "Transaction" }: { tx: Pick<Tx, "hash" | "isPending" | "error" | "receipt" | "receiptError">; label?: string }) {
+export function TxStatus({ tx, label = "Transaction" }: { tx: Pick<Tx, "hash" | "isPending" | "error" | "receipt" | "receiptError"> & { revertReason?: string }; label?: string }) {
   return (
     <>
       {tx.isPending && (
@@ -113,19 +114,19 @@ export function TxStatus({ tx, label = "Transaction" }: { tx: Pick<Tx, "hash" | 
           Could not read the receipt: {errorText(tx.receiptError)}
         </p>
       )}
-      {tx.receipt && <ReceiptLine receipt={tx.receipt} hash={tx.hash} label={label} />}
+      {tx.receipt && <ReceiptLine receipt={tx.receipt} hash={tx.hash} label={label} reason={tx.revertReason} />}
     </>
   );
 }
 
-function ReceiptLine({ receipt, hash, label }: { receipt: TransactionReceipt; hash?: Hex; label: string }) {
+function ReceiptLine({ receipt, hash, label, reason }: { receipt: TransactionReceipt; hash?: Hex; label: string; reason?: string }) {
   return receipt.status === "success" ? (
     <p role="status" className={`${NOTE} break-all bg-sage-tint text-sage-ink`}>
       {label} confirmed in block {String(receipt.blockNumber)} ({hash})
     </p>
   ) : (
     <p role="alert" className={`${NOTE} break-all bg-terracotta-tint text-terracotta-strong`}>
-      {label} reverted ({hash})
+      {label} reverted ({hash}){reason ? `: ${reason}` : ""}
     </p>
   );
 }

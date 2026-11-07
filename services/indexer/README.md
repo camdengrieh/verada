@@ -43,7 +43,9 @@ Ponder needs Node >= 22.12 (`codegen`, `dev`, `start`); the tests and typecheck 
 | `X402_BASE_MIN_PRICE`, `X402_ARC_MIN_PRICE`, `X402_OPTIMISM_MIN_PRICE` | Optional per-network price floor in USD, e.g. a facilitator's per-settlement fee |
 
 The browser-facing options (`CORS_ALLOWED_ORIGINS`, rate limits, SSE limits, Endaoment proxy)
-are documented in `.env.example`.
+are documented in `.env.example`. The remaining optional variables (`SWARM_GATEWAY_URL` for agent
+reports, `ENS_PARENT_NAME`, the `X402_*` paid routes) are listed with their defaults in
+[`docs/ENV.md`](../../docs/ENV.md#indexer).
 
 Only the configured voting scheme is indexed. If a governor switches to a new scheme, add that
 contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null`.
@@ -64,7 +66,8 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 | `quote_asset`, `cause`, `org_deployment`, `donation` | | Registries and distributor |
 | `epoch` | `token, epoch` | Votes, `EpochOpened` (`opened`, `openedAt`, `governor`, `scheme`), `EpochClosed` (`closed`, `closedAt`, clears `closeFailed`), `EpochCloseFailed` (`closed` and `closeFailed`, as on-chain; no `closedAt`), `NoVoteFallbackApplied` / `TallyTimeoutFallbackApplied` (`fallbackApplied`, `fallbackReason` = `no_votes` / `timeout`), `EpochFinalized`, donations, `BallotPrepared` (`prepared`, `preparedAt`, `catalogVersion`, `poolSize`, `pinnedCount`, `ballotSize`: the indexed choice bounded by the indexed cap, as the governor reads both in that transaction), `LaunchSnapshotSet` (`launchSnapshot`), `FeesAttributed` (`causeAttributed`), `Settled` (`settledAmount`, `settledAt`). `voterCount` equals `voteCount` |
 | `epoch_option` | `token, epoch, index` | Options fixed by `BallotPrepared`: `orgId` from the event and `causeId = keccak256(orgId)` (also written by `EpochOpened`, cause ids only). The governor stores only a commitment, so this log is the source of the options |
-| `epoch_clock` | `id` | `epochZeroStart` and `epochLength` of the epoch governor (see below) |
+| `epoch_schedule` | `startEpoch` | The governor's schedule segments (`EpochScheduleSet`): from epoch `startEpoch`, which starts at `startTime`, epochs last `length`, accept ballots in their last `votingWindow` and weigh over `holdWindow`; `setAt` is null for the constructor default (see below) |
+| `timing_setting` | `id` | Last `TallyGraceSet`, `LaunchSnapshotDelaySet`, `CurationGraceSet` and `FeeVault.SettleGraceSet` value, by `id` (`tallyGrace`, `launchSnapshotDelay`, `curationGrace`, `settleGrace`) |
 | `ballot_size_cap` | `id` | `BallotSizeCapSet`: the epoch governor's protocol ballot size cap (2..32; emitted at deployment). Absent: 32 |
 | `token_ballot_size` | `token` | `BallotSizeSet`: the controller's own ballot size (`choice`, 0 follows the cap) from epoch `effectiveFrom` |
 | `shortlist` | `token` | The controller's pinned causes. `ShortlistScheduled`: latest list `causeIds` from epoch `effectiveFrom`, and `previousCauseIds` before it. `ShortlistSet` is only used until the first scheduled event (`scheduled` false) |
@@ -90,18 +93,24 @@ contract to `ponder.config.ts`; polls on an unindexed scheme show as `poll: null
 | `live_round` | `token, target` | `RoundFinalized`: `status` (`RoundStatus` name, including `NoBallot`), `winner`, `effectiveFrom` |
 | `live_ballot` | `token, target` | Frozen ballot of a rotation poll (`BallotPrepared`): catalogue version, pool size, pin count, option cause ids; curated counts and epoch from `CuratedPicksUsed` |
 
-**Epoch timing.** `epochZeroStart` is an immutable aligned to a whole week since unix time 0.
-`EpochOpened` and `VoteCast` only happen during the epoch they name, so the first of them gives
-`epochZeroStart = floor(timestamp / week) * week - epoch * week` without an RPC call. Until one
-has been indexed the API returns `start`, `end` and `snapshot` as null.
-
-If no epoch event has been indexed yet, the first pin schedule reads `epochZeroStart` from
-the governor instead. `LaunchSnapshotSet` is emitted during the epoch it names and also fixes it.
+**Epoch timing.** The epoch length, voting window and hold window are owner-set
+(`setEpochSchedule`), so an epoch's boundaries are never `epochZeroStart + n * length`. The indexer
+keeps the governor's schedule segments in `epoch_schedule`: segment 0 is the constructor default
+(`epochZeroStart` read from the chain by the first handler that proves the governor live, 7 day
+defaults), and every `EpochScheduleSet` adds a segment from its `startEpoch`, or replaces the stored
+one with the same `startEpoch` (a pending change replaced, or epoch zero re-anchored before any token
+registered). `start`, `end`, `votingOpensAt`, `length`, `votingWindow` and `holdWindow` of every epoch
+come from `@varada/sdk`'s schedule math over these rows, the same as `EpochGovernor.epochStart` and
+`votingOpensAt`. Until the governor was seen (or when the `epochZeroStart` read failed) they are null.
+An epoch is TRADING until `votingOpensAt` (ballots revert `VotingNotOpen`), VOTING until `end`
+(exclusive), then in its tally phase. The owner-set graces (`tallyGrace`, `launchSnapshotDelay`,
+`curationGrace`, `settleGrace`) are served by `/api/epoch-schedule` as the last event value, or the
+contract default (14 days, 1 day, 6 hours, 7 days) while no setter was called.
 
 **Weight snapshots.** An epoch's weights are read at `snapshotFor(token, epoch)`: `start - 1`,
 except in the launch epoch of a token registered without supply at that point, where the
 governor sets a launch snapshot inside the epoch (`LaunchSnapshotSet`). The epoch detail's
-`snapshot` follows the same rule, so it is known for the launch epoch even before the clock is.
+`snapshot` follows the same rule, so it is known for the launch epoch even before the schedule is.
 
 **Cause pools.** A deposit splits its fees by the epoch they were earned in. Each part goes to
 the pool of that epoch, or of the first later epoch not yet settled, and the pool of an epoch is
@@ -157,14 +166,15 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | --- | --- |
 | `/api/health` | `{ status: "ok" }` |
 | `/api/tokens?cursor&limit` | `{ items: Token[], nextCursor }`; each item has every `token` column plus `feeTotals` |
-| `/api/tokens/:address` | `Token & { feeTotals, profile, shortlist, shortlistPending, ballotSize, focus }` |
+| `/api/tokens/:address` | `Token & { feeTotals, profile, currentEpoch, shortlist, shortlistPending, ballotSize, focus }`; `currentEpoch` is `{ epoch, start, end, votingOpensAt, length, votingWindow, holdWindow } \| null` (null until the governor was seen) |
 | `/api/tokens/by-label/:label` | Same as the detail; 400 unless the label passes `isValidLabel`, 404 if unregistered |
 | `/api/activity?kind&token&cursor&limit` | `{ items: ActivityItem[], nextCursor }`; kind `live_donation` is a live-vault `Donated` (data: `causeId`, `org`, `amount`, `orgDeployed`, `inSwap`; no donor) |
 | `/api/activity/stream?token` | Server-Sent Events, `Last-Event-ID` resume |
 | `/api/causes`, `/api/causes/search?q` | Causes and the Endaoment search proxy |
 | `/api/causes/leaderboard?cursor&limit` | Money given per cause, largest first: `totals` (`causes`, `donations`, `donated`), `items` (`rank`, `causeId`, `donated`, `donations`, `tokens`, and `org` with name, EIN, country, categories and regions once the catalogue is loaded; weekly `donation` and live `live_donation` gifts summed, USDC base units), `byCategory` (donated per category slug through the catalogue; an org in several categories counts in each; empty without the catalogue) and an offset `nextCursor`. 503 `cause_totals_unavailable` without the repo |
 | `/api/epochs/:token?cursor&limit` | `{ items: Epoch[], nextCursor }` |
-| `/api/epochs/:token/:epoch` | `Epoch & { start, end, snapshot, options, optionOrgIds, poll, donations, causePool }` |
+| `/api/epoch-schedule` | `{ now, segments: [{ startEpoch, startTime, length, votingWindow, holdWindow }], currentEpoch, tallyGrace, launchSnapshotDelay, curationGrace, settleGrace, gracesSetAt }` (seconds; strings for big values) |
+| `/api/epochs/:token/:epoch` | `Epoch & { start, end, votingOpensAt, length, votingWindow, holdWindow, snapshot, options, optionOrgIds, poll, donations, causePool }` |
 | `/api/takeovers/:token` | `{ items: Proposal[] }`, newest first (at most 100) |
 | `/api/takeovers/:token/:id` | `Proposal`; 404 if the id belongs to another token |
 | `/api/polls/:governor/:token/:scope` | Raw `poll` row |
@@ -181,6 +191,10 @@ No route accepts or filters by a wallet address of the viewer (see `docs/PRIVACY
 | `/api/catalog/pool?categories&regions` | `{ poolSize, buckets: [{ bucket, category, region, size }] }` |
 | `/api/catalog/entries?at=bucket:index,...&root=` | `{ root, items: [{ bucket, index, orgId, proof }] }`, at most 100 entries (what the keeper's `prepareBallot` and round preparation need). With `root` (optional), from the loaded snapshot with that root, or 404 `catalog_root_unavailable` when none has it |
 | `/api/catalog/causes?ids=0x..,...` | `{ items: CatalogOrg[] }` by cause id, at most 50 (names for ballot options) |
+| `/api/agents` | `{ items }`: the curator agents (label, ENS name, category, signer, vault, active flag, description) with `totals` and the `latest` report (`epoch`, `reportRef`, `catalogVersion`). 503 until the agents repository is wired |
+| `/api/agents/:label` | One agent with `totals`, up to 52 `reports`, `latestCurations` (region, count, weight, picks root), credited `donors` and `gifts`; 400 for an unknown label |
+| `/api/agents/:label/reports/:epoch` | The agent's signed weekly report fetched from Swarm (`SWARM_GATEWAY_URL`) and checked against the on-chain curations, per region; 404 `report_unavailable` when the report cannot be fetched |
+| `/api/agents/:label/picks/:epoch/:region` | Merkle proofs of the picks for one region; 404 `report_mismatch` when the report's picks root differs from the one on chain |
 | `/api/catalog/orgs/:id` | `{ root, org, entries }` by org id, cause id, EIN or Endaoment id, entries with proofs |
 
 The `/api/catalog/*` routes answer 503 `catalog_unavailable` until the snapshot at

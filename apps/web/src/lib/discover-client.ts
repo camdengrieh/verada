@@ -1,3 +1,4 @@
+import { donationAssetOrDefault, type DonationAsset } from "@varada/sdk";
 import type { AppConfig } from "./config";
 import { chainTokens } from "./chain-reads";
 import type { DataDeps } from "./data";
@@ -44,8 +45,10 @@ export interface DiscoverToken {
   feeBps: number | null;
   /** Cause focus as catalogue slugs (empty arrays: any). Null until indexed. */
   focus: { categories: string[]; regions: string[] } | null;
-  /** USDC base units credited to causes. */
+  /** Base units of `donationAsset` credited to causes. */
   raised: bigint;
+  /** Asset `raised` is in. */
+  donationAsset: DonationAsset;
   mode: DiscoverMode;
   /** Null when the list came from the plain token route (no market data). */
   market: DiscoverMarket | null;
@@ -116,6 +119,7 @@ export function toDiscoverToken(v: unknown): DiscoverToken | null {
     feeBps: int(v.feeBps),
     focus: isRecord(v.focus) ? { categories: strList(v.focus.categories), regions: strList(v.focus.regions) } : null,
     raised: big(v.raised),
+    donationAsset: donationAssetOrDefault(v.donationAsset),
     mode,
     market: toDiscoverMarket(v.market),
   };
@@ -133,6 +137,7 @@ export function basicDiscoverToken(t: TokenSummary): DiscoverToken {
     feeBps: t.feeBps ?? null,
     focus: null,
     raised: 0n,
+    donationAsset: t.donationAsset ?? "usdc",
     mode: { kind: "weekly" },
     market: null,
   };

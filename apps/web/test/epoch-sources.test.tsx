@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
 import { epochOptionSources, IndexerClient, toEpochDetail, type TokenDetail } from "@/lib/indexer";
 
@@ -50,15 +50,25 @@ const chainRead = vi.fn(async ({ functionName }: { functionName: string }) => {
   throw new Error(`unexpected public read ${functionName}`);
 });
 
+// The fixtures' epoch runs 1700000000..1700604800 (a fixed week): pin the clock a day into it so the
+// epoch is in its voting phase, as the epoch panel gates ballots on the governor's schedule.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date((1_700_000_000 + 86_400) * 1000) });
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
+
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => config,
   useDeps: () => ({ indexer, chain: () => ({ readContract: chainRead }) }),
   usePrivateRpc: () => ({}),
 }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: undefined, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: undefined }),
   useWriteContract: () => ({ writeContractAsync: vi.fn(), data: undefined, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));
 
 const { EpochPanel, ballotMakeup, shownOptionSources } = await import("@/components/epoch-panel");

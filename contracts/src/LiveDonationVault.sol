@@ -10,6 +10,7 @@ import {IPoolManager} from "v4-core/interfaces/IPoolManager.sol";
 import {TransientStateLibrary} from "v4-core/libraries/TransientStateLibrary.sol";
 import {Currency} from "v4-core/types/Currency.sol";
 
+import {DonationAsset} from "./interfaces/IDonationAsset.sol";
 import {ICauseRegistry} from "./interfaces/ICauseRegistry.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
 import {ILiveDonationVault} from "./interfaces/ILiveDonationVault.sol";
@@ -60,12 +61,18 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
     uint256 internal constant BPS = 10_000;
     /// @notice Highest donation threshold a token may use (1,000,000 USDC).
     uint256 public constant MAX_DONATION_THRESHOLD = 1_000_000e6;
+    /// @notice Highest donation threshold of an `Eth` token (1,000 WETH).
+    uint256 public constant MAX_DONATION_THRESHOLD_ETH = 1_000e18;
     /// @notice Gas forwarded to an in-swap push (`executePush`).
     /// @dev At least 1.25x the measured push to a deployed org with cold storage (165k against
     ///      the mock org: registry lookup, address check, active check, approve, donate with the
     ///      Endaoment fee, clear, snapshot checks). To be confirmed against mainnet Endaoment on a
     ///      fork before deployment.
     uint256 public constant PUSH_GAS_BUDGET = 220_000;
+    /// @notice Gas forwarded to an in-swap push of an `Eth` token: the push plus a WETH to USDC
+    ///         conversion through the consolidator. Inside a swap's inline conversion envelope
+    ///         this is usually not available and the push is deferred to `flush`.
+    uint256 public constant PUSH_GAS_BUDGET_ETH = 600_000;
     /// @notice Gas kept after a push attempt for the backoff write and the event.
     uint256 public constant POST_PUSH_RESERVE = 30_000;
     /// @notice Delay before a bucket whose push failed is pushed inside a swap again.
@@ -73,6 +80,10 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
 
     /// @inheritdoc ILiveDonationVault
     address public immutable usdc;
+    /// @notice WETH, the on-chain form of the `Eth` donation asset (zero: unsupported).
+    address public immutable weth;
+    /// @notice Converts an `Eth` cause credit into USDC for Endaoment.
+    IFeeConsolidator public immutable consolidator;
     /// @notice The factory, the only registrar.
     address public immutable factory;
     /// @notice Receiver of the platform share and of skimmed balances.
@@ -94,6 +105,7 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
     struct TokenConfig {
         bool registered;
         uint96 threshold;
+        DonationAsset asset;
     }
 
     struct Credit {
@@ -102,6 +114,8 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
     }
 
     Totals internal _totals;
+    /// @dev Same ledger for the tokens whose donation asset is WETH.
+    Totals internal _totalsEth;
     /// @notice Registration and donation threshold of a token.
     mapping(address token => TokenConfig) public configOf;
     mapping(address token => mapping(bytes32 causeId => Credit)) internal _credit;
@@ -140,6 +154,12 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
         if (base == address(0) || registry == address(0)) revert ZeroAddress();
         if (consolidator_.settlementAsset() != base) revert SettlementMismatch();
         usdc = base;
+        address weth_;
+        (bool ok, bytes memory ret) =
+            address(consolidator_).staticcall(abi.encodeCall(IFeeConsolidator.weth, ()));
+        if (ok && ret.length == 32) weth_ = abi.decode(ret, (address));
+        weth = weth_;
+        consolidator = consolidator_;
         factory = factory_;
         platformTreasury = platformTreasury_;
         causeRegistry = causeRegistry_;
@@ -166,12 +186,41 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
         bytes32 initialCause,
         RotationPeriod period
     ) external {
+        _register(token, threshold, initialCause, period, DonationAsset.Usdc);
+    }
+
+    /// @inheritdoc ILiveDonationVault
+    function registerToken(
+        address token,
+        uint96 threshold,
+        bytes32 initialCause,
+        RotationPeriod period,
+        DonationAsset asset
+    ) external {
+        _register(token, threshold, initialCause, period, asset);
+    }
+
+    function _register(
+        address token,
+        uint96 threshold,
+        bytes32 initialCause,
+        RotationPeriod period,
+        DonationAsset asset
+    ) private {
         if (msg.sender != factory) revert NotFactory();
         if (configOf[token].registered) revert AlreadyRegistered(token);
-        if (threshold > MAX_DONATION_THRESHOLD) revert ThresholdTooHigh(threshold);
-        configOf[token] = TokenConfig({registered: true, threshold: threshold});
+        if (asset == DonationAsset.Eth && weth == address(0)) revert EthUnsupported();
+        uint256 max =
+            asset == DonationAsset.Eth ? MAX_DONATION_THRESHOLD_ETH : MAX_DONATION_THRESHOLD;
+        if (threshold > max) revert ThresholdTooHigh(threshold);
+        configOf[token] = TokenConfig({registered: true, threshold: threshold, asset: asset});
         governor.registerToken(token, initialCause, period);
-        emit LiveTokenRegistered(token, threshold, initialCause, period);
+        emit LiveTokenRegistered(token, threshold, initialCause, period, asset);
+    }
+
+    /// @inheritdoc ILiveDonationVault
+    function donationAssetOf(address token) external view returns (DonationAsset) {
+        return configOf[token].asset;
     }
 
     /// @inheritdoc ILiveDonationVault
@@ -194,28 +243,31 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
 
         uint256 platform = (amount * PLATFORM_SHARE_BPS) / BPS;
         uint256 share = amount - platform;
-        Totals memory t = _totals;
+        bool eth = cfg.asset == DonationAsset.Eth;
+        Totals memory t = eth ? _totalsEth : _totals;
         t.platformAccrued = SafeCast.toUint128(uint256(t.platformAccrued) + platform);
         t.totalPending = SafeCast.toUint128(uint256(t.totalPending) + share);
-        _totals = t;
+        if (eth) _totalsEth = t;
+        else _totals = t;
         Credit storage c = _credit[token][causeId];
         uint256 pending = uint256(c.pending) + share;
         c.pending = SafeCast.toUint128(pending);
 
         uint256 required = uint256(t.platformAccrued) + t.totalPending;
-        uint256 balance = IERC20(usdc).balanceOf(address(this));
+        uint256 balance = IERC20(eth ? weth : usdc).balanceOf(address(this));
         if (balance < required) revert UnbackedCredit(balance, required);
-        emit Credited(token, causeId, rotation, amount, platform, share);
+        emit Credited(token, causeId, rotation, amount, platform, share, cfg.asset);
 
         // Push only when due and not backing off.
         if (cfg.threshold == 0 ? pending == 0 : pending < cfg.threshold) return;
         // forge-lint: disable-next-line(block-timestamp)
         if (block.timestamp < c.pushRetryAt) return;
-        if (gasleft() < (PUSH_GAS_BUDGET * 64) / 63 + POST_PUSH_RESERVE) {
+        uint256 budget = eth ? PUSH_GAS_BUDGET_ETH : PUSH_GAS_BUDGET;
+        if (gasleft() < (budget * 64) / 63 + POST_PUSH_RESERVE) {
             emit DonationDeferred(token, causeId, pending, InsufficientPushGas.selector);
             return;
         }
-        try this.executePush{gas: PUSH_GAS_BUDGET}(token, causeId, pending) {}
+        try this.executePush{gas: budget}(token, causeId, pending) {}
         catch {
             // Bare catch: only the selector is copied, so return data cannot inflate gas here.
             bytes4 reason = _returnSelector();
@@ -239,16 +291,18 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
         Currency s0 = poolManager.getSyncedCurrency();
 
         Credit storage c = _credit[token][causeId];
+        DonationAsset da = configOf[token].asset;
         c.pending -= SafeCast.toUint128(amount);
-        _totals.totalPending -= SafeCast.toUint128(amount);
+        _totalsOf(da).totalPending -= SafeCast.toUint128(amount);
 
-        EndaomentDonateLib.donateDeployed(IERC20(usdc), endaomentRegistry, org, amount);
+        uint256 usdcAmount = _toUsdc(da, amount);
+        EndaomentDonateLib.donateDeployed(IERC20(usdc), endaomentRegistry, org, usdcAmount);
 
         if (
             poolManager.getNonzeroDeltaCount() != n0
                 || Currency.unwrap(poolManager.getSyncedCurrency()) != Currency.unwrap(s0)
         ) revert PoolManagerStateChanged();
-        emit Donated(token, causeId, org, amount, false, true);
+        emit Donated(token, causeId, org, amount, false, true, da, usdcAmount);
     }
 
     /// @inheritdoc ILiveDonationVault
@@ -261,31 +315,63 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
 
         c.pending = 0;
         c.pushRetryAt = 0;
-        _totals.totalPending -= SafeCast.toUint128(donated);
+        DonationAsset da = configOf[token].asset;
+        _totalsOf(da).totalPending -= SafeCast.toUint128(donated);
 
+        uint256 usdcAmount = _toUsdc(da, donated);
         bool deploy = org.code.length == 0;
         if (deploy) {
-            EndaomentDonateLib.deployAndDonate(IERC20(usdc), endaomentFactory, orgId, org, donated);
+            EndaomentDonateLib.deployAndDonate(
+                IERC20(usdc), endaomentFactory, orgId, org, usdcAmount
+            );
         } else {
-            EndaomentDonateLib.donateDeployed(IERC20(usdc), endaomentRegistry, org, donated);
+            EndaomentDonateLib.donateDeployed(IERC20(usdc), endaomentRegistry, org, usdcAmount);
         }
-        emit Donated(token, causeId, org, donated, deploy, false);
+        emit Donated(token, causeId, org, donated, deploy, false, da, usdcAmount);
+    }
+
+    function _totalsOf(DonationAsset da) private view returns (Totals storage t) {
+        return da == DonationAsset.Eth ? _totalsEth : _totals;
+    }
+
+    /// @dev Endaoment takes USDC: an `Eth` amount (WETH held here) is converted through the
+    ///      consolidator first, with an exact allowance that must be fully used. USDC is
+    ///      returned as is. Any failure reverts the whole push or flush, leaving the credit.
+    function _toUsdc(DonationAsset da, uint256 amount) private returns (uint256 out) {
+        if (da == DonationAsset.Usdc) return amount;
+        IERC20(weth).forceApprove(address(consolidator), amount);
+        uint256 before = IERC20(usdc).balanceOf(address(this));
+        out = consolidator.convertDonation(amount, address(this));
+        if (IERC20(usdc).balanceOf(address(this)) - before != out) revert UnbackedCredit(0, out);
+        if (IERC20(weth).allowance(address(this), address(consolidator)) != 0) {
+            revert EndaomentDonateLib.AllowanceNotCleared(address(consolidator));
+        }
     }
 
     /// @inheritdoc ILiveDonationVault
+    /// @dev Pays the accrued share of every asset (USDC, then WETH); returns the USDC amount.
     function withdrawPlatform() external nonReentrant returns (uint256 amount) {
         amount = _totals.platformAccrued;
-        if (amount == 0) revert NothingToWithdraw();
-        _totals.platformAccrued = 0;
-        IERC20(usdc).safeTransfer(platformTreasury, amount);
-        emit PlatformWithdrawn(platformTreasury, amount);
+        uint256 amountEth = _totalsEth.platformAccrued;
+        if (amount == 0 && amountEth == 0) revert NothingToWithdraw();
+        if (amount != 0) {
+            _totals.platformAccrued = 0;
+            IERC20(usdc).safeTransfer(platformTreasury, amount);
+            emit PlatformWithdrawn(platformTreasury, amount);
+        }
+        if (amountEth != 0) {
+            _totalsEth.platformAccrued = 0;
+            IERC20(weth).safeTransfer(platformTreasury, amountEth);
+            emit PlatformWithdrawnEth(platformTreasury, amountEth);
+        }
     }
 
     /// @inheritdoc ILiveDonationVault
     function skim(address asset) external nonReentrant returns (uint256 amount) {
         uint256 balance = IERC20(asset).balanceOf(address(this));
-        if (asset == usdc) {
-            uint256 owed = uint256(_totals.platformAccrued) + _totals.totalPending;
+        if (asset == usdc || (weth != address(0) && asset == weth)) {
+            Totals memory t = asset == usdc ? _totals : _totalsEth;
+            uint256 owed = uint256(t.platformAccrued) + t.totalPending;
             amount = balance > owed ? balance - owed : 0;
         } else {
             amount = balance;
@@ -315,6 +401,16 @@ contract LiveDonationVault is ILiveDonationVault, Ownable2Step, ReentrancyGuardT
     /// @inheritdoc ILiveDonationVault
     function totalPending() external view returns (uint256) {
         return _totals.totalPending;
+    }
+
+    /// @inheritdoc ILiveDonationVault
+    function platformAccruedEth() external view returns (uint256) {
+        return _totalsEth.platformAccrued;
+    }
+
+    /// @inheritdoc ILiveDonationVault
+    function totalPendingEth() external view returns (uint256) {
+        return _totalsEth.totalPending;
     }
 
     /// @notice Donation threshold of `token` (USDC, 6 decimals).

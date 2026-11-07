@@ -44,6 +44,20 @@ describe("runtime config", () => {
   });
 });
 
+describe("dev stack (pnpm dev:up)", () => {
+  it("skips config.json so the tracked file cannot override the dev services", async () => {
+    vi.stubEnv("NEXT_PUBLIC_DEV_STACK", "true");
+    try {
+      const f = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ indexerUrls: ["https://x.example"] }) });
+      const cfg = await loadRuntimeConfig(f as unknown as typeof fetch, "/");
+      expect(f).not.toHaveBeenCalled();
+      expect(cfg.indexerUrls).toEqual(envDefaults().indexerUrls);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
 describe("private RPC config", () => {
   it("defaults to Nox and follows a runtime rpcUrl", () => {
     const d = envDefaults();

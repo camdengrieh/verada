@@ -17,9 +17,11 @@ import {
   T2,
   T3,
   TAKEOVER,
+  MIN,
   WEEK,
   activity,
   fixtureRepo,
+  shortSchedule,
 } from "./api.fixtures";
 
 /** Milliseconds clock inside fixture epoch `n`. */
@@ -27,7 +29,6 @@ const inEpoch = (n: bigint) => () => Number((EPOCH_ZERO + n * WEEK + 3600n) * 10
 
 declare global {
   interface Response {
-    // biome-ignore lint/suspicious/noExplicitAny: test convenience for JSON bodies
     json(): Promise<any>;
   }
 }
@@ -62,6 +63,12 @@ describe("tokens", () => {
     expect(b2.items[0].address).toBe(T1);
     expect(b2.items[0].feeTotals.causeAmount).toBe("90000000");
     expect(b2.nextCursor).toBeNull();
+  });
+
+  it("names the donation asset of a token", async () => {
+    const { app } = mkApp();
+    const b = await (await get(app, `/api/tokens/${T1}`)).json();
+    expect(b.donationAsset).toBe("usdc");
   });
 
   it("returns a token, 404 for unknown, 400 for bad address", async () => {
@@ -490,7 +497,7 @@ describe("epochs, causes, stats", () => {
       ...base,
       getEpoch: async (t: `0x${string}`, n: bigint) => {
         const r = await base.getEpoch(t, n);
-        return r && { ...r, clock: null };
+        return r && { ...r, schedule: [] };
       },
     };
     const config = readApiConfig(baseEnv);
@@ -503,6 +510,8 @@ describe("epochs, causes, stats", () => {
     expect(await (await get(noClock, `/api/epochs/${T1}/0`)).json()).toMatchObject({
       start: null,
       end: null,
+      votingOpensAt: null,
+      votingWindow: null,
       snapshot: String(LAUNCH_SNAPSHOT),
     });
     expect((await (await get(noClock, `/api/epochs/${T1}/1`)).json()).snapshot).toBeNull();
@@ -807,3 +816,109 @@ describe("active tokens", () => {
 });
 
 beforeEach(() => vi.restoreAllMocks());
+
+describe("epoch timing from the schedule", () => {
+  const mkShort = (now?: () => number) => {
+    const config = readApiConfig(baseEnv);
+    const repo = fixtureRepo(activity, { schedule: shortSchedule });
+    return createApi({ repo, search: { search: async () => [] }, config, bus: new ActivityBus(() => repo.listActivity({ limit: 100 }), 10_000), now });
+  };
+  const S6 = EPOCH_ZERO + 6n * WEEK;
+
+  it("reports votingOpensAt, length and windows (voting open all epoch by default)", async () => {
+    const { app } = mkApp();
+    expect(await (await get(app, `/api/epochs/${T1}/2`)).json()).toMatchObject({
+      start: String(EPOCH_ZERO + 2n * WEEK),
+      end: String(EPOCH_ZERO + 3n * WEEK),
+      votingOpensAt: String(EPOCH_ZERO + 2n * WEEK),
+      length: String(WEEK),
+      votingWindow: String(WEEK),
+      holdWindow: String(WEEK),
+    });
+  });
+
+  /** An API over the short schedule whose epoch route answers for any epoch number (the fixture has few). */
+  const mkAnyEpoch = () => {
+    const repo = fixtureRepo(activity, { schedule: shortSchedule });
+    return createApi({
+      repo: {
+        ...repo,
+        getEpoch: async (t, n) => {
+          const base = await repo.getEpoch(t, 2n);
+          return base ? { ...base, epoch: { ...base.epoch, epoch: n } } : null;
+        },
+      },
+      search: { search: async () => [] },
+      config: readApiConfig(baseEnv),
+      bus: new ActivityBus(() => repo.listActivity({ limit: 100 }), 10_000),
+    });
+  };
+
+  it("takes epoch boundaries from the segments, not zero + n * length", async () => {
+    // Epoch 5 is the last weekly one: it ends where the 45 minute segment starts.
+    expect(await (await get(mkAnyEpoch(), `/api/epochs/${T1}/5`)).json()).toMatchObject({
+      start: String(EPOCH_ZERO + 5n * WEEK),
+      end: String(S6),
+      votingOpensAt: String(EPOCH_ZERO + 5n * WEEK),
+      length: String(WEEK),
+    });
+  });
+
+  it("serves epochs of a 45 minute cycle with a 15 minute voting window", async () => {
+    expect(await (await get(mkAnyEpoch(), `/api/epochs/${T1}/8`)).json()).toMatchObject({
+      start: String(S6 + 90n * MIN),
+      end: String(S6 + 135n * MIN),
+      votingOpensAt: String(S6 + 120n * MIN),
+      length: String(45n * MIN),
+      votingWindow: String(15n * MIN),
+      snapshot: String(S6 + 90n * MIN - 1n),
+    });
+  });
+
+  it("gives the token the current epoch's window after a schedule change", async () => {
+    // 20 minutes into epoch 7 (S6 + 45 min): trading.
+    const app = mkShort(() => Number((S6 + 65n * MIN) * 1000n));
+    const t = await (await get(app, `/api/tokens/${T1}`)).json();
+    expect(t.currentEpoch).toEqual({
+      epoch: "7",
+      start: String(S6 + 45n * MIN),
+      end: String(S6 + 90n * MIN),
+      votingOpensAt: String(S6 + 75n * MIN),
+      length: String(45n * MIN),
+      votingWindow: String(15n * MIN),
+      holdWindow: String(45n * MIN),
+    });
+  });
+
+  it("serves the schedule, the current epoch and the graces", async () => {
+    const app = mkShort(() => Number((S6 + 100n * MIN) * 1000n));
+    const r = await get(app, "/api/epoch-schedule");
+    expect(r.status).toBe(200);
+    const b = await r.json();
+    expect(b.segments).toHaveLength(2);
+    expect(b.segments[1]).toEqual({
+      startEpoch: "6",
+      startTime: String(S6),
+      length: String(45n * MIN),
+      votingWindow: String(15n * MIN),
+      holdWindow: String(45n * MIN),
+    });
+    expect(b.currentEpoch).toMatchObject({ epoch: "8", votingOpensAt: String(S6 + 120n * MIN) });
+    // No setter event yet: contract defaults.
+    expect(b).toMatchObject({ tallyGrace: String(14n * 86_400n), settleGrace: String(7n * 86_400n), launchSnapshotDelay: "86400", curationGrace: "21600" });
+    expect(b.gracesSetAt.tallyGrace).toBeNull();
+    const config = readApiConfig(baseEnv);
+    const repo = fixtureRepo(activity, { schedule: shortSchedule, timing: [{ id: "tallyGrace", value: 600n, setAt: 9n }, { id: "settleGrace", value: 300n, setAt: 10n }] });
+    const set = createApi({ repo, search: { search: async () => [] }, config, bus: new ActivityBus(() => repo.listActivity({ limit: 100 }), 10_000) });
+    expect(await (await get(set, "/api/epoch-schedule")).json()).toMatchObject({ tallyGrace: "600", settleGrace: "300", gracesSetAt: { tallyGrace: "9", settleGrace: "10", curationGrace: null } });
+  });
+
+  it("has no current epoch before the governor was seen live", async () => {
+    const config = readApiConfig(baseEnv);
+    const repo = fixtureRepo(activity, { schedule: [] });
+    const app = createApi({ repo, search: { search: async () => [] }, config, bus: new ActivityBus(() => repo.listActivity({ limit: 100 }), 10_000) });
+    const b = await (await get(app, "/api/epoch-schedule")).json();
+    expect(b).toMatchObject({ segments: [], currentEpoch: null });
+    expect((await (await get(app, `/api/tokens/${T1}`)).json()).currentEpoch).toBeNull();
+  });
+});

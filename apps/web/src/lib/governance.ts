@@ -4,7 +4,8 @@
  * (weights, "have I voted") is read through `createAccountClient` by the caller; nothing here sends
  * an address to the indexer.
  */
-import { CATEGORIES, EPOCH_LENGTH, REGIONS, USDC_DECIMALS, causeIdOfOrg, swarmGatewayUrl } from "@varada/sdk";
+import { CATEGORIES, readEpochWindow, REGIONS, USDC_DECIMALS, causeIdOfOrg, donationAssetOrDefault, swarmGatewayUrl, type DonationAsset } from "@varada/sdk";
+import { donationUnitOf } from "./donation-asset";
 import { epochGovernorAbi } from "@varada/sdk/abis";
 import { isCauseName, type CauseName } from "@varada/ui/components/varada/cause-icon";
 import type { BallotOptionData, BallotSource } from "@varada/ui/components/varada/ballot-option";
@@ -109,21 +110,39 @@ export interface EpochClock {
   epoch: bigint;
   /** Unix seconds. */
   start: number;
-  /** Unix seconds, exclusive. */
+  /** Unix seconds, exclusive: the next epoch's start. */
   end: number;
+  /** Unix seconds: ballots are accepted from here to `end` (`start` when voting is open all epoch). */
+  votingOpensAt: number;
+  /** Seconds: this epoch's length and voting window, as the governor has them. */
+  length: number;
+  votingWindow: number;
 }
 
-/** The current epoch and its window, from the governor (`currentEpoch`, `epochStart`). */
+/**
+ * The current epoch and its window, from the governor (`currentEpoch`, `epochStart`,
+ * `votingOpensAt`, `epochScheduleFor`). The epoch length is owner-set and can change between epochs,
+ * so the end is the next epoch's start, never `start + 7 days`.
+ */
 export async function loadEpochClock(cfg: Pick<AppConfig, "governorAddress">, deps: Pick<DataDeps, "chain">): Promise<EpochClock> {
   if (!cfg.governorAddress) throw new Error("Governor address not configured");
-  const client = deps.chain();
-  const g = { address: cfg.governorAddress, abi: epochGovernorAbi } as const;
-  const epoch = await client.readContract({ ...g, functionName: "currentEpoch" });
-  const start = await client.readContract({ ...g, functionName: "epochStart", args: [epoch] });
-  return { epoch, start: Number(start), end: Number(start + EPOCH_LENGTH) };
+  const w = await readEpochWindow(deps.chain(), cfg.governorAddress);
+  return {
+    epoch: w.epoch,
+    start: Number(w.start),
+    end: Number(w.end),
+    votingOpensAt: Number(w.votingOpensAt),
+    length: Number(w.length),
+    votingWindow: Number(w.votingWindow),
+  };
 }
 
-export type EpochPhase = "unopened" | "open" | "counting" | "tallied" | "finalized";
+/**
+ * Where a token's ballot stands: `unopened` (not prepared), `trading` (prepared, ballots not accepted
+ * until `votingOpensAt`), `open` (ballots accepted), `counting` (ended or closed, tally pending),
+ * `tallied` (decrypted) and `finalized` (winner recorded).
+ */
+export type EpochPhase = "unopened" | "trading" | "open" | "counting" | "tallied" | "finalized";
 
 export interface EpochStatus {
   phase: EpochPhase;
@@ -133,13 +152,20 @@ export interface EpochStatus {
 }
 
 /** Where a token's epoch is in its life, from the indexer (or chain) detail and the clock. */
-export function epochStatus(detail: Pick<EpochDetail, "poll" | "prepared" | "finalized" | "end"> | null | undefined, nowSeconds: number): EpochStatus {
+export function epochStatus(detail: Pick<EpochDetail, "poll" | "prepared" | "finalized" | "end" | "votingOpensAt"> | null | undefined, nowSeconds: number): EpochStatus {
   if (detail?.finalized) return { phase: "finalized", label: "Finalized", tone: "ink" };
   const poll: PollSummary | null | undefined = detail?.poll;
   if (poll?.isFinal) return { phase: "tallied", label: "Tally decrypted", tone: "cause" };
   if (!detail || (!detail.prepared && !poll?.opened)) return { phase: "unopened", label: "Ballot not opened", tone: "neutral" };
   if (poll?.closed || (detail.end !== undefined && nowSeconds >= detail.end)) return { phase: "counting", label: "Counting votes", tone: "rwa" };
+  // Prepared, not ended: ballots are accepted only from `votingOpensAt` (VotingNotOpen before it).
+  if (detail.votingOpensAt !== undefined && nowSeconds < detail.votingOpensAt) return { phase: "trading", label: "Trading phase, voting not open yet", tone: "neutral" };
   return { phase: "open", label: "Open for ballots", tone: "cause" };
+}
+
+/** The ballot is prepared and the epoch has not ended: ballots are accepted now or will be (trading or voting). */
+export function ballotIsLive(status: EpochStatus): boolean {
+  return status.phase === "open" || status.phase === "trading";
 }
 
 /** Whether a ballot can be cast now. */
@@ -236,8 +262,9 @@ export interface FinalizedEpoch {
   epoch: string;
   winningCauseId: string | null;
   voteCount: number;
-  /** USDC base units. */
+  /** Base units of `donationAsset`. */
   donatedAmount: string;
+  donationAsset: DonationAsset;
   finalizedAt?: number;
   donatedAt?: number;
 }
@@ -248,8 +275,9 @@ export interface PoolDonation {
   epoch: string;
   causeId: string;
   payout: string;
-  /** USDC base units. */
+  /** Base units of `donationAsset`. */
   amount: string;
+  donationAsset: DonationAsset;
   timestamp?: number;
   txHash?: string;
 }
@@ -269,6 +297,7 @@ export function toFinalizedEpoch(item: ActivityItem): FinalizedEpoch | null {
     winningCauseId: winner,
     voteCount: Number(dec(d.voteCount)),
     donatedAmount: dec(d.donatedAmount),
+    donationAsset: donationAssetOrDefault(d.donationAsset),
     finalizedAt: item.timestamp,
     donatedAt: optSeconds(d.donatedAt),
   };
@@ -284,16 +313,17 @@ export function toPoolDonation(item: ActivityItem): PoolDonation | null {
     causeId: item.data.causeId,
     payout: typeof item.data.payout === "string" ? item.data.payout : "",
     amount: dec(item.data.amount),
+    donationAsset: donationAssetOrDefault(item.data.donationAsset),
     timestamp: item.timestamp,
     txHash: item.txHash,
   };
 }
 
-/** USDC base units as a number of dollars (display only). */
-export function usdcToUsd(amount: string | bigint): number {
+/** Donation-asset base units (USDC by default; pass the token's unit for ETH) as dollars (display only). */
+export function usdcToUsd(amount: string | bigint, per: { decimals: number; usd: number } = { decimals: USDC_DECIMALS, usd: 1 }): number {
   const v = typeof amount === "bigint" ? amount : /^\d+$/.test(amount) ? BigInt(amount) : 0n;
-  const unit = 10n ** BigInt(USDC_DECIMALS);
-  return Number(v / unit) + Number(v % unit) / Number(unit);
+  const unit = 10n ** BigInt(per.decimals);
+  return (Number(v / unit) + Number(v % unit) / Number(unit)) * per.usd;
 }
 
 export interface History {
@@ -321,7 +351,7 @@ export interface HistoryLabels {
 }
 
 /** The timeline's rows: each payout to a winning charity, newest first. */
-export function donationTimeline(donations: readonly PoolDonation[], labels: HistoryLabels, chainId: number): Donation[] {
+export function donationTimeline(donations: readonly PoolDonation[], labels: HistoryLabels, chainId: number, ethUsd?: number | null): Donation[] {
   return donations
     .filter((d) => d.timestamp !== undefined && BigInt(d.amount) > 0n)
     .sort((a, b) => (b.timestamp ?? 0) - (a.timestamp ?? 0))
@@ -330,7 +360,7 @@ export function donationTimeline(donations: readonly PoolDonation[], labels: His
       return {
         id: d.id,
         org: cause.name,
-        amount: usdcToUsd(d.amount),
+        amount: usdcToUsd(d.amount, donationUnitOf(d.donationAsset, ethUsd)),
         cause: cause.category,
         at: (d.timestamp ?? 0) * 1000,
         coin: labels.token(d.token.toLowerCase()),
@@ -341,14 +371,14 @@ export function donationTimeline(donations: readonly PoolDonation[], labels: His
 }
 
 /** Causes ranked by total paid out in the loaded window. */
-export function causeLeaderboard(donations: readonly PoolDonation[], labels: HistoryLabels): LeaderboardEntry[] {
-  const totals = new Map<string, bigint>();
-  for (const d of donations) totals.set(d.causeId.toLowerCase(), (totals.get(d.causeId.toLowerCase()) ?? 0n) + BigInt(d.amount));
+export function causeLeaderboard(donations: readonly PoolDonation[], labels: HistoryLabels, ethUsd?: number | null): LeaderboardEntry[] {
+  const totals = new Map<string, number>();
+  for (const d of donations) totals.set(d.causeId.toLowerCase(), (totals.get(d.causeId.toLowerCase()) ?? 0) + usdcToUsd(d.amount, donationUnitOf(d.donationAsset, ethUsd)));
   return [...totals]
-    .filter(([, v]) => v > 0n)
+    .filter(([, v]) => v > 0)
     .map(([id, v]) => {
       const cause = labels.cause(id);
-      return { id, name: cause.name, cause: cause.category, raised: usdcToUsd(v) };
+      return { id, name: cause.name, cause: cause.category, raised: v };
     });
 }
 

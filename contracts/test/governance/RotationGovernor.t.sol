@@ -941,7 +941,7 @@ contract RotationGovernorTest is RotationGovernorBase {
 
     function test_params_bounds() public {
         IRotationGovernor.Params memory p = _params();
-        p.votingPeriod = 59 minutes;
+        p.votingPeriod = 4 minutes;
         vm.expectRevert(IRotationGovernor.InvalidParams.selector);
         gov.setParams(p);
         p = _params();

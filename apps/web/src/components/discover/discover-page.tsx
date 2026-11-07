@@ -1,4 +1,5 @@
 "use client";
+import { EXTERNAL_ADDRESSES } from "@varada/sdk";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PullToRefresh } from "@varada/ui/components/mobile/pull-to-refresh";
@@ -7,9 +8,11 @@ import { useAppConfig } from "@/components/providers";
 import { stocksTabEmpty, TABS, TAB_LABELS, type DiscoverState, type DiscoverTab } from "@/lib/discover";
 import { errorText } from "@/components/use-tx";
 import { useQuoteAssets } from "@/lib/use-quote-assets";
+import { useUsdQuotes } from "@/hooks/use-usd-quotes";
 import { Filters } from "./filters";
 import { HomeHero } from "./hero";
 import { useDiscoverList, useDiscoverState, useLiveActivity, useNow, usePlatformStats, useRel, useTokenLogo } from "./hooks";
+import { LiveActivityFeed } from "./live-activity";
 import { LiveGiving, LiveTicker } from "./live-giving";
 import { CadenceFilter, CauseChooser, PairsPanel } from "./panels";
 import { ResultsEmpty, ResultsError, ResultsSkeleton, TokenResults, useResultsView, ViewToggle } from "./token-results";
@@ -43,6 +46,7 @@ export function DiscoverPage() {
   const rel = useRel();
   const [state, update] = useDiscoverState();
   const quotes = useQuoteAssets();
+  const usd = useUsdQuotes();
   const stats = usePlatformStats();
   const live = useLiveActivity();
   const logo = useTokenLogo();
@@ -63,7 +67,7 @@ export function DiscoverPage() {
   const filtered = Boolean(state.q || state.pair || state.category || state.region || state.mode || state.cadence || state.tab === "stocks" || state.tab === "live" || state.tab === "cause");
   const nowSeconds = now ? Math.floor(now.getTime() / 1000) : 0;
   const href = useCallback((path: string) => rel(path), [rel]);
-  const ctx = useMemo(() => ({ parent: config.ensParentName, assets: quotes.assets, logo }), [config.ensParentName, quotes.assets, logo]);
+  const ctx = useMemo(() => ({ parent: config.ensParentName, assets: quotes.assets, logo, usd: usd.quoteFor, ethUsd: usd.quoteFor(EXTERNAL_ADDRESSES.weth)?.priceUsd ?? null }), [config.ensParentName, quotes.assets, logo, usd.quoteFor]);
 
   const refresh = useCallback(async () => {
     await Promise.all([list.refetch(), stats.refetch()]);
@@ -96,7 +100,6 @@ export function DiscoverPage() {
 
   return (
     <div className="flex flex-col gap-8">
-      <h1 className="sr-only">Varada: memecoins that give back</h1>
       <LiveTicker live={live} assets={quotes.assets} />
       <HomeHero stats={stats.data} />
 
@@ -147,6 +150,7 @@ export function DiscoverPage() {
       </section>
 
       <LiveGiving live={live} stats={stats.data} statsLoading={stats.isLoading} assets={quotes.assets} />
+      <LiveActivityFeed live={live} />
     </div>
   );
 }

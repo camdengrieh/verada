@@ -28,7 +28,7 @@ export interface LaunchStep {
 
 export const DEFAULT_LAUNCH_STEPS: LaunchStep[] = [
   { title: "Name it", body: "Pick a ticker and claim <label>.varada.eth. Your coin's site goes live on Swarm with it." },
-  { title: "Choose how it gives", body: "A cause focus, then a weekly pool holders vote on, or live donations that rotate charities." },
+  { title: "Choose how it gives", body: "A cause focus, then an epoch pool holders vote on, or live donations that rotate charities." },
   { title: "Launch", body: "Liquidity seeds on Uniswap. From the first trade, 90% of every fee goes to charity." },
 ];
 

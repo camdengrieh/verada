@@ -1,9 +1,9 @@
 import { decodeAbiParameters, encodeAbiParameters, type Hex } from "viem";
-import { EPOCH_LENGTH, epochStart } from "./epoch.js";
+import { epochEnd, epochStart, type EpochSchedule } from "./epoch.js";
 
 /**
  * Largest number of options a poll may have (`IVotingScheme.MAX_OPTIONS`, `EpochGovernor.MAX_OPTIONS`):
- * the hard ceiling of every ballot size. A token's weekly ballot may be smaller (`effectiveBallotSize`).
+ * the hard ceiling of every ballot size. A token's ballot may be smaller (`effectiveBallotSize`).
  */
 export const MAX_BALLOT_OPTIONS = 32;
 
@@ -19,7 +19,7 @@ export function isBallotSize(size: number): boolean {
 }
 
 /**
- * Ballot size of a token's next unprepared weekly epoch. Mirrors `EpochGovernor._sizeOf`: the token's
+ * Ballot size of a token's next unprepared epoch. Mirrors `EpochGovernor._sizeOf`: the token's
  * own choice (`ballotSizeChoiceOf`, 0 to follow the cap), at most the protocol cap (`ballotSizeCap`),
  * and at most the scheme's `MAX_OPTIONS` (32 for `ZamaVotingScheme`). A prepared epoch keeps the size
  * it was prepared with (`ballotSizeFor`).
@@ -90,13 +90,16 @@ export function toWeightWhole(votes: bigint): bigint {
  * epoch is the exception: its snapshot is set at registration (`LaunchSnapshotSet`), so read
  * `EpochGovernor.snapshotFor(token, epoch)` when the launch epoch matters.
  */
-export function epochSnapshot(epoch: bigint, zeroStart: bigint): bigint {
-  return epochStart(epoch, zeroStart) - 1n;
+export function epochSnapshot(epoch: bigint, schedule: EpochSchedule): bigint {
+  return epochStart(epoch, schedule) - 1n;
 }
 
-/** End of the epoch's voting window (exclusive): the start of the next epoch. */
-export function epochVotingEnd(epoch: bigint, zeroStart: bigint): bigint {
-  return epochStart(epoch, zeroStart) + EPOCH_LENGTH;
+/**
+ * End of the epoch's voting window (exclusive): the start of the next epoch. Ballots open at
+ * `votingOpensAt(epoch, schedule)` (see `epoch.ts`), the end of the epoch minus its voting window.
+ */
+export function epochVotingEnd(epoch: bigint, schedule: EpochSchedule): bigint {
+  return epochEnd(epoch, schedule);
 }
 
 /**

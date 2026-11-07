@@ -9,10 +9,11 @@ vi.mock("@varada/ui/components/varada/tx-toast", () => ({ txToast }));
 
 const readyStatus = vi.hoisted(() => ({ state: "ready" }));
 const wallet: { hash?: string; receipt?: { status: string }; error?: unknown } = {};
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: wallet.receipt, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({}),
   useWriteContract: () => ({ writeContractAsync: vi.fn(), data: wallet.hash, isPending: false, error: wallet.error ?? null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: wallet.receipt, error: null }),
 }));
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => envDefaults(),

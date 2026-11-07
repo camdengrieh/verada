@@ -1,6 +1,6 @@
 /**
- * Turning a finished week's fees into a donation: the planning shared by the publisher's keeper and
- * the web app's "Send this week's donation" card. Every step is permissionless on chain:
+ * Turning a finished epoch's fees into a donation: the planning shared by the publisher's keeper and
+ * the web app's "Send this epoch's donation" card. Every step is permissionless on chain:
  *
  *   EpochGovernor.closeEpoch -> (public decryption + ZamaVotingScheme.submitTally)
  *   -> EpochGovernor.finalizeEpoch(token, epoch, orgIds) -> FeeVault.settle(token, epoch)
@@ -91,12 +91,12 @@ export interface DonationState {
   epochStart: bigint;
   /** `EpochGovernor.epochStart(epoch + 1)`: when the epoch ended, seconds. */
   epochEnd: bigint;
-  /** `EpochGovernor.isRegistered`: false for live tokens (they have no weekly epochs). */
+  /** `EpochGovernor.isRegistered`: false for live tokens (they have no epochs). */
   registered: boolean;
   governor: EpochGovernorState;
   /** `tallyOf` on the epoch's scheme; read only when {@link epochNeedsTally}. */
   tally?: VoteTally;
-  /** `EpochGovernor.TALLY_GRACE`, seconds. */
+  /** `EpochGovernor.tallyGrace()` (owner-set), seconds. */
   tallyGrace: bigint;
   /** `EpochGovernor.defaultCause`: wins an epoch nobody voted in (zero: none set). */
   defaultCause: Hex;
@@ -116,7 +116,7 @@ export interface DonationState {
   settled: boolean;
   /** `FeeVault.causePoolOf(token, epoch)`: the epoch's cause pool not yet settled. */
   epochPool: bigint;
-  /** `FeeVault.SETTLE_GRACE`, seconds. */
+  /** `FeeVault.settleGrace()` (owner-set), seconds. */
   settleGrace: bigint;
   /** Simulated `FeeVault.settle`; read once the epoch is finalized and not settled. */
   settleCheck?: CallCheck;
@@ -145,7 +145,7 @@ export type WaitReason =
   | "fees-pending";
 
 export type BlockedReason =
-  /** Not a weekly token of this governor (live tokens, or a wrong address). */
+  /** Not a token of this governor (live tokens, or a wrong address). */
   | "not-registered"
   /** The fee vault does not know the token (a misconfigured vault address). */
   | "fee-vault-not-registered"
@@ -169,7 +169,7 @@ export type DonationStep =
       functionName: string;
       args: readonly unknown[];
       /**
-       * `"tally-timeout"`: a `finalizeEpoch` past `TALLY_GRACE` without a final tally. The votes are
+       * `"tally-timeout"`: a `finalizeEpoch` past `tallyGrace` without a final tally. The votes are
        * not counted and the default cause wins (`TallyTimeoutFallbackApplied`).
        */
       fallback?: "tally-timeout";
@@ -194,19 +194,19 @@ const ZERO32 = `0x${"0".repeat(64)}` as Hex;
 const isZero32 = (h: Hex) => /^0x0*$/.test(h);
 
 /**
- * Next step for one ended epoch of one weekly token, from chain state alone.
+ * Next step for one ended epoch of one token, from chain state alone.
  *
  * - Distributed: done ("donated").
  * - Not registered with the governor: blocked. The epoch still running: wait for its end.
  * - Not finalized: the governor step ({@link planEpochGovernor}). A close the scheme refused
- *   (`closeFailed`) is sent again. Once `TALLY_GRACE` has passed since the epoch's end without a
+ *   (`closeFailed`) is sent again. Once `tallyGrace` has passed since the epoch's end without a
  *   final tally (unclosed, close refused, or never decrypted), the governor discards the votes and
  *   applies its default cause, so the plan finalizes (`fallback: "tally-timeout"`) instead of
  *   closing or waiting longer. Finalizing with no winning vote needs an active default cause
  *   (blocked otherwise, `NoVotes`), and finalizing with ballots needs org ids matching the ballot
  *   commitment.
  * - Finalized, not settled: `settle` when its simulation passes. `FeesPending` waits until
- *   `SETTLE_GRACE` after the epoch's end. `NothingToSettle` means the epoch's pool is empty: done
+ *   `settleGrace` after the epoch's end. `NothingToSettle` means the epoch's pool is empty: done
  *   ("nothing-to-donate").
  * - Settled, not distributed: `distribute` when its simulation passes. `OrgNotActive` and
  *   `OrgAddressMismatch` are blocked (an owner or Endaoment must act), never retried as such.
@@ -382,6 +382,12 @@ export function createDonationReader(client: DonationReadClient, addrs: Donation
   const read = <T>(address: Address, abi: Abi, functionName: string, args: readonly unknown[] = []) =>
     client.readContract({ address, abi, functionName, args } as never) as Promise<T>;
   const gov = (fn: string, args: readonly unknown[] = []) => read<unknown>(eg, epochGovernorAbi as Abi, fn, args);
+  // The graces are owner-set getters now; a contract deployed before that has them as constants.
+  const graceOf = (current: () => Promise<bigint>, legacy: () => Promise<bigint>) =>
+    current().catch((err: unknown) => {
+      if (!isRevertError(err)) throw err;
+      return legacy();
+    });
   const check = async (address: Address, abi: Abi, functionName: string, args: readonly unknown[]): Promise<CallCheck> => {
     try {
       await client.simulateContract({ address, abi, functionName, args } as never);
@@ -431,7 +437,7 @@ export function createDonationReader(client: DonationReadClient, addrs: Donation
         gov("epochScheme", te) as Promise<Address>,
         gov("epochStart", [epoch]) as Promise<bigint>,
         gov("epochStart", [epoch + 1n]) as Promise<bigint>,
-        gov("TALLY_GRACE") as Promise<bigint>,
+        graceOf(() => gov("tallyGrace") as Promise<bigint>, () => gov("TALLY_GRACE") as Promise<bigint>),
         gov("defaultCause") as Promise<Hex>,
         gov("winningCause", te) as Promise<Hex>,
         gov("ballotCommitment", te) as Promise<readonly [Hex, number | bigint]>,
@@ -439,7 +445,7 @@ export function createDonationReader(client: DonationReadClient, addrs: Donation
         read<boolean>(fv, feeVaultAbi as Abi, "isRegistered", [token]),
         read<boolean>(fv, feeVaultAbi as Abi, "settled", te),
         read<bigint>(fv, feeVaultAbi as Abi, "causePoolOf", te),
-        read<bigint>(fv, feeVaultAbi as Abi, "SETTLE_GRACE"),
+        graceOf(() => read<bigint>(fv, feeVaultAbi as Abi, "settleGrace"), () => read<bigint>(fv, feeVaultAbi as Abi, "SETTLE_GRACE")),
         read<bigint>(dd, donationDistributorAbi as Abi, "pending", te),
         read<boolean>(dd, donationDistributorAbi as Abi, "distributed", te),
       ]);

@@ -22,8 +22,12 @@ import { AssetProvider } from "@varada/ui/lib/assets";
 - Add `transpilePackages: ["@varada/ui"]` in Next config (the package ships TypeScript source).
 - Wrap pages in `AssetProvider` with a resolver for site-relative paths (`assets/...`). The site is served
   under `/bzz/<ref>/`, bzz subdomains and ENS gateways, so components never build absolute URLs
-  themselves. In apps/web the resolver is `useRel()`.
-- Fonts are self-hosted by the app: link `assets/fonts/fonts.css` (see `apps/web/src/app/design/layout.tsx`).
+  themselves. In apps/web the resolver joins `siteBase()` to the path (see `components/app-shell.tsx`).
+- Fonts are self-hosted by the app: link `assets/fonts/fonts.css` and preload the woff2 files (see
+  `apps/web/src/app/layout.tsx`). The `/design` gallery renders inside the same shell.
+- Imports map to files through the package `exports`: `@varada/ui/components/<folder>/<name>` is
+  `src/components/<folder>/<name>.tsx`, `@varada/ui/lib/assets` is `src/lib/assets.tsx`. The root export
+  only has `cn` and the asset helpers.
 - Components are presentational. Data, links (`LinkComponent` props) and callbacks come from the app;
   nothing here fetches, reads the chain or loads third-party URLs.
 
@@ -32,7 +36,7 @@ import { AssetProvider } from "@varada/ui/lib/assets";
 | Folder | What's in it |
 |---|---|
 | `src/styles.css` | Tokens (shadcn names plus Varada ones), Tailwind v4 theme, `num` and `kicker` utilities, animations, an evening-paper dark variant (`.dark`) |
-| `src/components/ui/` | Primitives and overlays: button (with `effect` hovers), badge, card, divider (line, dashed, brush, ornament, labelled), input, field, select, checkbox, radio-group, switch, slider, toggle-group, tabs (underline, pill, brush, segmented, card, vertical; scrollable lists), tooltip (spring, cursor-follow, tap to open), info-tip (glossary "?"), rich-tooltip / FeeTooltip, avatar-tooltip-group, popover, hover-card, dropdown-menu, dialog, sheet, drawer (scaled background, snap points, paper), command, toaster, skeleton, progress, accordion, table, avatar, separator, scroll-area, kbd, icons |
+| `src/components/ui/` | Primitives and overlays: button (with `effect` hovers), badge, card, divider (line, dashed, brush, ornament, labelled), input, textarea, field, select, checkbox, radio-group, switch, slider, toggle-group, tabs (underline, pill, brush, segmented, card, vertical; scrollable lists), tooltip (spring, cursor-follow, tap to open), info-tip (glossary "?"), rich-tooltip / FeeTooltip, avatar-tooltip-group, popover, hover-card, dropdown-menu, dialog, sheet, drawer (scaled background, snap points, paper), command, toaster, skeleton, progress, accordion, table, avatar, separator, scroll-area, kbd, icons |
 | `src/components/data/` | Data and flow: data-table, stat-card, sparkline, price-chart, countdown, stepper, file-dropzone, copy-button, empty-state, activity-list |
 | `src/components/motion/` | marquee, number-ticker, step-transition, confetti, loading-screen / PageLoader, ink-button, text-reveal, flip-words, decrypt-text, ink-text, scroll-reveal / ScrollWordReveal, scroll-progress, tilt-card, spotlight-card, animated-beam, orbit, animated-list, ink-ripple, dock |
 | `src/components/mobile/` | bottom-tab-bar (raised Launch), mobile-header, mobile-search-sheet, swipe-row, mobile-trade-sheet, mobile-trades-sheet (trades and holders tabs), mobile-vote-sheet, mobile-pair-picker, filter-sheet, sticky-action-bar, token-carousel, pull-to-refresh |
@@ -74,3 +78,6 @@ Each component file starts with a comment naming its source (`Adapted from 21st.
 pnpm --filter @varada/ui typecheck
 pnpm --filter @varada/ui test
 ```
+
+Tests are vitest with jsdom, one file per area in `test/`. How the library fits the app, SDK and
+indexer: [`docs/OVERVIEW.md`](../../docs/OVERVIEW.md#varadaui).

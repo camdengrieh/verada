@@ -21,8 +21,21 @@ export interface PoolKey {
   hooks: Address;
 }
 
-/** Live state of a pool read from `StateView`. */
+/** Where a pool lives. A route may mix venues; v3 and v2 pools trade WETH, never native ETH. */
+export type SwapVenue = "v4" | "v3" | "v2";
+
+/**
+ * Live state of a pool. v4 pools come from `StateView`. A v3 pool (`venue` "v3") comes from `slot0` / `liquidity`
+ * and is described with a pool key whose `fee` is the v3 fee tier, `tickSpacing` 0 and no hooks; its `poolId` is
+ * the pool address in lower case. A v2 pair (`venue` "v2") is described as a constant-product pool: `liquidity`
+ * is sqrt(reserve0 * reserve1) and `sqrtPriceX96` the price of the reserves, `lpFee` 3000 (0.3%), so the same
+ * estimates and mid prices apply to every venue.
+ */
 export interface PoolState {
+  /** Default "v4". */
+  venue?: SwapVenue;
+  /** The pool / pair contract (v3 and v2 only). */
+  address?: Address;
   poolId: Hex;
   key: PoolKey;
   sqrtPriceX96: bigint;
@@ -41,6 +54,10 @@ export type RouteStep =
       kind: "pool";
       key: PoolKey;
       poolId: Hex;
+      /** Default "v4". */
+      venue?: SwapVenue;
+      /** The pool / pair contract (v3 and v2 only). */
+      address?: Address;
       zeroForOne: boolean;
       currencyIn: Address;
       currencyOut: Address;
@@ -118,4 +135,8 @@ export interface SwapEnvironment {
   stateView: Address;
   quoter: Address;
   universalRouter: Address;
+  v3Factory: Address;
+  v3Quoter: Address;
+  v2Factory: Address;
+  v2Router: Address;
 }

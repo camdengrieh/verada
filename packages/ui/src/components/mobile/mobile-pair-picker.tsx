@@ -11,6 +11,7 @@ import { Button } from "@varada/ui/components/ui/button";
 import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader } from "@varada/ui/components/ui/drawer";
 import { AssetKindBadge } from "@varada/ui/components/varada/asset-kind-badge";
 import type { ImageSource } from "@varada/ui/components/varada/shared";
+import { sortByDepth } from "@varada/ui/components/varada/quote-order";
 import { StockLogo, type QuoteKind } from "@varada/ui/components/varada/stock-logo";
 import { cn } from "@varada/ui/lib/utils";
 import { CONTAINED_SHEET, InlineSheet, sheetParts, type MobileSheetBaseProps } from "./sheet-shared";
@@ -25,12 +26,22 @@ export interface PairOption {
   /** Route-to-USDC depth as a 0–100 bar, with its label ("$48M deep"). */
   depthPct?: number;
   depthLabel?: string;
+  /** Route depth in USD; tiles are ordered by it, deepest first (falls back to `depthPct`). */
+  depthUsd?: number;
+  /** Marker on the tile: "thin" under the minimum depth, "cant-fill" with no route to USDC. */
+  fill?: "thin" | "cant-fill";
   /** A short caveat ("Market closed until 9:30 ET"). */
   note?: string;
   disabled?: boolean;
 }
 
 export type PairTab = "crypto" | "stocks";
+
+/** Deepest route first, ties by symbol; disabled or fill "cant-fill" options last. */
+export function orderPairOptions(list: readonly PairOption[]): PairOption[] {
+  const keyed = list.map((o) => ({ o, symbol: o.symbol, depthUsd: o.depthUsd ?? o.depthPct, routed: !o.disabled && o.fill !== "cant-fill" }));
+  return sortByDepth(keyed).map((k) => k.o);
+}
 
 export interface MobilePairPickerProps extends MobileSheetBaseProps {
   /** WETH, WBTC, USDC… */
@@ -79,7 +90,7 @@ export function MobilePairPicker({
   const [tab, setTab] = useState<PairTab>(defaultTab ?? (selected && stocks.includes(selected) ? "stocks" : "crypto"));
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
-  const filter = (list: readonly PairOption[]) => (q ? list.filter((o) => `${o.symbol} ${o.name}`.toLowerCase().includes(q)) : list);
+  const filter = (list: readonly PairOption[]) => orderPairOptions(q ? list.filter((o) => `${o.symbol} ${o.name}`.toLowerCase().includes(q)) : list);
   const lists: Record<PairTab, readonly PairOption[]> = { crypto: filter(crypto), stocks: filter(stocks) };
 
   const choose = (s: string) => {
@@ -181,7 +192,7 @@ function PairTile({ option: o }: { option: PairOption }) {
     <RadioGroup.Item
       value={o.symbol}
       disabled={o.disabled}
-      aria-label={[o.symbol, o.name, o.depthLabel, o.note].filter(Boolean).join(", ")}
+      aria-label={[o.symbol, o.name, o.depthLabel, o.fill === "thin" ? "thin" : o.fill === "cant-fill" ? "can't fill" : undefined, o.note].filter(Boolean).join(", ")}
       className={cn(
         "group relative flex min-h-32 min-w-0 flex-col items-start gap-1 rounded-[20px] border-2 border-line bg-paper-card p-3 text-left text-ink transition-colors",
         "hover:border-line-strong data-[state=checked]:border-ink data-[state=checked]:bg-sand/60",
@@ -205,6 +216,11 @@ function PairTile({ option: o }: { option: PairOption }) {
             <span className="block h-full rounded-full bg-sage" style={{ width: `${depth}%` }} />
           </span>
           {o.depthLabel ? <span className="num text-[11px] text-ink-muted">{o.depthLabel}</span> : null}
+        </span>
+      ) : null}
+      {o.fill ? (
+        <span aria-hidden="true" data-fill={o.fill} className={cn("text-[11px] font-semibold", o.fill === "thin" ? "text-ochre-ink" : "text-terracotta-strong")}>
+          {o.fill === "thin" ? "Thin" : "Can’t fill"}
         </span>
       ) : null}
       {o.note ? (

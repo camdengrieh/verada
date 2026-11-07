@@ -16,6 +16,7 @@ import {IVaradaFactory} from "../src/interfaces/IVaradaFactory.sol";
 import {IEndaomentOrgFundFactory} from "../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {CatalogPublish} from "../test/utils/CatalogFixture.sol";
 import {DeployLive} from "./DeployLive.s.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 /// @title SwapForkFixture
 /// @notice FORK-ONLY fixture for the swap engine's integration tests (`packages/sdk/test/swap.fork.test.ts`).
@@ -114,7 +115,8 @@ contract SwapForkFixture is DeployLive {
             label: label,
             logoRef: bytes32(0),
             categoryMask: CatalogPublish.CATEGORIES,
-            regionMask: CatalogPublish.REGIONS
+            regionMask: CatalogPublish.REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
     }
 

@@ -176,6 +176,7 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
     notices.push(
       <p key="route" className="m-0 text-[13px] text-ink-muted">
         Route: {quote.routeLabel}
+        {quote.venues && quote.venues.some((v) => v !== "v4") ? ` via Uniswap ${quote.venues.join(" + ")}` : ""}
         {quote.alternatives.length > 1 ? ` (best of ${quote.alternatives.length})` : ""}
       </p>,
     );
@@ -202,6 +203,13 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
     notices.push(
       <p key="err" role="alert" className="m-0 text-[13px] text-terracotta-strong">
         {swap.error.message}
+      </p>,
+    );
+  }
+  if (swap.phase === "error" && swap.error?.reason === "user-rejected") {
+    notices.push(
+      <p key="rejected" role="status" className="m-0 text-[13px] text-ink-soft">
+        Cancelled in your wallet. Nothing was swapped; press the button to try again.
       </p>,
     );
   }
@@ -270,7 +278,7 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
         slippage={slippagePct}
         onSlippageChange={setSlippagePct}
         priceImpact={quote?.best.priceImpactPct}
-        minReceived={quote ? `${formatDisplay(quote.amountOutMin, receiveAsset.decimals)} ${receiveAsset.symbol}` : undefined}
+        minReceived={quote ? formatDisplay(quote.amountOutMin, receiveAsset.decimals) : undefined}
         fee={formatPercent((quote?.fee.feeBps ?? 0) / 100)}
         sniperFee={sniper}
         causeAmount={causeValue(0.9)}
@@ -288,9 +296,9 @@ export function ConnectedTradePanel({ token: input, causeName = "the cause", cau
           {ladder.data && ladder.data.length > 0 ? <PriceImpactLadder steps={ladder.data} route={quote?.routeLabel} /> : null}
           <LiquidityPanel
             quote={{ symbol: token.quote.symbol, name: quoteName(token.quote), kind: assetKind(token.quote), description: `${assetKind(token.quote) === "crypto" ? "Wrapped ether" : "Tokenized asset"} · ${token.quote.decimals} decimals` }}
-            poolLiquidity={market?.tvlUsd != null ? formatUsd(market.tvlUsd) : market?.tvlQuote != null ? `${market.tvlQuote.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${token.quote.symbol}` : "—"}
+            poolLiquidity={market?.depthUsd != null ? formatUsd(market.depthUsd) : market?.depthQuote != null ? `${market.depthQuote.toLocaleString("en-US", { maximumFractionDigits: 4 })} ${token.quote.symbol}` : "—"}
             quotePrice={quoteUsd != null ? formatUsd(quoteUsd) : "—"}
-            routeDepth={depth.data ? `${formatPercent(depth.data.impactPct)} at ${formatUsd(depth.data.sizeUsd)}` : "—"}
+            routeDepth={depth.data ? (depth.data.impactPct === null ? `Can't fill ${formatUsd(depth.data.sizeUsd)}` : `${formatPercent(depth.data.impactPct)} at ${formatUsd(depth.data.sizeUsd)}`) : "—"}
             lpStatus="Locked forever"
             route={`Fees convert ${token.quote.symbol} to USDC before they go to the cause. Trades route through existing Uniswap v4 pools when you pay in another asset.`}
             warning={ondoInvolved && marketSession.session !== "open" ? true : undefined}

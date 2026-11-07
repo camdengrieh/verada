@@ -18,6 +18,7 @@ import {VaradaToken} from "../../src/VaradaToken.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "../../src/interfaces/IFeeVault.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 import {ILpLocker} from "../../src/interfaces/ILpLocker.sol";
 import {IQuoteRegistry} from "../../src/interfaces/IQuoteRegistry.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
@@ -122,7 +123,7 @@ contract LiveFactoryTest is LiveFactoryBase {
 
         vm.expectEmit(true, true, false, true, address(vault));
         emit ILiveDonationVault.LiveTokenRegistered(
-            predicted, 25e6, CAUSE_B, RotationPeriod.TwelveHours
+            predicted, 25e6, CAUSE_B, RotationPeriod.TwelveHours, DonationAsset.Usdc
         );
         vm.expectEmit(true, true, false, true, address(factory));
         emit IVaradaFactory.TokenCreated(
@@ -152,7 +153,7 @@ contract LiveFactoryTest is LiveFactoryBase {
         assertEq(hook.quoteOf(token), address(quote));
 
         // Vault and governor: threshold, initial cause, period, anchored at launch.
-        (bool registered, uint96 threshold) = vault.configOf(token);
+        (bool registered, uint96 threshold,) = vault.configOf(token);
         assertTrue(registered);
         assertEq(threshold, 25e6);
         assertTrue(rgov.isRegistered(token));

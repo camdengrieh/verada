@@ -19,9 +19,17 @@ const bigint = (v: unknown): bigint => (typeof v === "string" && /^\d+$/.test(v)
 const seconds = (v: unknown): number | null => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : typeof v === "number" ? v : null);
 const text = (v: unknown): string | null => (typeof v === "string" && v !== "" ? v : null);
 
-/** USDC base units to dollars. */
-export function usdcToUsd(amount: bigint): number {
-  return Number(amount / 10n ** BigInt(USDC_DECIMALS)) + Number(amount % 10n ** BigInt(USDC_DECIMALS)) / 10 ** USDC_DECIMALS;
+/** How a token's money amounts convert to dollars: its donation asset's decimals and USD per whole unit. */
+export interface DonationUnit {
+  decimals: number;
+  usd: number;
+}
+export const USDC_UNIT: DonationUnit = { decimals: USDC_DECIMALS, usd: 1 };
+
+/** Donation-asset base units (USDC by default) to dollars. */
+export function usdcToUsd(amount: bigint, unit: DonationUnit = USDC_UNIT): number {
+  const d = 10n ** BigInt(unit.decimals);
+  return (Number(amount / d) + Number(amount % d) / Number(d)) * unit.usd;
 }
 
 /* ---------- cause names ---------- */
@@ -194,12 +202,14 @@ export function buildImpact(
   txUrl: (hash: string) => string,
   /** Per-cause totals that replace the sums over `rows` (a live token's credited amounts, which cover more than the recent donations). */
   totals?: readonly { causeId: string; amount: bigint }[],
+  /** The token's donation asset as a dollar unit (USDC by default). */
+  unit: DonationUnit = USDC_UNIT,
 ): Impact {
   const byCategory = new Map<CauseName, { amount: number; charities: Set<string> }>();
   const byOrg = new Map<string, { name: string; cause: CauseName; amount: number }>();
   let total = 0;
   for (const r of totals ?? rows) {
-    const usd = usdcToUsd(r.amount);
+    const usd = usdcToUsd(r.amount, unit);
     total += usd;
     const m = meta(r.causeId.toLowerCase());
     const c = byCategory.get(m.cause) ?? { amount: 0, charities: new Set<string>() };
@@ -219,7 +229,7 @@ export function buildImpact(
       .map(([id, v]) => ({ id, name: v.name, cause: v.cause, raised: v.amount, moved: 0 })),
     timeline: sorted.map((r) => {
       const m = meta(r.causeId.toLowerCase());
-      return { id: r.id, org: m.name, amount: usdcToUsd(r.amount), cause: m.cause, at: r.timestamp * 1000, coin: `$${symbol}`, via: r.via, txHref: r.txHash ? txUrl(r.txHash) : undefined };
+      return { id: r.id, org: m.name, amount: usdcToUsd(r.amount, unit), cause: m.cause, at: r.timestamp * 1000, coin: `$${symbol}`, via: r.via, txHref: r.txHash ? txUrl(r.txHash) : undefined };
     }),
   };
 }

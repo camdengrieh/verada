@@ -32,13 +32,13 @@ contract TakeoverGovernor is ITakeoverGovernor, IBallotGovernor, Ownable2Step {
     /// @inheritdoc ITakeoverGovernor
     uint8 public constant FOR = 1;
 
-    uint32 public constant MIN_PERIOD = 1 days;
+    uint32 public constant MIN_PERIOD = 5 minutes;
     uint32 public constant MAX_PERIOD = 30 days;
     /// @notice Shortest execution window: leaves time for the tally's decryption pipeline.
-    uint32 public constant MIN_EXECUTION_WINDOW = 2 days;
+    uint32 public constant MIN_EXECUTION_WINDOW = 5 minutes;
     uint32 public constant MAX_COOLDOWN = 90 days;
     uint32 public constant MAX_TOKEN_AGE = 90 days;
-    uint32 public constant MIN_LOOKBACK = 1 days;
+    uint32 public constant MIN_LOOKBACK = 5 minutes;
     uint32 public constant MAX_LOOKBACK = 90 days;
     uint16 public constant MIN_QUORUM_BPS = 50;
     uint16 public constant MAX_QUORUM_BPS = 5000;

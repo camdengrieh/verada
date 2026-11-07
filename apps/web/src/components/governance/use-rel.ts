@@ -2,14 +2,20 @@
 
 import { useEffect, useState } from "react";
 import { siteBase } from "@/lib/base";
+import { useSiteRoot } from "@/lib/site-root";
 
 /**
- * Link builder from the site base, read from the real location once mounted (a component rendered
- * inside a page cannot see the layout segments `useRel` relies on, so it would build the wrong
- * prefix). Works under /bzz/<hash>/, bzz subdomains and ENS gateways, at any page depth.
+ * Link builder from the site base. Inside the app shell the base comes from the route depth, so the
+ * prerendered HTML already carries working hrefs at any depth. Without a shell (tests, isolated
+ * renders) it starts at "./" and is read from the real location once mounted. Works under
+ * /bzz/<hash>/, bzz subdomains and ENS gateways.
  */
 export function useSiteRel(): (path: string) => string {
+  const root = useSiteRoot();
   const [base, setBase] = useState("./");
-  useEffect(() => setBase(siteBase()), []);
-  return (path) => `${base}${path.replace(/^\//, "")}`;
+  useEffect(() => {
+    if (root === null) setBase(siteBase());
+  }, [root]);
+  const prefix = root ?? base;
+  return (path) => `${prefix}${path.replace(/^\//, "")}`;
 }

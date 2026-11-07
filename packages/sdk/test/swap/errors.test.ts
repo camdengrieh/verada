@@ -23,6 +23,12 @@ describe("error selectors", () => {
 });
 
 describe("mapSwapError", () => {
+  it("recognises a token balance shortfall by selector and by message", () => {
+    expect(mapSwapError({ message: "reverted", data: `0xe450d38c${"00".repeat(96)}` }).reason).toBe("insufficient-balance");
+    expect(mapSwapError(new Error("ERC20: transfer amount exceeds balance")).reason).toBe("insufficient-balance");
+    expect(toFunctionSelector("function ERC20InsufficientBalance(address,uint256,uint256)")).toBe("0xe450d38c");
+  });
+
   it("recognises wallet rejections", () => {
     expect(mapSwapError({ code: 4001, message: "x" }).reason).toBe("user-rejected");
     expect(mapSwapError(new Error("User rejected the request.")).reason).toBe("user-rejected");

@@ -35,6 +35,7 @@ import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaoment
 import {MockVotingScheme} from "../mocks/GovernanceMocks.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
 import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 interface IWETH is IERC20 {
     function deposit() external payable;
@@ -226,7 +227,8 @@ contract LaunchForkTest is BallotLog, Deploy {
             label: label,
             logoRef: bytes32(uint256(0xabc)),
             categoryMask: CatalogPublish.CATEGORIES,
-            regionMask: CatalogPublish.REGIONS
+            regionMask: CatalogPublish.REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
         vm.prank(creator);
         (address tokenAddr, uint256 lpTokenId) = VaradaFactory(d.factory).deployToken(p);

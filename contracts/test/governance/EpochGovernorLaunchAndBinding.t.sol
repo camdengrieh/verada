@@ -247,7 +247,7 @@ contract EpochGovernorLaunchAndBindingTest is BallotLog {
         vm.prank(factory);
         gov.registerToken(address(t));
 
-        assertEq(gov.LAUNCH_SNAPSHOT_DELAY(), 1 days);
+        assertEq(gov.launchSnapshotDelay(), 1 days);
         assertLt(gov.snapshotOf(1), block.timestamp, "regular snapshot predates the token");
         assertEq(gov.launchSnapshotOf(address(t)), block.timestamp + 1 days);
         assertEq(gov.snapshotFor(address(t), 1), block.timestamp + 1 days);

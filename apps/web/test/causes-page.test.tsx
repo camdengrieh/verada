@@ -19,7 +19,6 @@ vi.mock("@/components/providers", () => ({
   useDeps: () => ({ indexer: new IndexerClient(["https://idx.example"], { fetchImpl: fetchMock as unknown as typeof fetch }), chain: () => { throw new Error("unused"); } }),
   useAppConfig: () => ({ ensParentName: "varada.eth" }),
 }));
-vi.mock("@/components/nav", () => ({ useRel: () => (p: string) => `./${p}` }));
 
 const json = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
 const org = (i: number, over = {}) => ({ orgId: `0x${i}`, causeId: `0xca${i}`, ein: null, name: `Org ${i}`, country: "KEN", state: null, nteeCode: null, categories: ["hunger"], regions: ["africa"], ...over });
@@ -65,8 +64,8 @@ beforeEach(() => {
 describe("leaderboardEntries", () => {
   it("names causes from the catalogue and converts USDC to dollars", () => {
     const [a, b] = leaderboardEntries([
-      { rank: 1, causeId: "0xca1", donated: 12_500_000n, donations: 1, tokens: 1, org: { orgId: "0x1", name: "Food Bank", ein: null, country: null, categories: ["homelessness"], regions: [] } },
-      { rank: 2, causeId: "0x1234567890abcdef1234", donated: 1n, donations: 3, tokens: 2, org: null },
+      { rank: 1, causeId: "0xca1", donated: 12_500_000n, donatedEth: 0n, donations: 1, tokens: 1, org: { orgId: "0x1", name: "Food Bank", ein: null, country: null, categories: ["homelessness"], regions: [] } },
+      { rank: 2, causeId: "0x1234567890abcdef1234", donated: 1n, donatedEth: 0n, donations: 3, tokens: 2, org: null },
     ]);
     expect(a).toMatchObject({ name: "Food Bank", raised: 12.5, cause: "homeless", sub: "1 gift from 1 coin" });
     expect(b!.name).toMatch(/^Cause 0x1234/);
@@ -115,6 +114,15 @@ describe("CausesExplorer", () => {
     expect(within(grid).getByRole("button", { name: /Hunger & famine/ })).toHaveAttribute("aria-pressed", "true");
   });
 
+  it("links each category tile to its curator agent from the site root, not the page directory", async () => {
+    window.history.replaceState(null, "", "/bzz/abc123/causes/");
+    wrap(<CausesExplorer />);
+    const grid = await screen.findByRole("list", { name: "Cause categories" });
+    const link = within(grid).getAllByRole("link", { name: /Curator agent/ })[0]!;
+    expect(link.getAttribute("href")).toMatch(/^\/bzz\/abc123\/agent\/[a-z-]+\/$/);
+    expect(link.getAttribute("href")).not.toContain("/causes/");
+  });
+
   it("says so when the catalogue is not loaded (503)", async () => {
     fetchMock.mockImplementation(async (url: string) => (new URL(url).pathname.startsWith("/api/catalog") ? json({ error: "catalog_unavailable" }, 503) : route(url)));
     wrap(<CausesExplorer />);
@@ -128,5 +136,42 @@ describe("CatalogBrowser", () => {
     wrap(<CatalogBrowser onSelect={onSelect} selectLabel="Pin" />);
     fireEvent.click(await screen.findByRole("button", { name: "Pin Org 0" }));
     expect(onSelect).toHaveBeenCalledWith(expect.objectContaining({ name: "Org 0" }));
+  });
+
+  it("offers the cause and region pickers as keyboard-reachable chips inside the token's focus", async () => {
+    wrap(<CatalogBrowser onSelect={() => {}} within={{ categories: ["hunger", "clean-water"], regions: ["africa", "asia"] }} />);
+    const causes = screen.getByRole("group", { name: /Causes/ });
+    expect(within(causes).getAllByRole("checkbox").map((c) => (c as HTMLInputElement).labels?.[0]?.textContent)).toEqual(["Hunger & famine", "Clean water & sanitation"]);
+    expect(causes).toHaveTextContent("none chosen: any");
+    // Painted art next to the label, hidden from assistive tech.
+    expect(causes.querySelectorAll("img[aria-hidden='true']")).toHaveLength(2);
+    fireEvent.click(within(causes).getByRole("checkbox", { name: "Hunger & famine" }));
+    expect(within(causes).getByRole("checkbox", { name: "Hunger & famine" })).toBeChecked();
+    expect(causes).toHaveTextContent("1 chosen");
+    await waitFor(() => expect(fetchMock.mock.calls.some(([u]) => String(u).includes("categories=hunger&"))).toBe(true));
+    expect(within(screen.getByRole("group", { name: /Regions/ })).getAllByRole("checkbox")).toHaveLength(2);
+  });
+
+  it("marks chosen organizations and disables the rest once the limit is reached", async () => {
+    const onSelect = vi.fn();
+    wrap(<CatalogBrowser onSelect={onSelect} selectLabel="Pin" selectedLabel="Pinned" selectedIds={["0xCA0"]} full="All 1 pin slots are used." />);
+    const note = await screen.findByRole("note");
+    expect(note).toHaveTextContent("All 1 pin slots are used.");
+    await screen.findByText("Org 1");
+    const cards = document.querySelectorAll("[data-slot='org-card']");
+    expect(cards[0]).toHaveAttribute("data-selected", "true");
+    expect(within(cards[0] as HTMLElement).getByText("Pinned")).toBeInTheDocument();
+    expect(within(cards[0] as HTMLElement).queryByRole("button")).toBeNull();
+    const other = screen.getByRole("button", { name: "Pin Org 1" });
+    expect(other).toBeDisabled();
+    expect(other).toHaveAccessibleDescription("All 1 pin slots are used.");
+    fireEvent.click(other);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it("keeps the buttons live while there is room", async () => {
+    wrap(<CatalogBrowser onSelect={() => {}} selectLabel="Pin" selectedIds={[]} />);
+    expect(await screen.findByRole("button", { name: "Pin Org 2" })).toBeEnabled();
+    expect(screen.queryByRole("note")).toBeNull();
   });
 });

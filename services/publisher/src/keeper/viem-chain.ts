@@ -23,6 +23,7 @@ import {
   createBallotReader,
   createRoundReader,
   PERIOD_PROPOSAL_STATES,
+  readEpochWindow,
   ROUND_STATUSES,
   roundCall,
 } from "@varada/sdk";
@@ -149,6 +150,15 @@ export function createViemChain(opts: ViemChainOptions): {
 
   const reader: ChainReader = {
     currentEpoch: () => read<bigint>(eg, epochGovernorAbi, "currentEpoch"),
+    async timing() {
+      const [block, window, tallyGrace, settleGrace] = await Promise.all([
+        publicClient.getBlock({ blockTag: "latest" }),
+        readEpochWindow(publicClient, eg),
+        read<bigint>(eg, epochGovernorAbi, "tallyGrace"),
+        opts.feeVault ? read<bigint>(opts.feeVault, feeVaultAbi, "settleGrace") : Promise.resolve(undefined),
+      ]);
+      return { now: block.timestamp, window, tallyGrace, settleGrace };
+    },
     epochStart: (epoch) => read<bigint>(eg, epochGovernorAbi, "epochStart", [epoch]),
     isRegistered: (token) => read<boolean>(eg, epochGovernorAbi, "isRegistered", [token]),
     async epoch(token, epoch) {

@@ -15,6 +15,8 @@ import type { BallotOptionData, BallotSource } from "@varada/ui/components/varad
 import { CauseIcon, CAUSE_SHORT_LABELS } from "@varada/ui/components/varada/cause-icon";
 import { VoteFlowDialog, type VoteFlowState } from "@varada/ui/components/varada/vote-flow-dialog";
 import { useCatalogNames } from "@/components/catalog-browser";
+import { EpochPhaseStrip } from "@/components/epoch-phase";
+import { useNowSeconds } from "@/components/governance/hooks";
 import { OpenBallot } from "@/components/open-ballot";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
 import { useCastBallot } from "@/components/use-cast-ballot";
@@ -22,9 +24,9 @@ import { errorText, formatTime, TxStatus } from "@/components/use-tx";
 import { createAccountClient } from "@/lib/account-reads";
 import { loadCauses, loadEpochView } from "@/lib/data";
 import type { CatalogOrg, CauseSummary, EpochDetail, OptionSource, TokenDetail } from "@/lib/indexer";
+import { timingOf, timingPhase } from "@/lib/epoch-timing";
 import { ballotOptions } from "@/lib/profile";
 import { causeNameOfOrg } from "@/lib/token-data";
-import { untilText } from "@/lib/token-view";
 
 export function useCauses() {
   const deps = useDeps();
@@ -149,6 +151,10 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
   const view = useEpochView(token, openedHere);
   const epoch = view.data?.epoch;
   const ed = view.data?.detail ?? null;
+  // Trading until `votingOpensAt` (the governor refuses ballots with VotingNotOpen), then voting until the end.
+  const now = useNowSeconds(1_000);
+  const timing = timingOf(ed);
+  const phase = timing ? timingPhase(timing, now) : null;
   const { options, frozen } = ballotOptions({
     prepared: Boolean(ed?.prepared || ed?.poll?.opened),
     epochOptions: ed?.options ?? [],
@@ -219,11 +225,10 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
 
   const counts = ed?.poll?.isFinal ? ed.poll.counts : null;
   const leader = counts ? argmax(counts.map((c) => BigInt(c))) : -1;
-  const voteOpen = frozen && options.length > 1 && !ed?.poll?.closed && !mine.data?.voted;
+  const voteOpen = frozen && options.length > 1 && !ed?.poll?.closed && !mine.data?.voted && phase !== "trading" && phase !== "ended";
   // The hold scan runs ahead of encryption, in the same "prepare" step.
   const flow: VoteFlowState = ballot.phase === "encrypting" || ballot.phase === "scanning" ? "encrypting" : ballot.phase === "signing" ? "wallet" : ballot.phase === "sent" ? "sent" : ballot.phase === "error" ? "error" : "confirm";
   const chosen = index !== null ? ballotData[index] : undefined;
-  const closesIn = ed?.end !== undefined && !ed.poll?.closed ? untilText(ed.end, Date.now()) : "";
 
   return (
     <section aria-label="Current epoch" className="flex flex-col gap-4">
@@ -249,12 +254,12 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
         {view.data ? (
           <>
             {view.data.source === "chain" ? <p role="note" className="m-0 text-sm text-ink-muted">Epoch read directly from the chain.</p> : null}
+            {timing ? <EpochPhaseStrip timing={timing} epoch={epoch} onChange={() => void view.refetch()} /> : null}
             <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
               <div>
                 <dt className="text-ink-muted">Voting window</dt>
                 <dd className="num m-0">
-                  {formatTime(ed?.start)} to {formatTime(ed?.end)}
-                  {closesIn ? <span className="text-ink-muted"> (closes in {closesIn})</span> : null}
+                  {formatTime(timing?.votingOpensAt)} to {formatTime(timing?.end)}
                 </dd>
               </div>
               <div>
@@ -284,7 +289,7 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
               <p role="note" className="m-0 text-sm text-ink-soft">
                 This epoch&apos;s ballot is not prepared yet. {options.length > 0 ? "The pinned causes below lead it; " : ""}up to{" "}
                 {detail.ballotSize?.size ?? MAX_BALLOT_OPTIONS} options are filled from the curator agents&apos; picks and then in rotation from the token&apos;s focus pool
-                when it is prepared, and voting opens then.
+                when it is prepared{timing ? `. Ballots are accepted from ${formatTime(timing.votingOpensAt)}` : ", and voting opens then"}.
               </p>
             ) : null}
             {frozen && options.length === 0 && ed?.ballotUnavailable ? (
@@ -320,6 +325,12 @@ export function EpochPanel({ token, detail }: { token: Address; detail: TokenDet
             </p>
           ) : null}
           {!frozen && view.data && epoch !== undefined ? <OpenBallot token={token} epoch={epoch} onOpened={markOpened} /> : null}
+          {frozen && phase === "trading" && timing ? (
+            <p role="status" className="m-0 text-sm text-ink-soft">
+              Voting is not open yet, so ballots are refused for now. It opens at {formatTime(timing.votingOpensAt)}; until then holders trade.
+            </p>
+          ) : null}
+          {frozen && phase === "ended" ? <p role="status" className="m-0 text-sm text-ink-soft">Voting has closed for this epoch.</p> : null}
           {voteOpen ? (
             <form onSubmit={onVote} aria-label="Vote" className="flex flex-col gap-3">
               <BallotList

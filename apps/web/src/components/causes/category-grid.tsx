@@ -68,7 +68,7 @@ export function CategoryGrid({
                 </span>
               </button>
               {agent && agentHref ? (
-                <a href={agentHref(agent)} className="mx-3 mb-3 text-[13px] font-semibold text-ink-soft underline-offset-4 hover:underline">
+                <a href={agentHref(agent)} className="mx-3 mb-1 inline-flex min-h-11 items-center self-start text-[13px] font-semibold text-ink-soft underline-offset-4 hover:underline">
                   Curator agent
                   <span className="sr-only"> for {c.label}</span>
                 </a>

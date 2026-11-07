@@ -7,6 +7,15 @@ import { envDefaults } from "@/lib/config";
 const res = (body: unknown, status = 200) => ({ ok: status < 400, status, json: async () => body });
 const F = (fn: unknown) => fn as typeof fetch;
 
+describe("IndexerClient.catalogPool", () => {
+  it("reads the pool size, and treats a reply without one as unknown rather than empty", async () => {
+    const ok = new IndexerClient(["https://a.test"], { fetchImpl: F(vi.fn(async () => res({ poolSize: 0, buckets: [] }))) });
+    expect(await ok.catalogPool([], [])).toBe(0);
+    const odd = new IndexerClient(["https://a.test"], { fetchImpl: F(vi.fn(async () => res({ buckets: [] }))) });
+    expect(await odd.catalogPool(["hunger"], [])).toBeNull();
+  });
+});
+
 describe("IndexerClient", () => {
   it("fails over on network errors and 5xx, then sticks to the working URL", async () => {
     const fn = vi.fn(async (url: string) => {
@@ -174,6 +183,21 @@ describe("profile, epoch and takeover routes", () => {
     expect(at({ cap: 32, choice: 0, size: 1 })).toBeNull();
     expect(at(undefined)).toBeNull();
     expect(toEpochDetail({ epoch: "2", prepared: true, ballotSize: 8 })?.ballotSize).toBe(8);
+  });
+
+  it("parses the epoch schedule fields and leaves them undefined from an older indexer", async () => {
+    const { toEpochDetail } = await import("@/lib/indexer");
+    expect(toEpochDetail({ epoch: "7", start: 1000, end: 3700, votingOpensAt: 2800, length: 2700, votingWindow: 900, holdWindow: 2700 })).toMatchObject({
+      start: 1000,
+      end: 3700,
+      votingOpensAt: 2800,
+      length: 2700,
+      votingWindow: 900,
+      holdWindow: 2700,
+    });
+    expect(toEpochDetail({ epoch: "7", start: 1000, end: 3700 })).toMatchObject({ votingOpensAt: undefined, length: undefined });
+    // The indexer sends big values as strings.
+    expect(toEpochDetail({ epoch: "7", votingOpensAt: "2800" })?.votingOpensAt).toBe(2800);
   });
 
   it("tolerates epochs without a poll and normalizes takeover states", async () => {

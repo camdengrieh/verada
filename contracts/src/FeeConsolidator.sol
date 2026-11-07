@@ -19,14 +19,16 @@ import {PoolId, PoolIdLibrary} from "v4-core/types/PoolId.sol";
 import {PoolKey} from "v4-core/types/PoolKey.sol";
 import {SwapParams} from "v4-core/types/PoolOperation.sol";
 
+import {DonationAsset} from "./interfaces/IDonationAsset.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
 import {IQuoteRegistry} from "./interfaces/IQuoteRegistry.sol";
-import {IVaradaHook} from "./interfaces/IVaradaHook.sol";
+import {V3RouteLib} from "./libraries/V3RouteLib.sol";
 
 interface IConsolidatorRegistry is IQuoteRegistry {
     function routeOf(address asset) external view returns (PoolKey[] memory);
+    function routeToOf(address asset, DonationAsset da) external view returns (PoolKey[] memory);
     function settlementAsset() external view returns (address);
 }
 
@@ -34,10 +36,17 @@ interface IHookOracle {
     function twapTick(address token, uint32 window)
         external
         view
-        returns (bool ok, int24 twapTick, uint32 span);
+        returns (bool ok, int24 twapTick);
+}
+
+/// @dev `IVaradaHook.feeConfig` read as its first word only (`baseFeeBps`), which keeps the
+///      returndata decoding small; the call and selector are the same.
+interface IHookBaseFee {
+    function feeConfig(address token) external view returns (uint24 baseFeeBps);
 }
 
 interface IWETH {
+    function deposit() external payable;
     function withdraw(uint256 amount) external;
 }
 
@@ -120,15 +129,15 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         uint24 last;
     }
 
-    uint256 public constant BPS = 10_000;
+    uint256 internal constant BPS = 10_000;
     /// @notice Hard ceiling for `maxSlippageBps`.
-    uint256 public constant MAX_SLIPPAGE_CEILING_BPS = 2000;
+    uint256 internal constant MAX_SLIPPAGE_CEILING_BPS = 2000;
     /// @notice Highest pool fee a hop may charge.
-    uint256 public constant MAX_HOP_FEE_BPS = 1000;
+    uint256 internal constant MAX_HOP_FEE_BPS = 1000;
     /// @notice TWAP window used for the token's own pool.
-    uint32 public constant TWAP_WINDOW = 30 minutes;
+    uint32 internal constant TWAP_WINDOW = 30 minutes;
     /// @notice Time over which a reference moves fully to spot after a successful hop.
-    uint256 public constant REFERENCE_WINDOW = 1 days;
+    uint256 internal constant REFERENCE_WINDOW = 1 days;
     /// @notice Initial in-swap deviation bound, in ticks (about 3%).
     uint256 public constant DEFAULT_IN_SWAP_DEVIATION_TICKS = 300;
     /// @notice Initial in-swap slippage bound, in basis points.
@@ -211,6 +220,11 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     error AmountExceedsHeld(uint256 amount, uint256 held);
     error InvalidDeviation(uint256 ticks);
     error InvalidDrift(uint256 ticks);
+    error V3Unsupported();
+
+    function _checkSource() private view {
+        if (!isSource[msg.sender]) revert NotAuthorized();
+    }
 
     modifier onlySelf() {
         if (msg.sender != address(this)) revert NotAuthorized();
@@ -233,9 +247,11 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         if (maxSlippageBps_ > MAX_SLIPPAGE_CEILING_BPS) revert InvalidSlippage(maxSlippageBps_);
         if (maxDeviationTicks_ > MAX_TICK_SPAN) revert InvalidDeviation(maxDeviationTicks_);
         address settlement = vault_.settlementAsset();
-        if (settlement == address(0) || quoteRegistry_.settlementAsset() != settlement) {
-            revert SettlementMismatch();
-        }
+        if (
+            settlement == address(0) || quoteRegistry_.settlementAsset() != settlement
+                || quoteRegistry_.donationToken(DonationAsset.Usdc) != settlement
+                || quoteRegistry_.donationToken(DonationAsset.Eth) != weth_
+        ) revert SettlementMismatch();
         IEpochGovernor governor_ = vault_.governor();
         if (address(governor_) == address(0)) revert ZeroAddress();
         poolManager = poolManager_;
@@ -320,17 +336,18 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     function seedReferences(PoolKey[] calldata keys) external onlyOwner {
         for (uint256 i; i < keys.length; ++i) {
             PoolId id = keys[i].toId();
-            (uint160 sqrtPriceX96, int24 tick,,) = poolManager.getSlot0(id);
+            (uint160 sqrtPriceX96, int24 tick) = _spot(keys[i], id);
             if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
-            references[id] =
-                Reference(tick, uint40(block.timestamp), true, tick, uint40(block.timestamp));
-            emit ReferenceSet(id, tick);
+            _setReference(id, tick);
         }
     }
 
     /// @notice Sets a pool reference explicitly (for example from an external price).
     function setReference(PoolKey calldata key, int24 tick) external onlyOwner {
-        PoolId id = key.toId();
+        _setReference(key.toId(), tick);
+    }
+
+    function _setReference(PoolId id, int24 tick) private {
         references[id] =
             Reference(tick, uint40(block.timestamp), true, tick, uint40(block.timestamp));
         emit ReferenceSet(id, tick);
@@ -343,7 +360,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     function syncReference(PoolKey calldata key) external nonReentrant returns (int24 tick) {
         PoolId id = key.toId();
         if (!references[id].set) revert ReferenceNotSet(id);
-        (uint160 sqrtPriceX96, int24 spot,,) = poolManager.getSlot0(id);
+        (uint160 sqrtPriceX96, int24 spot) = _spot(key, id);
         if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
         _moveReference(id, spot);
         tick = references[id].tick;
@@ -372,18 +389,13 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         address quote = c0 == token ? c1 : c0;
         if (c0 != token && c1 != token) revert InvalidCurrency(token, token);
         if (quote == settlementAsset || token == settlementAsset) revert QuoteNotRoutable(quote);
-        if (!quoteRegistry.isAllowed(quote) || quoteRegistry.routeOf(quote).length == 0) {
-            revert QuoteNotRoutable(quote);
-        }
+        if (
+            !quoteRegistry.isAllowed(quote)
+                || !quoteRegistry.hasRouteTo(quote, vault.donationAssetOf(token))
+        ) revert QuoteNotRoutable(quote);
         _poolKeys[token] = key;
         quoteOf[token] = quote;
         emit PoolRegistered(token, quote, key.toId());
-    }
-
-    /// @notice The pool key registered for `token`.
-    function poolKeyOf(address token) external view returns (PoolKey memory) {
-        if (quoteOf[token] == address(0)) revert UnknownToken(token);
-        return _poolKeys[token];
     }
 
     // ------------------------------------------------------------------ consolidation
@@ -490,7 +502,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
 
     /// @dev Checks a delivery and books it as owed. Returns false for a zero amount.
     function _receive(address token, address currency, uint256 amount) private returns (bool) {
-        if (!isSource[msg.sender]) revert NotAuthorized();
+        _checkSource();
         address quote = quoteOf[token];
         if (quote == address(0)) revert UnknownToken(token);
         if (currency != token && currency != quote) revert InvalidCurrency(token, currency);
@@ -624,7 +636,12 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     {
         if (!heldThrough(token, currency, epoch)) return true;
         if (!locked) return false;
-        uint256 amount = _holdings[token][currency].total;
+        return _tryExecute(token, currency, _holdings[token][currency].total);
+    }
+
+    /// @dev Runs `execute` on this contract and reports whether it succeeded; a failure is
+    ///      logged with its reason and never reverts.
+    function _tryExecute(address token, address currency, uint256 amount) private returns (bool) {
         try this.execute(token, currency, amount) returns (uint256) {
             return true;
         } catch (bytes memory reason) {
@@ -642,10 +659,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
             );
             return;
         }
-        try this.execute(token, currency, amount) returns (uint256) {}
-        catch (bytes memory reason) {
-            emit ConsolidationFailed(token, currency, amount, reason);
-        }
+        _tryExecute(token, currency, amount);
     }
 
     /// @dev Swaps `amount` of held `currency` and credits the output to the accrual epochs of
@@ -660,11 +674,18 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         (uint256[] memory epochs, uint256[] memory parts) = _release(token, currency, amount);
 
         // `currency` is the token or its quote asset, never the settlement asset itself.
-        bytes memory result = poolManager.unlock(abi.encode(token, currency, amount));
-        out = abi.decode(result, (uint256));
+        address target = _targetOf(token);
+        if (currency == target) {
+            // A WETH-quoted token whose donation asset is ETH: nothing to convert.
+            out = amount;
+        } else {
+            bytes memory result =
+                poolManager.unlock(abi.encode(token, currency, amount, address(this)));
+            out = abi.decode(result, (uint256));
+        }
 
         if (out != 0) {
-            IERC20(settlementAsset).safeTransfer(address(vault), out);
+            IERC20(target).safeTransfer(address(vault), out);
             // Each part becomes its share of the output; the last one takes the remainder.
             uint256 n = parts.length;
             uint256 left = out;
@@ -696,24 +717,43 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         nonReentrant
         returns (uint256 out)
     {
-        if (!isSource[msg.sender]) revert NotAuthorized();
+        return _convertClaims(currency, amount, to, inSwap, DonationAsset.Usdc);
+    }
+
+    /// @inheritdoc IFeeConsolidator
+    /// @dev Same as `convertClaims` with a chosen donation asset: `Eth` converts into WETH (a
+    ///      route ending in native ETH is wrapped; a WETH claim is paid out as is).
+    function convertClaimsTo(
+        address currency,
+        uint256 amount,
+        address to,
+        bool inSwap,
+        DonationAsset da
+    ) external nonReentrant returns (uint256 out) {
+        return _convertClaims(currency, amount, to, inSwap, da);
+    }
+
+    function _convertClaims(
+        address currency,
+        uint256 amount,
+        address to,
+        bool inSwap,
+        DonationAsset da
+    ) private returns (uint256 out) {
+        _checkSource();
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert NothingToConsolidate(address(0), currency);
         if (!poolManager.isUnlocked()) revert PoolManagerLocked();
-        PoolKey[] memory route = quoteRegistry.routeOf(currency);
-        if (route.length == 0) revert NoRoute(currency);
+        address target = _donationToken(da);
+        PoolKey[] memory route = quoteRegistry.routeToOf(currency, da);
+        if (route.length == 0 && currency != target) revert NoRoute(currency);
 
         poolManager.burn(msg.sender, Currency.wrap(currency).toId(), amount);
-        address current = currency;
-        out = amount;
-        for (uint256 i; i < route.length; ++i) {
-            if (inSwap && address(route[i].hooks) != address(0)) revert HookedRouteHop(i);
-            (current, out) = _hop(route[i], current, out, address(0), false, inSwap);
-        }
-        if (current != settlementAsset) revert NoRoute(currency);
+        address current;
+        (current, out) = _walk(route, currency, amount, address(0), false, inSwap);
         if (out == 0) revert SlippageTooHigh(0, 1);
 
-        poolManager.take(Currency.wrap(settlementAsset), to, out);
+        _payOut(current, out, target, to);
         emit ClaimsConverted(msg.sender, currency, to, amount, out);
     }
 
@@ -722,26 +762,95 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     /// @inheritdoc IUnlockCallback
     function unlockCallback(bytes calldata data) external returns (bytes memory) {
         if (msg.sender != address(poolManager)) revert NotAuthorized();
-        (address token, address currencyIn, uint256 amountIn) =
-            abi.decode(data, (address, address, uint256));
+        (address token, address currencyIn, uint256 amountIn, address to) =
+            abi.decode(data, (address, address, uint256, address));
+        return abi.encode(_convertIn(token, currencyIn, amountIn, to, false));
+    }
 
-        PoolKey[] memory route = _routeFor(token, currencyIn);
-        bool tokenHop = currencyIn == token;
+    /// @dev Pays `amountIn` of `currencyIn` into the (unlocked) pool manager, runs it along its
+    ///      route and pays the result to `to`. Token zero marks a donation conversion (WETH into
+    ///      the settlement asset for an Endaoment push), which reverts when nothing comes out;
+    ///      a consolidation of dust may end in zero. `tight` selects the in-swap bounds.
+    function _convertIn(
+        address token,
+        address currencyIn,
+        uint256 amountIn,
+        address to,
+        bool tight
+    ) private returns (uint256 amount) {
+        address target;
+        PoolKey[] memory route;
+        bool tokenHop;
+        if (token == address(0)) {
+            target = settlementAsset;
+            route = quoteRegistry.routeOf(weth);
+            if (route.length == 0) revert NoRoute(weth);
+        } else {
+            target = _targetOf(token);
+            route = _routeFor(token, currencyIn);
+            tokenHop = currencyIn == token;
+        }
 
-        // Pay the input into the pool manager.
         poolManager.sync(Currency.wrap(currencyIn));
         IERC20(currencyIn).safeTransfer(address(poolManager), amountIn);
         poolManager.settle();
 
-        address current = currencyIn;
-        uint256 amount = amountIn;
-        for (uint256 i; i < route.length; ++i) {
-            (current, amount) = _hop(route[i], current, amount, token, tokenHop && i == 0, false);
-        }
-        if (current != settlementAsset) revert NoRoute(currencyIn);
+        address current;
+        (current, amount) = _walk(route, currencyIn, amountIn, token, tokenHop, tight);
+        if (token == address(0) && amount == 0) revert SlippageTooHigh(0, 1);
+        _payOut(current, amount, target, to);
+    }
 
-        poolManager.take(Currency.wrap(current), address(this), amount);
-        return abi.encode(amount);
+    /// @dev Pays `amount` of `current` (the end of a route) to `to` as `target`: taken straight
+    ///      when it is the target, or taken as native ETH and wrapped when the target is WETH.
+    function _payOut(address current, uint256 amount, address target, address to) private {
+        if (current == target) {
+            poolManager.take(Currency.wrap(current), to, amount);
+        } else if (current == address(0) && target == weth) {
+            poolManager.take(Currency.wrap(address(0)), address(this), amount);
+            IWETH(weth).deposit{value: amount}();
+            if (to != address(this)) IERC20(weth).safeTransfer(to, amount);
+        } else {
+            revert NoRoute(current);
+        }
+    }
+
+    /// @dev The currency a token's fees consolidate into: USDC or WETH.
+    function _targetOf(address token) private view returns (address) {
+        return _donationToken(vault.donationAssetOf(token));
+    }
+
+    /// @dev The currency of a donation asset. Equal to the registry's `donationToken` (checked at
+    ///      construction), without the external call.
+    function _donationToken(DonationAsset da) private view returns (address) {
+        return da == DonationAsset.Usdc ? settlementAsset : weth;
+    }
+
+    /// @inheritdoc IFeeConsolidator
+    /// @dev For the vaults pushing an `Eth` cause pool to Endaoment, which takes USDC. Pulls
+    ///      `amount` WETH from the caller (exact allowance), swaps it into USDC along the WETH
+    ///      route of the registry with the same price guards as consolidation, and pays the
+    ///      USDC to `to`. Outside a pool manager flow it unlocks the manager itself; inside one
+    ///      (a live vault pushing within a swap) it runs inline with the tight in-swap bounds.
+    ///      Reverts on any guard failure, so the caller keeps its WETH and retries later.
+    function convertDonation(uint256 amount, address to)
+        external
+        nonReentrant
+        returns (uint256 out)
+    {
+        _checkSource();
+        if (to == address(0)) revert ZeroAddress();
+        if (amount == 0) revert NothingToConsolidate(address(0), weth);
+        IERC20(weth).safeTransferFrom(msg.sender, address(this), amount);
+
+        if (poolManager.isUnlocked()) {
+            out = _convertIn(address(0), weth, amount, to, true);
+        } else {
+            out = abi.decode(
+                poolManager.unlock(abi.encode(address(0), weth, amount, to)), (uint256)
+            );
+        }
+        emit DonationConverted(msg.sender, amount, out);
     }
 
     function _routeFor(address token, address currency)
@@ -750,8 +859,8 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         returns (PoolKey[] memory route)
     {
         address quote = quoteOf[token];
-        PoolKey[] memory quoteRoute = quoteRegistry.routeOf(quote);
-        if (quoteRoute.length == 0) revert NoRoute(quote);
+        PoolKey[] memory quoteRoute =
+            quoteRegistry.routeToOf(quote, vault.donationAssetOf(token));
         if (currency == quote) return quoteRoute;
         if (currency != token) revert InvalidCurrency(token, currency);
 
@@ -760,6 +869,24 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         for (uint256 i; i < quoteRoute.length; ++i) {
             route[i + 1] = quoteRoute[i];
         }
+    }
+
+    /// @dev Runs `amount` of `current` through every hop of `route`. `tokenHop` marks the first hop
+    ///      as the token's own pool; `inSwap` selects the in-swap bounds and, as the trader can
+    ///      move pools in the same transaction, forbids hooked route pools.
+    function _walk(
+        PoolKey[] memory route,
+        address current,
+        uint256 amount,
+        address token,
+        bool tokenHop,
+        bool inSwap
+    ) private returns (address, uint256) {
+        for (uint256 i; i < route.length; ++i) {
+            if (inSwap && address(route[i].hooks) != address(0)) revert HookedRouteHop(i);
+            (current, amount) = _hop(route[i], current, amount, token, tokenHop && i == 0, inSwap);
+        }
+        return (current, amount);
     }
 
     /// @dev Swaps `amount` of `current` exact-input through `key`, applying the price guards.
@@ -772,40 +899,89 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         bool tokenHop,
         bool inSwap
     ) private returns (address next, uint256 out) {
-        address c0 = Currency.unwrap(key.currency0);
-        address c1 = Currency.unwrap(key.currency1);
-
         // WETH to a native ETH pool: unwrap inside the unlock.
-        if (current == weth && c0 != weth && c1 != weth) {
+        if (
+            current == weth && Currency.unwrap(key.currency0) != weth
+                && Currency.unwrap(key.currency1) != weth
+        ) {
             poolManager.take(Currency.wrap(weth), address(this), amount);
             IWETH(weth).withdraw(amount);
             poolManager.settle{value: amount}();
             current = address(0);
         }
 
-        bool zeroForOne = current == c0;
-        if (!zeroForOne && current != c1) revert NoRoute(current);
+        bool zeroForOne = current == Currency.unwrap(key.currency0);
+        if (!zeroForOne && current != Currency.unwrap(key.currency1)) revert NoRoute(current);
 
+        int24 tick;
+        {
+            uint256 minOut;
+            (minOut, tick) = _prepare(
+                key, amount, zeroForOne, token, tokenHop, inSwap
+            );
+            out = V3RouteLib.isV3(key)
+                ? _hopV3(key, zeroForOne, amount)
+                : _swapV4(key, zeroForOne, amount);
+            if (out < minOut) revert SlippageTooHigh(out, minOut);
+        }
+
+        if (!tokenHop) _moveReference(key.toId(), tick);
+        next = Currency.unwrap(zeroForOne ? key.currency1 : key.currency0);
+    }
+
+    /// @dev Reads the pool, runs the deviation guard of a hop and returns the least output the hop
+    ///      may produce together with the spot tick.
+    function _prepare(
+        PoolKey memory key,
+        uint256 amount,
+        bool zeroForOne,
+        address token,
+        bool tokenHop,
+        bool inSwap
+    ) private view returns (uint256 minOut, int24 tick) {
         PoolId id = key.toId();
-        (uint160 sqrtPriceX96, int24 tick,, uint24 lpFee) = poolManager.getSlot0(id);
-        if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
+        uint256 slippage;
+        uint256 expected;
+        {
+            uint160 sqrtPriceX96;
+            (sqrtPriceX96, tick) = _spot(key, id);
+            if (sqrtPriceX96 == 0) revert PoolNotInitialized(id);
+            uint256 deviation;
+            (slippage, deviation) = _bounds(inSwap);
+            int24 referenceTick = _checkDeviation(key, id, tick, token, tokenHop, deviation);
+            expected = _bestQuote(amount, sqrtPriceX96, referenceTick, zeroForOne);
+        }
+        uint256 tolerance = slippage + _hopFeeBps(key, id, token, tokenHop);
+        minOut = (expected * (BPS - tolerance)) / BPS;
+    }
 
-        uint256 slippage = maxSlippageBps;
-        uint256 deviation = maxDeviationTicks;
+    /// @dev The slippage and deviation bounds in force (the in-swap ones are only ever tighter).
+    function _bounds(bool inSwap) private view returns (uint256 slippage, uint256 deviation) {
+        slippage = maxSlippageBps;
+        deviation = maxDeviationTicks;
         if (inSwap) {
             if (inSwapMaxSlippageBps < slippage) slippage = inSwapMaxSlippageBps;
             if (inSwapMaxDeviationTicks < deviation) deviation = inSwapMaxDeviationTicks;
         }
-        int24 referenceTick = _checkDeviation(key, id, tick, token, tokenHop, deviation);
+    }
 
-        // Expected output at the better of spot and the reference: a spot pushed below the
-        // reference (inside the band) does not lower the minimum.
-        uint256 expected = _quote(amount, sqrtPriceX96, zeroForOne);
+    /// @dev Expected output at the better of spot and the reference: a spot pushed below the
+    ///      reference (inside the band) does not lower the minimum.
+    function _bestQuote(uint256 amount, uint160 sqrtPriceX96, int24 referenceTick, bool zeroForOne)
+        private
+        pure
+        returns (uint256 expected)
+    {
+        expected = _quote(amount, sqrtPriceX96, zeroForOne);
         uint256 atReference = _quote(amount, TickMath.getSqrtPriceAtTick(referenceTick), zeroForOne);
         if (atReference > expected) expected = atReference;
-        uint256 tolerance = slippage + _hopFeeBps(key, lpFee, token, tokenHop);
-        uint256 minOut = (expected * (BPS - tolerance)) / BPS;
+    }
 
+    /// @dev Exact-input swap through a v4 pool inside the unlock; requires a full fill.
+    function _swapV4(PoolKey memory key, bool zeroForOne, uint256 amount)
+        private
+        returns (uint256 out)
+    {
         BalanceDelta delta = poolManager.swap(
             key,
             SwapParams({
@@ -823,21 +999,47 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
             revert PartialFill(spent >= 0 ? 0 : uint256(uint128(-spent)), amount);
         }
         out = received > 0 ? uint256(uint128(received)) : 0;
-        if (out < minOut) revert SlippageTooHigh(out, minOut);
-
-        if (!tokenHop) _moveReference(id, tick);
-        next = zeroForOne ? c1 : c0;
     }
 
-    /// @dev Output of `amount` at price `sqrtPriceX96`, before fees and impact.
+    /// @dev Spot of a route pool, v3 or v4 (a v3 hop has no pool manager state).
+    function _spot(PoolKey memory key, PoolId id)
+        private
+        view
+        returns (uint160 sqrtPriceX96, int24 tick)
+    {
+        if (V3RouteLib.isV3(key)) return _v3Spot(key);
+        (sqrtPriceX96, tick,,) = poolManager.getSlot0(id);
+    }
+
+    /// @dev Spot of a v3 pool as `(sqrtPriceX96, tick)`; zero when the pool does not exist.
+    ///      Overridden by `FeeConsolidatorV3`; the base contract routes through v4 only.
+    function _v3Spot(PoolKey memory) internal view virtual returns (uint160, int24) {
+        revert V3Unsupported();
+    }
+
+    /// @dev A v3 hop inside the pool manager flow; returns the output received. The input is a
+    ///      credit of this contract at the pool manager: it is taken out, swapped on the v3 pool,
+    ///      and the output is paid back in as a credit, so the next hop (or the final `take`)
+    ///      sees the same accounting as after a v4 hop. Reverts unless the whole amount is spent.
+    ///      Overridden by `FeeConsolidatorV3`.
+    function _hopV3(PoolKey memory, bool, uint256) internal virtual returns (uint256) {
+        revert V3Unsupported();
+    }
+
+    /// @dev Output of `amount` at price `sqrtPriceX96`, before fees and impact: `amount` times
+    ///      the price (squared sqrt price, or its inverse), in two rounded-down steps. One
+    ///      `mulDiv` call site serves both steps and both directions to keep the code small.
     function _quote(uint256 amount, uint160 sqrtPriceX96, bool zeroForOne)
         private
         pure
         returns (uint256)
     {
-        return zeroForOne
-            ? FullMath.mulDiv(FullMath.mulDiv(amount, sqrtPriceX96, 1 << 96), sqrtPriceX96, 1 << 96)
-            : FullMath.mulDiv(FullMath.mulDiv(amount, 1 << 96, sqrtPriceX96), 1 << 96, sqrtPriceX96);
+        (uint256 num, uint256 den) =
+            zeroForOne ? (uint256(sqrtPriceX96), uint256(1 << 96)) : (uint256(1 << 96), uint256(sqrtPriceX96));
+        for (uint256 i; i < 2; ++i) {
+            amount = FullMath.mulDiv(amount, num, den);
+        }
+        return amount;
     }
 
     /// @dev Reverts unless `spotTick` is within `maxTicks` of the hop's reference; returns it.
@@ -850,7 +1052,7 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
         uint256 maxTicks
     ) private view returns (int24 referenceTick) {
         if (tokenHop) {
-            (bool ok, int24 twap,) = IHookOracle(address(key.hooks)).twapTick(token, TWAP_WINDOW);
+            (bool ok, int24 twap) = IHookOracle(address(key.hooks)).twapTick(token, TWAP_WINDOW);
             if (!ok) revert OracleUnavailable(token);
             referenceTick = twap;
         } else {
@@ -921,16 +1123,21 @@ contract FeeConsolidator is IFeeConsolidator, IUnlockCallback, Ownable2Step, Ree
     }
 
     /// @dev Pool fee of a hop in basis points, rounded up.
-    function _hopFeeBps(PoolKey memory key, uint24 lpFee, address token, bool tokenHop)
+    function _hopFeeBps(PoolKey memory key, PoolId id, address token, bool tokenHop)
         private
         view
         returns (uint256 feeBps)
     {
         if (tokenHop) {
             // The token pool uses an overridden dynamic fee equal to the token's base fee.
-            feeBps = IVaradaHook(address(key.hooks)).feeConfig(token).baseFeeBps;
+            feeBps = IHookBaseFee(address(key.hooks)).feeConfig(token);
         } else {
-            uint256 pips = LPFeeLibrary.isDynamicFee(key.fee) ? lpFee : key.fee;
+            uint256 pips = key.fee;
+            if (LPFeeLibrary.isDynamicFee(key.fee)) {
+                // A v3 hop has no dynamic fee, so only a v4 hop reaches this.
+                (,,, uint24 lpFee) = poolManager.getSlot0(id);
+                pips = lpFee;
+            }
             feeBps = (pips + 99) / 100;
         }
         if (feeBps > MAX_HOP_FEE_BPS) revert HopFeeTooHigh(feeBps);

@@ -32,6 +32,17 @@ export function formatUsdc(raw: bigint): string {
   return `$${compactFmt.format(n)}`;
 }
 
+/**
+ * An amount in a token's donation asset: dollars when it can be priced ("$12.4"), else in the
+ * asset itself ("0.004 ETH"). USDC is always dollars; ETH needs `ethUsd` (USD per ETH).
+ */
+export function formatDonation(raw: bigint, asset: "usdc" | "eth", ethUsd?: number | null): string {
+  if (asset === "usdc") return formatUsdc(raw);
+  const eth = unitsToNumber(raw, 18);
+  if (typeof ethUsd === "number" && Number.isFinite(ethUsd) && ethUsd > 0) return formatUsd(eth * ethUsd);
+  return `${eth === 0 ? "0" : formatSmallNumber(eth)} ETH`;
+}
+
 /** USD as a float, same style as {@link formatUsdc}. */
 export function formatUsd(n: number): string {
   if (!Number.isFinite(n) || n <= 0) return "$0";
@@ -57,6 +68,20 @@ export function formatSmallNumber(n: number): string {
 /** An amount of a quote asset: "12.4K WETH", "0.0₅412 WETH". */
 export function formatQuote(n: number, symbol: string): string {
   return `${n >= 1 ? compact(n) : formatSmallNumber(n)} ${symbol}`;
+}
+
+/** A dollar figure; thin or closed-market prices get a leading "~": "~$1.2K". */
+export function formatUsdValue(usd: number, approx: boolean): string {
+  return `${approx ? "~" : ""}${formatUsd(usd)}`;
+}
+
+/**
+ * An amount of a quote asset as dollars when the asset has a price ("~$1.2K"), otherwise in its own
+ * units ("0.4 WETH"). `quoteUnits` is the amount in whole units of the asset.
+ */
+export function formatQuoteAsUsd(quoteUnits: number, symbol: string, q: { priceUsd: number | null; confidence: string; marketClosed?: boolean } | null | undefined): string {
+  if (!q || q.priceUsd === null) return formatQuote(quoteUnits, symbol);
+  return formatUsdValue(quoteUnits * q.priceUsd, q.confidence !== "high" || Boolean(q.marketClosed));
 }
 
 /** "just now", "4 min ago", "3 h ago", "2 d ago". */

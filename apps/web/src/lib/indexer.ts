@@ -1,5 +1,5 @@
 /** Client for the indexer HTTP API: JSON, cursor pagination, bigint values as decimal strings. */
-import { isBallotSize } from "@varada/sdk";
+import { donationAssetOrDefault, isBallotSize, type DonationAsset } from "@varada/sdk";
 
 export interface Page<T> {
   items: T[];
@@ -12,6 +12,8 @@ export interface TokenSummary {
   symbol: string;
   creator?: string;
   feeBps?: number;
+  /** Asset every fee, credit and donation amount of the token is in; absent means USDC. */
+  donationAsset?: DonationAsset;
   metadataURI?: string;
   /** ENS label (`<label>.<parent>`), when the indexer has the profile. */
   label?: string;
@@ -125,7 +127,18 @@ export interface EpochDetail {
   poll: PollSummary | null;
   voterCount?: number;
   start?: number;
+  /** Exclusive end of the epoch: the next epoch's start, whatever the schedule was. */
   end?: number;
+  /**
+   * First second a ballot is accepted (`EpochGovernor.votingOpensAt`): the epoch is in its trading
+   * phase before it and ballots revert `VotingNotOpen`. Equals `start` when voting is open all epoch;
+   * undefined from an indexer that predates the schedule fields (then voting is open from `start`).
+   */
+  votingOpensAt?: number;
+  /** Seconds: the length, voting window and hold window of this epoch's schedule segment. */
+  length?: number;
+  votingWindow?: number;
+  holdWindow?: number;
   snapshot?: number;
   winningCause?: string | null;
   finalized?: boolean;
@@ -309,6 +322,7 @@ export function toToken(v: unknown): TokenSummary | null {
     symbol: str(v.symbol) ?? "",
     creator: str(v.creator),
     feeBps: typeof v.feeBps === "number" ? v.feeBps : undefined,
+    donationAsset: v.donationAsset === undefined ? undefined : donationAssetOrDefault(v.donationAsset),
     metadataURI: str(v.metadataUri) ?? str(v.metadataURI),
     label: str(v.label),
     controller: nonZero(v.controller, ZERO_ADDRESS) ?? undefined,
@@ -462,6 +476,10 @@ export function toEpochDetail(v: unknown): EpochDetail | null {
     voterCount: num(v.voterCount),
     start: num(v.start),
     end: num(v.end),
+    votingOpensAt: num(v.votingOpensAt),
+    length: num(v.length),
+    votingWindow: num(v.votingWindow),
+    holdWindow: num(v.holdWindow),
     snapshot: num(v.snapshot),
     winningCause: nonZero(v.winningCause ?? v.winner, ZERO_BYTES32),
     finalized: typeof v.finalized === "boolean" ? v.finalized : undefined,
@@ -906,7 +924,8 @@ export class IndexerClient {
         categories: categories.length ? categories.join(",") : undefined,
         regions: regions.length ? regions.join(",") : undefined,
       });
-      return isRecord(v) ? num(v.poolSize) ?? 0 : 0;
+      // A reply without a pool size is "unknown" (null), never an empty pool: zero would block every launch.
+      return isRecord(v) ? (num(v.poolSize) ?? null) : null;
     });
   }
 

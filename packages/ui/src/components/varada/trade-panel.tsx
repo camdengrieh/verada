@@ -157,6 +157,8 @@ export function isStablecoin(symbol: string): boolean {
 /** "3,402.18" → 3402.18; null when it isn't a number. */
 export function parseBalance(balance: string | undefined): number | null {
   if (!balance) return null;
+  // A dust balance is displayed as "<0.00000001": positive, not missing.
+  if (/^<\s*[\d.]+$/.test(balance.trim())) return Number.MIN_VALUE;
   const n = Number(balance.replace(/[,\s_]/g, ""));
   return Number.isFinite(n) ? n : null;
 }
@@ -174,10 +176,16 @@ function trimFixed(n: number, decimals: number): string {
 export function percentOfBalance(raw: string, percent: number): string {
   const clean = raw.replace(/[,\s_]/g, "");
   if (percent >= 100) return clean;
-  const n = Number(clean);
-  if (!Number.isFinite(n) || n <= 0) return "0";
-  const decimals = Math.min(8, Math.max(clean.split(".")[1]?.length ?? 0, 4));
-  return trimFixed((n * percent) / 100, decimals);
+  const m = /^(\d+)(?:\.(\d*))?$/.exec(clean);
+  if (!m || !(percent > 0)) return "0";
+  const decimals = Math.min(8, Math.max(m[2]?.length ?? 0, 4));
+  // Exact integer arithmetic: a Number loses digits above 2^53 and toFixed switches to exponent text from 1e21.
+  const scale = 10n ** BigInt(decimals);
+  const scaled = BigInt(m[1]!) * scale + BigInt((m[2] ?? "").slice(0, decimals).padEnd(decimals, "0"));
+  const part = (scaled * BigInt(Math.round(percent * 1000))) / 100_000n;
+  const whole = (part / scale).toString();
+  const frac = (part % scale).toString().padStart(decimals, "0").replace(/0+$/, "");
+  return frac ? `${whole}.${frac}` : whole;
 }
 
 /** USD converted into a token amount at `priceUsd`, rounded down with enough precision for small amounts. */

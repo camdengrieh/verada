@@ -100,11 +100,16 @@ export const KNOWN_ERROR_SELECTORS: Record<string, SwapReason> = {
   "0x8b063d73": "slippage", // V4TooLittleReceived(uint256,uint256)
   "0x12bacdd3": "slippage", // V4TooMuchRequested(uint256,uint256)
   "0x39d35496": "slippage", // V3TooLittleReceived()
+  "0x739dbe52": "slippage", // V3TooMuchRequested()
+  "0x849eaf98": "slippage", // V2TooLittleReceived()
+  "0x8ab0bc16": "slippage", // V2TooMuchRequested()
+  "0xae52ad0c": "no-route", // V2InvalidPath()
   "0x5bf6f916": "deadline-expired", // TransactionDeadlinePassed()
   "0x1c26714c": "hook-reverted", // InsufficientGas() of VaradaLiveHook: send more gas
   "0x7d617bb3": "hook-reverted", // PartialFillNotSupported() of VaradaLiveHook
   "0x19f9fbb7": "hook-reverted", // SwapReentered() of VaradaLiveHook
   "0xa9e35b2f": "hook-reverted", // HookCallFailed()
+  "0xe450d38c": "insufficient-balance", // ERC20InsufficientBalance(address,uint256,uint256) of OpenZeppelin v5 tokens
 };
 
 const UNEXPECTED_REVERT_BYTES = "0x6190b2b0"; // V4Quoter: UnexpectedRevertBytes(bytes)
@@ -189,6 +194,9 @@ export function mapSwapError(err: unknown): SwapError {
   for (const [selector, reason] of Object.entries(KNOWN_ERROR_SELECTORS)) {
     if (lower.includes(selector)) return new SwapError(reason, undefined, { detail: selector, cause: err });
   }
+  if (lower.includes("erc20insufficientbalance") || lower.includes("transfer amount exceeds balance") || lower.includes("transferfromfailed") || lower.includes("transfer_from_failed")) {
+    return new SwapError("insufficient-balance", undefined, { cause: err });
+  }
   if (lower.includes("userblocked")) return new SwapError("blocked", undefined, { cause: err });
   if (lower.includes("usersanctioned")) return new SwapError("sanctioned", undefined, { cause: err });
   if (lower.includes("transactiondeadlinepassed") || lower.includes("deadline")) return new SwapError("deadline-expired", undefined, { cause: err });
@@ -196,6 +204,9 @@ export function mapSwapError(err: unknown): SwapError {
     return new SwapError("slippage", undefined, { cause: err });
   }
   if (lower.includes("poolnotinitialized") || lower.includes("pool not initialized")) return new SwapError("pool-not-initialized", undefined, { cause: err });
+  if (lower.includes("insufficient_liquidity") || lower.includes("insufficient_input_amount") || lower.includes("insufficient_output_amount") || lower.includes("uniswapv2library")) {
+    return new SwapError("insufficient-liquidity", undefined, { cause: err });
+  }
   if (lower.includes("notenoughliquidity") || lower.includes("not enough liquidity") || lower.includes("insufficient liquidity")) {
     return new SwapError("insufficient-liquidity", undefined, { cause: err });
   }

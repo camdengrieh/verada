@@ -190,6 +190,9 @@ describe("TradePanel presets", () => {
     expect(screen.getByLabelText("You pay")).toHaveValue("38900000");
     expect(percentOfBalance("3,402.18", 25)).toBe("850.545");
     expect(percentOfBalance("0.3", 10)).toBe("0.03");
+    // A fork wallet can hold more than 1e21 ETH: no exponent text, no lost digits.
+    expect(percentOfBalance("115792089237316195423570985008687907853269984665640564039457.58400791", 50)).toBe("57896044618658097711785492504343953926634992332820282019728.79200395");
+    expect(percentOfBalance("2000000000000000000000000", 25)).toBe("500000000000000000000000");
     await screen.findByRole("button", { name: "Review sell" });
   });
 

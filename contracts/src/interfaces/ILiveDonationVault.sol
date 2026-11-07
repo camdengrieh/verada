@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {DonationAsset} from "./IDonationAsset.sol";
 import {RotationPeriod} from "./IRotationGovernor.sol";
 
 /// @title ILiveDonationVault
@@ -11,7 +12,11 @@ import {RotationPeriod} from "./IRotationGovernor.sol";
 interface ILiveDonationVault {
     event HookSet(address indexed hook);
     event LiveTokenRegistered(
-        address indexed token, uint96 threshold, bytes32 indexed initialCause, RotationPeriod period
+        address indexed token,
+        uint96 threshold,
+        bytes32 indexed initialCause,
+        RotationPeriod period,
+        DonationAsset asset
     );
     /// @notice `gross` USDC was credited for `token`: `platform` to the platform, `causeShare` to
     ///         `causeId`. `rotation` is the rotation the fee was earned in (`type(uint64).max` for
@@ -22,7 +27,8 @@ interface ILiveDonationVault {
         uint64 indexed rotation,
         uint256 gross,
         uint256 platform,
-        uint256 causeShare
+        uint256 causeShare,
+        DonationAsset asset
     );
     /// @notice `amount` USDC was sent to `org` for `causeId`. `orgDeployed` when the org was
     ///         deployed by this donation; `inSwap` when pushed inside a swap.
@@ -32,7 +38,9 @@ interface ILiveDonationVault {
         address indexed org,
         uint256 amount,
         bool orgDeployed,
-        bool inSwap
+        bool inSwap,
+        DonationAsset asset,
+        uint256 usdcAmount
     );
     /// @notice A due push was not made; `pending` stays credited. `reason` is the 4-byte revert
     ///         selector (zero when there was none).
@@ -40,6 +48,7 @@ interface ILiveDonationVault {
         address indexed token, bytes32 indexed causeId, uint256 pending, bytes4 reason
     );
     event PlatformWithdrawn(address indexed treasury, uint256 amount);
+    event PlatformWithdrawnEth(address indexed treasury, uint256 amount);
     event Skimmed(address indexed asset, uint256 amount);
 
     error NotHook();
@@ -57,6 +66,7 @@ interface ILiveDonationVault {
     error InsufficientPushGas();
     error NothingToWithdraw();
     error NothingToSkim(address asset);
+    error EthUnsupported();
 
     /// @notice The settlement asset (USDC), equal to Endaoment's base token.
     function usdc() external view returns (address);
@@ -72,6 +82,21 @@ interface ILiveDonationVault {
     ) external;
 
     /// @notice Whether `token` is registered.
+    /// @notice Registers a token with a donation asset. Threshold is in that asset's units.
+    function registerToken(
+        address token,
+        uint96 threshold,
+        bytes32 initialCause,
+        RotationPeriod period,
+        DonationAsset asset
+    ) external;
+
+    function donationAssetOf(address token) external view returns (DonationAsset);
+
+    function platformAccruedEth() external view returns (uint256);
+
+    function totalPendingEth() external view returns (uint256);
+
     function isRegistered(address token) external view returns (bool);
 
     /// @notice Credits `amount` USDC (already transferred here) earned by `token` while `causeId`

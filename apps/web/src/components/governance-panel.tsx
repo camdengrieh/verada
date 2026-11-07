@@ -13,6 +13,7 @@ import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
 import { errorText } from "@/components/use-tx";
 import { EpochClock } from "@/components/governance/epoch-clock";
+import { cycleText, durationText, timingOf } from "@/lib/epoch-timing";
 import { GovernanceHistory } from "@/components/governance/history";
 import { standingKey, useNowSeconds } from "@/components/governance/hooks";
 import { HowVotingWorks } from "@/components/governance/how-it-works";
@@ -21,7 +22,7 @@ import { TokenBallot } from "@/components/governance/token-ballot";
 import { TokenBoard, canVoteHere, type BoardEntry } from "@/components/governance/token-board";
 import { createAccountClient } from "@/lib/account-reads";
 import { loadBallotSizeCap, loadToken, loadTokens } from "@/lib/data";
-import { epochStatus, loadEpochClock, loadTokenEpochs, readStanding, type TokenEpochRow } from "@/lib/governance";
+import { ballotIsLive, epochStatus, loadEpochClock, loadTokenEpochs, readStanding, type TokenEpochRow } from "@/lib/governance";
 import type { TokenSummary } from "@/lib/indexer";
 
 /** Tokens whose ballots the board follows (the indexer's newest). */
@@ -77,7 +78,7 @@ export function GovernancePanel() {
 
   // The viewer's weight on each token whose ballot is open, through the account's own private client.
   const accountClient = useMemo(() => (account ? createAccountClient(rpc, account) : null), [rpc, account]);
-  const openRows: TokenEpochRow<TokenSummary>[] = (epochs.data ?? []).filter((r) => epochStatus(r.detail, now).phase === "open");
+  const openRows: TokenEpochRow<TokenSummary>[] = (epochs.data ?? []).filter((r) => ballotIsLive(epochStatus(r.detail, now)));
   const standings = useQueries({
     queries: openRows.map((r) => ({
       queryKey: standingKey(governor, r.token.address, epoch, account),
@@ -96,7 +97,7 @@ export function GovernancePanel() {
   // Default selection: a token the wallet can still vote in, else one with an open ballot, else the first.
   const fallback = useMemo(() => {
     const votable = entries.find((e) => canVoteHere(e, now));
-    const open = entries.find((e) => epochStatus(e.row.detail, now).phase === "open");
+    const open = entries.find((e) => ballotIsLive(epochStatus(e.row.detail, now)));
     return (votable ?? open ?? entries[0])?.row.token.address;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [epochs.data, standings.map((s) => s.dataUpdatedAt).join(","), now]);
@@ -117,7 +118,7 @@ export function GovernancePanel() {
   const counts = useMemo(() => {
     const rows = epochs.data ?? [];
     return {
-      open: rows.filter((r) => epochStatus(r.detail, now).phase === "open").length,
+      open: rows.filter((r) => ballotIsLive(epochStatus(r.detail, now))).length,
       ballots: rows.reduce((n, r) => n + (r.detail?.poll?.ballotCount ?? 0), 0),
     };
   }, [epochs.data, now]);
@@ -138,6 +139,7 @@ export function GovernancePanel() {
       <section aria-label="Governance" className="@container grid grid-cols-1 gap-6">
         <PageHeading capText={capText} />
         <EmptyState
+          headingLevel={2}
           icon={<Vote />}
           title="Governance is not set up on this site"
           body="The site's config.json has no governorAddress, so there is no epoch to read or vote in."
@@ -154,7 +156,7 @@ export function GovernancePanel() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 @3xl:grid-cols-4">
-        <StatCard label="Epoch" value={epoch !== undefined ? String(epoch) : "—"} animate={false} hint="One week, Thursday to Thursday UTC" />
+        <StatCard label="Epoch" value={epoch !== undefined ? String(epoch) : "—"} animate={false} hint={clock.data ? `${durationText(clock.data.length)} per epoch` : "Set by the governor"} />
         <StatCard label="Open ballots" value={epochs.data ? counts.open : "—"} animate={false} hint={`of ${board.length} tokens followed`} />
         <StatCard label="Ballots cast" value={epochs.data ? counts.ballots : "—"} animate={false} hint="This epoch, all tokens" />
         <StatCard label="Ballot size" value={cap.data !== undefined ? cap.data : "—"} animate={false} hint={`At most ${MAX_BALLOT_OPTIONS} options`} />
@@ -179,6 +181,7 @@ export function GovernancePanel() {
       )}
       {tokens.data && board.length === 0 && (
         <EmptyState
+          headingLevel={2}
           icon={<Vote />}
           title="No tokens have launched yet"
           body="Ballots appear here as soon as a token exists. Launch one and its holders vote on where its fees go."
@@ -217,7 +220,7 @@ export function GovernancePanel() {
       )}
 
       <GovernanceHistory tokens={board} selected={selected} nowMs={now * 1000} />
-      <HowVotingWorks ballotSize={cap.data} />
+      <HowVotingWorks ballotSize={cap.data} cycle={clock.data ? cycleText(timingOf(clock.data)!) : undefined} />
     </section>
   );
 }
@@ -226,9 +229,9 @@ function PageHeading({ capText }: { capText: string }) {
   return (
     <div className="grid grid-cols-1 gap-2">
       <p className="kicker m-0">Governance</p>
-      <h1 className="m-0 font-display text-4xl font-semibold tracking-tight text-ink @3xl:text-5xl">This week&apos;s vote</h1>
+      <h1 className="m-0 font-display text-4xl font-semibold tracking-tight text-ink @3xl:text-5xl">This epoch&apos;s vote</h1>
       <p className="m-0 max-w-2xl text-[15px] text-ink-soft">
-        Each week, holders of a token vote with an encrypted ballot on which charity receives that token&apos;s cause pool. Every ballot holds {capText} from the
+        Each epoch, holders of a token trade first and then vote, in the last part of the epoch, with an encrypted ballot on which charity receives that token&apos;s cause pool. Every ballot holds {capText} from the
         token&apos;s cause focus, or fewer if its controller chose a smaller ballot. Only totals are decrypted after the epoch ends.
       </p>
     </div>

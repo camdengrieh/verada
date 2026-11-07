@@ -2,7 +2,6 @@ import type { Context } from "ponder:registry";
 
 type Row = Record<string, unknown>;
 
-// biome-ignore lint/suspicious/noExplicitAny: mirrors viem's readContract argument shape loosely
 export type ReadContract = (args: { functionName: string; address: string; args?: readonly any[] }) => Promise<unknown>;
 
 /**

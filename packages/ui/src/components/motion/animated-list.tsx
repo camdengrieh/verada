@@ -32,7 +32,8 @@ export function AnimatedList({ items, max = 5, label, className, itemClassName }
   const initial = useRef<Set<string> | null>(null);
   const history = (initial.current ??= new Set(items.map((i) => i.id)));
   return (
-    <ul role="log" aria-live="polite" aria-relevant="additions" aria-label={label} data-slot="animated-list" className={cn("flex flex-col gap-2.5", className)}>
+    <div role="log" aria-live="polite" aria-relevant="additions" aria-label={label} data-slot="animated-list">
+    <ul className={cn("flex flex-col gap-2.5", className)}>
       <AnimatePresence initial={false} mode="popLayout">
         {shown.map((item) => (
           <motion.li
@@ -59,5 +60,6 @@ export function AnimatedList({ items, max = 5, label, className, itemClassName }
         ))}
       </AnimatePresence>
     </ul>
+    </div>
   );
 }

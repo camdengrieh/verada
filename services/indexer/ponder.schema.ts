@@ -13,6 +13,12 @@ export const token = onchainTable(
     createdAt: t.bigint().notNull(),
     createdBlock: t.bigint().notNull(),
     txHash: t.hex().notNull(),
+    /**
+     * Asset the token's fees are consolidated into and donated in, fixed at launch: 0 USDC
+     * (6 decimals), 1 ETH (WETH, 18 decimals). Every fee, credit and donation amount of the token
+     * is in this asset's units.
+     */
+    donationAsset: t.integer().notNull().default(0),
     /** ERC-20 metadata read at launch; empty when the read failed. */
     name: t.text().notNull().default(""),
     symbol: t.text().notNull().default(""),
@@ -364,14 +370,35 @@ export const vote = onchainTable(
 );
 
 /**
- * Epoch clock of the epoch governor. `epochZeroStart` is derived from the first `EpochOpened` or
- * `VoteCast`: both only happen during the current epoch, and epoch starts are multiples of one
- * week, so `floor(timestamp / week) * week - epoch * week` equals the contract's immutable.
+ * Epoch schedule of the epoch governor, one row per segment (the governor's `_segments`): from epoch
+ * `startEpoch`, which starts at `startTime`, epochs last `length` seconds, accept ballots in their
+ * last `votingWindow` and weigh over `holdWindow`. Epoch boundaries are NOT `zero + n * length`: they
+ * come from these rows (`@varada/sdk` `epochStart`, `votingOpensAt`).
+ *
+ * Segment 0 is the constructor's default (`epochZeroStart`, read from the chain on first need, with
+ * the 7 day defaults and `setAt` null) until an `EpochScheduleSet` for epoch 0 re-anchors it before
+ * any token registered. Later `EpochScheduleSet` events add a segment, or replace the pending one
+ * with the same `startEpoch`.
  */
-export const epochClock = onchainTable("epoch_clock", (t) => ({
+export const epochSchedule = onchainTable("epoch_schedule", (t) => ({
+  startEpoch: t.bigint().primaryKey(),
+  startTime: t.bigint().notNull(),
+  length: t.bigint().notNull(),
+  votingWindow: t.bigint().notNull(),
+  holdWindow: t.bigint().notNull(),
+  /** Block timestamp of the `EpochScheduleSet` that wrote this segment; null for the constructor default. */
+  setAt: t.bigint(),
+}));
+
+/**
+ * Owner-set grace periods, last value of each setter event: `tallyGrace`, `launchSnapshotDelay`,
+ * `curationGrace` (epoch governor) and `settleGrace` (fee vault). No row until the setter is called
+ * (the API then reports the contract default).
+ */
+export const timingSetting = onchainTable("timing_setting", (t) => ({
   id: t.text().primaryKey(),
-  epochZeroStart: t.bigint().notNull(),
-  epochLength: t.bigint().notNull(),
+  value: t.bigint().notNull(),
+  setAt: t.bigint().notNull(),
 }));
 
 /**

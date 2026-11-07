@@ -12,15 +12,18 @@ const wagmi = vi.hoisted(() => ({
   sign: vi.fn(),
   estimate: vi.fn(),
   wait: vi.fn(),
+  getTx: vi.fn(),
+  call: vi.fn(),
   account: { address: "0x00000000000000000000000000000000000000aa", chainId: 1 } as { address?: string; chainId?: number },
 }));
 vi.mock("wagmi", () => ({
   useAccount: () => wagmi.account,
   useConfig: () => ({}),
+  usePublicClient: () => ({ waitForTransactionReceipt: wagmi.wait, getTransaction: wagmi.getTx, call: wagmi.call }),
   useSendTransaction: () => ({ sendTransactionAsync: wagmi.send }),
   useSignTypedData: () => ({ signTypedDataAsync: wagmi.sign }),
 }));
-vi.mock("wagmi/actions", () => ({ estimateGas: wagmi.estimate, waitForTransactionReceipt: wagmi.wait }));
+vi.mock("wagmi/actions", () => ({ estimateGas: wagmi.estimate }));
 
 const toasts = vi.hoisted(() => ({ pending: vi.fn(() => "toast-1"), success: vi.fn(), error: vi.fn() }));
 vi.mock("@varada/ui/components/varada/tx-toast", () => ({ txToast: toasts }));
@@ -66,6 +69,8 @@ beforeEach(() => {
   wagmi.sign.mockResolvedValue(`0x${"11".repeat(65)}`);
   wagmi.estimate.mockResolvedValue(1_000_000n);
   wagmi.wait.mockResolvedValue({ status: "success", blockNumber: 1n });
+  wagmi.getTx.mockResolvedValue({ from: ACCOUNT, to: "0x66a9893cc07d91d95644aedd05d03f95e1dba8af", input: "0x3593564c", value: 0n, gas: 1_000_000n });
+  wagmi.call.mockResolvedValue({ data: "0x" });
   toasts.pending.mockReturnValue("toast-1");
   accountClient.value = fakeChain({ erc20: 0n, permit: 0n, expiration: 0 });
 });
@@ -143,11 +148,74 @@ describe("useSwap", () => {
   it("marks a reverted swap as failed and updates the pending toast", async () => {
     const quote = await makeQuote();
     accountClient.value = fakeChain({ erc20: 2n ** 255n, permit: 10n ** 20n, expiration: Math.floor(Date.now() / 1000) + 3600 });
-    wagmi.wait.mockResolvedValueOnce({ status: "reverted" });
+    wagmi.wait.mockResolvedValueOnce({ status: "reverted", blockNumber: 7n });
+    wagmi.call.mockRejectedValueOnce(new Error("execution reverted"));
     const { result } = renderHook(() => useSwap());
     await act(async () => void (await result.current.execute(quote)));
     expect(result.current.phase).toBe("error");
+    expect(result.current.error?.reason).toBe("unknown");
+    expect(result.current.error?.detail).toBe(SWAP_HASH);
     expect(toasts.error).toHaveBeenCalledWith("toast-1", expect.anything());
+  });
+
+  it("replays a reverted swap at its block and reports the decoded reason (slippage)", async () => {
+    const quote = await makeQuote();
+    accountClient.value = fakeChain({ erc20: 2n ** 255n, permit: 10n ** 20n, expiration: Math.floor(Date.now() / 1000) + 3600 });
+    wagmi.wait.mockResolvedValueOnce({ status: "reverted", blockNumber: 7n });
+    wagmi.call.mockRejectedValueOnce(Object.assign(new Error("execution reverted"), { data: `0x8b063d73${"00".repeat(64)}` }));
+    const { result } = renderHook(() => useSwap());
+    await act(async () => void (await result.current.execute(quote)));
+    expect(wagmi.call).toHaveBeenCalledWith(expect.objectContaining({ account: ACCOUNT, blockNumber: 7n, data: "0x3593564c" }));
+    expect(result.current.error?.reason).toBe("slippage");
+    expect(result.current.error?.message).toBe("Price moved beyond your slippage limit");
+    expect(toasts.error).toHaveBeenCalledWith("toast-1", expect.objectContaining({ description: "Price moved beyond your slippage limit" }));
+  });
+
+  it("reports an expired on-chain deadline from a reverted swap", async () => {
+    const quote = await makeQuote();
+    accountClient.value = fakeChain({ erc20: 2n ** 255n, permit: 10n ** 20n, expiration: Math.floor(Date.now() / 1000) + 3600 });
+    wagmi.wait.mockResolvedValueOnce({ status: "reverted", blockNumber: 7n });
+    wagmi.call.mockRejectedValueOnce(Object.assign(new Error("execution reverted"), { data: "0x5bf6f916" }));
+    const { result } = renderHook(() => useSwap());
+    await act(async () => void (await result.current.execute(quote)));
+    expect(result.current.error?.reason).toBe("deadline-expired");
+  });
+
+  it("names a reverted approval by its decoded reason too", async () => {
+    const quote = await makeQuote();
+    wagmi.wait.mockResolvedValueOnce({ status: "reverted", blockNumber: 7n });
+    wagmi.call.mockRejectedValueOnce(new Error("execution reverted"));
+    const { result } = renderHook(() => useSwap());
+    await act(async () => void (await result.current.execute(quote)));
+    expect(result.current.error?.message).toBe("The approval transaction failed");
+    expect(result.current.steps.find((s) => s.id === "approve")?.status).toBe("error");
+    expect(wagmi.sign).not.toHaveBeenCalled();
+  });
+
+  it("a wallet rejection while signing the Permit2 permit fails only that step and sends nothing more", async () => {
+    const quote = await makeQuote();
+    wagmi.sign.mockRejectedValueOnce(Object.assign(new Error("User rejected the request."), { code: 4001 }));
+    const { result } = renderHook(() => useSwap());
+    await act(async () => void (await result.current.execute(quote)));
+    expect(result.current.error?.reason).toBe("user-rejected");
+    expect(result.current.steps.map((s) => [s.id, s.status])).toEqual([["approve", "done"], ["permit", "error"], ["swap", "pending"]]);
+    expect(wagmi.send).toHaveBeenCalledTimes(1);
+    expect(wagmi.estimate).not.toHaveBeenCalled();
+    expect(toasts.error).not.toHaveBeenCalled();
+    expect(result.current.busy).toBe(false);
+    // a retry starts clean
+    await act(async () => void (await result.current.execute(quote)));
+    expect(result.current.phase).toBe("success");
+  });
+
+  it("maps a token-balance revert at simulation to insufficient-balance before the wallet opens", async () => {
+    const quote = await makeQuote();
+    accountClient.value = fakeChain({ erc20: 2n ** 255n, permit: 10n ** 20n, expiration: Math.floor(Date.now() / 1000) + 3600 });
+    wagmi.estimate.mockRejectedValueOnce(Object.assign(new Error("execution reverted"), { data: `0xe450d38c${"00".repeat(96)}` }));
+    const { result } = renderHook(() => useSwap());
+    await act(async () => void (await result.current.execute(quote)));
+    expect(result.current.error?.reason).toBe("insufficient-balance");
+    expect(wagmi.send).not.toHaveBeenCalled();
   });
 
   it("refuses old quotes, blocked quotes and a missing wallet", async () => {

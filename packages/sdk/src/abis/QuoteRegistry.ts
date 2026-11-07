@@ -23,6 +23,19 @@ export const quoteRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "MAX_HOP_FEE_PIPS",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint24",
+        "internalType": "uint24"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "MAX_ROUTE_LENGTH",
     "inputs": [],
     "outputs": [
@@ -124,6 +137,25 @@ export const quoteRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "donationToken",
+    "inputs": [
+      {
+        "name": "da",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "getQuoteAsset",
     "inputs": [
       {
@@ -166,6 +198,30 @@ export const quoteRegistryAbi = [
         "name": "asset",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "bool",
+        "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasRouteTo",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "da",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
       }
     ],
     "outputs": [
@@ -341,12 +397,113 @@ export const quoteRegistryAbi = [
   },
   {
     "type": "function",
+    "name": "routeToOf",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "da",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple[]",
+        "internalType": "struct PoolKey[]",
+        "components": [
+          {
+            "name": "currency0",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "currency1",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "fee",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tickSpacing",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "hooks",
+            "type": "address",
+            "internalType": "contract IHooks"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "setRoute",
     "inputs": [
       {
         "name": "asset",
         "type": "address",
         "internalType": "address"
+      },
+      {
+        "name": "route",
+        "type": "tuple[]",
+        "internalType": "struct PoolKey[]",
+        "components": [
+          {
+            "name": "currency0",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "currency1",
+            "type": "address",
+            "internalType": "Currency"
+          },
+          {
+            "name": "fee",
+            "type": "uint24",
+            "internalType": "uint24"
+          },
+          {
+            "name": "tickSpacing",
+            "type": "int24",
+            "internalType": "int24"
+          },
+          {
+            "name": "hooks",
+            "type": "address",
+            "internalType": "contract IHooks"
+          }
+        ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setRouteTo",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "da",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
       },
       {
         "name": "route",
@@ -532,6 +689,31 @@ export const quoteRegistryAbi = [
     "anonymous": false
   },
   {
+    "type": "event",
+    "name": "RouteToSet",
+    "inputs": [
+      {
+        "name": "asset",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "donationAsset",
+        "type": "uint8",
+        "indexed": true,
+        "internalType": "enum DonationAsset"
+      },
+      {
+        "name": "hops",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
     "type": "error",
     "name": "AssetIsSettlement",
     "inputs": []
@@ -543,12 +725,39 @@ export const quoteRegistryAbi = [
   },
   {
     "type": "error",
+    "name": "HopFeeTooHigh",
+    "inputs": [
+      {
+        "name": "hop",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "fee",
+        "type": "uint24",
+        "internalType": "uint24"
+      }
+    ]
+  },
+  {
+    "type": "error",
     "name": "InvalidDecimals",
     "inputs": [
       {
         "name": "asset",
         "type": "address",
         "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "InvalidV3Hop",
+    "inputs": [
+      {
+        "name": "hop",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ]
   },
@@ -613,6 +822,17 @@ export const quoteRegistryAbi = [
     "inputs": [
       {
         "name": "endsIn",
+        "type": "address",
+        "internalType": "address"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "RouteIsImplicit",
+    "inputs": [
+      {
+        "name": "asset",
         "type": "address",
         "internalType": "address"
       }

@@ -24,6 +24,8 @@ export interface HolderItem {
   /** Percent of total supply. */
   share: number;
   usd?: number;
+  /** The USD price is thin or may lag: print the value with a leading "~". */
+  usdApprox?: boolean;
   /** Change in share over 24h, in percentage points. */
   change24h?: number;
 }
@@ -236,7 +238,7 @@ export function HoldersTable({
                       </span>
                       <span className="num text-xs text-ink-muted @xl:hidden">
                         {formatTokenAmount(h.balance)} {symbol}
-                        {h.usd !== undefined ? ` · ${usdShort(h.usd)}` : ""}
+                        {h.usd !== undefined ? ` · ${h.usdApprox ? "~" : ""}${usdShort(h.usd)}` : ""}
                       </span>
                     </span>
                   </td>
@@ -250,7 +252,7 @@ export function HoldersTable({
                     {formatTokenAmount(h.balance)}
                     {symbol ? <span className="sr-only"> {symbol}</span> : null}
                   </td>
-                  <td className="num hidden py-2.5 text-right text-ink-soft @xl:table-cell">{h.usd !== undefined ? usdShort(h.usd) : "—"}</td>
+                  <td className="num hidden py-2.5 text-right text-ink-soft @xl:table-cell">{h.usd !== undefined ? `${h.usdApprox ? "~" : ""}${usdShort(h.usd)}` : "—"}</td>
                   <td className="hidden py-2.5 text-right text-[13px] @md:table-cell">
                     <Change value={h.change24h} />
                   </td>

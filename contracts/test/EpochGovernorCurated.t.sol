@@ -377,7 +377,7 @@ contract EpochGovernorCuratedTest is BallotLog {
         address attacker = makeAddr("attacker");
         vm.prank(attacker);
         try gov.requestCurationSkip(token, 1) {} catch {}
-        vm.warp(gov.epochStart(1) + gov.CURATION_GRACE() + 1);
+        vm.warp(gov.epochStart(1) + gov.curationGrace() + 1);
         IEpochGovernor.Draw[] memory d = cat.draws(gov, registry, token, 1, FOCUS_C, FOCUS_R);
         vm.prank(attacker);
         vm.expectRevert(

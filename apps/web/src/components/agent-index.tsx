@@ -119,9 +119,12 @@ export function AgentIndex({ root = "./" }: { root?: string }) {
             </InputGroup>
             <Tabs value={region || "all"} onValueChange={(v) => setRegion(v === "all" ? "" : v)} variant="pill">
               <TabsList scrollable aria-label="Region" scrollLabels={{ previous: "Earlier regions", next: "More regions" }}>
-                <TabsTrigger value="all">All regions</TabsTrigger>
+                {/* A filter, not a tab set: no panel exists for aria-controls to point at. */}
+                <TabsTrigger value="all" aria-controls={undefined}>
+                  All regions
+                </TabsTrigger>
                 {REGIONS.map((r) => (
-                  <TabsTrigger key={r.slug} value={r.slug}>
+                  <TabsTrigger key={r.slug} value={r.slug} aria-controls={undefined}>
                     {r.label}
                   </TabsTrigger>
                 ))}

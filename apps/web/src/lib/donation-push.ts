@@ -1,8 +1,8 @@
 /**
- * "Send this week's donation": every step that turns an ended week's fees into its donation is
+ * "Send this epoch's donation": every step that turns an ended epoch's fees into its donation is
  * permissionless (close the vote, finalize the winner, `FeeVault.settle`, then
- * `DonationDistributor.distribute`), so anyone can push a week through when the platform keeper has
- * not. The indexer only says which weeks to look at; each week is planned from chain state with the
+ * `DonationDistributor.distribute`), so anyone can push an epoch through when the platform keeper has
+ * not. The indexer only says which epochs to look at; each epoch is planned from chain state with the
  * SDK's `planDonation`, the same plan the keeper runs, because the indexer may lag.
  *
  * The tally decryption is the one step this page does not do. On mainnet, Zama's relayer serves a
@@ -23,6 +23,7 @@ import { epochGovernorAbi } from "@varada/sdk/abis";
 import { isHex, zeroAddress, type Abi, type Address, type Hex } from "viem";
 import type { AppConfig } from "./config";
 import type { DataDeps } from "./data";
+import { durationText } from "./epoch-timing";
 
 export interface DonationPushAddresses {
   epochGovernor: Address;
@@ -160,15 +161,17 @@ export function donationRequest(
 
 /** The button for a step: a finalize past the tally grace says that the default charity gets the week. */
 export function stepLabel(step: Extract<DonationStep, { type: "send" }>, charity: string, defaultCharity: string): string {
-  if (step.fallback === "tally-timeout") return `Give this week to ${defaultCharity}`;
+  if (step.fallback === "tally-timeout") return `Give this epoch to ${defaultCharity}`;
   return stageLabel(step.stage, charity);
 }
 
 /** What happens on a finalize past the tally grace, which overrides the vote. */
-export function fallbackText(defaultCharity: string): string {
+/** `tallyGraceSeconds`: the governor's `tallyGrace` (owner-set; 14 days by default), shown as read. */
+export function fallbackText(defaultCharity: string, tallyGraceSeconds?: number): string {
+  const tallyGraceText = tallyGraceSeconds === undefined ? "time" : durationText(tallyGraceSeconds);
   return (
-    "This week's votes were never decrypted, and the 14 days the platform has to do it are over. Finalizing now does not " +
-    `count the votes: the week goes to the default charity, ${defaultCharity}, whatever the votes said.`
+    `This epoch's votes were never decrypted, and the ${tallyGraceText} the platform has to do it are over. Finalizing now does not ` +
+    `count the votes: the epoch goes to the default charity, ${defaultCharity}, whatever the votes said.`
   );
 }
 
@@ -182,7 +185,7 @@ export function stageLabel(stage: DonationStage, charity: string): string {
     case "finalize":
       return "Finalize the winner";
     case "settle":
-      return "Move the week's fees to the donation contract";
+      return "Move the epoch's fees to the donation contract";
     case "distribute":
       return `Send the donation to ${charity}`;
   }
@@ -202,15 +205,15 @@ export function waitText(step: DonationStep, format: (seconds: number) => string
   if (step.type !== "wait") return null;
   switch (step.reason) {
     case "epoch-not-ended":
-      return `This week is still running. It ends at ${when(step.until, format)}.`;
+      return `This epoch is still running. It ends at ${when(step.until, format)}.`;
     case "tally-decryption":
       return "Waiting for the tally to be decrypted. The platform keeper relays it from Zama; this page cannot.";
     case "tally-other-scheme":
-      return `This week's votes were cast on a voting contract the platform does not decrypt. From ${when(step.until, format)} the week can be finalized on the default charity.`;
+      return `This epoch's votes were cast on a voting contract the platform does not decrypt. From ${when(step.until, format)} the epoch can be finalized on the default charity.`;
     case "fees-pending":
       return (
-        "Some of this week's fees are still on their way to the vault (trading fees not yet collected or converted to USDC). " +
-        `Moving the fees now would leave those for a later week, so the vault accepts it once they are in, or from ${when(step.until, format)} at the latest.`
+        "Some of this epoch's fees are still on their way to the vault (trading fees not yet collected or converted to USDC). " +
+        `Moving the fees now would leave those for a later epoch, so the vault accepts it once they are in, or from ${when(step.until, format)} at the latest.`
       );
   }
 }
@@ -220,13 +223,13 @@ export function blockedText(step: DonationStep, charity: string): string | null 
   if (step.type !== "blocked") return null;
   switch (step.reason) {
     case "not-registered":
-      return "This token has no weekly donation.";
+      return "This token does not give through epoch pools.";
     case "fee-vault-not-registered":
       return "The fee vault this app is configured with does not know this token, so its fees cannot be moved from here.";
     case "no-default-cause":
-      return "Nobody voted for a charity this week and the platform has not set a default charity, so there is no winner yet. The week can be finalized once one is set.";
+      return "Nobody voted for a charity this epoch and the platform has not set a default charity, so there is no winner yet. The epoch can be finalized once one is set.";
     case "ballot-options-unavailable":
-      return "The charities on this week's ballot could not be loaded from the indexer, so the winner cannot be finalized from this page right now. The platform keeper reads them from the chain.";
+      return "The charities on this epoch's ballot could not be loaded from the indexer, so the winner cannot be finalized from this page right now. The platform keeper reads them from the chain.";
     case "org-not-active":
       return `Endaoment no longer lists ${charity} as active, so the donation cannot be sent. The money stays in the donation contract until this is resolved.`;
     case "org-address-mismatch":

@@ -2,8 +2,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { FeesStep } from "@/components/launch/fees-step";
 import { causeNameOf, FocusStep } from "@/components/launch/focus-step";
-import { LabelStatusLine } from "@/components/launch/identity-step";
+import { IdentityStep, LabelStatusLine } from "@/components/launch/identity-step";
 import { LaunchSuccess } from "@/components/launch/launch-success";
+import { ModeStep } from "@/components/launch/mode-step";
 import type { StepProps } from "@/components/launch/types";
 import { initialWizardState, type WizardState } from "@/lib/launch-steps";
 import type { LaunchInput } from "@/lib/launch";
@@ -56,6 +57,24 @@ describe("FocusStep", () => {
   });
 });
 
+describe("ModeStep epoch pool", () => {
+  const modeProps = { causes: undefined, causesLoading: false, causesFailed: false, liveReady: true };
+
+  it("says 'each epoch' and shows the length the governor reports, not a week", () => {
+    render(<ModeStep {...props(base)} {...modeProps} epochLength="45 minutes" />);
+    const pool = screen.getByRole("radio", { name: /Epoch pool/ });
+    expect(pool).toBeInTheDocument();
+    expect(screen.getByText(/Fees pool for each epoch \(currently 45 minutes\)\./)).toBeInTheDocument();
+    expect(screen.queryByText(/for a week/)).toBeNull();
+  });
+
+  it("promises no length while the governor's is unknown", () => {
+    render(<ModeStep {...props(base)} {...modeProps} />);
+    expect(screen.getByText(/Fees pool for each epoch\. Holders then vote/)).toBeInTheDocument();
+    expect(screen.queryByText(/currently/)).toBeNull();
+  });
+});
+
 describe("FeesStep", () => {
   it("turns launch protection on with a surcharge and a decay, and off again", () => {
     const setInput = vi.fn();
@@ -69,6 +88,44 @@ describe("FeesStep", () => {
     render(<FeesStep {...props(protectedState)} />);
     expect(screen.getByText("Starting surcharge")).toBeInTheDocument();
     expect(screen.getByRole("img", { name: /90% to your coin's cause, 10% to Varada/ })).toBeInTheDocument();
+  });
+});
+
+describe("FeesStep donation asset", () => {
+  it("offers USDC and ETH, USDC selected by default, with a hint for the pair", () => {
+    render(<FeesStep {...props(base)} />);
+    expect(screen.getByRole("radio", { name: /^USDC/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^ETH/ })).not.toBeChecked();
+    // The default pair is WETH: ETH needs no conversion.
+    expect(screen.getByText(/ETH looks better for this pair/)).toBeInTheDocument();
+  });
+
+  it("choosing ETH sets the asset and restarts the threshold in ETH", () => {
+    const setInput = vi.fn();
+    render(<FeesStep {...props(base, setInput)} />);
+    fireEvent.click(screen.getByRole("radio", { name: /^ETH/ }));
+    expect(setInput).toHaveBeenCalledWith({ donationAsset: "eth", donationThreshold: "0.01" });
+  });
+
+  it("the success screen says what donations are paid in", () => {
+    render(<LaunchSuccess name="N" symbol="N" label="n-coin" token={null} live={false} donationAsset="eth" onAgain={vi.fn()} />);
+    expect(screen.getByText("Donations paid in ETH")).toBeInTheDocument();
+  });
+});
+
+describe("IdentityStep label errors", () => {
+  const identity = (state: WizardState, errors: Record<string, string>) =>
+    render(<IdentityStep {...props(state)} errors={errors} labelLoading={false} labelFailed={false} labelEdited setLabelEdited={vi.fn()} onLogo={vi.fn()} onLogoBusy={vi.fn()} />);
+
+  it("shows a taken label before the field is left", () => {
+    const taken = { ...base, input: { ...base.input, label: "paws" }, labelStatus: { kind: "taken" as const, token: "0x0000000000000000000000000000000000000001" as const } };
+    identity(taken, { label: "paws is already taken" });
+    expect(screen.getByText("paws is already taken")).toBeInTheDocument();
+  });
+
+  it("keeps a plain format error hidden until the field is touched", () => {
+    identity({ ...base, input: { ...base.input, label: "ab" } }, { label: "Use 3 to 63 characters" });
+    expect(screen.queryByText("Use 3 to 63 characters")).toBeNull();
   });
 });
 

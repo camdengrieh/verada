@@ -201,9 +201,12 @@ cast calldata "setActive(uint8,bool)" 2 false
 
 From `EpochGovernor`:
 
-- `EPOCH_LENGTH` is 7 days. `epochZeroStart` is `floor(deployTime / 7 days) * 7 days`, a Thursday
-  00:00 UTC (Unix time 0 was a Thursday). Epoch `k` starts at `epochZeroStart + k * 604800`, so
-  **every epoch starts on a Thursday at 00:00 UTC**.
+- The epoch length is owner-set (`setEpochSchedule`; see `docs/TIMING.md`). The default is 7 days
+  from `epochZeroStart`, `floor(deployTime / 7 days) * 7 days`, a Thursday 00:00 UTC (Unix time 0
+  was a Thursday), so with the defaults **every epoch starts on a Thursday at 00:00 UTC**. After a
+  schedule change, or on the first production test cycle (45 minutes: 30 of trading, then 15 of
+  voting), that is no longer true: read `epochStart(epoch)` (`curator status` prints the deadline
+  for the next epoch) and never compute `epochZeroStart + k * 604800`.
 - `CuratorRegistry.submitCurations` accepts only `epoch == currentEpoch() + 1`. Curations for the
   epoch starting next Thursday can be sent any time during the current epoch, and replaced until
   that Thursday 00:00 UTC.

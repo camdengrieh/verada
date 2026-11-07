@@ -20,7 +20,6 @@ import { createFakeContext } from "./fakeDb";
 
 declare global {
   interface Response {
-    // biome-ignore lint/suspicious/noExplicitAny: test convenience for JSON bodies
     json(): Promise<any>;
   }
 }
@@ -53,7 +52,6 @@ const block = (n: number, ts: number) => ({ number: BigInt(n), timestamp: BigInt
 const txh = (n: number) => `0x${n.toString(16).padStart(64, "0")}` as Hex;
 
 describe("holder balances", () => {
-  // biome-ignore lint/suspicious/noExplicitAny: test shim for event payloads
   const transfer = (h: ReturnType<typeof createFakeContext>, from: Hex, to: Hex, value: bigint, ts = 10 * DAY + 5): any =>
     onTokenTransfer({
       event: { args: { from, to, value }, block: block(1, ts), transaction: { hash: txh(1) }, log: { address: TOKEN } },
@@ -151,7 +149,6 @@ describe("trades", () => {
     await h.context.db.insert(token).values({ address: tokenAddr, pool: POOL, creator: CREATOR } as never);
     return { h, reads };
   };
-  // biome-ignore lint/suspicious/noExplicitAny: test shim for event payloads
   const poolTransfer = (h: ReturnType<typeof createFakeContext>, tokenAddr: Hex, hash: Hex, ts: number): any =>
     onPoolTransfer({
       event: {
