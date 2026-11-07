@@ -137,7 +137,7 @@ export function envDefaults(): AppConfig {
     zamaRelayerUrl: url(process.env.NEXT_PUBLIC_ZAMA_RELAYER_URL),
     devPlainBallots: process.env.NEXT_PUBLIC_DEV_PLAIN_BALLOTS === "true",
     privateRpc: {
-      network: isAnonNetworkId(network) ? network : "nox",
+      network: isAnonNetworkId(network) ? network : "nym",
       rpcUrls: defaultRpcUrls(rpcUrl, process.env.NEXT_PUBLIC_PRIVATE_RPC_URLS),
     },
   };

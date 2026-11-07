@@ -276,7 +276,7 @@ pnpm --filter @varada/web check:private-rpc            # BASE_URL=http://127.0.0
 
 It drives headless Chrome (`CHROME_PATH`, needs `playwright-core` like `scripts/e2e.mjs`), turns the
 routing switch on, prints the worker log and exits 0 once the pill reads "Private RPC on". The
-configured network is `privateRpc.network` (Nox by default, see `docs/PRIVACY.md`).
+configured network is `privateRpc.network` (Nym by default, see `docs/PRIVACY.md`).
 
 ## Art and assets
 

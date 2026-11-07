@@ -74,9 +74,9 @@ and trust assumptions: [`docs/hooks/README.md`](docs/hooks/README.md). Tutorial:
 The app never talks to an Ethereum RPC provider directly. Every chain read goes through an
 [anon-rpc](https://github.com/ethereum/anon-rpc) worker: a client bundle pinned by hash in an
 on-chain specifier contract, fetched at start and run in a null-origin sandboxed iframe with no
-access to the page, its storage or any keys. The default worker is [Nox](https://github.com/hisoka-io/nox),
-the mixnet built by Hisoka. The worker connects to Nox anchors over KPS (WebRTC), the request is
-mixed through the network, and an exit node forwards it to the RPC provider.
+access to the page, its storage or any keys. The default worker is the [Nym](https://nym.com) mixnet
+client, pinned by Nym's specifier on mainnet. The request is mixed through the network, and an exit
+node forwards it to the RPC provider.
 
 What this gives users:
 
@@ -88,13 +88,14 @@ What this gives users:
   directly only after an explicit per-visit opt-in.
 - Requests to the Varada indexer can go through the mixnet as well (a switch in the privacy pill),
   so Varada does not see the user's IP either.
-- Nym and Tor run on the same plumbing behind one setting (`NEXT_PUBLIC_ANON_RPC_NETWORK`).
+- Hisoka's [Nox](https://github.com/hisoka-io/nox) mixnet and Tor run on the same plumbing behind
+  one setting (`NEXT_PUBLIC_ANON_RPC_NETWORK`).
 - Users can add their own RPC endpoints, pick another network, or switch to a direct mode to their
   own RPC from Connection settings in the privacy pill, so the app keeps working if the default
   network goes away. These settings stay in the browser.
 
 The header pill shows the live state. `pnpm --filter @varada/web check:private-rpc` drives the app
-in headless Chrome and confirms a read completes through Nox. The route-by-route account of what
+in headless Chrome and confirms a read completes through the configured network (Nym by default). The route-by-route account of what
 leaves the browser, measurements and known gaps: [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 ## Getting started
@@ -126,14 +127,14 @@ every known gap are in [`docs/PRIVACY.md`](docs/PRIVACY.md).
   is no app server to take down, and every token page is the one site under `<label>.varada.eth`.
   What we run that users depend on is the indexer (one AWS account): without it, core data falls
   back to chain reads, and the client takes a list of indexer mirrors. The anon-rpc worker bundle
-  comes from resolvers the network operator lists, and the default mixnet's specifier contract is
-  on Sepolia today; Nym and Tor (mainnet specifiers) are a configuration switch, and users can add
-  their own RPCs or go direct to them from the privacy pill if the default network disappears.
+  comes from resolvers the network operator lists, and the default mixnet (Nym) has its specifier
+  contract on mainnet; Nox (specifier on Sepolia) and Tor are a configuration switch, and users can
+  add their own RPCs or go direct to them from the privacy pill if the default network disappears.
 - **O**pen source. MIT, see [`LICENSE`](LICENSE). Everything builds and runs from this repository
   alone: follow Getting started, then `pnpm --filter @varada/web dev` for the app, `pnpm test` for
   the TypeScript suites and `forge test` in `contracts/`. The published site is a plain static
   export whose Swarm hash can be rebuilt and compared.
-- **P**rivacy. Chain reads go through anon-rpc (Hisoka's Nox mixnet by default; Nym or Tor by
+- **P**rivacy. Chain reads go through anon-rpc (the Nym mixnet by default; Hisoka's Nox or Tor by
   configuration), isolated per account, so the RPC provider sees neither the user's IP nor which
   accounts belong together, and account reads never fall back to a direct connection. Ballot
   choices are encrypted (Zama FHE) and only per-option totals are decrypted. Varada's servers never

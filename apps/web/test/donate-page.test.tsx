@@ -79,6 +79,15 @@ vi.mock("@/components/providers", () => ({
 }));
 vi.mock("@/components/nav", () => ({ useRel: () => (p: string) => `./${p}` }));
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: () => ({ readContract: accountRead }) }));
+const publicClient = {
+  waitForTransactionReceipt: async ({ hash }: { hash: string }) => {
+    if (!receipts.has(hash)) receipts.set(hash, { status: "success", transactionHash: hash });
+    return { ...receipts.get(hash)!, blockNumber: 1n, logs: [] };
+  },
+  getTransaction: vi.fn(),
+  call: vi.fn(),
+};
+
 vi.mock("wagmi", async () => {
   const { useCallback, useState } = await import("react");
   return {
@@ -93,6 +102,9 @@ vi.mock("wagmi", async () => {
       }, []);
       return { writeContractAsync: send, data: hash, isPending: false, error: null, reset: () => setHash(undefined) };
     },
+    // Every sent transaction confirms at once (useTx reads receipts through the public client). One
+    // stable client object: the receipt hook re-waits whenever the client identity changes.
+    usePublicClient: () => publicClient,
     // Every sent transaction confirms at once.
     useWaitForTransactionReceipt: ({ hash }: { hash?: string }) => {
       if (hash && !receipts.has(hash)) receipts.set(hash, { status: "success", transactionHash: hash });

@@ -13,6 +13,7 @@ import {ContenthashLib} from "../../src/libraries/ContenthashLib.sol";
 import {DnsNameLib} from "../../src/libraries/DnsNameLib.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
 import {EnsResolutionForkTest} from "./EnsResolution.t.sol";
+import {DonationAsset} from "../../src/interfaces/IDonationAsset.sol";
 
 interface IUniversalResolverFind {
     function findResolver(bytes calldata name) external view returns (address, bytes32, uint256);

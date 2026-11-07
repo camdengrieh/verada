@@ -1,11 +1,11 @@
 import { db } from "ponder:api";
 import * as rawSchema from "ponder:schema";
-import { and, count, eq, gte, inArray, lt, sql } from "ponder";
+import { and, count, desc, eq, gte, inArray, lt, sql } from "ponder";
 import type { Hex } from "viem";
 import type { CoinDonationRow, DonorsRepo, WalletDonationRow } from "./donors";
 
 const { default: _interop, ...schema } = rawSchema as typeof rawSchema & { default?: unknown };
-const { donation, liveDonation, orgDonation, vaultGift, token, epochClock } = schema;
+const { donation, liveDonation, orgDonation, vaultGift, token, epochSchedule } = schema;
 
 const num = (v: unknown) => Number(v ?? 0);
 
@@ -52,11 +52,16 @@ export const donorsRepo: DonorsRepo = {
     }));
   },
   async clock() {
-    const [c] = await db
-      .select({ epochZeroStart: epochClock.epochZeroStart, epochLength: epochClock.epochLength })
-      .from(epochClock)
-      .where(eq(epochClock.id, "epoch_governor"))
+    // The governor's schedule is a list of segments (`epochSchedule`); the donor window maths assumes
+    // one uniform clock, so project the latest segment back to epoch 0. Exact for every epoch in that
+    // segment (the current and future ones); earlier segments, if the schedule was ever changed, are
+    // approximated.
+    const [seg] = await db
+      .select({ startEpoch: epochSchedule.startEpoch, startTime: epochSchedule.startTime, length: epochSchedule.length })
+      .from(epochSchedule)
+      .orderBy(desc(epochSchedule.startEpoch))
       .limit(1);
-    return c ?? null;
+    if (!seg) return null;
+    return { epochZeroStart: seg.startTime - seg.startEpoch * seg.length, epochLength: seg.length };
   },
 };

@@ -59,6 +59,6 @@ describe("useTx reads the receipt through the public client", () => {
     client.waitForTransactionReceipt.mockResolvedValue({ status: "success", blockNumber: 9n, logs: [] });
     render(<Probe />);
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("confirmed in block 9"));
-    expect(txToast.success).toHaveBeenCalled();
+    await waitFor(() => expect(txToast.success).toHaveBeenCalled());
   });
 });
