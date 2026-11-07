@@ -14,6 +14,7 @@ import { HeroCause } from "@varada/ui/components/varada/hero-cause";
 import { HeroStats } from "@varada/ui/components/varada/hero-shared";
 import { usdFormatOptions } from "@varada/ui/components/varada/impact-shared";
 import { CategoryGrid } from "@/components/causes/category-grid";
+import { CauseCoins } from "@/components/causes/cause-coins";
 import { CausesLeaderboardSection } from "@/components/causes/causes-leaderboard";
 import { categoryLabelOf, regionLabelOf } from "@/components/causes/org-card";
 
@@ -181,6 +182,17 @@ export function CausesExplorer() {
       <Section id="categories" kicker="By cause" title="Pick a cause">
         <CategoryGrid selected={filters.categories} onToggle={toggleCategory} counts={catalog.data?.categories} totals={byCategory} agentHref={agentLink} />
       </Section>
+
+      {filters.categories.length > 0 && (
+        <Section id="coins" kicker="Coins" title={single ? `Coins giving to ${categoryLabelOf(single).toLowerCase()}` : "Coins giving to these causes"}>
+          <CauseCoins
+            categories={filters.categories}
+            regions={filters.regions}
+            causeName={single ? categoryLabelOf(single) : filters.categories.map(categoryLabelOf).join(", ")}
+            root={rel("")}
+          />
+        </Section>
+      )}
 
       <Section id="leaderboard" kicker="Giving" title="Who has received the most">
         <CausesLeaderboardSection

@@ -14,6 +14,7 @@ import { EnsProfileCard } from "@varada/ui/components/varada/ens-profile-card";
 import { SubnameTree } from "@varada/ui/components/varada/subname-tree";
 import { useMemo, useState } from "react";
 import { AGENT_CATEGORIES, REGIONS, agentByLabel, agentName } from "@varada/sdk";
+import { CauseCoins } from "@/components/causes/cause-coins";
 import { agentCause, agentHref, agentsIndexHref, causeName, RelLink, regionName, usdcText } from "@/components/agent-common";
 import { AgentDonatePanel } from "@/components/agent-donate";
 import { AgentRegionView } from "@/components/agent-region";
@@ -158,6 +159,14 @@ export function AgentDetail({ label, region, root = "./" }: { label: string; reg
           </div>
         </>
       )}
+
+      <section aria-labelledby="agent-coins-h" className={SECTION}>
+        <h2 id="agent-coins-h" className={H2}>
+          Coins giving to {def.label.toLowerCase()}
+        </h2>
+        <p className="m-0 text-sm text-ink-soft">Coins that chose this cause at launch. Their trading fees fund its charities every week.</p>
+        <CauseCoins categories={[def.slug]} causeName={def.label} root={root} />
+      </section>
 
       <TopDonors board={donorBoard.data ?? null} loading={donorBoard.isLoading} failed={Boolean(donorBoard.error)} cause={def.label} region={focus ? regionName(focus.slug) : undefined} root={root} />
 

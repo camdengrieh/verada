@@ -39,6 +39,16 @@ function route(url: string) {
       return json({ donatedUsdc: "9000000" });
     case "/api/agents":
       return json({ items: [] });
+    case "/api/discover":
+      return json({
+        items: [
+          { address: "0x00000000000000000000000000000000000000a1", name: "Soup Coin", symbol: "SOUP", label: "soup", focus: { categories: ["hunger"], regions: [] }, raised: "5000000", mode: { kind: "weekly" } },
+          { address: "0x00000000000000000000000000000000000000a2", name: "Open Coin", symbol: "OPEN", label: "open", focus: null, raised: "0", mode: { kind: "weekly" } },
+          { address: "0x00000000000000000000000000000000000000a3", name: "Shelter Coin", symbol: "SHEL", label: "shel", focus: { categories: ["homelessness"], regions: [] }, raised: "0", mode: { kind: "weekly" } },
+        ],
+        nextCursor: null,
+        total: 3,
+      });
     default:
       return json({}, 404);
   }
@@ -65,6 +75,18 @@ describe("leaderboardEntries", () => {
 });
 
 describe("CausesExplorer", () => {
+  it("lists the coins whose focus is the picked cause, and only those", async () => {
+    window.history.replaceState(null, "", "/causes/?category=hunger");
+    wrap(<CausesExplorer />);
+    const section = await screen.findByRole("region", { name: "Coins giving to hunger & famine" });
+    await waitFor(() => expect(within(section).getByText("Soup Coin")).toBeInTheDocument());
+    expect(within(section).queryByText("Open Coin")).not.toBeInTheDocument();
+    expect(within(section).queryByText("Shelter Coin")).not.toBeInTheDocument();
+    expect(within(section).getByRole("link", { name: "Every coin for hunger & famine on Discover" })).toHaveAttribute("href", "./?tab=cause&category=hunger");
+    const discover = fetchMock.mock.calls.map(([u]) => new URL(u as string)).find((u) => u.pathname === "/api/discover")!;
+    expect(discover.searchParams.get("categories")).toBe("hunger");
+  });
+
   it("shows catalogue totals, the leaderboard and the first page of charities, then loads more", async () => {
     wrap(<CausesExplorer />);
     await waitFor(() => expect(screen.getByText("Food Bank")).toBeInTheDocument());
