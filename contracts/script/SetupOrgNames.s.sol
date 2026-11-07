@@ -28,6 +28,8 @@ import {console} from "forge-std/console.sol";
 ///        ORG_GATEWAY_URLS  comma-separated EIP-3668 URL templates for the Merkle fallback
 ///                          (default https://org.varada.eth.limo/ccip/{data}.json, i.e. Swarm)
 ///        ORG_NAMESPACE_CONTENTHASH  contenthash for org.varada.eth (ENSIP-7, Swarm) to set
+///        ORG_L2_FALLBACK_URL  last Optimism URL, the static `l2-fallback.json?d={data}` (default via
+///                          org.varada.eth.limo; set the content-addressed gateway URL instead)
 ///        ORG_SITE_PREFIX   prefix for the `url` text record (default https://varada.eth.limo/causes?org=)
 ///        ORG_NAMES_SHARD_BITS  shard bits the names root was built with (default 12, the
 ///                          catalogue's `namesShardBits`)
@@ -103,6 +105,7 @@ contract SetupOrgNames is Script {
         if (resolver == address(0) && l2Registry == address(0)) {
             revert MissingEnv("ORG_L2_REGISTRY");
         }
+        _l2FallbackUrl = vm.envOr("ORG_L2_FALLBACK_URL", string(SWARM_L2_FALLBACK_URL));
         string[] memory l2Urls = vm.envOr("ORG_L2_GATEWAY_URLS", ",", new string[](0));
         for (uint256 i; i < l2Urls.length; ++i) {
             _l2UrlsEnv.push(l2Urls[i]);
@@ -126,6 +129,11 @@ contract SetupOrgNames is Script {
     /// @notice Unruggable Optimism gateways (ENS's reverse resolver lists the last two).
     /// @dev Set by `run()` from ORG_L2_GATEWAY_URLS.
     string[] internal _l2UrlsEnv;
+    /// @dev Last-resort Optimism URL; `run()` overrides it with ORG_L2_FALLBACK_URL. Prefer a
+    ///      content-addressed Swarm gateway URL (https://api.gateway.ethswarm.org/bzz/<ref>/...):
+    ///      under EIP-3668 a client may stop at a 4xx, so the last-resort URL must not depend on
+    ///      a gateway resolving org.varada.eth.
+    string internal _l2FallbackUrl = SWARM_L2_FALLBACK_URL;
 
     /// @notice Optimism proof gateways in order: ORG_L2_GATEWAY_URLS (our /l2 proxy first), else
     ///         the public Unruggable ones; the Swarm `l2-fallback.json` always comes last so a
@@ -136,7 +144,7 @@ contract SetupOrgNames is Script {
         for (uint256 i; i < head.length; ++i) {
             u[i] = head[i];
         }
-        u[head.length] = SWARM_L2_FALLBACK_URL;
+        u[head.length] = _l2FallbackUrl;
     }
 
     function opGatewayUrls() public pure returns (string[] memory u) {
