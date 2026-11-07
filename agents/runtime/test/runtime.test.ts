@@ -213,7 +213,9 @@ describe("api keys", () => {
 describe("config", () => {
   it("reads the environment with safe defaults", () => {
     const c = readConfig({ INDEXER_URL: "https://ix.example/" });
-    expect(c).toMatchObject({ INDEXER_URL: "https://ix.example", CHAT_MODEL: "claude-opus-5-5", CHAT_EFFORT: "low", schedulerEnabled: false, PORT: 8000 });
+    expect(c).toMatchObject({ INDEXER_URL: "https://ix.example", CHAT_MODEL: "claude-opus-5-5", CHAT_EFFORT: "low", schedulerEnabled: false, port: 8000 });
+    expect(readConfig({ PORT: "8080" }).port).toBe(8000);
+    expect(readConfig({ USER_PORT: "9000" }).port).toBe(9000);
     expect(c.allowedOrigins).toContain("https://varada.eth.limo");
     expect(readConfig({}).INDEXER_URL).toBeUndefined();
     expect(() => readConfig({ INDEXER_URL: "not a url" })).toThrow();

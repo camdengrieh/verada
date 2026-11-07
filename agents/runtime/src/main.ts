@@ -58,4 +58,4 @@ const app = createServer({
     : undefined,
 });
 
-serve({ fetch: app.fetch, port: cfg.PORT }, (i) => log("listening", { port: i.port, model: cfg.CHAT_MODEL }));
+serve({ fetch: app.fetch, port: cfg.port }, (i) => log("listening", { port: i.port, model: cfg.CHAT_MODEL }));
