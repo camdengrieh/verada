@@ -4,7 +4,7 @@ import { usePathname, useSelectedLayoutSegments } from "next/navigation";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { AssetProvider } from "@varada/ui/lib/assets";
 import { BottomTabBar, BOTTOM_TAB_BAR_HEIGHT, type BottomTab } from "@varada/ui/components/mobile/bottom-tab-bar";
-import { Compass, HandHeart, Vote, User, Coins } from "@varada/ui/components/ui/icons";
+import { Compass, HandHeart, Heart, Vote, User, Coins } from "@varada/ui/components/ui/icons";
 import { useCommandShortcut } from "@varada/ui/components/ui/command";
 import { Toaster } from "@varada/ui/components/ui/toaster";
 import { Divider } from "@varada/ui/components/ui/divider";
@@ -21,7 +21,7 @@ import { siteBase, siteBaseFromPath } from "@/lib/base";
 /** Resolves site-relative asset paths against the site root so they work under any Swarm/ENS prefix. */
 const resolveAsset = (path: string) => `${siteBase()}${path.replace(/^\//, "")}`;
 
-const TAB_ICONS = { "": Compass, "launch/": Coins, "causes/": HandHeart, "governance/": Vote, "agent/": User } as const;
+const TAB_ICONS = { "": Compass, "donate/": Heart, "launch/": Coins, "causes/": HandHeart, "governance/": Vote, "agent/": User } as const;
 
 /** The route a pathname belongs to ("" for the token list), independent of any Swarm/ENS prefix. */
 export function activeRoute(pathname: string): string {

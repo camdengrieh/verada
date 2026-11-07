@@ -6,7 +6,7 @@ import { CATEGORIES, REGIONS } from "@varada/sdk";
 import { FilterSheet, countFilters, type FilterGroup, type FilterValue } from "@varada/ui/components/mobile/filter-sheet";
 import { Badge } from "@varada/ui/components/ui/badge";
 import { Button } from "@varada/ui/components/ui/button";
-import { Search, SlidersHorizontal, X } from "@varada/ui/components/ui/icons";
+import { HandHeart, Search, SlidersHorizontal, X } from "@varada/ui/components/ui/icons";
 import { Input, InputAddon, InputGroup } from "@varada/ui/components/ui/input";
 import { Label } from "@varada/ui/components/ui/label";
 import { Skeleton } from "@varada/ui/components/ui/skeleton";
@@ -153,6 +153,14 @@ export function CausesExplorer() {
             <p className="m-0 text-[17px] leading-relaxed text-ink-soft">
               Every compliant Endaoment organization is in the Varada cause catalogue, grouped by cause and region. Coins choose a focus at launch and their ballots draw from the matching charities.
             </p>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <Button asChild variant="cause">
+                <a href={rel("donate/")}>
+                  <HandHeart aria-hidden="true" />
+                  Just donate
+                </a>
+              </Button>
+            </div>
           </div>
           {catalog.isLoading || (board.isLoading && given === undefined) ? (
             <Skeleton className="h-20 rounded-2xl" />

@@ -12,6 +12,7 @@ const TOKEN = "0x00000000000000000000000000000000000000a1";
 const pages = [
   ["", /Varada|Tokens|Launch/i],
   ["launch/", /launch/i],
+  ["donate/", /donate/i],
   ["causes/", /cause/i],
   ["governance/", /governance|epoch/i],
   [`token/?address=${TOKEN}`, new RegExp(TOKEN.slice(0, 10), "i")],

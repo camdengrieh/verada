@@ -28,6 +28,7 @@ export function AppLink({ to, children }: { to: string; children: ReactNode }) {
 
 export const NAV_ITEMS = [
   { to: "", label: "Tokens" },
+  { to: "donate/", label: "Donate" },
   { to: "launch/", label: "Launch" },
   { to: "causes/", label: "Causes" },
   { to: "governance/", label: "Governance" },

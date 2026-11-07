@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CATEGORIES } from "@varada/sdk";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@varada/ui/components/ui/command";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@varada/ui/components/ui/dialog";
-import { Compass, Coins, HandHeart, Search, User, Vote } from "@varada/ui/components/ui/icons";
+import { Compass, Coins, HandHeart, Heart, Search, User, Vote } from "@varada/ui/components/ui/icons";
 import { Kbd } from "@varada/ui/components/ui/kbd";
 import { CauseIcon } from "@varada/ui/components/varada/cause-icon";
 import { useAppConfig, useDeps } from "@/components/providers";
@@ -14,7 +14,7 @@ import { causeNameOf, shortAddr, tokenPath } from "@/lib/discover";
 import { fetchDiscover } from "@/lib/discover-client";
 import { useRel } from "./hooks";
 
-const PAGE_ICONS = { "": Compass, "launch/": Coins, "causes/": HandHeart, "governance/": Vote, "agent/": User } as const;
+const PAGE_ICONS = { "": Compass, "donate/": Heart, "launch/": Coins, "causes/": HandHeart, "governance/": Vote, "agent/": User } as const;
 
 /** Debounced copy of a value. */
 function useDebounced<T>(value: T, ms: number): T {

@@ -57,7 +57,7 @@ export function labelRedirect(pathname) {
   if (label.charAt(0) === "-" || label.charAt(label.length - 1) === "-") return null;
   if (label.length >= 4 && label.charAt(2) === "-" && label.charAt(3) === "-") return null;
   // Real routes are never redirected to a token page.
-  if (["launch", "causes", "governance", "token", "agent", "design", "404"].indexOf(label) !== -1) return null;
+  if (["launch", "donate", "causes", "governance", "token", "agent", "design", "404"].indexOf(label) !== -1) return null;
   // Relative to the current document: "./" for /pepe, "../" for /pepe/.
   return (seg[2] ? "../" : "./") + "token/?label=" + label;
 }

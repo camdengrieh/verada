@@ -17,7 +17,7 @@ function hrefs(selected: string[] | null): Record<string, string | null> {
 
 describe("Nav", () => {
   it("links relative to the site root at every page depth", () => {
-    expect(hrefs([])).toEqual({ Tokens: "./", Launch: "./launch/", Causes: "./causes/", Governance: "./governance/", Agents: "./agent/" });
+    expect(hrefs([])).toEqual({ Tokens: "./", Donate: "./donate/", Launch: "./launch/", Causes: "./causes/", Governance: "./governance/", Agents: "./agent/" });
     expect(hrefs(["token"])).toMatchObject({ Tokens: "../", Launch: "../launch/", Agents: "../agent/" });
     expect(hrefs(["agent", "hunger"])).toMatchObject({ Tokens: "../../", Governance: "../../governance/", Agents: "../../agent/" });
     expect(hrefs(["agent", "hunger", "africa"])).toMatchObject({ Tokens: "../../../", Causes: "../../../causes/", Agents: "../../../agent/" });
