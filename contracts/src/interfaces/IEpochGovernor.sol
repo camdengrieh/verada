@@ -38,10 +38,13 @@ import {ICuratorRegistry} from "./ICuratorRegistry.sol";
 ///      `[holdFromFor(token, epoch), snapshotFor(token, epoch)]`, in whole tokens. The snapshot is
 ///      `snapshotOf(epoch)` (the second before the epoch starts), except in the epoch a token
 ///      launches in, which predates the token and uses its `launchSnapshotOf` instead. The window
-///      is `HOLD_WINDOW` (the whole previous epoch), so a position held only around the public
-///      snapshot carries no weight. A token's launch epoch and the epoch after it start the window
-///      at `launchSnapshotOf - min(LAUNCH_SNAPSHOT_DELAY, launch epoch end - launchSnapshotOf) / 2`
-///      instead, the later half of the launch delay. The voter and weight are public; the choice
+///      is `holdWindow()` (by default the whole previous epoch), so a position held only around
+///      the public snapshot carries no weight. A token's launch epoch and the epoch after it start
+///      the window at `launchSnapshotOf - min(launchSnapshotDelay, launch epoch end -
+///      launchSnapshotOf) / 2` instead, the later half of the launch delay (fixed when the token
+///      registered). Ballots are accepted only in the last `votingWindow()` of an epoch
+///      (`votingOpensAt`); weights are fixed at the snapshot before the epoch starts, so trading
+///      during the epoch's first phase cannot change that epoch's weights. The voter and weight are public; the choice
 ///      is as private as the scheme makes it.
 interface IEpochGovernor {
     /// @notice A pinned cause: catalogue entry `(bucket, index, orgId)` and its Merkle proof
@@ -92,14 +95,14 @@ interface IEpochGovernor {
     event NoVoteFallbackApplied(address indexed token, uint256 indexed epoch, bytes32 causeId);
 
     /// @notice Emitted when an epoch with ballots falls back to the default cause because no
-    ///         valid final tally arrived within `TALLY_GRACE` after the epoch ended.
+    ///         valid final tally arrived within `tallyGrace` after the epoch ended.
     event TallyTimeoutFallbackApplied(
         address indexed token, uint256 indexed epoch, bytes32 causeId
     );
 
     /// @notice Emitted when closing an epoch could not request the tally from its scheme (for
     ///         example because the scheme no longer lists this governor). `closeEpoch` may be
-    ///         retried; otherwise the epoch falls back to the default cause after `TALLY_GRACE`.
+    ///         retried; otherwise the epoch falls back to the default cause after `tallyGrace`.
     event EpochCloseFailed(address indexed token, uint256 indexed epoch);
 
     /// @notice Emitted with every token shortlist change: the epoch from which `causes` apply.
@@ -123,6 +126,24 @@ interface IEpochGovernor {
     );
 
     event SchemeUpdated(address indexed scheme);
+    /// @notice The epoch schedule changed: from epoch `startEpoch` (starting at `startTime`)
+    ///         epochs last `length` seconds, ballots are accepted in the last `votingWindow`
+    ///         seconds of each, and weights look back `holdWindow` seconds from the snapshot. Takes
+    ///         effect from the next epoch, except before the first token registers, when it
+    ///         re-anchors epoch zero (`startEpoch` 0).
+    event EpochScheduleSet(
+        uint256 startEpoch,
+        uint256 startTime,
+        uint256 length,
+        uint256 votingWindow,
+        uint256 holdWindow
+    );
+    /// @notice `tallyGrace` changed (applies immediately).
+    event TallyGraceSet(uint256 grace);
+    /// @notice `launchSnapshotDelay` changed (applies to tokens registered afterwards).
+    event LaunchSnapshotDelaySet(uint256 delay);
+    /// @notice `curationGrace` changed.
+    event CurationGraceSet(uint256 grace);
     event CuratorRegistrySet(address curators);
     /// @notice No longer emitted (`requestCurationSkip` reverts); kept for indexers.
     event CurationSkipRequested(address indexed token, uint256 indexed epoch, uint256 skipAt);
@@ -145,6 +166,10 @@ interface IEpochGovernor {
     error TokenNotRegistered(address token);
     error EpochNotEnded(uint256 epoch);
     error EpochNotCurrent(uint256 epoch);
+    /// @notice A ballot before the epoch's voting window opened at `opensAt`.
+    error VotingNotOpen(uint256 epoch, uint256 opensAt);
+    /// @notice A duration outside `[min, max]`.
+    error DurationOutOfRange(uint256 value, uint256 min, uint256 max);
     error EpochNotOpened(address token, uint256 epoch);
     error EpochAlreadyOpened(address token, uint256 epoch);
     error EpochAlreadyClosed(address token, uint256 epoch);
@@ -184,8 +209,52 @@ interface IEpochGovernor {
 
     // ------------------------------------------------------------------ constants / config
 
-    /// @notice Length of an epoch in seconds.
-    function EPOCH_LENGTH() external view returns (uint256);
+    /// @notice Shortest value of any owner-set duration (epoch, voting window, hold window,
+    ///         graces).
+    function MIN_DURATION() external view returns (uint256);
+
+    /// @notice Longest value of any owner-set duration.
+    function MAX_DURATION() external view returns (uint256);
+
+    /// @notice Length in seconds of the current epoch (7 days by default). The length of any
+    ///         epoch is `epochScheduleFor(epoch)`.
+    function epochLength() external view returns (uint256);
+
+    /// @notice Seconds at the end of the current epoch during which ballots are accepted (the
+    ///         whole epoch by default). The remaining first part of the epoch is the trading phase.
+    function votingWindow() external view returns (uint256);
+
+    /// @notice Length of the hold window ending at the current epoch's snapshot (7 days by
+    ///         default).
+    function holdWindow() external view returns (uint256);
+
+    /// @notice `(length, votingWindow, holdWindow)` in force for `epoch`. For the epoch after the
+    ///         current one this is the schedule that will apply to it, including a pending change.
+    function epochScheduleFor(uint256 epoch)
+        external
+        view
+        returns (uint256 length, uint256 votingWindow, uint256 holdWindow);
+
+    /// @notice Timestamp from which ballots of `epoch` are accepted: its end minus its voting
+    ///         window. Ballots are accepted until the epoch ends.
+    function votingOpensAt(uint256 epoch) external view returns (uint256);
+
+    /// @notice Sets the epoch length, the voting window and the hold window, from the next epoch
+    ///         (epochs already started keep their schedule). Before the first token registers it
+    ///         applies at once, so the very first cycle can be short. Owner only.
+    /// @param length Epoch length, `MIN_DURATION..MAX_DURATION`.
+    /// @param votingWindow_ Final part of the epoch that accepts ballots, `MIN_DURATION..length`.
+    /// @param holdWindow_ Hold window of the epochs' weights, `MIN_DURATION..MAX_DURATION`.
+    function setEpochSchedule(uint256 length, uint256 votingWindow_, uint256 holdWindow_) external;
+
+    /// @notice Sets `tallyGrace`. Owner only; applies at once.
+    function setTallyGrace(uint256 grace) external;
+
+    /// @notice Sets `launchSnapshotDelay`. Owner only; applies to tokens registered afterwards.
+    function setLaunchSnapshotDelay(uint256 delay) external;
+
+    /// @notice Sets `curationGrace`. Owner only.
+    function setCurationGrace(uint256 grace) external;
 
     /// @notice Hard ceiling of every ballot size (further capped by the scheme's `MAX_OPTIONS`).
     function MAX_OPTIONS() external view returns (uint8);
@@ -223,16 +292,16 @@ interface IEpochGovernor {
 
     /// @notice Seconds after an epoch ends during which its final tally may still arrive; past
     ///         it, an epoch without a valid final tally finalizes to the default cause.
-    function TALLY_GRACE() external view returns (uint256);
+    function tallyGrace() external view returns (uint256);
 
     /// @notice Longest wait after a token's registration before its launch snapshot (shorter when
     ///         the launch epoch ends sooner: then halfway to its end).
-    function LAUNCH_SNAPSHOT_DELAY() external view returns (uint256);
+    function launchSnapshotDelay() external view returns (uint256);
 
     /// @notice Former grace of `requestCurationSkip`. Kept for compatibility: a ballot with
     ///         usable curator picks now always needs its curated draws. Picks committed but
     ///         never served are dropped by the curator registry owner (`voidCurations`).
-    function CURATION_GRACE() external view returns (uint256);
+    function curationGrace() external view returns (uint256);
 
     /// @notice Timestamp at which epoch 0 starts.
     function epochZeroStart() external view returns (uint256);
@@ -243,7 +312,8 @@ interface IEpochGovernor {
     /// @notice Start timestamp of `epoch`.
     function epochStart(uint256 epoch) external view returns (uint256);
 
-    /// @notice Timestamp at which voting weights for `epoch` are read (the second before it starts).
+    /// @notice Timestamp at which voting weights for `epoch` are read (the second before it starts,
+    ///         so before the epoch's trading phase).
     function snapshotOf(uint256 epoch) external view returns (uint256);
 
     /// @notice Timestamp at which `token`'s voting weights for `epoch` are read: `snapshotOf(epoch)`,
@@ -253,9 +323,6 @@ interface IEpochGovernor {
     /// @notice Launch snapshot of a token created in the epoch it was registered in (zero when the
     ///         token had supply at that epoch's snapshot and uses the regular one).
     function launchSnapshotOf(address token) external view returns (uint256);
-
-    /// @notice Length of the hold window ending at an epoch's snapshot: one epoch.
-    function HOLD_WINDOW() external view returns (uint256);
 
     /// @notice Start of `token`'s hold window for `epoch`: weights are the lowest vote checkpoint
     ///         over `[holdFromFor, snapshotFor]`.
@@ -353,7 +420,7 @@ interface IEpochGovernor {
 
     /// @notice Stores the winning cause of an ended epoch from the scheme's final tally, or the
     ///         default cause when nobody voted or when no valid final tally arrived within
-    ///         `TALLY_GRACE` of the epoch's end. Permissionless. Applying a tally needs the
+    ///         `tallyGrace` of the epoch's end. Permissionless. Applying a tally needs the
     ///         ballot's org ids in order (`BallotPrepared`), checked against `ballotCommitment`
     ///         (`BallotMismatch` otherwise); without one they are ignored and may be empty.
     function finalizeEpoch(address token, uint256 epoch, bytes32[] calldata orgIds) external;
