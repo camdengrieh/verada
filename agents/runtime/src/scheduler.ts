@@ -146,7 +146,7 @@ export function commandArgv(template: string, prompt: string): [string, string[]
 export const curatorPrompt = (agent: string) => `run the curator skill for agent ${agent}`;
 
 /** Secrets that the curator run must not inherit (it gets only its own agent's 1Claw key). */
-const STRIP = /^(ONECLAW_API_KEY_|ONECLAW_AGENT_TOKEN|ONECLAW_TOKEN|ONECLAW_KEYS_VAULT_ID|CHAT_)/;
+const STRIP = /^(ONECLAW_API_KEY_|ONECLAW_AGENT_TOKEN|ONECLAW_TOKEN|AGENTS_VAULT_ID|RUNTIME_VAULT_ID|CHAT_)/;
 
 export function runEnv(base: NodeJS.ProcessEnv, a: AgentRecord, apiKey: string): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};

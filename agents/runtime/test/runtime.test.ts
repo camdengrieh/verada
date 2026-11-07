@@ -191,7 +191,7 @@ describe("scheduler", () => {
       ["-p", "run the curator skill for agent relief", "--output-format", "json"],
     ]);
     const env = runEnv(
-      { PATH: "/bin", ANTHROPIC_API_KEY: "a", ONECLAW_AGENT_TOKEN: "t", ONECLAW_AGENT_TOKEN_FILE: "/f", ONECLAW_API_KEY_HOUSING: "h", CHAT_MODEL: "m", ONECLAW_KEYS_VAULT_ID: "v" },
+      { PATH: "/bin", ANTHROPIC_API_KEY: "a", ONECLAW_AGENT_TOKEN: "t", ONECLAW_AGENT_TOKEN_FILE: "/f", ONECLAW_API_KEY_HOUSING: "h", CHAT_MODEL: "m", AGENTS_VAULT_ID: "v" },
       { agent: "relief", oneClawAgentId: "id-r", apiKeyPath: "p" },
       "key-r",
     );

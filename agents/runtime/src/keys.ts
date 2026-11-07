@@ -38,7 +38,7 @@ export async function loadRuntimeSecrets(o: {
 /**
  * Each curator agent's 1Claw API key, read at run time and never written to disk or logs.
  *  1. `ONECLAW_API_KEY_<AGENT>` (e.g. ONECLAW_API_KEY_RELIEF), for an operator running locally;
- *  2. otherwise the 1Claw vault `ONECLAW_KEYS_VAULT_ID` at the agent's `apiKeyPath`, read with the
+ *  2. otherwise the 1Claw vault `AGENTS_VAULT_ID` at the agent's `apiKeyPath`, read with the
  *     runtime's own agent token (ONECLAW_AGENT_TOKEN, minted by 1Claw; or the file in
  *     ONECLAW_AGENT_TOKEN_FILE, re-read each time so a renewed token is picked up).
  */

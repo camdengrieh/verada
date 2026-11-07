@@ -45,7 +45,7 @@ does two jobs:
 | `INDEXER_URL` | Plain | Indexer base URL (public `/api/agents/*` routes). Until it is set, the chat says nothing has been published yet |
 | `ANTHROPIC_API_KEY` | Vault secret | For the chat and for Claude Code |
 | `SCHEDULER_ENABLED` | Plain | `true` to run the curators here |
-| `ONECLAW_KEYS_VAULT_ID` | Plain | The vault `varada-curator-api-keys`; the runtime's bound agent needs read access to it |
+| `AGENTS_VAULT_ID` | Plain | The vault `varada-curator-api-keys`; the runtime's bound agent needs read access to it |
 | `ONECLAW_AGENT_TOKEN` | Minted by 1Claw | Reads the agents' API keys from that vault |
 | `GITHUB_TOKEN` | Vault secret | Contents write on the repository, for the skill's audit-trail push |
 | `CURATOR_REGISTRY_ADDRESS`, `PUBLISHER_URL`, `CATALOG_SOURCE`, `ETH_RPC_URL` | Plain | Passed through to the curator runs (see `agents/README.md`) |

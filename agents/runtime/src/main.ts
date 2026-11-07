@@ -10,14 +10,14 @@ import { claudeAsker, createServer } from "./server.js";
 const cfg = readConfig();
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ t: new Date().toISOString(), msg, ...extra }));
 
-const loaded = await loadRuntimeSecrets({ env: process.env, vaultId: cfg.ONECLAW_SECRETS_VAULT_ID, baseUrl: cfg.ONECLAW_BASE_URL });
+const loaded = await loadRuntimeSecrets({ env: process.env, vaultId: cfg.RUNTIME_VAULT_ID, baseUrl: cfg.ONECLAW_BASE_URL });
 log("runtime secrets", { loaded, anthropicKey: Boolean(process.env.ANTHROPIC_API_KEY) });
 
 let lastRuns: RunRecord[] = [];
 let schedulerError: string | null = null;
 
 if (cfg.schedulerEnabled) {
-  const keyOf = apiKeys({ vaultId: cfg.ONECLAW_KEYS_VAULT_ID, baseUrl: cfg.ONECLAW_BASE_URL });
+  const keyOf = apiKeys({ vaultId: cfg.AGENTS_VAULT_ID, baseUrl: cfg.ONECLAW_BASE_URL });
   const s = scheduler({
     repoDir: cfg.REPO_DIR,
     schedule: () => cliSchedule(cfg.REPO_DIR, new Date()),
