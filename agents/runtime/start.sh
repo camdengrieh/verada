@@ -13,8 +13,10 @@ cd "$ROOT"
 LOGF="$ROOT/.startup.log"; : > "$LOGF"
 exec > >(tee -a "$LOGF" >&2) 2>&1
 log() { echo "[start.sh $(date -u +%H:%M:%S)] $*"; }
-# Containers may start without a writable HOME; git and npm both need one.
-if [ -z "${HOME:-}" ] || [ ! -w "${HOME}" ]; then export HOME="$ROOT/.home"; mkdir -p "$HOME"; fi
+# The image's HOME (/app on the node template) is not writable for npm's cache and logs, so git
+# and npm keep everything under this clone.
+export HOME="$ROOT/.home"; mkdir -p "$HOME"
+export npm_config_cache="$ROOT/.npm-cache"
 log "repo $ROOT, node $(node --version), HOME $HOME"
 
 # Hold the HTTP ports from the first second: Cloud Run's startup probe (TCP on the runtime's
