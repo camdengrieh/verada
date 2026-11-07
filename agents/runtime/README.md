@@ -80,13 +80,18 @@ source repo `https://github.com/camdengrieh/verada`, startup command
 `SCHEDULER_ENABLED=false`, `RUNTIME_VAULT_ID`, `CHAT_ALLOWED_ORIGINS`. Bound to the `relief` agent,
 which has one policy: read on `runtime/**` in `varada-curators`. Nothing grants it the key vault.
 
-**Scheduler runtime** (to create once the agents are registered on chain and signing is on): the
-same template, source and startup command; `expose_http: false`; preset `small` is enough if Claude
-Code fits, else `medium`; `env_public` `SCHEDULER_ENABLED=true`, `RUNTIME_VAULT_ID`,
-`AGENTS_VAULT_ID`, and the curator variables. Bind it to a **child agent** of `relief` (children do
-not count against the plan's agent cap and cannot sign), and grant that child read on
-`agents/**` in `varada-curator-api-keys` and on `runtime/**` in `varada-curators`. A second runtime
-is a paid add-on on Pro.
+**Scheduler** (once the agents are registered on chain and signing is on), one of two ways:
+
+- **Claude scheduled routines, one per agent** (`agents/README.md` §4). Each run receives only its
+  own agent's key as a network secret, so no machine ever holds more than one key. This is the
+  stronger isolation and costs nothing extra on 1Claw.
+- **A second 1Claw runtime** (paid add-on on Pro): the same template, source and startup command;
+  `expose_http: false`; `env_public` `SCHEDULER_ENABLED=true`, `RUNTIME_VAULT_ID`,
+  `AGENTS_VAULT_ID`, and the curator variables. Its bound agent must be able to read `agents/**`
+  in `varada-curator-api-keys`. The Pro plan's ten agent slots are all curators, and a child agent
+  cannot do it (a child's vaults and scopes must be a subset of its parent's), so this binds the
+  runtime to one curator agent whose token is widened to the key vault. That container then holds
+  every key, which is the trade-off the routines avoid.
 
 Check `GET /health` on the chat runtime (`chat: true`), then a chat.
 
