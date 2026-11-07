@@ -47,8 +47,10 @@ contract VaradaResolver is
     ITokenProfileRegistry public immutable registry;
     /// @notice Curator registry for `<label>.agent.<parent>` (zero: no agent names).
     ICuratorRegistry public immutable curators;
-    /// @notice CAIP-10 style prefix of the agents' ERC-8004 registry, e.g. `eip155:1:0x8004…:`.
-    string internal _agentRegistryPrefix;
+    /// @notice ENSIP-25 text key prefix for the agents' ERC-8004 registry:
+    ///         `agent-registration[<ERC-7930 address of the registry>][`, e.g.
+    ///         `agent-registration[0x000100000101148004a169fb4a3325136eb29fa0ceb6d2e539a432][`.
+    string internal _agentRegistrationKeyPrefix;
     /// @notice Dotted parent name (`varada.eth`), for gateway URLs.
     string internal _parentName;
 
@@ -86,8 +88,8 @@ contract VaradaResolver is
         _agentsDnsHash = keccak256(agentsDns);
         _agentsDnsLength = agentsDns.length;
         if (address(curators_) != address(0)) {
-            _agentRegistryPrefix = string.concat(
-                "eip155:", _decimal(block.chainid), ":", _addressHex(_identityOf(curators_)), ":"
+            _agentRegistrationKeyPrefix = string.concat(
+                "agent-registration[", _interopAddressHex(block.chainid, _identityOf(curators_)), "]["
             );
         }
         bytes32 node = DnsNameLib.namehash(parentDnsName, 0);
@@ -372,9 +374,15 @@ contract VaradaResolver is
         }
         if (k == keccak256("description")) return a.description;
         if (k == keccak256("varada.category")) return _decimal(categoryBit);
-        if (k == keccak256("agent-registration")) {
-            return string.concat(_agentRegistryPrefix, _decimal(a.agentId));
+        // ENSIP-25: the name attests the ERC-8004 identity `agentId` in the agents' registry.
+        if (k == keccak256(bytes(string.concat(_agentRegistrationKeyPrefix, _decimal(a.agentId), "]")))) {
+            return "1";
         }
+        // ENSIP-26: the agent's public page and what it does.
+        if (k == keccak256("agent-endpoint[web]")) {
+            return string.concat("https://", a.label, ".agent.", _parentName, ".limo");
+        }
+        if (k == keccak256("agent-context")) return a.description;
         return "";
     }
 
@@ -443,6 +451,29 @@ contract VaradaResolver is
     }
 
     /// @dev Lowercase `0x`-prefixed hex of an address (40 hex digits).
+    /// @dev ERC-7930 interoperable address (EVM: version 1, chain type 0, minimal big-endian chain
+    ///      reference, 20-byte address) as lowercase `0x` hex.
+    function _interopAddressHex(uint256 chainId, address a) internal pure returns (string memory) {
+        uint256 len;
+        for (uint256 c = chainId; c != 0; c >>= 8) ++len;
+        bytes memory ref = new bytes(len);
+        for (uint256 i; i < len; ++i) {
+            ref[len - 1 - i] = bytes1(uint8(chainId >> (8 * i)));
+        }
+        // forge-lint: disable-next-line(unsafe-typecast)
+        bytes memory raw = bytes.concat(hex"00010000", bytes1(uint8(len)), ref, hex"14", bytes20(a));
+        bytes16 digits = "0123456789abcdef";
+        bytes memory out = new bytes(2 + 2 * raw.length);
+        out[0] = "0";
+        out[1] = "x";
+        for (uint256 i; i < raw.length; ++i) {
+            uint8 b = uint8(raw[i]);
+            out[2 + 2 * i] = digits[b >> 4];
+            out[3 + 2 * i] = digits[b & 0x0f];
+        }
+        return string(out);
+    }
+
     function _addressHex(address a) internal pure returns (string memory) {
         bytes16 digits = "0123456789abcdef";
         bytes20 w = bytes20(a);

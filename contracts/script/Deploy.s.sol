@@ -283,6 +283,10 @@ contract Deploy is Script {
         curators.setGovernor(IEpochGovernor(address(governor)));
         // `agent.<parent>` is the curator agents' namespace: no token may take the label.
         profiles.setReservation(keccak256("agent"), true, address(0));
+        // `org.<parent>` holds the charity names (SetupOrgNames, VaradaOrgResolver) and `names.<parent>`
+        // their Swarm-hosted CCIP data: no token may take either label.
+        profiles.setReservation(keccak256("org"), true, address(0));
+        profiles.setReservation(keccak256("names"), true, address(0));
         registry.setMaterializer(address(governor), true);
         distributor.setFeeVault(address(vault));
         vault.setConsolidator(address(consolidator));

@@ -109,12 +109,44 @@ contract VaradaResolverAgentsTest is Test {
         assertEq(_text(name, "url"), "https://homeless.agent.varada.eth.limo");
         assertEq(_text(name, "description"), "Homelessness curator");
         assertEq(_text(name, "varada.category"), "1");
-        assertEq(
-            _text(name, "agent-registration"),
-            string.concat("eip155:31337:", vm.toLowercase(vm.toString(address(identity))), ":1")
+        // ENSIP-25: chain 31337 = 0x7a69 (2-byte chain reference).
+        string memory key = string.concat(
+            "agent-registration[0x0001000002", "7a69", "14",
+            _hexNo0x(address(identity)), "][1]"
         );
+        assertEq(_text(name, key), "1");
+        assertEq(_text(name, string.concat(
+            "agent-registration[0x0001000002", "7a69", "14", _hexNo0x(address(identity)), "][2]"
+        )), "", "another agent id is not attested");
+        assertEq(_text(name, "agent-registration"), "", "the old non-standard key is gone");
+        // ENSIP-26
+        assertEq(_text(name, "agent-endpoint[web]"), "https://homeless.agent.varada.eth.limo");
+        assertEq(_text(name, "agent-context"), "Homelessness curator");
         assertEq(_text(name, "com.twitter"), "");
         assertEq(agentId, 1);
+    }
+
+    /// @dev The exact ENSIP-25 key on mainnet: ERC-7930 address of the ERC-8004 Identity Registry.
+    function test_ensip25Key_onMainnet() public {
+        address mainnetIdentity = 0x8004A169FB4a3325136EB29fA0ceB6D2e539a432;
+        vm.etch(mainnetIdentity, address(identity).code);
+        vm.chainId(1);
+        CuratorRegistry c = new CuratorRegistry(
+            address(this),
+            IERC8004IdentityRegistry(mainnetIdentity),
+            curators.catalog(),
+            curators.causeRegistry(),
+            curators.endaomentFactory(),
+            curators.usdc(),
+            ITokenProfileRegistry(address(profiles))
+        );
+        (uint256 id,) = c.registerAgent(2, "hunger", makeAddr("relief"), "", "Hunger curator");
+        VaradaResolver r = new VaradaResolver(profiles, PARENT_DNS, ICuratorRegistry(address(c)), "varada.eth");
+        bytes32 node = DnsNameLib.namehash(DnsNameLib.encode("hunger.agent.varada.eth"), 0);
+        string memory key = string.concat(
+            "agent-registration[0x000100000101148004a169fb4a3325136eb29fa0ceb6d2e539a432][", vm.toString(id), "]"
+        );
+        assertEq(r.text(node, key), "1");
     }
 
     function test_legacyNodeCalls_answerAgents() public view {
@@ -164,5 +196,12 @@ contract VaradaResolverAgentsTest is Test {
         );
         assertEq(abi.decode(r, (address)), address(0));
         assertTrue(plain.supportsInterface(type(IExtendedResolver).interfaceId));
+    }
+
+    function _hexNo0x(address a) internal pure returns (string memory) {
+        bytes memory full = bytes(vm.toLowercase(vm.toString(a)));
+        bytes memory out = new bytes(40);
+        for (uint256 j; j < 40; ++j) out[j] = full[j + 2];
+        return string(out);
     }
 }
