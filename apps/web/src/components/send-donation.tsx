@@ -28,9 +28,8 @@ const TEXT = "m-0 text-sm text-ink-soft";
 const NOTE = "m-0 rounded-xl px-3 py-2 text-sm";
 
 const isZero = (h: Hex) => /^0x0*$/.test(h);
-const dateOf = (seconds: bigint) => formatTime(Number(seconds)).slice(0, 10);
 
-/** The step last sent from the card: its label is fixed when sent, whichever week is shown after. */
+/** The step last sent from the card: its label is fixed when sent, whichever epoch is shown after. */
 interface Sent {
   stage: DonationStage;
   epoch: bigint;
@@ -43,11 +42,11 @@ const sameStep = (a: DonationStep, b: DonationStep) =>
   a.type === "send" && b.type === "send" && a.stage === b.stage && a.functionName === b.functionName && a.fallback === b.fallback;
 
 /**
- * Offered while an ended week's fees have not reached its winning charity. Every step left (close
+ * Offered while an ended epoch's fees have not reached its winning charity. Every step left (close
  * the vote, finalize the winner, move the fees to the donation contract, send the donation) is
- * permissionless, so anyone can push the week through when the platform keeper has not. The plan
+ * permissionless, so anyone can push the epoch through when the platform keeper has not. The plan
  * is read from the chain before every step, with the same SDK code the keeper runs, and the
- * caller's wallet sends it. Hidden when no ended week is waiting or the app lacks the addresses.
+ * caller's wallet sends it. Hidden when no ended epoch is waiting or the app lacks the addresses.
  */
 export function SendDonation({ token }: { token: Address }) {
   const config = useAppConfig();
@@ -94,8 +93,8 @@ export function SendDonation({ token }: { token: Address }) {
   if (!w) {
     if (!donated) return null;
     return (
-      <section aria-label="Send this week's donation" className={CARD}>
-        <h2 className={HEADING}>Send this week&apos;s donation</h2>
+      <section aria-label="Send this epoch's donation" className={CARD}>
+        <h2 className={HEADING}>Send this epoch&apos;s donation</h2>
         <p role="status" className={`${NOTE} bg-sage-tint text-sage-ink`}>
           The donation was sent. Thank you for paying the gas.
         </p>
@@ -146,10 +145,10 @@ export function SendDonation({ token }: { token: Address }) {
   }
 
   return (
-    <section aria-label="Send this week's donation" className={CARD}>
-      <h2 className={HEADING}>Send this week&apos;s donation</h2>
+    <section aria-label="Send this epoch's donation" className={CARD}>
+      <h2 className={HEADING}>Send this epoch&apos;s donation</h2>
       <p className={TEXT}>
-        The week of {dateOf(state.epochStart)} to {dateOf(state.epochEnd)} has ended, but its donation has not gone out yet
+        The epoch from {formatTime(Number(state.epochStart))} to {formatTime(Number(state.epochEnd))} has ended, but its donation has not gone out yet
         {amount > 0n ? ` (${usdcText(amount)} for the cause so far)` : ""}.
       </p>
       {stages.length > 0 && (
@@ -166,9 +165,9 @@ export function SendDonation({ token }: { token: Address }) {
       )}
       <p className={TEXT}>
         Anyone can do these steps, not only the platform. Each one is checked on chain: the money can only go to{" "}
-        {fallback ? "the default charity" : "the week's winning charity"}, never to you or anyone else, and you pay the gas.
+        {fallback ? "the default charity" : "the epoch's winning charity"}, never to you or anyone else, and you pay the gas.
       </p>
-      {fallback && <p role="note" className={`${NOTE} bg-ochre-tint text-ochre-ink`}>{fallbackText(defaultCharity)}</p>}
+      {fallback && <p role="note" className={`${NOTE} bg-ochre-tint text-ochre-ink`}>{fallbackText(defaultCharity, Number(state.tallyGrace))}</p>}
       {step.type === "send" && (
         <div>
           <Button type="button" variant="cause" onClick={() => void sendNext()} disabled={busy}>
@@ -192,7 +191,7 @@ export function SendDonation({ token }: { token: Address }) {
       {waiting && <p role="status" className={`${NOTE} bg-sand text-ink-soft`}>{waiting}</p>}
       {blocked && <p role="alert" className={`${NOTE} bg-terracotta-tint text-terracotta-strong`}>{blocked}</p>}
       {error && <p role="alert" className={`${NOTE} bg-terracotta-tint text-terracotta-strong`}>{error}</p>}
-      {sent && <TxStatus tx={tx} label={sent.epoch === w.epoch ? sent.label : `${sent.label} (week of ${dateOf(sent.weekStart)})`} />}
+      {sent && <TxStatus tx={tx} label={sent.epoch === w.epoch ? sent.label : `${sent.label} (epoch from ${formatTime(Number(sent.weekStart))})`} />}
     </section>
   );
 }

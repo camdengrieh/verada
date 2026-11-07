@@ -21,8 +21,10 @@ import { untilText, usdText } from "@/lib/token-view";
 import { shownOptionSources } from "@/components/epoch-panel";
 import { ballotOptions } from "@/lib/profile";
 import { useSiteRel as useRel } from "@/components/governance/use-rel";
+import { EpochPhaseStrip } from "@/components/epoch-phase";
+import { timingOf, timingPhase } from "@/lib/epoch-timing";
 
-/** This week's cause pool: the amount so far, when voting closes and how the ballot is made up. */
+/** This epoch's cause pool: the amount so far, its phase and when it changes, and how the ballot is made up. */
 export function PoolSummary({ token, detail, onVote }: { token: Address; detail: TokenDetail; onVote: () => void }) {
   const config = useAppConfig();
   const view = useEpochView(token);
@@ -35,15 +37,27 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
 
   const { options, frozen } = ballotOptions({ prepared: Boolean(ed.prepared || ed.poll?.opened), epochOptions: ed.options, pinned: detail.shortlist });
   const mix = frozen ? ballotMix(shownOptionSources(true, options, ed)) : null;
+  // Phases come from the governor's schedule: trading until `votingOpensAt`, then voting until the end.
+  const timing = timingOf(ed)!;
+  const phase = timingPhase(timing, Date.now() / 1000);
   const closing = untilText(ed.end, Date.now());
+  const opening = phase === "trading" ? untilText(timing.votingOpensAt, Date.now()) : "";
+  const countdown = phase === "trading" ? `voting opens in ${opening || "moments"}` : closing ? `voting closes in ${closing}` : "voting closed";
   const curator = agents[0]?.ensName || undefined;
-  const voteLabel = ed.poll?.closed || !closing ? "See the result" : "Vote privately";
+  const voteLabel = ed.poll?.closed || phase === "ended" ? "See the result" : phase === "trading" ? "See the ballot" : "Vote privately";
   const common = { amount: usdText(usdcToUsd(pool.total, unit)), attributed: usdText(usdcToUsd(pool.earned, unit)), carriedForward: usdText(usdcToUsd(pool.carriedIn, unit)) };
 
+  const strip = <EpochPhaseStrip timing={timing} epoch={epoch} onChange={() => void view.refetch()} />;
   if (mix) {
-    return <CausePoolCard epoch={Number(epoch)} countdown={closing ? `closes in ${closing}` : "voting closed"} {...common} ballot={mix} curator={curator} onVote={onVote} voteLabel={voteLabel} />;
+    return (
+      <div className="grid grid-cols-1 gap-3">
+        <CausePoolCard epoch={Number(epoch)} countdown={countdown} {...common} ballot={mix} curator={curator} onVote={onVote} voteLabel={voteLabel} />
+        {strip}
+      </div>
+    );
   }
   return (
+    <div className="grid grid-cols-1 gap-3">
     <PoolMeter
       epoch={Number(epoch)}
       amount={usdcToUsd(pool.total, unit)}
@@ -56,6 +70,8 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
       voteLabel={voteLabel === "Vote privately" && !frozen ? "See the ballot" : voteLabel}
       headingLevel={2}
     />
+    {strip}
+    </div>
   );
 }
 
@@ -131,7 +147,7 @@ function useAgentsFor(detail: TokenDetail) {
 
 /**
  * The curator agents whose cause is in the token's focus: each ranks charities for its cause every
- * week, and its picks can fill the ballot slots after the pins.
+ * epoch, and its picks can fill the ballot slots after the pins.
  */
 export function CuratedBy({ focus }: { focus: TokenDetail["focus"] }) {
   const config = useAppConfig();
@@ -148,7 +164,7 @@ export function CuratedBy({ focus }: { focus: TokenDetail["focus"] }) {
       {agents.data && matching.length === 0 && <p className="m-0 text-sm text-ink-soft">No curator agent covers this token&apos;s causes yet.</p>}
       {matching.length > 0 && (
         <>
-          <p className="m-0 text-sm text-ink-soft">Curator agents for this token&apos;s causes. Their weekly picks fill the ballot slots after the pinned causes.</p>
+          <p className="m-0 text-sm text-ink-soft">Curator agents for this token&apos;s causes. Their picks fill the ballot slots after the pinned causes.</p>
           <ul className="m-0 grid list-none gap-3 p-0">
             {matching.map((a) => (
               <li key={a.label}>

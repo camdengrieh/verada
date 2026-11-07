@@ -74,6 +74,25 @@ describe("chainEpochDetail", () => {
     expect(d).toMatchObject({ epoch: "4", prepared: true, options: [], ballotUnavailable: true, poolSize: "40", start: Number(START) });
   });
 
+  it("takes the epoch's boundaries from the governor's schedule, not start + 7 days (45 minute epochs: 30 trading, 15 voting)", async () => {
+    const schedule = vi.fn(async ({ functionName, args }: { functionName: string; args?: readonly unknown[] }) => {
+      if (functionName === "epochStart") return START + ((args![0] as bigint) - 4n) * 2_700n;
+      if (functionName === "votingOpensAt") return START + 1_800n;
+      if (functionName === "epochScheduleFor") return [2_700n, 900n, 2_700n];
+      return views[functionName];
+    });
+    const client = { readContract: schedule, getBlock: async () => HEAD, getLogs: async () => [] } as unknown as PublicClient;
+    const d = await chainEpochDetail(client, cfg, TOKEN, 4n);
+    expect(d).toMatchObject({
+      start: Number(START),
+      end: Number(START) + 2_700,
+      votingOpensAt: Number(START) + 1_800,
+      length: 2_700,
+      votingWindow: 900,
+      holdWindow: 2_700,
+    });
+  });
+
   it("does not flag a readable ballot", async () => {
     const client = { readContract, getBlock: async () => HEAD, getLogs: async () => [] } as unknown as PublicClient;
     const d = await chainEpochDetail(client, cfg, TOKEN, 4n);

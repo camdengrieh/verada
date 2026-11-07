@@ -27,7 +27,8 @@ export function ModeStep({
   causesLoading,
   causesFailed,
   liveReady,
-}: StepProps & { causes: ActiveCause[] | undefined; causesLoading: boolean; causesFailed: boolean; liveReady: boolean | undefined }) {
+  epochLength,
+}: StepProps & { causes: ActiveCause[] | undefined; causesLoading: boolean; causesFailed: boolean; liveReady: boolean | undefined; epochLength?: string }) {
   const id = useId();
   const mode: GivingModeKey = state.input.mode ?? "weekly";
   const rotation = state.input.rotation ?? "24h";
@@ -49,10 +50,10 @@ export function ModeStep({
           tone="cause"
           title={
             <span className="flex flex-wrap items-center gap-2">
-              Weekly pool
+              Epoch pool
             </span>
           }
-          description="Fees pool for a week. Holders then vote with hidden ballots on which charity from your focus receives the pool."
+          description={`Fees pool for each epoch${epochLength ? ` (currently ${epochLength})` : ""}. Holders then vote with hidden ballots, in the last part of the epoch, on which charity from your focus receives the pool.`}
         />
         <RadioCard
           id={`${id}-live`}
@@ -120,7 +121,7 @@ export function ModeStep({
             {causesLoading ? <p className="m-0 text-sm text-ink-soft">Loading active charities</p> : null}
             {causesFailed ? <p role="alert" className="m-0 text-sm font-medium text-destructive">Could not load the cause registry from the indexer. Try again in a moment.</p> : null}
             {causes && causes.length === 0 ? (
-              <EmptyState size="compact" icon={<Heart />} title="No active charities yet" body="A charity becomes active after it wins a weekly vote. Until one has, launch with the weekly pool." />
+              <EmptyState size="compact" icon={<Heart />} title="No active charities yet" body="A charity becomes active after it wins an epoch vote. Until one has, launch with the epoch pool." />
             ) : null}
             {causes && causes.length > 0 ? (
               <>

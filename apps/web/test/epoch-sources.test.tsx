@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor, within } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
 import { epochOptionSources, IndexerClient, toEpochDetail, type TokenDetail } from "@/lib/indexer";
 
@@ -48,6 +48,15 @@ const indexer = new IndexerClient(config.indexerUrls, { fetchImpl: fetchMock as 
 const chainRead = vi.fn(async ({ functionName }: { functionName: string }) => {
   if (functionName === "currentEpoch") return 5n;
   throw new Error(`unexpected public read ${functionName}`);
+});
+
+// The fixtures' epoch runs 1700000000..1700604800 (a fixed week): pin the clock a day into it so the
+// epoch is in its voting phase, as the epoch panel gates ballots on the governor's schedule.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date((1_700_000_000 + 86_400) * 1000) });
+});
+afterAll(() => {
+  vi.useRealTimers();
 });
 
 vi.mock("@/components/providers", () => ({

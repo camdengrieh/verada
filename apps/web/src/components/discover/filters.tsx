@@ -108,7 +108,7 @@ export function Filters({ state, assets, onChange }: FiltersProps) {
         type: "single",
         options: [
           { value: ALL, label: "Any" },
-          { value: "weekly", label: "Weekly pool" },
+          { value: "weekly", label: "Epoch pool" },
           { value: "live", label: "Live donation" },
         ],
       },
@@ -161,7 +161,7 @@ export function Filters({ state, assets, onChange }: FiltersProps) {
         </FilterSelect>
         <FilterSelect label="Giving mode" value={state.mode ?? ALL} onValueChange={(v) => onChange({ mode: v === "weekly" || v === "live" ? v : null })}>
           <SelectItem value={ALL}>Any giving mode</SelectItem>
-          <SelectItem value="weekly">Weekly pool</SelectItem>
+          <SelectItem value="weekly">Epoch pool</SelectItem>
           <SelectItem value="live">Live donation</SelectItem>
         </FilterSelect>
         {count > 0 ? (

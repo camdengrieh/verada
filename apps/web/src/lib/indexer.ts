@@ -123,7 +123,18 @@ export interface EpochDetail {
   poll: PollSummary | null;
   voterCount?: number;
   start?: number;
+  /** Exclusive end of the epoch: the next epoch's start, whatever the schedule was. */
   end?: number;
+  /**
+   * First second a ballot is accepted (`EpochGovernor.votingOpensAt`): the epoch is in its trading
+   * phase before it and ballots revert `VotingNotOpen`. Equals `start` when voting is open all epoch;
+   * undefined from an indexer that predates the schedule fields (then voting is open from `start`).
+   */
+  votingOpensAt?: number;
+  /** Seconds: the length, voting window and hold window of this epoch's schedule segment. */
+  length?: number;
+  votingWindow?: number;
+  holdWindow?: number;
   snapshot?: number;
   winningCause?: string | null;
   finalized?: boolean;
@@ -459,6 +470,10 @@ export function toEpochDetail(v: unknown): EpochDetail | null {
     voterCount: num(v.voterCount),
     start: num(v.start),
     end: num(v.end),
+    votingOpensAt: num(v.votingOpensAt),
+    length: num(v.length),
+    votingWindow: num(v.votingWindow),
+    holdWindow: num(v.holdWindow),
     snapshot: num(v.snapshot),
     winningCause: nonZero(v.winningCause ?? v.winner, ZERO_BYTES32),
     finalized: typeof v.finalized === "boolean" ? v.finalized : undefined,

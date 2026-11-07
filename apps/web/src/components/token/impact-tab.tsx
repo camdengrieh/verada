@@ -102,7 +102,7 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch, donationAsset
           body={
             live
               ? "Every swap donates its cause share as it happens. The first trade starts the count, and each donation is listed here with its transaction."
-              : `Trading fees are collected in ${assetSymbol} and 90% goes to the cause pool, which holders vote to pay out each week. The first trade starts the count.`
+              : `Trading fees are collected in ${assetSymbol} and 90% goes to the cause pool, which holders vote to pay out each epoch. The first trade starts the count.`
           }
         />
         <div className="mx-auto max-w-md px-4 pb-8">

@@ -11,6 +11,8 @@ import { BOTTOM_TAB_BAR_HEIGHT } from "@varada/ui/components/mobile/bottom-tab-b
 import { factoryAbi } from "@/lib/abis";
 import { chainLabelStatus } from "@/lib/chain-reads";
 import { loadCauses } from "@/lib/data";
+import { durationText } from "@/lib/epoch-timing";
+import { loadEpochClock } from "@/lib/governance";
 import { buildMetadataDocument, parseLaunchInput, randomSalt, type LaunchInput } from "@/lib/launch";
 import { ESTIMATE_METADATA_URI, launchCall } from "@/lib/launch-tx";
 import {
@@ -110,6 +112,16 @@ export function LaunchWizard() {
     retry: false,
     staleTime: 120_000,
   });
+
+  // The real epoch length, from the governor (owner-set): shown on the epoch pool so no length is promised here.
+  const epochClock = useQuery({
+    queryKey: ["epoch-clock", config.governorAddress],
+    queryFn: () => loadEpochClock(config, deps),
+    enabled: Boolean(config.governorAddress),
+    retry: false,
+    staleTime: 120_000,
+  });
+  const epochLength = epochClock.data ? durationText(epochClock.data.length) : undefined;
 
   const ws: WizardState = useMemo(
     () => ({
@@ -268,7 +280,7 @@ export function LaunchWizard() {
     },
     {
       ...STEPS[1],
-      content: <ModeStep {...stepProps(1)} causes={causesQuery.data} causesLoading={causesQuery.isLoading} causesFailed={Boolean(causesQuery.error)} liveReady={liveQuery.data} />,
+      content: <ModeStep {...stepProps(1)} causes={causesQuery.data} causesLoading={causesQuery.isLoading} causesFailed={Boolean(causesQuery.error)} liveReady={liveQuery.data} epochLength={epochLength} />,
     },
     {
       ...STEPS[2],

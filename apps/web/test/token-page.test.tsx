@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
 import { IndexerClient } from "@/lib/indexer";
 import { tickPrice } from "@/lib/token-market";
@@ -168,6 +168,15 @@ const accountRead = vi.fn(async ({ functionName }: { functionName: string }) => 
 const account = { address: undefined as string | undefined };
 const writeContract = vi.fn(async (_args: unknown) => "0x01");
 
+// The fixtures' epoch runs 1700000000..1700604800 (a fixed week): pin the clock a day into it so the
+// epoch is in its voting phase, as the epoch panel gates ballots on the governor's schedule.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date((1_700_000_000 + 86_400) * 1000) });
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
+
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => config,
   useDeps: () => ({ indexer, chain: () => ({ readContract: chainRead }) }),
@@ -264,8 +273,8 @@ describe("token page", () => {
     // Focus: hunger in Africa, fixed at launch.
     expect(screen.getAllByText(/Hunger/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Africa/).length).toBeGreaterThan(0);
-    // Weekly pool, the pool's quote asset from the market.
-    expect(screen.getAllByText(/Weekly pool/i).length).toBeGreaterThan(0);
+    // Epoch pool, the pool's quote asset from the market.
+    expect(screen.getAllByText(/Epoch pool/i).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.getAllByText(/WETH/).length).toBeGreaterThan(0));
   });
 

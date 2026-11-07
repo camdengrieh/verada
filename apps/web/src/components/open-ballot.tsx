@@ -20,7 +20,7 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
   const tx = useTx({
     kind: "transaction",
     description: `Epoch ${epoch}`,
-    titles: { pending: "Opening this week's ballot…", success: "Ballot opened", error: "Ballot not opened" },
+    titles: { pending: "Opening this epoch's ballot…", success: "Ballot opened", error: "Ballot not opened" },
   });
   const [planning, setPlanning] = useState(false);
   const [error, setError] = useState<string>();
@@ -63,7 +63,7 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
     return (
       <div role="group" aria-label="Open ballot" className="rounded-2xl bg-sage-tint p-4">
         <p role="status" className="m-0 text-sm text-sage-ink">
-          This week&apos;s ballot is open. Loading its options from the chain.
+          This epoch&apos;s ballot is open. Loading its options from the chain.
         </p>
       </div>
     );
@@ -71,12 +71,12 @@ export function OpenBallot({ token, epoch, onOpened }: { token: Address; epoch: 
   return (
     <div role="group" aria-label="Open ballot" className="grid grid-cols-1 gap-3 rounded-2xl border border-line bg-paper-card p-4">
       <p className="m-0 text-sm text-ink-soft">
-        Nobody has opened this week&apos;s ballot yet. Anyone can: the ballot is drawn on chain exactly as the platform keeper would draw
+        Nobody has opened this epoch&apos;s ballot yet. Anyone can: the ballot is drawn on chain exactly as the platform keeper would draw
         it, and you pay the gas (about 2M gas for a full 32-option ballot, less for a smaller one).
       </p>
       <div>
         <Button type="button" variant="cause" onClick={() => void open()} disabled={planning || tx.isPending || Boolean(tx.hash && !tx.receipt)}>
-          {planning ? "Preparing the ballot" : "Open this week's ballot"}
+          {planning ? "Preparing the ballot" : "Open this epoch's ballot"}
         </Button>
       </div>
       {error && (

@@ -1,3 +1,5 @@
+import { toFunctionSelector } from "viem";
+
 /**
  * Plain-language reasons for failed wallet writes and contract reverts. Matching is on the error's
  * chain (viem wraps the cause several levels deep), its numeric `code` and the custom-error name a
@@ -34,6 +36,7 @@ const REVERTS: Record<string, string> = {
   PollNotOpen: "This poll is not open yet.",
   VotingClosed: "Voting has closed for this proposal.",
   EpochNotCurrent: "This is not the current epoch any more. Reload to see the latest ballot.",
+  VotingNotOpen: "Voting is not open yet for this epoch. Ballots are accepted only in its last part (until then holders trade); the page shows when it opens.",
   EpochNotOpened: "This epoch's ballot has not been opened yet.",
   EpochAlreadyOpened: "This epoch's ballot is already open.",
   BallotAlreadyPrepared: "This epoch's ballot is already prepared.",
@@ -46,11 +49,27 @@ const REVERTS: Record<string, string> = {
   InsufficientGas: "The transaction did not carry enough gas. Try again.",
 };
 
+/**
+ * Governor errors the voting scheme's ABI does not declare: a ballot is authorized by the epoch
+ * governor, so a revert there reaches the wallet as bare data (viem cannot name it). Matched by selector.
+ */
+const BY_SELECTOR: Record<string, string> = {
+  [toFunctionSelector("VotingNotOpen(uint256,uint256)")]: "VotingNotOpen",
+};
+
 /** A custom-error name found anywhere in the error chain, or undefined. */
 export function revertName(e: unknown): string | undefined {
   for (const c of chain(e)) {
     const n = c.data?.errorName;
     if (typeof n === "string" && n) return n;
+  }
+  for (const c of chain(e)) {
+    for (const hex of [(c as { signature?: unknown }).signature, (c as { raw?: unknown }).raw, (c as { data?: unknown }).data]) {
+      if (typeof hex === "string" && hex.length >= 10) {
+        const name = BY_SELECTOR[hex.slice(0, 10).toLowerCase()];
+        if (name) return name;
+      }
+    }
   }
   // Fall back to the name inside a revert message, e.g. `reverted with the following signature ... AlreadyVoted()`.
   for (const c of chain(e)) {

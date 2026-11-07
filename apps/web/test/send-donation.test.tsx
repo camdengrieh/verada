@@ -93,7 +93,7 @@ const readContract = vi.fn(async ({ address, functionName, args }: { address: st
       return st.opened ? SCHEME : zeroAddress;
     case "epochStart":
       return startOf(args![0] as bigint);
-    case "TALLY_GRACE":
+    case "tallyGrace":
       return 14n * DAY;
     case "defaultCause":
       return chain.defaultCause;
@@ -107,7 +107,7 @@ const readContract = vi.fn(async ({ address, functionName, args }: { address: st
       return st.settled;
     case "causePoolOf":
       return st.pool;
-    case "SETTLE_GRACE":
+    case "settleGrace":
       return 7n * DAY;
     case "pending":
       return st.pending;
@@ -160,7 +160,7 @@ function renderCard() {
   return { ...r, rerender: () => r.rerender(ui()) };
 }
 
-const card = () => screen.findByRole("region", { name: "Send this week's donation" });
+const card = () => screen.findByRole("region", { name: "Send this epoch's donation" });
 
 /** The step's transaction is mined: apply it on the fake chain and report its receipt. */
 function mine(n: number, apply: () => void, rerender: () => void) {
@@ -198,22 +198,22 @@ beforeEach(() => {
   };
 });
 
-describe("send this week's donation", () => {
+describe("send this epoch's donation", () => {
   it("walks an unvoted week through finalize, settle and distribute, re-planning after each receipt", async () => {
     const { rerender } = renderCard();
     const c = await card();
-    expect(c).toHaveTextContent(/The week of .* has ended, but its donation has not gone out yet \(1\.5 USDC for the cause so far\)/);
+    expect(c).toHaveTextContent(/The epoch from .* has ended, but its donation has not gone out yet \(1\.5 USDC for the cause so far\)/);
     expect(within(c).getByRole("list", { name: "Steps left" })).toHaveTextContent(
-      /Finalize the winner.*Move the week's fees to the donation contract.*Send the donation to the winning charity/,
+      /Finalize the winner.*Move the epoch's fees to the donation contract.*Send the donation to the winning charity/,
     );
-    expect(c).toHaveTextContent(/Anyone can do these steps.*only go to the week's winning charity.*you pay the gas/);
+    expect(c).toHaveTextContent(/Anyone can do these steps.*only go to the epoch's winning charity.*you pay the gas/);
 
     fireEvent.click(within(c).getByRole("button", { name: "Finalize the winner" }));
     await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(1));
     expect(writeContractAsync.mock.calls[0]![0]).toMatchObject({ address: GOVERNOR, functionName: "finalizeEpoch", args: [TOKEN, 4n, []], chainId: config.chainId });
     mine(1, () => (chain.finalized = true), rerender);
 
-    const settle = await screen.findByRole("button", { name: "Move the week's fees to the donation contract" });
+    const settle = await screen.findByRole("button", { name: "Move the epoch's fees to the donation contract" });
     expect(screen.getByRole("list", { name: "Steps left" })).toHaveTextContent(/Send the donation to Hunger Relief/);
     fireEvent.click(settle);
     await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(2));
@@ -276,8 +276,8 @@ describe("send this week's donation", () => {
     weekState.set(4n, { finalized: true, winner: CAUSE2 });
     renderCard();
     const c = await card();
-    expect(await within(c).findByRole("button", { name: "Move the week's fees to the donation contract" })).toBeEnabled();
-    expect(c).toHaveTextContent(`The week of ${new Date(Number(startOf(4n)) * 1000).toISOString().slice(0, 10)}`);
+    expect(await within(c).findByRole("button", { name: "Move the epoch's fees to the donation contract" })).toBeEnabled();
+    expect(c).toHaveTextContent(`The epoch from ${new Date(Number(startOf(4n)) * 1000).toISOString().replace(".000Z", "Z")}`);
     expect(within(c).queryByRole("alert")).toBeNull();
   });
 
@@ -311,7 +311,7 @@ describe("send this week's donation", () => {
     Object.assign(chain, { opened: true, voters: 2n, closed: true, now: startOf(5n) + 15n * DAY });
     renderCard();
     const c = await card();
-    const button = await within(c).findByRole("button", { name: "Give this week to Hunger Relief" });
+    const button = await within(c).findByRole("button", { name: "Give this epoch to Hunger Relief" });
     expect(within(c).getByRole("note")).toHaveTextContent(/votes were never decrypted.*does not count the votes.*default charity, Hunger Relief/);
     expect(c).toHaveTextContent(/can only go to the default charity/);
     fireEvent.click(button);
@@ -328,7 +328,7 @@ describe("send this week's donation", () => {
     fireEvent.click(button);
     expect(await screen.findByText(/The next step changed since this page loaded/)).toBeInTheDocument();
     expect(writeContractAsync).not.toHaveBeenCalled();
-    expect(await screen.findByRole("button", { name: "Give this week to Hunger Relief" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Give this epoch to Hunger Relief" })).toBeEnabled();
   });
 
   it("keeps the confirmed step's own charity and week once the card moves to another week", async () => {
@@ -340,8 +340,8 @@ describe("send this week's donation", () => {
     await waitFor(() => expect(writeContractAsync).toHaveBeenCalledTimes(1));
     mine(1, () => weekState.set(3n, { ...weekState.get(3n), distributed: true, pending: 0n }), rerender);
     expect(await screen.findByRole("button", { name: "Send the donation to Clean Water" })).toBeInTheDocument();
-    const week3 = new Date(Number(startOf(3n)) * 1000).toISOString().slice(0, 10);
-    expect(screen.getByText(new RegExp(`Send the donation to Hunger Relief \\(week of ${week3}\\) confirmed in block 101`))).toBeInTheDocument();
+    const week3 = new Date(Number(startOf(3n)) * 1000).toISOString().replace(".000Z", "Z");
+    expect(screen.getByText(new RegExp(`Send the donation to Hunger Relief \\(epoch from ${week3}\\) confirmed in block 101`))).toBeInTheDocument();
     expect(screen.queryByText(/Send the donation to Clean Water confirmed/)).toBeNull();
   });
 
@@ -359,7 +359,7 @@ describe("send this week's donation", () => {
     const first = renderCard();
     await waitFor(() => expect(readContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: "causePoolOf" })));
     await new Promise((r) => setTimeout(r, 20));
-    expect(screen.queryByRole("region", { name: "Send this week's donation" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Send this epoch's donation" })).toBeNull();
     first.unmount();
     chain.pool = 5n;
     renderCard();
@@ -371,7 +371,7 @@ describe("send this week's donation", () => {
     renderCard();
     await waitFor(() => expect(readContract).toHaveBeenCalledWith(expect.objectContaining({ functionName: "distributed" })));
     await new Promise((r) => setTimeout(r, 20));
-    expect(screen.queryByRole("region", { name: "Send this week's donation" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Send this epoch's donation" })).toBeNull();
   });
 
   it("is hidden for a token the governor does not know (live tokens)", async () => {
@@ -408,7 +408,7 @@ describe("donation-push helpers", () => {
 
   it("words every wait and block", () => {
     const fmt = (s: number) => `t${s}`;
-    expect(waitText({ type: "wait", stage: "tally", reason: "tally-other-scheme", until: 9n }, fmt)).toMatch(/From t9 the week can be finalized/);
+    expect(waitText({ type: "wait", stage: "tally", reason: "tally-other-scheme", until: 9n }, fmt)).toMatch(/From t9 the epoch can be finalized/);
     expect(waitText({ type: "wait", stage: "close", reason: "epoch-not-ended", until: 9n }, fmt)).toMatch(/ends at t9/);
     expect(waitText({ type: "done", reason: "donated" }, fmt)).toBeNull();
     expect(blockedText({ type: "blocked", stage: "finalize", reason: "no-default-cause" }, "X")).toMatch(/has not set a default charity/);

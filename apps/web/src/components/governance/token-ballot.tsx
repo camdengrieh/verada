@@ -16,6 +16,7 @@ import { MAX_BALLOT_OPTIONS } from "@varada/sdk";
 import { ConnectButton } from "@/components/connect-button";
 import { agentsForFocus, getAgentReport } from "@/lib/agents";
 import { useSiteRel as useRel } from "@/components/governance/use-rel";
+import { EpochPhaseStrip } from "@/components/epoch-phase";
 import { OpenBallot } from "@/components/open-ballot";
 import { usePrivacyState, openPrivacyDetails } from "@/components/privacy-status";
 import { useAppConfig, useDeps } from "@/components/providers";
@@ -44,6 +45,7 @@ import {
 import type { TokenSummary } from "@/lib/indexer";
 import { label as tokenLabel } from "@/lib/indexer";
 import { ballotOptions } from "@/lib/profile";
+import { timingOf } from "@/lib/epoch-timing";
 
 const NOTE = "m-0 rounded-xl px-3 py-2 text-sm";
 
@@ -109,7 +111,11 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
   });
   const sources = optionSources(frozen, options, ed);
   const makeup = frozen ? ballotMakeup(sources) : null;
-  const status = epochStatus(ed, now);
+  // This epoch's phases: the detail's own boundaries, else the platform clock's when it is the same epoch.
+  // An indexer that predates the schedule fields lacks `votingOpensAt`: the clock's is the same epoch's.
+  const sameClock = clock && epoch === clock.epoch ? clock : null;
+  const timing = timingOf(ed && ed.end !== undefined ? { ...ed, votingOpensAt: ed.votingOpensAt ?? sameClock?.votingOpensAt } : sameClock);
+  const status = epochStatus(ed && timing ? { ...ed, end: timing.end, votingOpensAt: timing.votingOpensAt } : ed, now);
 
   const orgs = useCatalogOrgs(options);
   const causes = useCauseRegistry();
@@ -177,6 +183,8 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
   const voteBlocker: string | null =
     status.phase === "counting"
       ? "Voting has closed. The tally is being counted."
+      : status.phase === "trading"
+        ? `Voting is not open yet. Ballots are accepted from ${formatTime(timing?.votingOpensAt)}; until then holders trade.`
       : status.phase === "tallied" || status.phase === "finalized"
         ? "Voting has ended for this epoch."
         : status.phase === "unopened"
@@ -302,9 +310,11 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
         </p>
       )}
 
+      {view.data && timing && <EpochPhaseStrip timing={timing} epoch={epoch} onChange={() => void view.refetch()} />}
+
       {view.data && (
         <dl className="m-0 grid grid-cols-2 gap-3 text-sm @lg:grid-cols-4">
-          <Fact term="Voting window" value={ed?.start !== undefined && ed?.end !== undefined ? `${formatTime(ed.start)} to ${formatTime(ed.end)}` : clock ? `${formatTime(clock.start)} to ${formatTime(clock.end)}` : "unknown"} />
+          <Fact term="Voting window" value={timing ? `${formatTime(timing.votingOpensAt)} to ${formatTime(timing.end)}` : "unknown"} />
           <Fact term="Weight snapshot" value={formatTime(ed?.snapshot)} />
           <Fact term="Ballots cast" value={ed?.poll ? String(ed.poll.ballotCount) : "0"} />
           <Fact
@@ -333,7 +343,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
           <p role="note" className={`${NOTE} bg-ochre-tint text-ochre-ink`}>
             This epoch&apos;s ballot is not prepared yet. {options.length > 0 ? "The pinned causes below lead it; " : ""}up to{" "}
             {td?.ballotSize?.size ?? MAX_BALLOT_OPTIONS} options are filled from the curator agents&apos; picks and then in rotation from the token&apos;s focus
-            pool when it is prepared, and voting opens then.
+            pool when it is prepared{timing ? `. Ballots are accepted from ${formatTime(timing.votingOpensAt)}` : ", and voting opens then"}.
           </p>
           {options.length > 0 && (
             <ol aria-label="Pinned causes" className="m-0 grid grid-cols-1 list-none gap-1.5 p-0 text-sm text-ink">
@@ -347,7 +357,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
               ))}
             </ol>
           )}
-          {epoch !== undefined && (gate.connected ? <OpenBallot token={address} epoch={epoch} onOpened={markOpened} /> : <p className="m-0 text-sm text-ink-soft">Connect a wallet to open this week&apos;s ballot.</p>)}
+          {epoch !== undefined && (gate.connected ? <OpenBallot token={address} epoch={epoch} onOpened={markOpened} /> : <p className="m-0 text-sm text-ink-soft">Connect a wallet to open this epoch&apos;s ballot.</p>)}
         </div>
       )}
 
@@ -385,7 +395,7 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
               {!gate.connected ? <ConnectButton /> : gate.wrongChain ? voteAction : (
                 <Button variant="cause" size="lg" disabled={status.phase !== "open"} onClick={() => setSheetOpen(true)}>
                   <Vote aria-hidden="true" />
-                  {status.phase === "open" ? "Open the ballot" : "Voting closed"}
+                  {status.phase === "open" ? "Open the ballot" : status.phase === "trading" ? "Voting not open yet" : "Voting closed"}
                 </Button>
               )}
             </div>
@@ -422,8 +432,8 @@ export function TokenBallot({ token, clock }: { token: TokenSummary; clock: Epoc
             value={choiceId}
             onValueChange={setChoiceId}
             kicker={`${tokenLabel(token)} · Epoch ${epoch ?? ""}`}
-            title="Where should this week's pool go?"
-            meta={clock ? `Closes ${formatTime(clock.end)}${weightText ? ` · your weight ${weightText}` : ""}` : weightText ? `Your weight ${weightText}` : undefined}
+            title="Where should this epoch's pool go?"
+            meta={timing ? `Voting ends ${formatTime(timing.end)}${weightText ? ` · your weight ${weightText}` : ""}` : weightText ? `Your weight ${weightText}` : undefined}
             onVote={(o) => startVote(o.id)}
             privacyNote="Your choice is encrypted on this device. Zama's relayer sees your IP and address, never the choice."
             disabledReason={voteBlocker ?? undefined}

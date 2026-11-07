@@ -4,6 +4,7 @@ import { FeesStep } from "@/components/launch/fees-step";
 import { causeNameOf, FocusStep } from "@/components/launch/focus-step";
 import { IdentityStep, LabelStatusLine } from "@/components/launch/identity-step";
 import { LaunchSuccess } from "@/components/launch/launch-success";
+import { ModeStep } from "@/components/launch/mode-step";
 import type { StepProps } from "@/components/launch/types";
 import { initialWizardState, type WizardState } from "@/lib/launch-steps";
 import type { LaunchInput } from "@/lib/launch";
@@ -53,6 +54,24 @@ describe("FocusStep", () => {
     expect(causeNameOf("hunger")).toBe("hunger");
     expect(causeNameOf("children-youth")).toBe("children");
     expect(causeNameOf("other")).toBe("other");
+  });
+});
+
+describe("ModeStep epoch pool", () => {
+  const modeProps = { causes: undefined, causesLoading: false, causesFailed: false, liveReady: true };
+
+  it("says 'each epoch' and shows the length the governor reports, not a week", () => {
+    render(<ModeStep {...props(base)} {...modeProps} epochLength="45 minutes" />);
+    const pool = screen.getByRole("radio", { name: /Epoch pool/ });
+    expect(pool).toBeInTheDocument();
+    expect(screen.getByText(/Fees pool for each epoch \(currently 45 minutes\)\./)).toBeInTheDocument();
+    expect(screen.queryByText(/for a week/)).toBeNull();
+  });
+
+  it("promises no length while the governor's is unknown", () => {
+    render(<ModeStep {...props(base)} {...modeProps} />);
+    expect(screen.getByText(/Fees pool for each epoch\. Holders then vote/)).toBeInTheDocument();
+    expect(screen.queryByText(/currently/)).toBeNull();
   });
 });
 

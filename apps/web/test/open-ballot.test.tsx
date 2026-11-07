@@ -41,10 +41,18 @@ const sizes = Array.from({ length: BUCKET_COUNT }, () => 0);
 sizes[HUNGER_AF] = 3;
 const chain = { prepared: false, pool: 0, options: [] as string[] };
 const SCHEME = config.votingSchemeAddress;
-const chainRead = vi.fn(async ({ functionName }: { functionName: string }) => {
+const NOW = Math.floor(Date.now() / 1000);
+const chainRead = vi.fn(async ({ functionName, args }: { functionName: string; args?: readonly unknown[] }) => {
   switch (functionName) {
     case "currentEpoch":
       return 5n;
+    // Epoch 5 started an hour ago and ends tomorrow; ballots are accepted throughout.
+    case "epochStart":
+      return BigInt(args?.[0] === 6n ? NOW + 86_400 : NOW - 3_600);
+    case "votingOpensAt":
+      return BigInt(NOW - 3_600);
+    case "epochScheduleFor":
+      return [90_000n, 90_000n, 90_000n];
     case "isPrepared":
       return chain.prepared;
     case "poolOf":
@@ -76,7 +84,6 @@ const chainRead = vi.fn(async ({ functionName }: { functionName: string }) => {
     case "isFinalized":
       return false;
     case "snapshotFor":
-    case "epochStart":
       return 1_000n;
     case "voterCount":
       return 0n;
@@ -139,7 +146,7 @@ function renderPanelWithRerender() {
 
 async function clickOpen() {
   const group = await screen.findByRole("group", { name: "Open ballot" });
-  fireEvent.click(within(group).getByRole("button", { name: "Open this week's ballot" }));
+  fireEvent.click(within(group).getByRole("button", { name: "Open this epoch's ballot" }));
   return group;
 }
 
@@ -155,7 +162,7 @@ beforeEach(() => {
   delete fixtures[`/api/epochs/${TOKEN}/5`];
 });
 
-describe("open this week's ballot", () => {
+describe("open this epoch's ballot", () => {
   it("sends openEpoch when the ballot needs no draws", async () => {
     renderPanel();
     await clickOpen();
@@ -219,7 +226,7 @@ describe("open this week's ballot", () => {
     wallet.receipt = { status: "success", blockNumber: 7n };
     rerender();
     await screen.findByRole("form", { name: "Vote" });
-    expect(screen.queryByRole("button", { name: "Open this week's ballot" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Open this epoch's ballot" })).toBeNull();
     expect(chainLogs).toHaveBeenCalled();
   });
 

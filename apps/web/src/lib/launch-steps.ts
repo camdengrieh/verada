@@ -18,7 +18,7 @@ import {
 /** The wizard's steps in order. */
 export const STEPS = [
   { id: "identity", label: "Identity", description: "Name, ticker, ENS name and logo" },
-  { id: "mode", label: "Giving", description: "Weekly pool or live donation" },
+  { id: "mode", label: "Giving", description: "Epoch pool or live donation" },
   { id: "pair", label: "Pair", description: "What your coin trades against" },
   { id: "focus", label: "Causes", description: "Which charities can receive fees" },
   { id: "fees", label: "Fees", description: "Trading fee and launch protection" },

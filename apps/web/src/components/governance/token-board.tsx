@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger } from "@varada/ui/components/ui/tabs";
 import { useMemo, useState } from "react";
 import { isAddress } from "viem";
 import { useAppConfig } from "@/components/providers";
-import { epochStatus, formatWeight, tokenLogoUrl, type Standing, type TokenEpochRow } from "@/lib/governance";
+import { ballotIsLive, epochStatus, formatWeight, tokenLogoUrl, type Standing, type TokenEpochRow } from "@/lib/governance";
 import { label as tokenLabel, type TokenSummary } from "@/lib/indexer";
 import { cn } from "@varada/ui/lib/utils";
 
@@ -31,7 +31,7 @@ export function filterBoard(entries: readonly BoardEntry[], filter: BoardFilter,
   const out = entries.filter((e) => {
     const t = e.row.token;
     if (q && !`${t.name} ${t.symbol} ${t.address} ${t.label ?? ""}`.toLowerCase().includes(q)) return false;
-    if (filter === "open") return epochStatus(e.row.detail, nowSeconds).phase === "open";
+    if (filter === "open") return ballotIsLive(epochStatus(e.row.detail, nowSeconds));
     if (filter === "mine") return Boolean(e.standing && e.standing.weight > 0n);
     return true;
   });
@@ -66,9 +66,9 @@ export function TokenBoard({
   const votable = entries.filter((e) => canVoteHere(e, nowSeconds)).length;
 
   return (
-    <section aria-label="Tokens voting this week" className="grid grid-cols-1 content-start gap-3">
+    <section aria-label="Tokens voting this epoch" className="grid grid-cols-1 content-start gap-3">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="m-0 font-display text-xl font-semibold text-ink">Tokens voting this week</h2>
+        <h2 className="m-0 font-display text-xl font-semibold text-ink">Tokens voting this epoch</h2>
         {connected && votable > 0 && (
           <Badge tone="cause" shape="pill">
             {votable} to vote in
@@ -145,7 +145,7 @@ export function TokenBoard({
                   </span>
                   <span className="flex shrink-0 flex-col items-end gap-1">
                     <Badge tone={status.tone} shape="pill">
-                      {status.phase === "open" ? "Open" : status.phase === "unopened" ? "Not opened" : status.phase === "counting" ? "Counting" : status.phase === "tallied" ? "Tallied" : "Final"}
+                      {status.phase === "open" ? "Voting" : status.phase === "trading" ? "Trading" : status.phase === "unopened" ? "Not opened" : status.phase === "counting" ? "Counting" : status.phase === "tallied" ? "Tallied" : "Final"}
                     </Badge>
                     {canVoteHere(e, nowSeconds) && <span className="text-[11px] font-bold text-sage-ink">You can vote</span>}
                   </span>

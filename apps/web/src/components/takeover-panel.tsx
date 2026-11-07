@@ -1,5 +1,6 @@
 "use client";
 
+import { durationText } from "@/lib/epoch-timing";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
@@ -40,12 +41,8 @@ export function takeoverStateLabel(state: string): string {
   return STATE_LABELS[state] ?? state;
 }
 
-function formatDuration(seconds: number): string {
-  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-  if (seconds > 0 && seconds % 86400 === 0) return unit(seconds / 86400, "day");
-  if (seconds > 0 && seconds % 3600 === 0) return unit(seconds / 3600, "hour");
-  return `${seconds} s`;
-}
+/** The governor's own duration, as read ("3 days", "5 minutes", "1 hour 30 minutes"): the floors are now 5 minutes. */
+const formatDuration = durationText;
 
 /** `part / whole` as a percentage with two decimals, or null when `whole` is missing or zero. */
 export function shareOf(part: string, whole: string | undefined): string | null {

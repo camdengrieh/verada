@@ -1,5 +1,6 @@
 import { ChainNotConfiguredError, ConnectorChainMismatchError } from "wagmi";
 import { describe, expect, it } from "vitest";
+import { toFunctionSelector } from "viem";
 import { friendlyTxError, isUserRejection, isWrongChain, revertName } from "@/lib/tx-errors";
 import { txUrl } from "@/lib/explorer";
 
@@ -56,5 +57,15 @@ describe("txUrl", () => {
     expect(txUrl(31337, h)).toBeUndefined();
     expect(txUrl(1, "0x12")).toBeUndefined();
     expect(txUrl(1, undefined)).toBeUndefined();
+  });
+});
+
+describe("VotingNotOpen", () => {
+  it("is named from the error data even though the scheme's ABI cannot decode it", () => {
+    const selector = toFunctionSelector("VotingNotOpen(uint256,uint256)");
+    const raw = `${selector}${"00".repeat(64)}`;
+    expect(revertName({ shortMessage: "reverted", cause: { signature: selector } })).toBe("VotingNotOpen");
+    expect(revertName({ cause: { raw } })).toBe("VotingNotOpen");
+    expect(friendlyTxError({ shortMessage: "reverted", cause: { data: { errorName: "VotingNotOpen" } } })).toMatch(/Voting is not open yet/);
   });
 });

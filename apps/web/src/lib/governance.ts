@@ -4,7 +4,7 @@
  * (weights, "have I voted") is read through `createAccountClient` by the caller; nothing here sends
  * an address to the indexer.
  */
-import { CATEGORIES, EPOCH_LENGTH, REGIONS, USDC_DECIMALS, causeIdOfOrg, donationAssetOrDefault, swarmGatewayUrl, type DonationAsset } from "@varada/sdk";
+import { CATEGORIES, readEpochWindow, REGIONS, USDC_DECIMALS, causeIdOfOrg, donationAssetOrDefault, swarmGatewayUrl, type DonationAsset } from "@varada/sdk";
 import { donationUnitOf } from "./donation-asset";
 import { epochGovernorAbi } from "@varada/sdk/abis";
 import { isCauseName, type CauseName } from "@varada/ui/components/varada/cause-icon";
@@ -110,21 +110,39 @@ export interface EpochClock {
   epoch: bigint;
   /** Unix seconds. */
   start: number;
-  /** Unix seconds, exclusive. */
+  /** Unix seconds, exclusive: the next epoch's start. */
   end: number;
+  /** Unix seconds: ballots are accepted from here to `end` (`start` when voting is open all epoch). */
+  votingOpensAt: number;
+  /** Seconds: this epoch's length and voting window, as the governor has them. */
+  length: number;
+  votingWindow: number;
 }
 
-/** The current epoch and its window, from the governor (`currentEpoch`, `epochStart`). */
+/**
+ * The current epoch and its window, from the governor (`currentEpoch`, `epochStart`,
+ * `votingOpensAt`, `epochScheduleFor`). The epoch length is owner-set and can change between epochs,
+ * so the end is the next epoch's start, never `start + 7 days`.
+ */
 export async function loadEpochClock(cfg: Pick<AppConfig, "governorAddress">, deps: Pick<DataDeps, "chain">): Promise<EpochClock> {
   if (!cfg.governorAddress) throw new Error("Governor address not configured");
-  const client = deps.chain();
-  const g = { address: cfg.governorAddress, abi: epochGovernorAbi } as const;
-  const epoch = await client.readContract({ ...g, functionName: "currentEpoch" });
-  const start = await client.readContract({ ...g, functionName: "epochStart", args: [epoch] });
-  return { epoch, start: Number(start), end: Number(start + EPOCH_LENGTH) };
+  const w = await readEpochWindow(deps.chain(), cfg.governorAddress);
+  return {
+    epoch: w.epoch,
+    start: Number(w.start),
+    end: Number(w.end),
+    votingOpensAt: Number(w.votingOpensAt),
+    length: Number(w.length),
+    votingWindow: Number(w.votingWindow),
+  };
 }
 
-export type EpochPhase = "unopened" | "open" | "counting" | "tallied" | "finalized";
+/**
+ * Where a token's ballot stands: `unopened` (not prepared), `trading` (prepared, ballots not accepted
+ * until `votingOpensAt`), `open` (ballots accepted), `counting` (ended or closed, tally pending),
+ * `tallied` (decrypted) and `finalized` (winner recorded).
+ */
+export type EpochPhase = "unopened" | "trading" | "open" | "counting" | "tallied" | "finalized";
 
 export interface EpochStatus {
   phase: EpochPhase;
@@ -134,13 +152,20 @@ export interface EpochStatus {
 }
 
 /** Where a token's epoch is in its life, from the indexer (or chain) detail and the clock. */
-export function epochStatus(detail: Pick<EpochDetail, "poll" | "prepared" | "finalized" | "end"> | null | undefined, nowSeconds: number): EpochStatus {
+export function epochStatus(detail: Pick<EpochDetail, "poll" | "prepared" | "finalized" | "end" | "votingOpensAt"> | null | undefined, nowSeconds: number): EpochStatus {
   if (detail?.finalized) return { phase: "finalized", label: "Finalized", tone: "ink" };
   const poll: PollSummary | null | undefined = detail?.poll;
   if (poll?.isFinal) return { phase: "tallied", label: "Tally decrypted", tone: "cause" };
   if (!detail || (!detail.prepared && !poll?.opened)) return { phase: "unopened", label: "Ballot not opened", tone: "neutral" };
   if (poll?.closed || (detail.end !== undefined && nowSeconds >= detail.end)) return { phase: "counting", label: "Counting votes", tone: "rwa" };
+  // Prepared, not ended: ballots are accepted only from `votingOpensAt` (VotingNotOpen before it).
+  if (detail.votingOpensAt !== undefined && nowSeconds < detail.votingOpensAt) return { phase: "trading", label: "Trading phase, voting not open yet", tone: "neutral" };
   return { phase: "open", label: "Open for ballots", tone: "cause" };
+}
+
+/** The ballot is prepared and the epoch has not ended: ballots are accepted now or will be (trading or voting). */
+export function ballotIsLive(status: EpochStatus): boolean {
+  return status.phase === "open" || status.phase === "trading";
 }
 
 /** Whether a ballot can be cast now. */

@@ -1,14 +1,16 @@
 "use client";
 
-import { Countdown } from "@varada/ui/components/data/countdown";
 import { Skeleton } from "@varada/ui/components/ui/skeleton";
 import { InfoTip } from "@varada/ui/components/ui/info-tip";
-import { errorText, formatTime } from "@/components/use-tx";
+import { EpochPhaseStrip } from "@/components/epoch-phase";
+import { errorText } from "@/components/use-tx";
+import { timingOf } from "@/lib/epoch-timing";
 import type { EpochClock as Clock } from "@/lib/governance";
 
 /**
- * The platform's current epoch and the time left in it (one epoch is one week, Thursday to
- * Thursday, UTC). Voting on every token closes together when it ends.
+ * The platform's current epoch: its phase (trading, then voting, then tally), the time to the next
+ * change and the real times, all from the governor's owner-set schedule. Every token's voting opens
+ * and closes together.
  */
 export function EpochClock({ clock, loading, error, onDone }: { clock: Clock | undefined; loading: boolean; error: unknown; onDone?: () => void }) {
   return (
@@ -28,14 +30,7 @@ export function EpochClock({ clock, loading, error, onDone }: { clock: Clock | u
           Could not read the epoch from the chain: {errorText(error)}
         </p>
       )}
-      {clock && (
-        <>
-          <Countdown to={clock.end * 1000} label={`Epoch ${clock.epoch} closes in`} doneText="Voting is closed. Tallies are being counted." onDone={onDone} />
-          <p className="num m-0 text-xs text-ink-muted">
-            {formatTime(clock.start)} to {formatTime(clock.end)}
-          </p>
-        </>
-      )}
+      {clock && <EpochPhaseStrip timing={timingOf(clock)!} epoch={clock.epoch} onChange={onDone} />}
     </section>
   );
 }

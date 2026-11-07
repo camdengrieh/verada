@@ -185,6 +185,21 @@ describe("profile, epoch and takeover routes", () => {
     expect(toEpochDetail({ epoch: "2", prepared: true, ballotSize: 8 })?.ballotSize).toBe(8);
   });
 
+  it("parses the epoch schedule fields and leaves them undefined from an older indexer", async () => {
+    const { toEpochDetail } = await import("@/lib/indexer");
+    expect(toEpochDetail({ epoch: "7", start: 1000, end: 3700, votingOpensAt: 2800, length: 2700, votingWindow: 900, holdWindow: 2700 })).toMatchObject({
+      start: 1000,
+      end: 3700,
+      votingOpensAt: 2800,
+      length: 2700,
+      votingWindow: 900,
+      holdWindow: 2700,
+    });
+    expect(toEpochDetail({ epoch: "7", start: 1000, end: 3700 })).toMatchObject({ votingOpensAt: undefined, length: undefined });
+    // The indexer sends big values as strings.
+    expect(toEpochDetail({ epoch: "7", votingOpensAt: "2800" })?.votingOpensAt).toBe(2800);
+  });
+
   it("tolerates epochs without a poll and normalizes takeover states", async () => {
     const { toEpochDetail, toTakeover, takeoverStateName } = await import("@/lib/indexer");
     expect(toEpochDetail({ epoch: 3 })).toMatchObject({ epoch: "3", options: [], poll: null, prepared: false });
