@@ -1,0 +1,6 @@
+{
+  "chainId": 1,
+  "liveHook": "0xE128C345131e72d3E7A70ceAFbD260e90cCA60Ec",
+  "liveVault": "0xc8e3fcea16CFe189a0f8DA4b8a7e5AE38a6921AD",
+  "rotationGovernor": "0x68689D0B59d6893B5088cF5D6634e779333d82A0"
+}

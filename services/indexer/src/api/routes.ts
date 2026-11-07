@@ -23,7 +23,7 @@ import { ActivityBus } from "./bus";
 import type { ApiConfig } from "./config";
 import { type Cursor, decodeCursor, decodeOffset, encodeCursor, encodeOffset } from "./cursor";
 import { pickProofs, verifyReport, type AgentsRepo, type ReportFetcher } from "./agents";
-import type { CatalogStore } from "./catalog";
+import { namesSummary, type CatalogStore } from "./catalog";
 import type { CauseSearch } from "./search";
 import { type CauseTotalsRepo, DEFAULT_ETH_USD_REFERENCE, rankCauseTotals, totalsByCategory } from "./cause-totals";
 import { type DonorsRepo, type NameLookup, donorWindow, inCause, rankBy } from "./donors";
@@ -615,6 +615,8 @@ export function createApi(deps: ApiDeps): Hono {
         sourceAsOf: meta.sourceAsOf,
         orgs: meta.stats.orgs,
         entries: meta.stats.entries,
+        // `<label>.org.<parent>` names this build registers; null on a build without names.
+        names: namesSummary(cat),
         categories: CATEGORIES.map((x) => ({ slug: x.slug, label: x.label, bit: x.bit, orgs: meta.stats.byCategory[x.slug] ?? 0 })),
         regions: REGIONS.map((x) => ({ slug: x.slug, label: x.label, bit: x.bit, orgs: meta.stats.byRegion[x.slug] ?? 0 })),
         bucketSizes: meta.bucketSizes,
