@@ -28,7 +28,7 @@ import {FeeVault} from "../src/FeeVault.sol";
 ///        TALLY_GRACE_SECONDS        default 1800  (30 min)
 ///        CURATION_GRACE_SECONDS     default 300   (5 min)
 ///        LAUNCH_SNAPSHOT_DELAY_SECONDS default 300 (5 min)
-///        SETTLE_GRACE_SECONDS       default 300   (5 min)
+///        SETTLE_GRACE_SECONDS       default 2700  (45 min)
 ///      A change of the epoch schedule takes effect from the NEXT epoch (see `EpochGovernor`).
 contract ConfigureTiming is Script {
     function run() external {
@@ -43,7 +43,7 @@ contract ConfigureTiming is Script {
         uint256 tally = vm.envOr("TALLY_GRACE_SECONDS", uint256(30 minutes));
         uint256 curation = vm.envOr("CURATION_GRACE_SECONDS", uint256(5 minutes));
         uint256 snapshotDelay = vm.envOr("LAUNCH_SNAPSHOT_DELAY_SECONDS", uint256(5 minutes));
-        uint256 settle = vm.envOr("SETTLE_GRACE_SECONDS", uint256(5 minutes));
+        uint256 settle = vm.envOr("SETTLE_GRACE_SECONDS", uint256(45 minutes));
 
         vm.startBroadcast();
         (, address sender,) = vm.readCallers();

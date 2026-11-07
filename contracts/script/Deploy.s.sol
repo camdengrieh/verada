@@ -284,6 +284,19 @@ contract Deploy is Script {
             POOL_MANAGER
         );
 
+        // Cycle timing (owner-settable later; see ConfigureTiming). Defaults are the first production
+        // test cycle: 30 minutes of trading then 15 minutes of voting (45 minute epoch, hold window =
+        // the trading phase). This MUST run before any token registers (the first call re-anchors
+        // epoch 0 only while none has) and before `setCuratorRegistry` below, which caches the epoch
+        // length. Set EPOCH_LENGTH_SECONDS / VOTING_WINDOW_SECONDS / HOLD_WINDOW_SECONDS to override
+        // (7 days / 7 days / 7 days are the contracts' own defaults).
+        governor.setEpochSchedule(
+            vm.envOr("EPOCH_LENGTH_SECONDS", uint256(45 minutes)),
+            vm.envOr("VOTING_WINDOW_SECONDS", uint256(15 minutes)),
+            vm.envOr("HOLD_WINDOW_SECONDS", uint256(30 minutes))
+        );
+        vault.setSettleGrace(vm.envOr("SETTLE_GRACE_SECONDS", uint256(45 minutes)));
+
         // Wiring.
         governor.setFactory(address(factory));
         governor.setCuratorRegistry(ICuratorRegistry(address(curators)));
