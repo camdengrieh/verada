@@ -7,6 +7,7 @@ import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.
 import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
 import {IEnsV2StandardRegistry} from "../../src/interfaces/external/ens/IEnsV2Subregistry.sol";
 import {DnsNameLib} from "../../src/libraries/DnsNameLib.sol";
+import {DonationAsset} from "../../src/interfaces/IDonationAsset.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
 import {EnsResolutionForkTest} from "./EnsResolution.t.sol";
 
@@ -82,7 +83,8 @@ contract VaradaNamesV2ForkTest is EnsResolutionForkTest {
                 label: labels[i],
                 logoRef: bytes32(0),
                 categoryMask: CatalogPublish.CATEGORIES,
-                regionMask: CatalogPublish.REGIONS
+                regionMask: CatalogPublish.REGIONS,
+                donationAsset: DonationAsset.Usdc
             });
             vm.prank(creator);
             vm.expectRevert(

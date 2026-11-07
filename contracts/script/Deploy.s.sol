@@ -14,6 +14,8 @@ import {CuratorRegistry} from "../src/CuratorRegistry.sol";
 import {DonationDistributor} from "../src/DonationDistributor.sol";
 import {EpochGovernor} from "../src/EpochGovernor.sol";
 import {FeeConsolidator, IConsolidatorRegistry} from "../src/FeeConsolidator.sol";
+import {FeeConsolidatorV3} from "../src/FeeConsolidatorV3.sol";
+import {IUniswapV3Factory} from "../src/interfaces/external/IUniswapV3.sol";
 import {FeeVault} from "../src/FeeVault.sol";
 import {QuoteRegistry} from "../src/QuoteRegistry.sol";
 import {TakeoverGovernor} from "../src/TakeoverGovernor.sol";
@@ -74,6 +76,8 @@ contract Deploy is Script {
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     /// @dev Endaoment's org fund factory on mainnet.
     address internal constant ENDAOMENT_FACTORY = 0x10fD9348136dCea154F752fe0B6dB45Fc298A589;
+    /// @dev Canonical Uniswap v3 factory on mainnet; the consolidator swaps registry v3 hops on its pools.
+    address internal constant UNISWAP_V3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     /// @dev Consolidator guards: slippage versus spot and spot versus reference, in bps and ticks.
     uint256 internal constant MAX_SLIPPAGE_BPS = 300;
     uint256 internal constant MAX_DEVIATION_TICKS = 1500;
@@ -216,14 +220,17 @@ contract Deploy is Script {
         );
         _expect("feeVault", vaultAddr, address(vault));
 
-        FeeConsolidator consolidator = new FeeConsolidator(
+        // The v3-capable consolidator: it deploys its own V3SwapExecutor in the constructor (a
+        // CREATE from the consolidator, so the deployer's nonce sequence and `_expect` are unchanged).
+        FeeConsolidator consolidator = new FeeConsolidatorV3(
             deployer,
             IPoolManager(POOL_MANAGER),
             IConsolidatorRegistry(address(quotes)),
             IFeeVault(address(vault)),
             WETH,
             MAX_SLIPPAGE_BPS,
-            MAX_DEVIATION_TICKS
+            MAX_DEVIATION_TICKS,
+            IUniswapV3Factory(UNISWAP_V3_FACTORY)
         );
         _expect("feeConsolidator", consolidatorAddr, address(consolidator));
 

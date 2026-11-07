@@ -5,6 +5,7 @@ import {console2} from "forge-std/Script.sol";
 import {Vm, VmSafe} from "forge-std/Vm.sol";
 
 import {DeployLive} from "./DeployLive.s.sol";
+import {FeeConsolidatorV3} from "../src/FeeConsolidatorV3.sol";
 
 /// @title DeployV3Routes
 /// @notice The one-command mainnet deployment of the consolidator/registry generation (routes with
@@ -93,6 +94,9 @@ contract DeployV3Routes is DeployLive {
         vm.serializeAddress(a, "lpLocker", d.lpLocker);
         vm.serializeAddress(a, "feeVault", d.feeVault);
         vm.serializeAddress(a, "feeConsolidator", d.feeConsolidator);
+        vm.serializeAddress(
+            a, "v3SwapExecutor", address(FeeConsolidatorV3(payable(d.feeConsolidator)).executor())
+        );
         vm.serializeAddress(a, "quoteRegistry", d.quoteRegistry);
         vm.serializeAddress(a, "causeRegistry", d.causeRegistry);
         vm.serializeAddress(a, "causeCatalog", d.causeCatalog);
