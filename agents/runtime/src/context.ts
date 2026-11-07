@@ -39,7 +39,10 @@ function latestEpoch(agent: unknown): string | null {
   return typeof e === "string" || typeof e === "number" ? String(e) : null;
 }
 
-export async function loadCauseContext(indexerUrl: string, label: string, fetchFn: Fetch = fetch): Promise<CauseContext> {
+export async function loadCauseContext(indexerUrl: string | undefined, label: string, fetchFn: Fetch = fetch): Promise<CauseContext> {
+  if (!indexerUrl) {
+    return { label, agent: null, report: null, donors: null, text: JSON.stringify({ cause: label, agent: null, latestReport: null, donorsLast7Days: null, note: "The indexer is not live yet: nothing has been published for this cause." }) };
+  }
   const base = `${indexerUrl}/api/agents/${encodeURIComponent(label)}`;
   const [agent, donors] = await Promise.all([getJson(fetchFn, base), getJson(fetchFn, `${base}/donors?days=7&limit=10`).catch(() => null)]);
   const epoch = latestEpoch(agent);

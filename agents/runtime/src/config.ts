@@ -7,8 +7,8 @@ import { z } from "zod";
  */
 const Env = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8000),
-  /** Indexer base URL (public `/api/agents/*` routes). */
-  INDEXER_URL: z.string().url(),
+  /** Indexer base URL (public `/api/agents/*` routes). Unset until the indexer is deployed: the chat then knows only that no report exists yet. */
+  INDEXER_URL: z.string().url().optional(),
   /** Origins allowed to call the chat API from a browser, comma-separated (`*` for any). */
   CHAT_ALLOWED_ORIGINS: z.string().default("https://varada.eth.limo,https://varada.eth.link"),
   /** Claude model for public chat. */
@@ -44,7 +44,7 @@ export function readConfig(env: Record<string, string | undefined> = process.env
   const e = Env.parse(env);
   return {
     ...e,
-    INDEXER_URL: e.INDEXER_URL.replace(/\/+$/, ""),
+    INDEXER_URL: e.INDEXER_URL?.replace(/\/+$/, ""),
     allowedOrigins: e.CHAT_ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
     schedulerEnabled: e.SCHEDULER_ENABLED === "true",
   };

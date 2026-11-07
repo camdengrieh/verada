@@ -120,6 +120,7 @@ describe("cause context", () => {
     const none = await loadCauseContext("https://ix.example", "water", fetchFn);
     expect(none.agent).toBeNull();
     expect(none.text).toContain('"latestReport":null');
+    expect((await loadCauseContext(undefined, "water", fetchFn)).text).toContain("not live yet");
     expect(isCause("water")).toBe(true);
     expect(isCause("nope")).toBe(false);
   });
@@ -214,6 +215,7 @@ describe("config", () => {
     const c = readConfig({ INDEXER_URL: "https://ix.example/" });
     expect(c).toMatchObject({ INDEXER_URL: "https://ix.example", CHAT_MODEL: "claude-opus-5-5", CHAT_EFFORT: "low", schedulerEnabled: false, PORT: 8000 });
     expect(c.allowedOrigins).toContain("https://varada.eth.limo");
-    expect(() => readConfig({})).toThrow();
+    expect(readConfig({}).INDEXER_URL).toBeUndefined();
+    expect(() => readConfig({ INDEXER_URL: "not a url" })).toThrow();
   });
 });
