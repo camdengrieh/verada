@@ -8,7 +8,11 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
-log() { echo "[start.sh $(date -u +%H:%M:%S)] $*" >&2; }
+# Everything this script prints also goes to a file the placeholder serves at /startup-log, so
+# startup can be followed over HTTP when the platform's logs are not available.
+LOGF="$ROOT/.startup.log"; : > "$LOGF"
+exec > >(tee -a "$LOGF" >&2) 2>&1
+log() { echo "[start.sh $(date -u +%H:%M:%S)] $*"; }
 # Containers may start without a writable HOME; git and npm both need one.
 if [ -z "${HOME:-}" ] || [ ! -w "${HOME}" ]; then export HOME="$ROOT/.home"; mkdir -p "$HOME"; fi
 log "repo $ROOT, node $(node --version), HOME $HOME"
@@ -16,10 +20,15 @@ log "repo $ROOT, node $(node --version), HOME $HOME"
 # Hold the HTTP ports from the first second: Cloud Run's startup probe (TCP on the runtime's
 # http_port) allows only a few minutes, and the installs below can take longer. Requests get a
 # 503 "starting" until the real server replaces this.
-node -e '
-const http = require("http");
+STARTUP_LOG_FILE="$LOGF" node -e '
+const http = require("http"), fs = require("fs");
 const ports = [...new Set([Number(process.env.PORT) || 8080, Number(process.env.HTTP_PORT) || 8000])];
-for (const p of ports) http.createServer((q, s) => { s.writeHead(503, { "retry-after": "30", "content-type": "application/json" }); s.end(JSON.stringify({ ok: false, starting: true })); }).listen(p);
+const tail = (n) => { try { return fs.readFileSync(process.env.STARTUP_LOG_FILE, "utf8").split("\n").slice(-n).join("\n"); } catch { return ""; } };
+for (const p of ports) http.createServer((q, s) => {
+  if (q.url.startsWith("/startup-log")) { s.writeHead(200, { "content-type": "text/plain" }); return s.end(tail(400)); }
+  s.writeHead(503, { "retry-after": "30", "content-type": "application/json" });
+  s.end(JSON.stringify({ ok: false, starting: true, log: tail(5).split("\n") }));
+}).listen(p);
 ' &
 HOLD=$!
 log "placeholder listening (pid $HOLD)"
