@@ -50,7 +50,7 @@ does two jobs:
 | `GITHUB_TOKEN` | Vault secret | Contents write on the repository, for the skill's audit-trail push |
 | `CURATOR_REGISTRY_ADDRESS`, `PUBLISHER_URL`, `CATALOG_SOURCE`, `ETH_RPC_URL` | Plain | Passed through to the curator runs (see `agents/README.md`) |
 | `CURATOR_COMMAND` | Plain, optional | Default `claude -p {prompt} --output-format json --allowedTools Bash,Read,Write,Edit,Glob,Grep,WebSearch,WebFetch,Task` |
-| `CHAT_MODEL`, `CHAT_EFFORT`, `CHAT_RATE_PER_MINUTE`, `CHAT_RATE_PER_DAY`, `CHAT_ALLOWED_ORIGINS`, `CONTEXT_TTL_SECONDS`, `CURATOR_TIMEOUT_MINUTES`, `STATE_FILE`, `HTTP_PORT` (default 8000, the runtime's `http_port`; 1Claw's `PORT` is its sidecar's) | Plain, optional | See `src/config.ts` |
+| `CHAT_MODEL`, `CHAT_EFFORT`, `CHAT_RATE_PER_MINUTE`, `CHAT_RATE_PER_DAY`, `CHAT_ALLOWED_ORIGINS`, `CONTEXT_TTL_SECONDS`, `CURATOR_TIMEOUT_MINUTES`, `STATE_FILE`, `PORT` / `HTTP_PORT` (the server listens on both: Cloud Run's `PORT`, 8080, and the runtime's `http_port`, default 8000) | Plain, optional | See `src/config.ts` |
 
 A curator run inherits the container environment except the runtime's own 1Claw token, the key
 vault id, other agents' keys and the chat settings. It gets exactly one agent's key.

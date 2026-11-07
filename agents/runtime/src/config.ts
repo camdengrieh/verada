@@ -7,9 +7,11 @@ import { z } from "zod";
  */
 const Env = z.object({
   /**
-   * Port this server listens on: the runtime's `http_port` (8000). 1Claw sets PORT to the
-   * container's front port (8080 on Cloud Run), which its sidecar holds, so PORT is not used.
+   * Ports this server listens on. PORT is the container port Cloud Run routes to (1Claw sets it;
+   * 8080) when the runtime has no sidecar; HTTP_PORT / USER_PORT is the runtime's `http_port`
+   * (8000), where a sidecar forwards. The server listens on every distinct one of them.
    */
+  PORT: z.coerce.number().int().min(1).max(65535).optional(),
   USER_PORT: z.coerce.number().int().min(1).max(65535).optional(),
   HTTP_PORT: z.coerce.number().int().min(1).max(65535).default(8000),
   /** Indexer base URL (public `/api/agents/*` routes). Unset until the indexer is deployed: the chat then knows only that no report exists yet. */
@@ -49,7 +51,7 @@ const Env = z.object({
   STATE_FILE: z.string().default("/tmp/varada-runtime-state.json"),
 });
 
-export type RuntimeConfig = z.infer<typeof Env> & { allowedOrigins: string[]; schedulerEnabled: boolean; port: number };
+export type RuntimeConfig = z.infer<typeof Env> & { allowedOrigins: string[]; schedulerEnabled: boolean; ports: number[] };
 
 export function readConfig(env: Record<string, string | undefined> = process.env): RuntimeConfig {
   const e = Env.parse(env);
@@ -58,6 +60,6 @@ export function readConfig(env: Record<string, string | undefined> = process.env
     INDEXER_URL: e.INDEXER_URL?.replace(/\/+$/, ""),
     allowedOrigins: e.CHAT_ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
     schedulerEnabled: e.SCHEDULER_ENABLED === "true",
-    port: e.USER_PORT ?? e.HTTP_PORT,
+    ports: [...new Set([e.PORT, e.USER_PORT ?? e.HTTP_PORT].filter((p): p is number => p !== undefined))],
   };
 }
