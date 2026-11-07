@@ -126,3 +126,22 @@ All on mainnet. Rehearse each step on a fork first.
   verifier and the real public gateways. They were all failing on 2026-11-07 (Unruggable 403,
   dRPC `_ensureRootClaim` timeout, 3668.io 504). That run proved the fallback path. A real
   Optimism proof can be shown once `VaradaOrgNames` is on Optimism and a name is ~7 days old.
+
+## Coin and donor names
+
+| Name | Resolver (mainnet) | What it answers |
+|---|---|---|
+| `<label>.coin.varada.eth` | `VaradaCoinResolver` `0xCcF8C626F5C8cb1f28011D72adc9c6a4696b56a5` | An alias onto `VaradaResolver`. It answers the coin's token address, text records and logo, and the site's contenthash. |
+| `<name>.donor.varada.eth` | `VaradaDonorNames` `0xeBc4663b05f62cBb276484Ff94de9917a1dDD1f8` | The holder's address on Ethereum, Optimism and Base. |
+
+**Coin names**
+- A coin's label is its token name, slugged by `labelFromName` in the SDK. The wizard shows it read-only.
+- At launch, `TokenProfileRegistry` rejects a taken, reserved or invalid label. So no coin can launch without its name, and none can launch under another coin's name.
+- Checking on-chain that the label equals the slug of the token name is planned for V2.
+- Reserved coin labels: org, names, agent, coin, donor, endaoment, varada.
+
+**Donor names**
+- Anyone can claim one: first come, one per address, on Ethereum (`claim(name)` / `release()`).
+- Rules: LabelLib, minimum 3 characters.
+- The owner can only reserve labels that nobody has claimed.
+- Set up by `contracts/script/SetupCoinDonorNames.s.sol` on 2026-11-07.

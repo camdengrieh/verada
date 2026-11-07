@@ -4,7 +4,6 @@ pragma solidity 0.8.26;
 import {SetupOrgNames} from "../../script/SetupOrgNames.s.sol";
 import {VaradaFactory} from "../../src/VaradaFactory.sol";
 import {VaradaOrgResolver} from "../../src/VaradaOrgResolver.sol";
-import {DonationAsset} from "../../src/interfaces/IDonationAsset.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
 import {IContentHashResolver} from "../../src/interfaces/external/ens/IEnsResolverProfiles.sol";
