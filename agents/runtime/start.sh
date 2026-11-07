@@ -9,16 +9,25 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 cd "$ROOT"
 
-# The curator CLI and its workspace dependencies (not the whole monorepo).
-if ! command -v pnpm >/dev/null 2>&1; then corepack enable >/dev/null 2>&1 || npm install -g pnpm@10 >/dev/null; fi
-pnpm install --frozen-lockfile --filter "@varada/curator..." >/dev/null
+# Hold the HTTP ports from the first second: Cloud Run's startup probe (TCP on the runtime's
+# http_port) allows only a few minutes, and the installs below can take longer. Requests get a
+# 503 "starting" until the real server replaces this.
+node -e '
+const http = require("http");
+const ports = [...new Set([Number(process.env.PORT) || 8080, Number(process.env.HTTP_PORT) || 8000])];
+for (const p of ports) http.createServer((q, s) => { s.writeHead(503, { "retry-after": "30", "content-type": "application/json" }); s.end(JSON.stringify({ ok: false, starting: true })); }).listen(p);
+' &
+HOLD=$!
 
-# This server (standalone package, its own lockfile).
+# This server (standalone package, its own lockfile): small, so it comes first.
 (cd agents/runtime && npm ci --no-audit --no-fund >/dev/null)
 
-# Claude Code runs the curator skill. The claude-code template ships it; other templates install it.
-if [ "${SCHEDULER_ENABLED:-false}" = "true" ] && ! command -v claude >/dev/null 2>&1; then
-  npm install -g @anthropic-ai/claude-code >/dev/null
+# The scheduler also needs the curator CLI (its workspace dependencies, not the whole monorepo)
+# and Claude Code. The chat runtime needs neither.
+if [ "${SCHEDULER_ENABLED:-false}" = "true" ]; then
+  if ! command -v pnpm >/dev/null 2>&1; then corepack enable >/dev/null 2>&1 || npm install -g pnpm@10 >/dev/null; fi
+  pnpm install --frozen-lockfile --filter "@varada/curator..." >/dev/null
+  command -v claude >/dev/null 2>&1 || npm install -g @anthropic-ai/claude-code >/dev/null
 fi
 
 # The skill commits its audit trail to claude/curation-<epoch> and pushes.
@@ -28,4 +37,6 @@ git config --global user.name "${GIT_AUTHOR_NAME:-varada-curator}"
 git config --global user.email "${GIT_AUTHOR_EMAIL:-curators@varada.invalid}"
 
 export REPO_DIR="$ROOT"
+kill "$HOLD" 2>/dev/null || true
+wait "$HOLD" 2>/dev/null || true
 exec npm --prefix agents/runtime start
