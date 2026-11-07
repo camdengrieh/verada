@@ -32,7 +32,8 @@ import {
   rateLimitMiddleware,
   readOnlyGate,
 } from "./security";
-import { currentEpochAt, resolveSchedule } from "./shortlist";
+import { resolveSchedule } from "./shortlist";
+import { currentEpochOf, gracesOf, scheduleWindow, timingFields } from "./timing";
 import { toProposal } from "./takeover";
 import { type LiveRepo, toLiveView } from "./live";
 import { DISCOVER_SORTS, filterAndPage, type DiscoverRepo } from "./discover";
@@ -53,8 +54,8 @@ import {
   type ActivityKind,
   type BallotSizeSettings,
   type CausePoolAttributionRow,
-  type EpochClock,
   type EpochRow,
+  type EpochSegment,
   type Repo,
   type TokenRow,
   activityCursor,
@@ -281,14 +282,16 @@ function profileOf(t: TokenRow, textRecords: { key: string; value: string }[]) {
 }
 
 /**
- * Epoch timing from the governor clock: `end` is exclusive. `snapshot` is the token's weight
- * snapshot for the epoch, `snapshotFor(token, epoch)`: the launch snapshot when the governor set
- * one for this epoch, else `start - 1`.
+ * Epoch timing from the governor's schedule segments: `end` is exclusive, `votingOpensAt` the first
+ * second a ballot is accepted (the epoch's end minus its voting window; equals `start` when voting is
+ * open all epoch), `length`, `votingWindow` and `holdWindow` those of the segment the epoch belongs to.
+ * `snapshot` is the token's weight snapshot for the epoch, `snapshotFor(token, epoch)`: the launch
+ * snapshot when the governor set one for this epoch, else `start - 1`. All null while no schedule is
+ * known; the launch snapshot is still reported.
  */
-function epochTiming(clock: EpochClock | null, n: bigint, launchSnapshot: bigint | null) {
-  if (!clock) return { start: null, end: null, snapshot: launchSnapshot };
-  const start = clock.epochZeroStart + n * clock.epochLength;
-  return { start, end: start + clock.epochLength, snapshot: launchSnapshot ?? start - 1n };
+function epochTiming(schedule: readonly EpochSegment[], n: bigint, launchSnapshot: bigint | null) {
+  const w = scheduleWindow(schedule, n);
+  return { ...timingFields(w), snapshot: launchSnapshot ?? (w ? w.start - 1n : null) };
 }
 
 /**
@@ -620,7 +623,7 @@ export function createApi(deps: ApiDeps): Hono {
   const tokenDetail = async (c: Context, address: `0x${string}`) => {
     const found = await repo.getToken(address);
     if (!found) return send(c, { error: "not_found" }, CACHE.none, 404);
-    const current = currentEpochAt(found.clock, nowSeconds());
+    const current = currentEpochOf(found.schedule, nowSeconds());
     const own = resolveSchedule(found.shortlist, current);
     return send(
       c,
@@ -630,6 +633,10 @@ export function createApi(deps: ApiDeps): Hono {
         donationAsset: donationAssetOrDefault(found.token.donationAsset),
         feeTotals: found.feeTotals,
         profile: profileOf(found.token, found.textRecords),
+        // The current epoch's boundaries from the governor's schedule (null until it was seen live):
+        // trading until `votingOpensAt`, voting until `end`.
+        currentEpoch:
+          current === null ? null : { epoch: current, ...timingFields(scheduleWindow(found.schedule, current)) },
         shortlist: own.inEffect.length > 0 ? own.inEffect : null,
         shortlistPending: own.pending,
         ballotSize: ballotSizeOf(found.ballotSize),
@@ -937,6 +944,35 @@ export function createApi(deps: ApiDeps): Hono {
     return send(c, page, CACHE.list);
   });
 
+  // The epoch schedule: every segment the governor has had (a schedule change adds one), the epoch
+  // running now and the owner-set grace periods. Boundaries are never `zero + n * length`.
+  app.get("/api/epoch-schedule", async (c) => {
+    const [segments, settings] = await Promise.all([repo.getEpochSchedule(), repo.getTimingSettings()]);
+    const now = nowSeconds();
+    const current = currentEpochOf(segments, now);
+    const graces = gracesOf(settings);
+    return send(
+      c,
+      {
+        now,
+        segments,
+        currentEpoch:
+          current === null ? null : { epoch: current, ...timingFields(scheduleWindow(segments, current)) },
+        tallyGrace: graces.tallyGrace.value,
+        launchSnapshotDelay: graces.launchSnapshotDelay.value,
+        curationGrace: graces.curationGrace.value,
+        settleGrace: graces.settleGrace.value,
+        gracesSetAt: {
+          tallyGrace: graces.tallyGrace.setAt,
+          launchSnapshotDelay: graces.launchSnapshotDelay.setAt,
+          curationGrace: graces.curationGrace.setAt,
+          settleGrace: graces.settleGrace.setAt,
+        },
+      },
+      CACHE.detail,
+    );
+  });
+
   app.get("/api/epochs/:token/:epoch", async (c) => {
     const t = parse(c, addressSchema, c.req.param("token"));
     if (!t.ok) return t.res;
@@ -950,7 +986,7 @@ export function createApi(deps: ApiDeps): Hono {
       c,
       {
         ...found.epoch,
-        ...epochTiming(found.clock, n, found.epoch.launchSnapshot),
+        ...epochTiming(found.schedule, n, found.epoch.launchSnapshot),
         options: found.options,
         optionOrgIds: found.optionOrgIds,
         optionSources: optionSources(found.epoch, found.options.length),

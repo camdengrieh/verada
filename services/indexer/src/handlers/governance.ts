@@ -1,14 +1,15 @@
 import type { Context, Event } from "ponder:registry";
-import { EPOCH_LENGTH, MAX_BALLOT_OPTIONS, alignToThursday, causeIdOfOrg, effectiveBallotSize } from "@varada/sdk";
+import { DEFAULT_EPOCH_LENGTH, MAX_BALLOT_OPTIONS, causeIdOfOrg, effectiveBallotSize } from "@varada/sdk";
 import {
   ballotSizeCap,
   donation,
   epoch,
-  epochClock,
   epochOption,
+  epochSchedule,
   orgDeployment,
   poll,
   shortlist,
+  timingSetting,
   tokenBallotSize,
   vote,
 } from "ponder:schema";
@@ -36,18 +37,113 @@ export async function ensureEpoch(db: EpochDb, token: Hex, epochNo: bigint) {
 }
 
 /**
- * Records the governor's `epochZeroStart` the first time an event proves which epoch is current
- * (`EpochOpened` and `VoteCast` only happen during the epoch they name). Epoch starts are whole
- * weeks since unix time 0, so the current epoch's start is the timestamp aligned down to a week.
+ * Makes sure segment 0 of the epoch schedule exists: the constructor's default, anchored at the
+ * governor's immutable `epochZeroStart` (read from the chain; nothing here assumes a length or a
+ * week alignment beyond the 7 day defaults the constructor applies, which an `EpochScheduleSet`
+ * for epoch 0 overwrites). Called by every handler that proves the governor is live; a failed read
+ * is retried by the next one, and the API reports no timing until then.
  */
-async function recordClock(db: EpochDb, epochNo: bigint, timestamp: bigint) {
-  if (await db.find(epochClock, { id: "epoch_governor" })) return;
-  const zero = alignToThursday(timestamp) - epochNo * EPOCH_LENGTH;
-  if (zero < 0n) return;
-  await db
-    .insert(epochClock)
-    .values({ id: "epoch_governor", epochZeroStart: zero, epochLength: EPOCH_LENGTH })
+async function ensureSchedule(
+  context: { db: EpochDb; client: Context["client"]; contracts: Context["contracts"] },
+  governor: Hex,
+) {
+  if (await context.db.find(epochSchedule, { startEpoch: 0n })) return;
+  let zero: bigint;
+  try {
+    zero = BigInt(
+      (await context.client.readContract({
+        abi: context.contracts.EpochGovernor.abi,
+        address: governor,
+        functionName: "epochZeroStart",
+      })) as bigint,
+    );
+  } catch {
+    return;
+  }
+  await context.db
+    .insert(epochSchedule)
+    .values({
+      startEpoch: 0n,
+      startTime: zero,
+      length: DEFAULT_EPOCH_LENGTH,
+      votingWindow: DEFAULT_EPOCH_LENGTH,
+      holdWindow: DEFAULT_EPOCH_LENGTH,
+      setAt: null,
+    })
     .onConflictDoNothing();
+}
+
+/**
+ * `EpochScheduleSet(startEpoch, startTime, length, votingWindow, holdWindow)`: from epoch
+ * `startEpoch` the epochs last `length`, accept ballots in their last `votingWindow` and weigh over
+ * `holdWindow`. Mirrors `setEpochSchedule`: a change for the same `startEpoch` replaces the stored
+ * segment (the pending one, or epoch zero re-anchored before any token registered), any other adds
+ * one. A segment past epoch 0 needs the constructor default under it, so that is ensured first.
+ */
+export async function onEpochScheduleSet({
+  event,
+  context,
+}: {
+  event: Event<"EpochGovernor:EpochScheduleSet">;
+  context: Context<"EpochGovernor:EpochScheduleSet">;
+}) {
+  const { startEpoch, startTime, length, votingWindow, holdWindow } = event.args;
+  if (startEpoch > 0n) await ensureSchedule(context, event.log.address);
+  const values = { startTime, length, votingWindow, holdWindow, setAt: event.block.timestamp };
+  if (await context.db.find(epochSchedule, { startEpoch })) {
+    await context.db.update(epochSchedule, { startEpoch }).set(values);
+  } else {
+    await context.db.insert(epochSchedule).values({ startEpoch, ...values });
+  }
+}
+
+async function setTiming(db: EpochDb, id: string, value: bigint, at: bigint) {
+  if (await db.find(timingSetting, { id })) await db.update(timingSetting, { id }).set({ value, setAt: at });
+  else await db.insert(timingSetting).values({ id, value, setAt: at });
+}
+
+/** `TallyGraceSet(grace)`: applies at once. */
+export async function onTallyGraceSet({
+  event,
+  context,
+}: {
+  event: Event<"EpochGovernor:TallyGraceSet">;
+  context: Context<"EpochGovernor:TallyGraceSet">;
+}) {
+  await setTiming(context.db, "tallyGrace", event.args.grace, event.block.timestamp);
+}
+
+/** `LaunchSnapshotDelaySet(delay)`: applies to tokens registered afterwards. */
+export async function onLaunchSnapshotDelaySet({
+  event,
+  context,
+}: {
+  event: Event<"EpochGovernor:LaunchSnapshotDelaySet">;
+  context: Context<"EpochGovernor:LaunchSnapshotDelaySet">;
+}) {
+  await setTiming(context.db, "launchSnapshotDelay", event.args.delay, event.block.timestamp);
+}
+
+/** `CurationGraceSet(grace)`. */
+export async function onCurationGraceSet({
+  event,
+  context,
+}: {
+  event: Event<"EpochGovernor:CurationGraceSet">;
+  context: Context<"EpochGovernor:CurationGraceSet">;
+}) {
+  await setTiming(context.db, "curationGrace", event.args.grace, event.block.timestamp);
+}
+
+/** `FeeVault.SettleGraceSet(grace)`: applies at once. */
+export async function onSettleGraceSet({
+  event,
+  context,
+}: {
+  event: Event<"FeeVault:SettleGraceSet">;
+  context: Context<"FeeVault:SettleGraceSet">;
+}) {
+  await setTiming(context.db, "settleGrace", event.args.grace, event.block.timestamp);
 }
 
 export async function onVoteCast({
@@ -69,7 +165,7 @@ export async function onVoteCast({
   await context.db
     .update(epoch, { token, epoch: epochNo })
     .set({ voteCount: row.voteCount + 1, voterCount: row.voterCount + 1 });
-  await recordClock(context.db, epochNo, event.block.timestamp);
+  await ensureSchedule(context, event.log.address);
 }
 
 export async function onEpochOpened({
@@ -95,13 +191,13 @@ export async function onEpochOpened({
     governor: event.log.address,
     scheme: p?.scheme ?? null,
   });
-  await recordClock(context.db, epochNo, event.block.timestamp);
+  await ensureSchedule(context, event.log.address);
 }
 
 /**
  * A token registered without supply at its launch epoch's regular snapshot gets a snapshot inside
  * that epoch; `snapshotFor(token, epoch)` returns it instead of `snapshotOf(epoch)`. Emitted by
- * `registerToken` during the epoch it names, so it also fixes the clock.
+ * `registerToken` during the epoch it names, so it also anchors the schedule.
  */
 export async function onLaunchSnapshotSet({
   event,
@@ -113,7 +209,7 @@ export async function onLaunchSnapshotSet({
   const { token, epoch: epochNo, snapshot } = event.args;
   await ensureEpoch(context.db, token, epochNo);
   await context.db.update(epoch, { token, epoch: epochNo }).set({ launchSnapshot: snapshot });
-  await recordClock(context.db, epochNo, event.block.timestamp);
+  await ensureSchedule(context, event.log.address);
 }
 
 /**
@@ -186,7 +282,7 @@ export async function onBallotPrepared({
     curatedDrawn: row.curatedDrawn ?? 0,
     curatedCount: row.curatedCount ?? 0,
   });
-  await recordClock(context.db, epochNo, event.block.timestamp);
+  await ensureSchedule(context, event.log.address);
 }
 
 export async function onEpochClosed({
@@ -270,27 +366,6 @@ export function nextSchedule(old: Schedule | null, causes: readonly Hex[], from:
   };
 }
 
-/** Records the clock from the governor's `epochZeroStart` when no epoch event has yet. */
-async function clockFromChain(
-  context: Context<"EpochGovernor:ShortlistScheduled">,
-  address: Hex,
-) {
-  if (await context.db.find(epochClock, { id: "epoch_governor" })) return;
-  try {
-    const zero = await context.client.readContract({
-      abi: context.contracts.EpochGovernor.abi,
-      address,
-      functionName: "epochZeroStart",
-    });
-    await context.db
-      .insert(epochClock)
-      .values({ id: "epoch_governor", epochZeroStart: BigInt(zero), epochLength: EPOCH_LENGTH })
-      .onConflictDoNothing();
-  } catch {
-    // Derived later from the first EpochOpened or VoteCast.
-  }
-}
-
 export const BALLOT_SIZE_CAP_ID = "epoch_governor";
 
 export async function onBallotSizeCapSet({
@@ -351,7 +426,7 @@ export async function onShortlistScheduled({
   const next = { ...nextSchedule(row, causes, effectiveFrom), scheduled: true, updatedAt: event.block.timestamp };
   if (row) await context.db.update(shortlist, { token }).set(next);
   else await context.db.insert(shortlist).values({ token, ...next });
-  await clockFromChain(context, event.log.address);
+  await ensureSchedule(context, event.log.address);
 }
 
 export async function onEpochFinalized({

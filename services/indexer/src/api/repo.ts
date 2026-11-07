@@ -26,7 +26,8 @@ const {
   tokenProfile,
   tokenTextRecord,
   profileUpdate,
-  epochClock,
+  epochSchedule,
+  timingSetting,
   epochOption,
   shortlist,
   ballotSizeCap,
@@ -40,6 +41,21 @@ const {
   liveCauseTotal,
   liveDonation,
 } = schema;
+
+/** The governor's epoch schedule segments, by start epoch. Empty until it was seen live. */
+async function loadSchedule() {
+  const rows = await db
+    .select({
+      startEpoch: epochSchedule.startEpoch,
+      startTime: epochSchedule.startTime,
+      length: epochSchedule.length,
+      votingWindow: epochSchedule.votingWindow,
+      holdWindow: epochSchedule.holdWindow,
+    })
+    .from(epochSchedule)
+    .orderBy(asc(epochSchedule.startEpoch));
+  return rows as import("@varada/sdk").EpochSegment[];
+}
 
 /** Byte-wise collation so SQL ordering matches the JS string comparison used for cursors. */
 const collated = (expr: unknown) => sql`${expr} COLLATE "C"`;
@@ -402,11 +418,7 @@ export const repo: Repo = {
       .from(tokenFocus)
       .where(eq(tokenFocus.token, address))
       .limit(1);
-    const [clock] = await db
-      .select({ epochZeroStart: epochClock.epochZeroStart, epochLength: epochClock.epochLength })
-      .from(epochClock)
-      .where(eq(epochClock.id, "epoch_governor"))
-      .limit(1);
+    const epochSegments = await loadSchedule();
     const [cap] = await db
       .select({ cap: ballotSizeCap.cap })
       .from(ballotSizeCap)
@@ -429,13 +441,20 @@ export const repo: Repo = {
       textRecords,
       shortlist: schedule(own),
       focus: focus ?? null,
-      clock: clock ?? null,
+      schedule: epochSegments,
       ballotSize: {
         cap: cap?.cap ?? null,
         choice: choice?.choice ?? null,
         choiceEffectiveFrom: choice?.effectiveFrom ?? null,
       },
     };
+  },
+  getEpochSchedule: loadSchedule,
+  async getTimingSettings() {
+    return db
+      .select({ id: timingSetting.id, value: timingSetting.value, setAt: timingSetting.setAt })
+      .from(timingSetting)
+      .orderBy(asc(timingSetting.id));
   },
   async findTokenByLabel(label) {
     const [row] = await db
@@ -485,11 +504,7 @@ export const repo: Repo = {
           .where(and(eq(poll.governor, row.governor), eq(poll.token, t), eq(poll.scope, n)))
           .limit(1)
       : [];
-    const [clock] = await db
-      .select({ epochZeroStart: epochClock.epochZeroStart, epochLength: epochClock.epochLength })
-      .from(epochClock)
-      .where(eq(epochClock.id, "epoch_governor"))
-      .limit(1);
+    const epochSegments = await loadSchedule();
     const causePool = await db
       .select()
       .from(causePoolAttribution)
@@ -507,7 +522,7 @@ export const repo: Repo = {
       // All or nothing: a row stored without its org id (only `EpochOpened` seen) leaves the list empty.
       optionOrgIds: options.every((o: { orgId: Hex | null }) => o.orgId) ? options.map((o: { orgId: Hex | null }) => o.orgId as Hex) : [],
       poll: p ?? null,
-      clock: clock ?? null,
+      schedule: epochSegments,
       causePool,
       accrued,
     };
