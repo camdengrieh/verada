@@ -158,7 +158,50 @@ contract FeeVaultAttributionTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IFeeVault.FeesPending.selector, token, 2));
         vault.settle(token, 2);
 
-        vm.warp(governor.epochStart(3) + vault.SETTLE_GRACE());
+        vm.warp(governor.epochStart(3) + vault.settleGrace());
+        vault.settle(token, 2);
+        assertEq(distributor.received(token, 2), 900);
+    }
+
+    function test_settleGrace_defaultAndSetter() public {
+        assertEq(vault.settleGrace(), 7 days);
+        vm.expectEmit(address(vault));
+        emit FeeVault.SettleGraceSet(45 minutes);
+        vault.setSettleGrace(45 minutes);
+        assertEq(vault.settleGrace(), 45 minutes);
+    }
+
+    function test_settleGrace_boundsAndOwner() public {
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                FeeVault.SettleGraceOutOfRange.selector, 5 minutes - 1, 5 minutes, 30 days
+            )
+        );
+        vault.setSettleGrace(5 minutes - 1);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                FeeVault.SettleGraceOutOfRange.selector, 30 days + 1, 5 minutes, 30 days
+            )
+        );
+        vault.setSettleGrace(30 days + 1);
+        vault.setSettleGrace(5 minutes);
+        vault.setSettleGrace(30 days);
+        vm.prank(makeAddr("stranger"));
+        vm.expectRevert();
+        vault.setSettleGrace(1 hours);
+    }
+
+    /// A short grace lets settlement proceed past fees that are still outstanding.
+    function test_shortSettleGrace_settlesSooner() public {
+        vault.setSettleGrace(45 minutes);
+        governor.setCurrentEpoch(3);
+        _deposit(1000, 2);
+        governor.setFinalized(token, 2, true);
+        MockFlushConsolidator(consolidator).setPending(true);
+        vm.warp(governor.epochStart(3) + 45 minutes - 1);
+        vm.expectRevert(abi.encodeWithSelector(IFeeVault.FeesPending.selector, token, 2));
+        vault.settle(token, 2);
+        vm.warp(governor.epochStart(3) + 45 minutes);
         vault.settle(token, 2);
         assertEq(distributor.received(token, 2), 900);
     }
@@ -171,7 +214,7 @@ contract FeeVaultAttributionTest is Test {
         MockFlushConsolidator(consolidator).setReverting(true);
         vm.expectRevert(abi.encodeWithSelector(IFeeVault.FeesPending.selector, token, 2));
         vault.settle(token, 2);
-        vm.warp(governor.epochStart(3) + vault.SETTLE_GRACE());
+        vm.warp(governor.epochStart(3) + vault.settleGrace());
         vault.settle(token, 2);
         assertEq(distributor.received(token, 2), 900);
     }

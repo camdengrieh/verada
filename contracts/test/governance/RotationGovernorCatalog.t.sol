@@ -671,7 +671,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
             assertEq(gov.roundOptionOrgIds(token, target)[0], _org(29), "curated picks first");
         }
         // The weekly governor has no skip either.
-        vm.warp(weekly.epochStart(1) + weekly.CURATION_GRACE() + 1);
+        vm.warp(weekly.epochStart(1) + weekly.curationGrace() + 1);
         vm.expectRevert(
             abi.encodeWithSelector(IEpochGovernor.CurationSkipDisabled.selector, token, 1)
         );
@@ -886,7 +886,7 @@ contract RotationGovernorCatalogTest is Test, BallotLog {
         assertEq(b.governor(), address(gov));
         assertEq(address(b.curators()), address(curators));
         assertEq(b.curationZero(), weekly.epochZeroStart());
-        assertEq(b.curationLength(), weekly.EPOCH_LENGTH());
+        assertEq(b.curationLength(), weekly.epochLength());
         vm.expectRevert(CatalogBallotBuilder.NotGovernor.selector);
         b.setCurators(ICuratorRegistry(address(curators)), 0, 1);
         vm.prank(address(gov));

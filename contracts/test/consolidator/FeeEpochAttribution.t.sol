@@ -96,7 +96,7 @@ contract FeeEpochAttributionTest is ConsolidatorBase {
         vm.expectRevert(abi.encodeWithSelector(IFeeVault.FeesPending.selector, address(meme), 1));
         vault.settle(address(meme), 1);
 
-        vm.warp(governor.epochStart(2) + vault.SETTLE_GRACE());
+        vm.warp(governor.epochStart(2) + vault.settleGrace());
         vault.settle(address(meme), 1);
         assertEq(vault.causePoolOf(address(meme), 1), 0);
 

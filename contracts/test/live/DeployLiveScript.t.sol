@@ -204,8 +204,8 @@ contract DeployLiveScriptTest is Test, DeployLive {
         assertEq(address(CuratorRegistry(d.curatorRegistry).governor()), d.epochGovernor);
         assertEq(address(b.curators()), d.curatorRegistry);
         assertEq(uint256(b.curationZero()), eg.epochZeroStart());
-        assertEq(uint256(b.curationLength()), eg.EPOCH_LENGTH());
-        assertEq(b.CURATION_GRACE(), eg.CURATION_GRACE());
+        assertEq(uint256(b.curationLength()), eg.epochLength());
+        assertEq(b.CURATION_GRACE(), eg.curationGrace());
         // Weekly-or-longer rounds get the full 6h grace; short rounds a third of the vote window.
         assertEq(b.curationGraceEnd(1000, 1000 + 7 days), 1000 + 6 hours);
         assertEq(b.curationGraceEnd(1000, 1000 + 45 minutes), 1000 + 15 minutes);
