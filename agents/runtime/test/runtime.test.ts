@@ -219,3 +219,15 @@ describe("config", () => {
     expect(() => readConfig({ INDEXER_URL: "not a url" })).toThrow();
   });
 });
+
+describe("runtime secrets", () => {
+  it("fills missing variables from the vault with the runtime token, never overriding", async () => {
+    const { loadRuntimeSecrets } = await import("../src/keys.js");
+    const env: NodeJS.ProcessEnv = { ONECLAW_AGENT_TOKEN: "tok", GITHUB_TOKEN: "already" };
+    const read = vi.fn(async (_v: string, path: string) => (path === "runtime/anthropic-api-key" ? "sk-test" : "other"));
+    expect(await loadRuntimeSecrets({ env, vaultId: "v", baseUrl: "https://api.1claw.co", read })).toEqual(["ANTHROPIC_API_KEY"]);
+    expect(env.ANTHROPIC_API_KEY).toBe("sk-test");
+    expect(env.GITHUB_TOKEN).toBe("already");
+    expect(await loadRuntimeSecrets({ env: {}, vaultId: "v", baseUrl: "x", read })).toEqual([]);
+  });
+});

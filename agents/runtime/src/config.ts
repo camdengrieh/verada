@@ -24,6 +24,12 @@ const Env = z.object({
   SCHEDULER_ENABLED: z.enum(["true", "false"]).default("false"),
   /** Repository checkout the curator skill runs in. */
   REPO_DIR: z.string().default(process.cwd()),
+  /**
+   * The 1Claw vault with the runtime's own secrets, read with the runtime token at startup when the
+   * variable is not already set: `runtime/anthropic-api-key` -> ANTHROPIC_API_KEY and
+   * `runtime/github-token` -> GITHUB_TOKEN. (1Claw vault env vars do not reach the container.)
+   */
+  ONECLAW_SECRETS_VAULT_ID: z.string().optional(),
   /** The 1Claw vault holding each agent's API key at `agents/<agent>/api-key`. */
   ONECLAW_KEYS_VAULT_ID: z.string().optional(),
   ONECLAW_BASE_URL: z.string().url().default("https://api.1claw.co"),

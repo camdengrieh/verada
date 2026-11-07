@@ -22,11 +22,10 @@ if [ "${SCHEDULER_ENABLED:-false}" = "true" ] && ! command -v claude >/dev/null 
 fi
 
 # The skill commits its audit trail to claude/curation-<epoch> and pushes.
-if [ -n "${GITHUB_TOKEN:-}" ]; then
-  git config --global credential.helper '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
-  git config --global user.name "${GIT_AUTHOR_NAME:-varada-curator}"
-  git config --global user.email "${GIT_AUTHOR_EMAIL:-curators@varada.invalid}"
-fi
+# GITHUB_TOKEN may arrive later (the server reads it from the vault), so the helper reads it at use time.
+git config --global credential.helper '!f() { echo username=x-access-token; echo "password=$GITHUB_TOKEN"; }; f'
+git config --global user.name "${GIT_AUTHOR_NAME:-varada-curator}"
+git config --global user.email "${GIT_AUTHOR_EMAIL:-curators@varada.invalid}"
 
 export REPO_DIR="$ROOT"
 exec npm --prefix agents/runtime start

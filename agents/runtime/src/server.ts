@@ -9,6 +9,8 @@ export interface ServerDeps {
   ask(ctx: CauseContext, req: ChatRequest): Promise<ChatAnswer>;
   allowedOrigins: string[];
   limit: ReturnType<typeof rateLimiter>;
+  /** Whether the chat has its Anthropic key (for /health). */
+  chatReady?: () => boolean;
   /** Scheduler status for /health (null when the scheduler is off). */
   scheduler?: () => unknown;
 }
@@ -30,7 +32,7 @@ export function createServer(deps: ServerDeps) {
     }),
   );
 
-  app.get("/health", (c) => c.json({ ok: true, causes: CAUSE_LABELS.length, scheduler: deps.scheduler?.() ?? null }));
+  app.get("/health", (c) => c.json({ ok: true, causes: CAUSE_LABELS.length, chat: deps.chatReady?.() ?? true, scheduler: deps.scheduler?.() ?? null }));
   app.get("/causes", (c) => c.json({ causes: CAUSE_LABELS }));
 
   app.post("/chat/:label", async (c) => {

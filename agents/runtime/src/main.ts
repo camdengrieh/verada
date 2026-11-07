@@ -3,12 +3,15 @@ import { serve } from "@hono/node-server";
 import { rateLimiter } from "./chat.js";
 import { readConfig } from "./config.js";
 import { contextCache, loadCauseContext } from "./context.js";
-import { apiKeys } from "./keys.js";
+import { apiKeys, loadRuntimeSecrets } from "./keys.js";
 import { cliSchedule, commandArgv, curatorPrompt, exec, fileState, recordAgents, runEnv, scheduler, type RunRecord } from "./scheduler.js";
 import { claudeAsker, createServer } from "./server.js";
 
 const cfg = readConfig();
 const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ t: new Date().toISOString(), msg, ...extra }));
+
+const loaded = await loadRuntimeSecrets({ env: process.env, vaultId: cfg.ONECLAW_SECRETS_VAULT_ID, baseUrl: cfg.ONECLAW_BASE_URL });
+log("runtime secrets", { loaded, anthropicKey: Boolean(process.env.ANTHROPIC_API_KEY) });
 
 let lastRuns: RunRecord[] = [];
 let schedulerError: string | null = null;
@@ -46,9 +49,10 @@ if (cfg.schedulerEnabled) {
 
 const app = createServer({
   context: contextCache((label) => loadCauseContext(cfg.INDEXER_URL, label), cfg.CONTEXT_TTL_SECONDS * 1000),
-  ask: claudeAsker(new Anthropic(), { model: cfg.CHAT_MODEL, effort: cfg.CHAT_EFFORT }),
+  ask: claudeAsker(new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY ?? "missing" }), { model: cfg.CHAT_MODEL, effort: cfg.CHAT_EFFORT }),
   allowedOrigins: cfg.allowedOrigins,
   limit: rateLimiter(cfg.CHAT_RATE_PER_MINUTE, cfg.CHAT_RATE_PER_DAY),
+  chatReady: () => Boolean(process.env.ANTHROPIC_API_KEY),
   scheduler: cfg.schedulerEnabled
     ? () => ({ lastRuns: lastRuns.map((r) => ({ agent: r.agent, cause: r.cause, status: r.status, finishedAt: r.finishedAt })), error: schedulerError })
     : undefined,
