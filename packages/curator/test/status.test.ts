@@ -24,6 +24,7 @@ interface Opts {
   balance?: bigint;
   paused?: boolean;
   governor?: Address;
+  noSchedule?: boolean;
 }
 
 /** Answers each (contract, function) pair; anything else fails the test. */
@@ -52,6 +53,16 @@ function stub(o: Opts = {}) {
         [`${GOVERNOR}.epochStart`]: () => {
           expect(args).toEqual([42n]);
           return START;
+        },
+        [`${GOVERNOR}.epochScheduleFor`]: () => {
+          expect(args).toEqual([42n]);
+          if (o.noSchedule) throw new Error("execution reverted");
+          return [2700n, 900n, 2700n];
+        },
+        [`${GOVERNOR}.votingOpensAt`]: () => {
+          expect(args).toEqual([42n]);
+          if (o.noSchedule) throw new Error("execution reverted");
+          return START + 2700n - 900n;
         },
         [`${CATALOG}.latestVersion`]: () => o.version ?? 3,
         [`${CATALOG}.rootOf`]: () => {
@@ -95,6 +106,8 @@ describe("curatorStatus", () => {
       nextEpoch: 42n,
       nextEpochStart: new Date(Number(START) * 1000).toISOString(),
       secondsUntilNextEpoch: 7200n,
+      nextEpochLengthSeconds: 2700n,
+      nextEpochVotingOpensAt: new Date(Number(START + 1800n) * 1000).toISOString(),
       catalogVersion: 3,
       catalogRoot: ROOT,
       agent: { agentId: 7n, signer: SIGNER, vault: VAULT, active: true, registered: true },
@@ -112,6 +125,11 @@ describe("curatorStatus", () => {
     const json = JSON.parse(toJson(s));
     expect(json.nextEpoch).toBe("42");
     expect(json.vault.giveRemaining).toBe("400000000");
+  });
+
+  it("reports no schedule fields on a governor without the schedule getters", async () => {
+    const s = await curatorStatus(stub({ noSchedule: true }).reader, REGISTRY, hunger);
+    expect(s).toMatchObject({ nextEpoch: 42n, nextEpochLengthSeconds: null, nextEpochVotingOpensAt: null });
   });
 
   it("limits giveRemaining by the balance, floors an overspent cap at 0, and is 0 while paused", async () => {

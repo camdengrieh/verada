@@ -109,7 +109,7 @@ async function main() {
         epoch: Number(need(v.epoch, "--epoch")),
         catalogVersion: Number(need(v["catalog-version"], "--catalog-version")),
         generatedAt: new Date().toISOString(),
-        title: `${agent.label}: week ${need(v.epoch, "--epoch")}`,
+        title: `${agent.label}: epoch ${need(v.epoch, "--epoch")}`,
         intro: "",
         regions: REGIONS.map((r) => ({ region: r.slug, weight: 0, summary: "", events: [], picks: [], newsletter: "" })),
       });

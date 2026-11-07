@@ -115,7 +115,8 @@ const EnvSchema = z.object({
   /** Plan, estimate and log keeper transactions without decrypting or sending. */
   KEEPER_DRY_RUN: flag(false),
   KEEPER_MAX_TX_PER_RUN: int(10, 1, 1_000),
-  KEEPER_LOOKBACK_EPOCHS: int(4, 1, 52),
+  /** Epochs followed per token. Epochs can be as short as 5 minutes: size it in time (see README "Epoch schedule"). */
+  KEEPER_LOOKBACK_EPOCHS: int(4, 1, 500),
   /** Epochs without fees, ballots, pin changes or a launch before a token counts as idle (0: open every epoch). */
   KEEPER_IDLE_EPOCHS: int(2, 0, 52),
   /** Indexer lag past which its activity listing is not trusted (every current epoch is opened). */

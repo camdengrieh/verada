@@ -1,5 +1,5 @@
 import { ballotCommitment, periodPollScope, rotationPollScope } from "@varada/sdk";
-import { epochGovernorAbi, rotationGovernorAbi, zamaVotingSchemeAbi } from "@varada/sdk/abis";
+import { epochGovernorAbi, feeVaultAbi, rotationGovernorAbi, zamaVotingSchemeAbi } from "@varada/sdk/abis";
 import {
   custom,
   decodeFunctionData,
@@ -366,5 +366,85 @@ describe("viem chain: rotation rounds", () => {
     expect(chain.rotation).toBeUndefined();
     expect(chain.rounds).toBeUndefined();
     await expect(chain.writer.estimate({ kind: "closeRound", token: TOKEN, target: 7n })).rejects.toThrow(/no rotation governor configured/);
+  });
+});
+
+describe("viem chain: epoch schedule", () => {
+  const FV = "0x00000000000000000000000000000000000000f1" as Address;
+  // Epoch 7 of a 45 minute cycle (30 trading, 15 voting) anchored at 1_000_000.
+  const ZERO = 1_000_000n;
+  const LEN = 2_700n;
+  const VOTING = 900n;
+  const NOW = ZERO + 7n * LEN + 600n;
+
+  function scheduleRpc(opts: { withoutGetters?: boolean } = {}) {
+    const calls: string[] = [];
+    const transport = custom({
+      async request({ method, params }: { method: string; params: unknown[] }) {
+        switch (method) {
+          case "eth_chainId":
+            return toHex(31337);
+          case "eth_getBlockByNumber":
+            return { number: toHex(5n), timestamp: toHex(NOW), hash: keccak256(toHex(5n)), parentHash: keccak256(toHex(4n)), transactions: [] };
+          case "eth_call": {
+            const { data, to } = params[0] as { data: Hex; to: Address };
+            if (to.toLowerCase() === FV.toLowerCase()) {
+              calls.push("settleGrace");
+              return encodeFunctionResult({ abi: feeVaultAbi, functionName: "settleGrace", result: 600n });
+            }
+            const call = decodeFunctionData({ abi: epochGovernorAbi, data });
+            calls.push(call.functionName);
+            const e = call.args?.[0] as bigint;
+            switch (call.functionName) {
+              case "currentEpoch":
+                return encodeFunctionResult({ abi: epochGovernorAbi, functionName: "currentEpoch", result: 7n });
+              case "epochStart":
+                return encodeFunctionResult({ abi: epochGovernorAbi, functionName: "epochStart", result: ZERO + e * LEN });
+              case "votingOpensAt":
+                if (opts.withoutGetters) throw new Error("execution reverted");
+                return encodeFunctionResult({ abi: epochGovernorAbi, functionName: "votingOpensAt", result: ZERO + (e + 1n) * LEN - VOTING });
+              case "epochScheduleFor":
+                if (opts.withoutGetters) throw new Error("execution reverted");
+                return encodeFunctionResult({ abi: epochGovernorAbi, functionName: "epochScheduleFor", result: [LEN, VOTING, LEN] });
+              case "tallyGrace":
+                return encodeFunctionResult({ abi: epochGovernorAbi, functionName: "tallyGrace", result: 900n });
+              default:
+                throw new Error(`unexpected call ${call.functionName}`);
+            }
+          }
+          default:
+            throw new Error(`unexpected ${method}`);
+        }
+      },
+    });
+    return { transport, calls };
+  }
+
+  const timingOf = (rpc: ReturnType<typeof scheduleRpc>, feeVault?: Address) =>
+    createViemChain({ chainId: 31337, rpcUrls: ["http://unused"], privateKey: KEY, epochGovernor: EG, takeoverGovernor: EG, feeVault, transport: rpc.transport }).reader.timing!();
+
+  it("reads the window and graces from the governor and the vault, not from constants", async () => {
+    const rpc = scheduleRpc();
+    const t = await timingOf(rpc, FV);
+    expect(t).toEqual({
+      now: NOW,
+      window: {
+        epoch: 7n,
+        start: ZERO + 7n * LEN,
+        end: ZERO + 8n * LEN,
+        votingOpensAt: ZERO + 8n * LEN - VOTING,
+        length: LEN,
+        votingWindow: VOTING,
+        holdWindow: LEN,
+      },
+      tallyGrace: 900n,
+      settleGrace: 600n,
+    });
+    expect(rpc.calls).toEqual(expect.arrayContaining(["currentEpoch", "epochStart", "votingOpensAt", "epochScheduleFor", "tallyGrace", "settleGrace"]));
+  });
+
+  it("skips the settle grace without a fee vault", async () => {
+    const t = await timingOf(scheduleRpc());
+    expect(t.settleGrace).toBeUndefined();
   });
 });
