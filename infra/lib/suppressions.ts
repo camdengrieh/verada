@@ -3,6 +3,7 @@ import { NagSuppressions } from "cdk-nag";
 import { VaradaConfig } from "./config";
 import { DataStack } from "./data-stack";
 import { IndexerStack } from "./indexer-stack";
+import { OrgGatewayStack } from "./org-gateway-stack";
 import { PublisherStack } from "./publisher-stack";
 import { SwarmStack } from "./swarm-stack";
 
@@ -12,6 +13,7 @@ export interface SuppressionTargets {
   readonly indexer: IndexerStack;
   readonly swarm?: SwarmStack;
   readonly publisher?: PublisherStack;
+  readonly orgGateway?: OrgGatewayStack;
 }
 
 /** The same four findings apply to every public ALB-fronted Fargate service; reasons are per service. */
@@ -42,7 +44,7 @@ function suppressPublicService(
 }
 
 /** Every suppression carries a reason; nothing is suppressed stack-wide. */
-export function applySuppressions({ config, data, indexer, swarm, publisher }: SuppressionTargets): void {
+export function applySuppressions({ config, data, indexer, swarm, publisher, orgGateway }: SuppressionTargets): void {
   if (!config.isProd) {
     NagSuppressions.addResourceSuppressions(data.database, [
       {
@@ -128,6 +130,16 @@ export function applySuppressions({ config, data, indexer, swarm, publisher }: S
         "Inline environment values are non-sensitive settings (port, public and internal service URLs, chain id, public contract addresses and start block, Arkiv chain name, keeper and dry-run flags, site feed owner/manifest, CORS list). Keys, the RPC URL, the batch id and the gateway auth secret are injected from Secrets Manager.",
       executionRole:
         "ecr:GetAuthorizationToken does not support resource-level scoping, and the publisher secret ARN ends in the Secrets Manager random suffix wildcard. Everything else is scoped to specific ARNs.",
+    });
+  }
+  if (orgGateway) {
+    suppressPublicService(orgGateway.service, {
+      publicIngress:
+        "The org-name gateway is intentionally public: wallets resolving <label>.org.varada.eth call it for CCIP-Read. The ALB is the only ingress (behind CloudFront it forwards only header-tagged requests).",
+      inlineEnv:
+        "Inline environment values are non-sensitive settings (port, build directory, heap size, the public resolver address). The Ethereum RPC URL is injected from Secrets Manager.",
+      executionRole:
+        "ecr:GetAuthorizationToken does not support resource-level scoping, and the RPC secret ARN ends in the Secrets Manager random suffix wildcard. Everything else is scoped to specific ARNs.",
     });
   }
 }

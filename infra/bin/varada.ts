@@ -9,6 +9,9 @@ import { IndexerStack } from "../lib/indexer-stack";
 import { ObservabilityStack } from "../lib/observability-stack";
 import { SwarmStack } from "../lib/swarm-stack";
 import { PublisherStack } from "../lib/publisher-stack";
+import { OrgGatewayStack } from "../lib/org-gateway-stack";
+import { loadOrgGatewayConfig } from "../lib/org-gateway-config";
+import { OrgL2ProxyStack } from "../lib/org-l2-proxy-stack";
 import { applySuppressions } from "../lib/suppressions";
 
 const app = new cdk.App();
@@ -35,6 +38,22 @@ const indexer = new IndexerStack(app, `${prefix}-Indexer`, {
 const swarm = new SwarmStack(app, `${prefix}-Swarm`, { ...common, vpc: network.vpc });
 const publisher = new PublisherStack(app, `${prefix}-Publisher`, { ...common, vpc: network.vpc, bee: swarm.beeApi });
 publisher.addDependency(swarm, "deploy the gateway before the service that uploads through it");
+// Org names' Optimism proof proxy (Lambda Function URL): opt in with -c orgL2Proxy=true.
+if (["true", true].includes(app.node.tryGetContext("orgL2Proxy"))) {
+  new OrgL2ProxyStack(app, `${prefix}-OrgL2Proxy`, {
+    env,
+    envName: config.envName,
+    isProd: config.isProd,
+    resolver: app.node.tryGetContext("orgResolver") || undefined,
+    upstreams: app.node.tryGetContext("orgL2Upstreams") || undefined,
+    tags: { Project: "varada", Environment: config.envName },
+  });
+}
+// Org-name CCIP-Read gateway (docs/ORG_NAMES.md): opt in with -c orgGateway=true.
+const orgGatewayConfig = loadOrgGatewayConfig(app.node, { isProd: config.isProd, allowInsecureHttp: config.allowInsecureHttp });
+const orgGateway = orgGatewayConfig.enabled
+  ? new OrgGatewayStack(app, `${prefix}-OrgGateway`, { ...common, orgGateway: orgGatewayConfig, vpc: network.vpc })
+  : undefined;
 new ObservabilityStack(app, `${prefix}-Observability`, {
   ...common,
   indexer,
@@ -42,8 +61,9 @@ new ObservabilityStack(app, `${prefix}-Observability`, {
   services: [
     { id: "Swarm", label: "Swarm gateway", service: swarm.service },
     { id: "Publisher", label: "Publisher", service: publisher.service, logAlarms: publisher.logAlarms },
+    ...(orgGateway ? [{ id: "OrgGateway", label: "Org name gateway", service: orgGateway.service }] : []),
   ],
 });
 
-applySuppressions({ config, data, indexer, swarm, publisher });
+applySuppressions({ config, data, indexer, swarm, publisher, orgGateway });
 Aspects.of(app).add(new AwsSolutionsChecks({ verbose: true }));
