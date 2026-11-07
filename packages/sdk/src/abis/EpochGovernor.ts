@@ -33,19 +33,6 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
-    "name": "CURATION_GRACE",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "DRAW_FACTOR",
     "inputs": [],
     "outputs": [
@@ -59,33 +46,7 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
-    "name": "EPOCH_LENGTH",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "HOLD_WINDOW",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "LAUNCH_SNAPSHOT_DELAY",
+    "name": "MAX_DURATION",
     "inputs": [],
     "outputs": [
       {
@@ -105,6 +66,19 @@ export const epochGovernorAbi = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "MIN_DURATION",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -131,19 +105,6 @@ export const epochGovernorAbi = [
         "name": "",
         "type": "uint8",
         "internalType": "uint8"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "TALLY_GRACE",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -378,6 +339,19 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "curationGrace",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "curationSkipAt",
     "inputs": [
       {
@@ -477,6 +451,48 @@ export const epochGovernorAbi = [
       }
     ],
     "stateMutability": "pure"
+  },
+  {
+    "type": "function",
+    "name": "epochLength",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "epochScheduleFor",
+    "inputs": [
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "length",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "votingWindow_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "holdWindow_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
   },
   {
     "type": "function",
@@ -625,6 +641,19 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "holdWindow",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "isClosed",
     "inputs": [
       {
@@ -734,6 +763,19 @@ export const epochGovernorAbi = [
         "name": "",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "launchSnapshotDelay",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "stateMutability": "view"
@@ -1066,6 +1108,19 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "setCurationGrace",
+    "inputs": [
+      {
+        "name": "grace",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setCuratorRegistry",
     "inputs": [
       {
@@ -1092,12 +1147,48 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "setEpochSchedule",
+    "inputs": [
+      {
+        "name": "length",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "votingWindow_",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "holdWindow_",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "setFactory",
     "inputs": [
       {
         "name": "factory_",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setLaunchSnapshotDelay",
+    "inputs": [
+      {
+        "name": "delay",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1151,6 +1242,19 @@ export const epochGovernorAbi = [
             "internalType": "bytes32[]"
           }
         ]
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "setTallyGrace",
+    "inputs": [
+      {
+        "name": "grace",
+        "type": "uint256",
+        "internalType": "uint256"
       }
     ],
     "outputs": [],
@@ -1297,6 +1401,19 @@ export const epochGovernorAbi = [
   },
   {
     "type": "function",
+    "name": "tallyGrace",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "transferOwnership",
     "inputs": [
       {
@@ -1323,6 +1440,38 @@ export const epochGovernorAbi = [
         "internalType": "uint256"
       }
     ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "votingOpensAt",
+    "inputs": [
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "votingWindow",
+    "inputs": [],
     "outputs": [
       {
         "name": "",
@@ -1499,6 +1648,19 @@ export const epochGovernorAbi = [
   },
   {
     "type": "event",
+    "name": "CurationGraceSet",
+    "inputs": [
+      {
+        "name": "grace",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "CurationSkipRequested",
     "inputs": [
       {
@@ -1638,6 +1800,43 @@ export const epochGovernorAbi = [
   },
   {
     "type": "event",
+    "name": "EpochScheduleSet",
+    "inputs": [
+      {
+        "name": "startEpoch",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "startTime",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "length",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "votingWindow",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "holdWindow",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "FactorySet",
     "inputs": [
       {
@@ -1645,6 +1844,19 @@ export const epochGovernorAbi = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "LaunchSnapshotDelaySet",
+    "inputs": [
+      {
+        "name": "delay",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1796,6 +2008,19 @@ export const epochGovernorAbi = [
   },
   {
     "type": "event",
+    "name": "TallyGraceSet",
+    "inputs": [
+      {
+        "name": "grace",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "TallyTimeoutFallbackApplied",
     "inputs": [
       {
@@ -1934,6 +2159,27 @@ export const epochGovernorAbi = [
     "type": "error",
     "name": "CuratorRegistryAlreadySet",
     "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DurationOutOfRange",
+    "inputs": [
+      {
+        "name": "value",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "min",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "max",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
   },
   {
     "type": "error",
@@ -2337,6 +2583,22 @@ export const epochGovernorAbi = [
       },
       {
         "name": "used",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ]
+  },
+  {
+    "type": "error",
+    "name": "VotingNotOpen",
+    "inputs": [
+      {
+        "name": "epoch",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "opensAt",
         "type": "uint256",
         "internalType": "uint256"
       }

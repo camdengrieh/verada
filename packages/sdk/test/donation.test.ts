@@ -307,14 +307,14 @@ describe("createDonationReader", () => {
     isFinalized: true,
     voterCount: 3n,
     epochScheme: ZAMA,
-    TALLY_GRACE: 14n * DAY,
+    tallyGrace: 14n * DAY,
     defaultCause: CAUSE,
     winningCause: CAUSE,
     ballotCommitment: [ballotCommitment(ORGS), 2],
     registry: REG,
     settled: false,
     causePoolOf: 100n,
-    SETTLE_GRACE: 7n * DAY,
+    settleGrace: 7n * DAY,
     pending: 0n,
     distributed: false,
   };
@@ -325,6 +325,43 @@ describe("createDonationReader", () => {
     expect(s).toMatchObject({ now: END + DAY, currentEpoch: 5n, epochStart: END - 7n * DAY, epochEnd: END, ballot: { optionCount: 2 }, settleCheck: { ok: false, error: "FeesPending" } });
     expect(c.sims).toEqual(["settle"]);
     expect(planDonation(s, ctx)).toMatchObject({ type: "wait", reason: "fees-pending", until: END + 7n * DAY });
+  });
+
+  it("plans a 45 minute epoch with a short grace from the owner-set getters", async () => {
+    const MIN = 60n;
+    const c = client({ ...base, isFinalized: false, isClosed: false, isOpened: true, tallyGrace: 10n * MIN, settleGrace: 5n * MIN, isActive: true });
+    const s = await createDonationReader(c, { epochGovernor: EG, feeVault: FV, distributor: DD }).read(T, 4n);
+    expect(s).toMatchObject({ tallyGrace: 10n * MIN, settleGrace: 5n * MIN });
+    expect(c.reads).toContain("tallyGrace");
+    expect(c.reads).toContain("settleGrace");
+    // The epoch ended a day ago: well past a 10 minute tally grace without a final tally.
+    expect(planDonation({ ...s, now: END + 11n * MIN, tally: { isFinal: false, counts: [] } }, ctx)).toMatchObject({ type: "send", fallback: "tally-timeout" });
+    expect(planDonation({ ...s, now: END + 9n * MIN, governor: { ...s.governor, closed: true }, tally: { isFinal: false, counts: [] } }, ctx)).toMatchObject({ type: "decrypt" });
+  });
+
+  it("falls back to the constants of a governor deployed before the setters", async () => {
+    const inner = client({ ...base, TALLY_GRACE: 14n * DAY, SETTLE_GRACE: 7n * DAY });
+    const legacy = {
+      ...inner,
+      async readContract(a: { address: Address; abi: Abi; functionName: string; args?: readonly unknown[] }) {
+        if (a.functionName === "tallyGrace" || a.functionName === "settleGrace") throw revert(feeVaultAbi as Abi, "FeesPending", [T, 4n]);
+        return inner.readContract(a);
+      },
+    };
+    const s = await createDonationReader(legacy as never, { epochGovernor: EG, feeVault: FV, distributor: DD }).read(T, 4n);
+    expect(s).toMatchObject({ tallyGrace: 14n * DAY, settleGrace: 7n * DAY });
+  });
+
+  it("does not hide a network failure behind the legacy fallback", async () => {
+    const inner = client({ ...base });
+    const broken = {
+      ...inner,
+      async readContract(a: { address: Address; abi: Abi; functionName: string; args?: readonly unknown[] }) {
+        if (a.functionName === "tallyGrace") throw new Error("network down");
+        return inner.readContract(a);
+      },
+    };
+    await expect(createDonationReader(broken as never, { epochGovernor: EG, feeVault: FV, distributor: DD }).read(T, 4n)).rejects.toThrow("network down");
   });
 
   it("reads the tally of a closed epoch and simulates nothing", async () => {
