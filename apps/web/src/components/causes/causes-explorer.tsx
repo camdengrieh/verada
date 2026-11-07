@@ -21,6 +21,7 @@ import { CausesLeaderboardSection } from "@/components/causes/causes-leaderboard
 import { categoryLabelOf, regionLabelOf } from "@/components/causes/org-card";
 
 import { CauseSearch } from "@/components/cause-search";
+import { OrgNameSearch, OrgNamesStat } from "@/components/names";
 import { CatalogResults, FocusPicker, useDebounced } from "@/components/catalog-browser";
 import { useSiteRel as useRel } from "@/components/governance/use-rel";
 import { useAppConfig, useDeps } from "@/components/providers";
@@ -270,6 +271,10 @@ export function CausesExplorer() {
             return n ? `Apply ${n} filter${n === 1 ? "" : "s"}` : "Show all charities";
           }}
         />
+      </Section>
+
+      <Section id="names" kicker="ENS names" title="Find a charity's name" aside={<OrgNamesStat variant="inline" />}>
+        <OrgNameSearch root={rel("")} />
       </Section>
 
       <Section id="endaoment" kicker="Endaoment" title="Search every registered nonprofit">

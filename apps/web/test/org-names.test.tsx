@@ -204,3 +204,20 @@ describe("OrgNameSearch", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toBeInTheDocument());
   });
 });
+
+describe("Causes page", () => {
+  it("shows the name count and the name search next to the catalogue", async () => {
+    const { CausesExplorer } = await import("@/components/causes/causes-explorer");
+    fetchMock.mockImplementation(async (u: string) => {
+      const url = new URL(u);
+      if (url.pathname === "/api/catalog") return json({ root: ROOT, orgs: 2, entries: 2, categories: [], regions: [], names: { count: 2, root: ROOT, shardBits: 12 } });
+      if (url.pathname === "/api/catalog/search") return json({ items: [], total: 0 });
+      return json({}, 404);
+    });
+    wrap(<CausesExplorer />);
+    const section = await screen.findByRole("region", { name: "Find a charity's name" });
+    const total = new Intl.NumberFormat("en-US").format(2 + AGENT_NAME_COUNT);
+    await waitFor(() => expect(within(section).getByText(total)).toBeInTheDocument());
+    expect(within(section).getByLabelText("Search charity names")).toBeInTheDocument();
+  });
+});
