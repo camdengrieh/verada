@@ -13,9 +13,12 @@ export interface PoolMarket {
   liquidity: bigint;
   /** Reserves held by the locked position, in whole units. Estimated from the launch supply. */
   reserves: { token: number; quote: number } | null;
-  /** Value of both sides of the pool. */
+  /** Value of both sides of the pool at the spot price. A launch pool holds the whole supply, so this is mostly unsold tokens. */
   tvlQuote: number | null;
   tvlUsd: number | null;
+  /** The quote asset the pool holds: what a seller is paid from, and the depth a sell can use. */
+  depthQuote: number | null;
+  depthUsd: number | null;
   /** Price times total supply. */
   marketCapUsd: number | null;
   /** Percent change over the indexer's window (24 h), null without enough trades. */
@@ -59,6 +62,8 @@ export async function loadPoolMarket(args: { chain: PublicClient; indexer?: Mark
   const reserves = raw ? { token: raw.token / 10 ** tokenDecimals, quote: raw.quote / 10 ** token.quote.decimals } : null;
   const tvlQuote = reserves && priceInQuote !== null ? reserves.quote + reserves.token * priceInQuote : null;
   const tvlUsd = tvlQuote !== null && quoteUsd !== null ? tvlQuote * quoteUsd : null;
+  const depthQuote = reserves ? reserves.quote : null;
+  const depthUsd = depthQuote !== null && quoteUsd !== null ? depthQuote * quoteUsd : null;
 
   let change24hPct: number | null = null;
   let volume24hQuote: number | null = null;
@@ -78,6 +83,8 @@ export async function loadPoolMarket(args: { chain: PublicClient; indexer?: Mark
     reserves,
     tvlQuote,
     tvlUsd,
+    depthQuote,
+    depthUsd,
     marketCapUsd: supply !== null && priceUsd !== null ? (Number(supply) / 10 ** tokenDecimals) * priceUsd : null,
     change24hPct,
     volume24hQuote,

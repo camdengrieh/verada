@@ -6,6 +6,7 @@ import { FileDropzone, validateFile } from "@varada/ui/components/data/file-drop
 import { Sparkline } from "@varada/ui/components/data/sparkline";
 import { Stepper } from "@varada/ui/components/data/stepper";
 import { Delta } from "@varada/ui/components/data/stat-card";
+import { EmptyState } from "@varada/ui/components/data/empty-state";
 
 type Coin = { id: string; name: string; price: number };
 const coins: Coin[] = [
@@ -181,5 +182,14 @@ describe("FileDropzone", () => {
     expect(onChange).toHaveBeenCalledWith(ok);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(screen.getByText("logo.webp")).toBeInTheDocument();
+  });
+});
+
+describe("EmptyState heading level", () => {
+  it("renders the level it is given, down to h1 for a page that has nothing else to say", () => {
+    const { rerender } = render(<EmptyState title="Nothing here" headingLevel={1} />);
+    expect(screen.getByRole("heading", { level: 1, name: "Nothing here" })).toBeInTheDocument();
+    rerender(<EmptyState title="Nothing here" />);
+    expect(screen.getByRole("heading", { level: 3 })).toBeInTheDocument();
   });
 });

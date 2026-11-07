@@ -74,7 +74,7 @@ export function CausesLeaderboardSection({
         size="compact"
         icon={<HandHeart />}
         title="No gifts yet"
-        body="The first donation to a charity, from a weekly pool or a live-donation coin, puts it on the board."
+        body="The first donation to a charity, from an epoch pool or a live-donation coin, puts it on the board."
       />
     );
   }

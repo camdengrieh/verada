@@ -228,6 +228,11 @@ export const varadaFactoryAbi = [
             "name": "regionMask",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "donationAsset",
+            "type": "uint8",
+            "internalType": "enum DonationAsset"
           }
         ]
       },
@@ -341,6 +346,11 @@ export const varadaFactoryAbi = [
             "name": "regionMask",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "donationAsset",
+            "type": "uint8",
+            "internalType": "enum DonationAsset"
           }
         ]
       }
@@ -368,6 +378,25 @@ export const varadaFactoryAbi = [
         "name": "",
         "type": "address",
         "internalType": "address"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "donationAssetOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
       }
     ],
     "stateMutability": "view"
@@ -615,6 +644,11 @@ export const varadaFactoryAbi = [
             "name": "regionMask",
             "type": "uint16",
             "internalType": "uint16"
+          },
+          {
+            "name": "donationAsset",
+            "type": "uint8",
+            "internalType": "enum DonationAsset"
           }
         ]
       }
@@ -753,6 +787,22 @@ export const varadaFactoryAbi = [
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "DonationRouteMissing",
+    "inputs": [
+      {
+        "name": "quoteAsset",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "donationAsset",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ]
   },
   {
     "type": "error",

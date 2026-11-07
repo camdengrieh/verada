@@ -9,6 +9,7 @@ const HOOK = "0x2222222222222222222222222222222222222222";
 const market = (quote = WETH) => ({ address: TOKEN, symbol: "TKN", hook: HOOK, quote, decimals: 18, mode: "weekly" }) as const;
 
 const h = vi.hoisted(() => ({
+  depth: { sizeUsd: 10_000, impactPct: 0.04 } as { sizeUsd: number; impactPct: number | null },
   connected: true,
   connect: vi.fn(),
   quote: { status: "idle", quote: null, error: null, stale: false, updatedAt: null, refresh: vi.fn() } as Record<string, unknown>,
@@ -27,12 +28,12 @@ vi.mock("@/hooks/use-swap-quote", () => ({ useSwapQuote: (p: unknown) => (h.quot
 vi.mock("@/hooks/use-swap", () => ({ useSwap: () => h.swap }));
 vi.mock("@/hooks/use-swap-balances", () => ({ useBalances: () => ({ balances: h.balances, balanceOf: (a: { address: string }) => h.balances.get(a.address.toLowerCase()), loading: false, error: null, refresh: vi.fn() }) }));
 vi.mock("@/hooks/use-swap-market", () => ({
-  usePoolMarket: () => ({ market: { priceUsd: 5, tvlUsd: 120_000, tvlQuote: 48 }, quoteUsd: 2500, loading: false, error: null, refresh: vi.fn() }),
+  usePoolMarket: () => ({ market: { priceUsd: 5, tvlUsd: 9_000_000, tvlQuote: 3600, depthUsd: 120_000, depthQuote: 48 }, quoteUsd: 2500, loading: false, error: null, refresh: vi.fn() }),
   useUsdPrices: () => ({ data: new Map([[ETH.address, 2500], [WETH.address.toLowerCase(), 2500], [USDC.address.toLowerCase(), 1]]) }),
 }));
 vi.mock("@/lib/swap/tokens", async (orig) => ({ ...(await orig<typeof import("@/lib/swap/tokens")>()), resolveMarketToken: async () => { if (h.resolved instanceof Error) throw h.resolved; return h.resolved; } }));
 vi.mock("@/lib/swap/trade", async (orig) => ({ ...(await orig<typeof import("@/lib/swap/trade")>()), requestTradeQuote: async () => null, quoteImpactLadder: async () => [] }));
-vi.mock("@/lib/swap/depth", () => ({ loadQuoteRouteDepth: async () => ({ sizeUsd: 10_000, impactPct: 0.04 }) }));
+vi.mock("@/lib/swap/depth", () => ({ loadQuoteRouteDepth: async () => h.depth }));
 
 import { ConnectedTradePanel } from "@/components/swap/connected-trade-panel";
 
@@ -66,6 +67,7 @@ beforeEach(() => {
   h.quoteParams = [];
   h.resolved = market();
   h.registry = [];
+  h.depth = { sizeUsd: 10_000, impactPct: 0.04 };
 });
 
 const renderPanel = (props = {}) => render(wrapper(<ConnectedTradePanel token={{ address: TOKEN, symbol: "TKN" }} causeName="Wildlife rescue" {...props} />));
@@ -115,6 +117,8 @@ describe("ConnectedTradePanel", () => {
     expect(screen.getByText(/Route: ETH > WETH > TKN \(best of 2\)/)).toBeInTheDocument();
     expect(screen.getAllByText(/3\.00%/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/396/).length).toBeGreaterThan(0); // min received
+    // the ticket adds the symbol itself: it must not be printed twice
+    expect(screen.getByText("Minimum received").parentElement).toHaveTextContent(/^Minimum received\s*396 TKN$/);
     expect(screen.getAllByText(/2\.00%/).length).toBeGreaterThan(0); // sniper
     // 90 / 10 of a 3% fee on $2,500: $67.50 and $7.50
     expect(screen.getAllByText("$67.50").length).toBeGreaterThan(0);
@@ -154,6 +158,53 @@ describe("ConnectedTradePanel", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("AMZNon is paused by Ondo");
   });
 
+  it("shows a cancelled-in-wallet note (not an alert) after a rejected prompt, and the button stays usable", async () => {
+    h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+    h.swap = { ...h.swap, phase: "error", error: new SwapError("user-rejected"), steps: [{ id: "approve", label: "Approve WETH", status: "done" }, { id: "permit", label: "Sign permit for WETH", status: "error" }, { id: "swap", label: "Swap", status: "pending" }] };
+    renderPanel();
+    fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "1" } });
+    expect(await screen.findByRole("status")).toHaveTextContent("Cancelled in your wallet");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("list", { name: "Swap progress" })).toHaveTextContent("Failed: Sign permit for WETH");
+    expect(await screen.findByRole("button", { name: "Review buy" })).toBeEnabled();
+  });
+
+  it("shows why a mined swap failed (slippage) as an alert", async () => {
+    h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+    h.swap = { ...h.swap, phase: "error", error: new SwapError("slippage") };
+    renderPanel();
+    fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "1" } });
+    expect(await screen.findByRole("alert")).toHaveTextContent("Price moved beyond your slippage limit");
+  });
+
+  it("sell: blocks on the token balance, then allows the swap once it covers the amount", async () => {
+    h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+    h.balances = new Map([[ETH.address, 5n * 10n ** 18n], [TOKEN, 2n * 10n ** 18n]]);
+    renderPanel();
+    fireEvent.click(await screen.findByRole("radio", { name: /Sell/ }));
+    const input = (await screen.findByLabelText("You pay")) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "3" } });
+    expect(await screen.findByRole("button", { name: "Insufficient TKN balance" })).toBeDisabled();
+    fireEvent.change(input, { target: { value: "1.5" } });
+    fireEvent.click(await screen.findByRole("button", { name: /Review sell/ }));
+    expect(h.swap.execute).toHaveBeenCalled();
+  });
+
+  it("warns that the US market is closed on a weekend for an Ondo quote asset, without blocking the trade", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-11-07T15:00:00Z")); // a Saturday
+    try {
+      h.resolved = market({ address: ONDO_TOKENS.AMZNon.address, symbol: "AMZNon", decimals: 18 });
+      h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
+      renderPanel();
+      fireEvent.change(await screen.findByLabelText("You pay"), { target: { value: "1" } });
+      expect((await screen.findAllByText(/US market closed\./)).length).toBeGreaterThan(0);
+      expect(await screen.findByRole("button", { name: "Review buy" })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows the swap steps and disables the button while the wallet is busy", async () => {
     h.quote = { status: "ready", quote: readyQuote(), error: null, stale: false, updatedAt: Date.now(), refresh: vi.fn() };
     h.swap = { ...h.swap, phase: "awaiting-wallet", busy: true, steps: [{ id: "approve", label: "Approve WETH", status: "done" }, { id: "swap", label: "Swap", status: "active" }] };
@@ -178,6 +229,12 @@ describe("ConnectedTradePanel", () => {
     expect(await screen.findByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("$120,000");
     expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("Locked forever");
     await waitFor(() => expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("0.04%"));
+  });
+
+  it("says so when the quote asset's way to USDC cannot fill the reference size (a thin pool)", async () => {
+    h.depth = { sizeUsd: 10_000, impactPct: null };
+    renderPanel();
+    await waitFor(() => expect(screen.getByRole("region", { name: "Pair and liquidity" })).toHaveTextContent("Can't fill $10,000"));
   });
 
   it("offers the registry's Ondo assets as extra pay assets and routing nodes", async () => {

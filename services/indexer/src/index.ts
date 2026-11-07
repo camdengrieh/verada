@@ -27,17 +27,22 @@ import {
   onBallotSizeCapSet,
   onBallotSizeSet,
   onCuratedPicksUsed,
+  onCurationGraceSet,
   onCurationSkipRequested,
   onDonated,
   onEpochCloseFailed,
   onEpochClosed,
   onEpochFinalized,
   onEpochOpened,
+  onEpochScheduleSet,
+  onLaunchSnapshotDelaySet,
   onLaunchSnapshotSet,
   onNoVoteFallbackApplied,
   onOrgDeployed,
   onShortlistScheduled,
+  onSettleGraceSet,
   onShortlistSet,
+  onTallyGraceSet,
   onTallyTimeoutFallbackApplied,
   onVoteCast,
 } from "./handlers/governance";
@@ -116,6 +121,11 @@ ponder.on("EpochGovernor:BallotPrepared", onBallotPrepared);
 ponder.on("EpochGovernor:BallotSizeCapSet", onBallotSizeCapSet);
 ponder.on("EpochGovernor:BallotSizeSet", onBallotSizeSet);
 ponder.on("EpochGovernor:LaunchSnapshotSet", onLaunchSnapshotSet);
+ponder.on("EpochGovernor:EpochScheduleSet", onEpochScheduleSet);
+ponder.on("EpochGovernor:TallyGraceSet", onTallyGraceSet);
+ponder.on("EpochGovernor:LaunchSnapshotDelaySet", onLaunchSnapshotDelaySet);
+ponder.on("EpochGovernor:CurationGraceSet", onCurationGraceSet);
+ponder.on("FeeVault:SettleGraceSet", onSettleGraceSet);
 ponder.on("CauseCatalog:CatalogVersionSet", onCatalogVersionSet);
 ponder.on("TokenProfileRegistry:FocusSet", onFocusSet);
 ponder.on("DonationDistributor:Donated", onDonated);

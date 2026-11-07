@@ -21,6 +21,9 @@ docs/SPEC.md
 # Local/fork deployment outputs (force-add a reviewed mainnet record deliberately)
 contracts/deployments/
 
+# pnpm dev:up state, logs and the throwaway test key
+.dev/
+
 # Cause catalogue harvest and build output (published to Swarm, not tracked)
 .catalog/
 

@@ -14,6 +14,7 @@ import {Actions} from "v4-periphery/libraries/Actions.sol";
 import {LiquidityAmounts} from "v4-periphery/libraries/LiquidityAmounts.sol";
 
 import {VaradaToken} from "./VaradaToken.sol";
+import {DonationAsset} from "./interfaces/IDonationAsset.sol";
 import {ICauseCatalog} from "./interfaces/ICauseCatalog.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeVault} from "./interfaces/IFeeVault.sol";
@@ -38,7 +39,7 @@ interface IPermit2Allowance {
 
 /// @title VaradaFactory
 /// @notice Launches a token: deploys it with CREATE2, initializes its Uniswap v4 pool against
-///         a registry-approved quote asset (WETH or an Ondo token) with the Varada hook, mints the whole supply as single-sided liquidity, sends
+///         a registry-approved quote asset (any registry-listed ERC-20: WETH, other liquid crypto or an Ondo token) with the Varada hook, mints the whole supply as single-sided liquidity, sends
 ///         the position NFT to the locker and registers the token with the fee vault, the
 ///         epoch governor and the profile registry (its `<label>.varada.eth` name). The factory
 ///         holds no tokens or positions after a launch. Once the deployer has configured live
@@ -85,6 +86,8 @@ contract VaradaFactory is IVaradaFactory, ReentrancyGuard {
     uint256 public tokenCount;
     mapping(address token => bool) public isVaradaToken;
     mapping(address token => address) public quoteAssetOf;
+    /// @inheritdoc IVaradaFactory
+    mapping(address token => DonationAsset) public donationAssetOf;
     /// @inheritdoc IVaradaFactory
     address public liveHook;
     /// @inheritdoc IVaradaFactory
@@ -191,6 +194,16 @@ contract VaradaFactory is IVaradaFactory, ReentrancyGuard {
         if (!_quoteRegistry.isAllowed(params.quoteAsset)) {
             revert QuoteAssetNotAllowed(params.quoteAsset);
         }
+        if (!_quoteRegistry.hasRouteTo(params.quoteAsset, params.donationAsset)) {
+            revert DonationRouteMissing(params.quoteAsset, params.donationAsset);
+        }
+        if (params.donationAsset == DonationAsset.Eth) {
+            // The cause pool is pushed to Endaoment as USDC: WETH must be convertible.
+            address weth = _quoteRegistry.donationToken(DonationAsset.Eth);
+            if (!_quoteRegistry.hasRouteTo(weth, DonationAsset.Usdc)) {
+                revert DonationRouteMissing(weth, DonationAsset.Usdc);
+            }
+        }
         uint8 quoteDecimals = _quoteRegistry.getQuoteAsset(params.quoteAsset).decimals;
         if (isVaradaToken[_predict(msg.sender, params)]) {
             revert TokenAlreadyDeployed(_predict(msg.sender, params));
@@ -203,6 +216,7 @@ contract VaradaFactory is IVaradaFactory, ReentrancyGuard {
         );
         isVaradaToken[token] = true;
         quoteAssetOf[token] = params.quoteAsset;
+        if (params.donationAsset != DonationAsset.Usdc) donationAssetOf[token] = params.donationAsset;
         unchecked {
             ++tokenCount;
         }
@@ -227,8 +241,16 @@ contract VaradaFactory is IVaradaFactory, ReentrancyGuard {
         if (isLive) {
             ILiveDonationVault(liveVault)
                 .registerToken(
-                    token, live.donationThreshold, live.initialCause, live.rotationPeriod
+                    token,
+                    live.donationThreshold,
+                    live.initialCause,
+                    live.rotationPeriod,
+                    params.donationAsset
                 );
+        } else {
+            // Before the pool exists: the consolidator reads it when the hook registers the pool.
+            if (params.donationAsset == DonationAsset.Usdc) feeVault.registerToken(token);
+            else feeVault.registerToken(token, params.donationAsset);
         }
 
         PoolKey memory key = _poolKey(token, params.quoteAsset, hook_);
@@ -239,10 +261,7 @@ contract VaradaFactory is IVaradaFactory, ReentrancyGuard {
         lpTokenId = _mintLiquidity(key, token, tokenIsCurrency0, poolTick);
 
         locker.lock(token, lpTokenId);
-        if (!isLive) {
-            feeVault.registerToken(token);
-            governor.registerToken(token);
-        }
+        if (!isLive) governor.registerToken(token);
 
         // Rounding in the liquidity math can leave a few wei of tokens behind; burn them so the
         // factory never holds a balance.

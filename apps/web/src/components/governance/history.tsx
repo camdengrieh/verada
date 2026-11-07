@@ -8,6 +8,9 @@ import { Switch } from "@varada/ui/components/ui/switch";
 import { CauseLeaderboard } from "@varada/ui/components/varada/cause-leaderboard";
 import { DonationTimeline } from "@varada/ui/components/varada/donation-timeline";
 import { useId, useMemo, useState } from "react";
+import { EXTERNAL_ADDRESSES } from "@varada/sdk";
+import { useQuoteUsd } from "@/hooks/use-usd-quotes";
+import { donationUnitOf } from "@/lib/donation-asset";
 import { useAppConfig, useDeps } from "@/components/providers";
 import { errorText, formatTime } from "@/components/use-tx";
 import { useCatalogOrgs, useCauseRegistry } from "@/components/governance/hooks";
@@ -61,9 +64,11 @@ export function GovernanceHistory({ tokens, selected, nowMs }: { tokens: readonl
     },
   };
 
-  const timeline = donationTimeline(scoped.donations, labels, config.chainId);
-  const board = causeLeaderboard(scoped.donations, labels);
-  const total = scoped.donations.reduce((n, d) => n + usdcToUsd(d.amount), 0);
+  const { quote: ethQuote } = useQuoteUsd(EXTERNAL_ADDRESSES.weth);
+  const ethUsd = ethQuote?.priceUsd ?? null;
+  const timeline = donationTimeline(scoped.donations, labels, config.chainId, ethUsd);
+  const board = causeLeaderboard(scoped.donations, labels, ethUsd);
+  const total = scoped.donations.reduce((n, d) => n + usdcToUsd(d.amount, donationUnitOf(d.donationAsset, ethUsd)), 0);
   const nameOfToken = (address: string) => {
     const t = tokenName.get(address.toLowerCase());
     return t ? tokenLabel(t) : `${address.slice(0, 6)}…${address.slice(-4)}`;
@@ -127,7 +132,7 @@ export function GovernanceHistory({ tokens, selected, nowMs }: { tokens: readonl
                   <TableCell className="num">{e.epoch}</TableCell>
                   <TableCell>{e.winningCauseId ? labels.cause(e.winningCauseId.toLowerCase()).name : "Fallback cause"}</TableCell>
                   <TableCell className="num text-right">{e.voteCount}</TableCell>
-                  <TableCell className="num text-right">{BigInt(e.donatedAmount) > 0n ? usd(usdcToUsd(e.donatedAmount)) : "Not paid yet"}</TableCell>
+                  <TableCell className="num text-right">{BigInt(e.donatedAmount) > 0n ? usd(usdcToUsd(e.donatedAmount, donationUnitOf(e.donationAsset, ethUsd))) : "Not paid yet"}</TableCell>
                   <TableCell className="num text-ink-muted">{e.finalizedAt !== undefined ? formatTime(e.finalizedAt) : "unknown"}</TableCell>
                 </TableRow>
               ))}
@@ -138,7 +143,7 @@ export function GovernanceHistory({ tokens, selected, nowMs }: { tokens: readonl
 
       {(board.length > 0 || timeline.length > 0) && (
         <div className="grid grid-cols-1 gap-6 @3xl:grid-cols-2">
-          {board.length > 0 && <CauseLeaderboard entries={board} title="Causes by USDC received" period={`${usd(total)} in the latest payouts`} headingLevel={3} />}
+          {board.length > 0 && <CauseLeaderboard entries={board} title="Causes by value received" period={`${usd(total)} in the latest payouts`} headingLevel={3} />}
           {timeline.length > 0 && <DonationTimeline donations={timeline.slice(0, 8)} now={nowMs} title="Donations to winners" headingLevel={3} />}
         </div>
       )}

@@ -20,10 +20,14 @@ import type { Source } from "@/lib/data";
 import type { TokenDetail } from "@/lib/indexer";
 import { quoteInfo } from "@/lib/quote-info";
 import { loadLive } from "@/lib/token-data";
-import { formatQuotePrice } from "@/lib/token-market";
+import { formatQuotePrice, formatUsdPrice } from "@/lib/token-market";
+import { usdNotes } from "@varada/sdk";
+import { useQuoteUsd } from "@/hooks/use-usd-quotes";
 import { usdText } from "@/lib/token-view";
 import { usdcToUsd } from "@/lib/token-data";
+import { useDonationUnit } from "@/hooks/use-donation-unit";
 import { factoryAbi } from "@/lib/abis";
+import { LiveActivityFeed } from "@/components/discover/live-activity";
 import { AboutTab } from "./about-tab";
 import { CuratedBy, FeeSplit, LiveSummary, PoolSummary } from "./giving";
 import { HoldersTab } from "./holders-tab";
@@ -102,7 +106,7 @@ function useQuoteAddress(token: Address, fromMarket: string | null | undefined):
   return fromMarket ?? (q.data && !/^0x0{40}$/i.test(q.data) ? q.data : null);
 }
 
-type TabId = "trades" | "holders" | "impact" | "governance" | "about" | "manage";
+type TabId = "trades" | "activity" | "holders" | "impact" | "governance" | "about" | "manage";
 
 export function TokenView({ address, token, source }: { address: Address; token: TokenDetail; source: Source | undefined }) {
   const config = useAppConfig();
@@ -132,18 +136,34 @@ export function TokenView({ address, token, source }: { address: Address; token:
 
   const figures = useMarketFigures(market.data, address, summary.data, nowSec);
   const feeTotals = token.feeTotals;
+  const donation = useDonationUnit(token.donationAsset);
+  const donationInfo = useMemo(() => ({ unit: donation.unit, symbol: donation.symbol }), [donation.unit, donation.symbol]);
   const isLive = Boolean(live.data);
-  const raisedUsd = isLive ? usdcToUsd(live.data!.totals.credited) : feeTotals ? usdcToUsd(BigInt(feeTotals.causeAmount)) : source === "indexer" ? 0 : null;
+  const raisedUsd = isLive ? usdcToUsd(live.data!.totals.credited, donation.unit) : feeTotals ? usdcToUsd(BigInt(feeTotals.causeAmount), donation.unit) : source === "indexer" ? 0 : null;
   const sym = quote?.symbol ?? "";
+  // USD per quote asset: USDC is $1, WETH and the Ondo assets come from their pools (shared pricing layer).
+  const { quote: usdQuote } = useQuoteUsd(quote?.address);
+  const perQuote = quote?.usd ? 1 : (usdQuote?.priceUsd ?? null);
+  const approx = !quote?.usd && perQuote !== null && Boolean(usdQuote && (usdQuote.confidence !== "high" || usdQuote.marketClosed));
+  const heroPrice = figures?.stats.price ?? null;
+  const priceNotes = perQuote !== null && !quote?.usd ? usdNotes(usdQuote) : [];
   const heroStats = {
-    price: figures?.stats.price != null ? (quote?.usd ? usdText(figures.stats.price) : formatQuotePrice(figures.stats.price, sym)) : null,
+    price: heroPrice != null ? (perQuote !== null ? formatUsdPrice(heroPrice * perQuote, approx) : formatQuotePrice(heroPrice, sym)) : null,
+    priceNote: heroPrice != null && perQuote !== null && !quote?.usd ? [formatQuotePrice(heroPrice, sym), ...priceNotes].join(" · ") : undefined,
     change24h: figures?.stats.change24h ?? undefined,
-    marketCap: figures?.marketCap != null ? (quote?.usd ? usdText(figures.marketCap, true) : `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(figures.marketCap)} ${sym}`.trim()) : null,
+    marketCap:
+      figures?.marketCap != null
+        ? perQuote !== null
+          ? `${approx ? "~" : ""}${usdText(figures.marketCap * perQuote, true)}`
+          : `${new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 2 }).format(figures.marketCap)} ${sym}`.trim()
+        : null,
     holders: summary.data?.holders ?? null,
     raisedUsd,
   };
 
   const liquidity = useLiquidityMetric(address, symbol);
+  // One token in dollars (price in the quote asset times the quote's USD price), for the holders' values.
+  const tokenUsd = heroPrice != null && perQuote !== null ? { priceUsd: heroPrice * perQuote, approx } : null;
   const causes = focusCauseNames(token.focus);
   const causeIcon = causes.length === 1 ? causes[0] : undefined;
   const designated = live.data?.designatedCause?.toLowerCase();
@@ -213,6 +233,8 @@ export function TokenView({ address, token, source }: { address: Address; token:
             nowSec={nowSec}
             onTrade={openTrade}
             extraMetrics={liquidity}
+            usd={usdQuote}
+            donation={donationInfo}
           />
         </div>
 
@@ -220,14 +242,15 @@ export function TokenView({ address, token, source }: { address: Address; token:
           <div id="trade" className="scroll-mt-24 empty:hidden">
             {wide ? <TradeAside token={address} symbol={symbol} causeName={causeName} causeIcon={causeIcon} onSwapped={onSwapped} /> : null}
           </div>
-          {live.data ? <LiveSummary live={live.data} /> : <PoolSummary token={address} detail={token} onVote={() => showTab("governance")} />}
-          <FeeSplit feeTotals={feeTotals} />
+          {live.data ? <LiveSummary live={live.data} unit={donation.unit} /> : <PoolSummary token={address} detail={token} onVote={() => showTab("governance")} />}
+          <FeeSplit feeTotals={feeTotals} unit={donation.unit} symbol={donation.symbol} priced={donation.priced} />
         </aside>
 
         <div ref={tabsRef} className="min-w-0 scroll-mt-24 lg:col-start-1 lg:row-start-2">
           <Tabs value={tab} onValueChange={(v) => setTab(v as TabId)} variant="brush">
             <TabsList scrollable scrollLabels={{ previous: "Earlier tabs", next: "More tabs" }} aria-label="Token sections">
               <TabsTrigger value="trades">Trades</TabsTrigger>
+              <TabsTrigger value="activity">Activity</TabsTrigger>
               <TabsTrigger value="holders">Holders</TabsTrigger>
               <TabsTrigger value="impact">Impact</TabsTrigger>
               <TabsTrigger value="governance">Governance</TabsTrigger>
@@ -235,13 +258,16 @@ export function TokenView({ address, token, source }: { address: Address; token:
               {canManage ? <TabsTrigger value="manage">Manage</TabsTrigger> : null}
             </TabsList>
             <TabsContent value="trades">
-              <TradesTab symbol={symbol} quote={quote} quoteDecimals={quoteDecimals} tape={tape} onTrade={openTrade} />
+              <TradesTab symbol={symbol} quote={quote} quoteDecimals={quoteDecimals} tape={tape} onTrade={openTrade} usd={usdQuote} />
+            </TabsContent>
+            <TabsContent value="activity">
+              <LiveActivityFeed token={address} symbol={symbol} title="Activity" />
             </TabsContent>
             <TabsContent value="holders">
-              <HoldersTab symbol={symbol} holders={holders} summary={summary} />
+              <HoldersTab symbol={symbol} holders={holders} summary={summary} tokenUsd={tokenUsd} />
             </TabsContent>
             <TabsContent value="impact">
-              <ImpactTab token={address} symbol={symbol} live={live.data ?? null} feeTotals={feeTotals} epoch={epochView.data?.epoch} />
+              <ImpactTab token={address} symbol={symbol} live={live.data ?? null} feeTotals={feeTotals} epoch={epochView.data?.epoch} donationAsset={donation.asset} />
             </TabsContent>
             <TabsContent value="governance" className="flex flex-col gap-8">
               <EpochPanel token={address} detail={token} />

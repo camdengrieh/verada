@@ -29,6 +29,7 @@ const tok = (address: Hex, i: number, over: Partial<TokenRow> = {}): TokenRow =>
   hook: "0x00000000000000000000000000000000000000c1",
   lpTokenId: BigInt(i),
   feeBps: 300,
+  donationAsset: 0,
   metadataUri: "bzz://x",
   createdAt: 1_000n + BigInt(i) * 100n,
   createdBlock: BigInt(i),

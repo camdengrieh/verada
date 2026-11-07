@@ -1,5 +1,7 @@
 import type { Hex } from "viem";
+import type { EpochSegment } from "@varada/sdk";
 import type { Cursor } from "./cursor";
+import type { TimingSettingRow } from "./timing";
 
 export const ACTIVITY_KINDS = [
   "launch",
@@ -64,6 +66,8 @@ export interface TokenRow {
   createdAt: bigint;
   createdBlock: bigint;
   txHash: Hex;
+  /** 0 USDC, 1 ETH. */
+  donationAsset: number;
   name: string;
   symbol: string;
   label: string | null;
@@ -152,10 +156,8 @@ export interface FocusRow {
   regionMask: number;
 }
 
-export interface EpochClock {
-  epochZeroStart: bigint;
-  epochLength: bigint;
-}
+/** Epoch schedule segment (`EpochGovernor` `EpochScheduleSet`), see `epoch_schedule`. */
+export type { EpochSegment } from "@varada/sdk";
 
 export interface PollRow {
   governor: Hex;
@@ -301,7 +303,8 @@ export interface Repo {
     textRecords: TextRecordRow[];
     shortlist: ShortlistSchedule | null;
     focus: FocusRow | null;
-    clock: EpochClock | null;
+    /** The governor's schedule segments by start epoch (empty until the governor was seen live). */
+    schedule: EpochSegment[];
     ballotSize: BallotSizeSettings;
   } | null>;
   /** Address of the token registered under `label`, if any. */
@@ -309,6 +312,10 @@ export interface Repo {
   feeTotalsFor(addresses: Hex[]): Promise<FeeTotalRow[]>;
   listActivity(q: ActivityQuery): Promise<ActivityItem[]>;
   listCauses(): Promise<CauseRow[]>;
+  /** The governor's epoch schedule segments by start epoch (empty until it was seen live). */
+  getEpochSchedule(): Promise<EpochSegment[]>;
+  /** Last value of each owner-set grace period event (a missing row means the contract default). */
+  getTimingSettings(): Promise<TimingSettingRow[]>;
   /** Newest epoch first. */
   listEpochs(token: Hex, q: { before?: bigint; limit: number }): Promise<EpochRow[]>;
   getEpoch(token: Hex, epoch: bigint): Promise<{
@@ -319,7 +326,8 @@ export interface Repo {
     /** Catalogue org ids of `options`, same order (from `BallotPrepared`); empty when any is unknown. */
     optionOrgIds: Hex[];
     poll: PollRow | null;
-    clock: EpochClock | null;
+    /** The governor's schedule segments by start epoch (empty until the governor was seen live). */
+    schedule: EpochSegment[];
     /** Credited to this epoch's pool, by accrual epoch (ascending). */
     causePool: CausePoolAttributionRow[];
     /** Earned in this epoch, by the pool it was credited to (ascending; includes this epoch). */

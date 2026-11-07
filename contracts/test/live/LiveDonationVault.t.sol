@@ -12,6 +12,7 @@ import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IFeeConsolidator} from "../../src/interfaces/IFeeConsolidator.sol";
 import {ILiveDonationVault} from "../../src/interfaces/ILiveDonationVault.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 import {IRotationGovernor, RotationPeriod} from "../../src/interfaces/IRotationGovernor.sol";
 import {IEndaomentOrgFundFactory} from "../../src/interfaces/external/IEndaomentOrgFundFactory.sol";
 import {EndaomentDonateLib} from "../../src/libraries/EndaomentDonateLib.sol";
@@ -124,8 +125,8 @@ contract LiveDonationVaultTest is LiveBase {
     function test_registerToken_emits() public {
         address t = makeAddr("t3");
         vm.expectEmit(address(vault));
-        emit ILiveDonationVault.LiveTokenRegistered(t, 5e6, CAUSE_B, RotationPeriod.ThreeDays);
-        vault.registerToken(t, 5e6, CAUSE_B, RotationPeriod.ThreeDays);
+        emit ILiveDonationVault.LiveTokenRegistered(t, 5e6, CAUSE_B, RotationPeriod.ThreeDays, DonationAsset.Usdc);
+        vault.registerToken(t, 5e6, CAUSE_B, RotationPeriod.ThreeDays, DonationAsset.Usdc);
     }
 
     // ------------------------------------------------------------------ credit
@@ -156,7 +157,8 @@ contract LiveDonationVaultTest is LiveBase {
         usdc.mint(address(vault), gross);
         vm.expectEmit(address(vault));
         emit ILiveDonationVault.Credited(
-            tok, CAUSE_A, 7, gross, (gross * 1000) / 10_000, gross - (gross * 1000) / 10_000
+            tok, CAUSE_A, 7, gross, (gross * 1000) / 10_000, gross - (gross * 1000) / 10_000,
+            DonationAsset.Usdc
         );
         _creditFunded(tok, CAUSE_A, gross);
         uint256 platform = vault.platformAccrued();
@@ -193,7 +195,7 @@ contract LiveDonationVaultTest is LiveBase {
             uint256 before = MockOrg(orgA).balance();
             usdc.mint(address(vault), 10e6);
             vm.expectEmit(address(vault));
-            emit ILiveDonationVault.Donated(t, CAUSE_A, orgA, 9e6, false, true);
+            emit ILiveDonationVault.Donated(t, CAUSE_A, orgA, 9e6, false, true, DonationAsset.Usdc, 9e6);
             _creditFunded(t, CAUSE_A, 10e6);
             assertEq(MockOrg(orgA).balance() - before, _net(9e6));
             (uint256 pending,) = vault.pendingOf(t, CAUSE_A);
@@ -224,7 +226,7 @@ contract LiveDonationVaultTest is LiveBase {
         assertEq(_count(vm.getRecordedLogs(), ILiveDonationVault.DonationDeferred.selector), 0);
 
         vm.expectEmit(address(vault));
-        emit ILiveDonationVault.Donated(t, CAUSE_B, orgB, 18e6, true, false);
+        emit ILiveDonationVault.Donated(t, CAUSE_B, orgB, 18e6, true, false, DonationAsset.Usdc, 18e6);
         uint256 donated = vault.flush(t, CAUSE_B);
         assertEq(donated, 18e6);
         assertGt(orgB.code.length, 0, "deployed by flush");

@@ -1,10 +1,11 @@
 import type { Hex } from "viem";
+import { applyScheduleChange, singleSegmentSchedule, type EpochSegment } from "@varada/sdk";
+import type { TimingSettingRow } from "../src/api/timing";
 import {
   type ActivityItem,
   type CausePoolAttributionRow,
   type CauseRow,
   type DonationRow,
-  type EpochClock,
   type EpochRow,
   type FeeTotalRow,
   type PollRow,
@@ -43,6 +44,7 @@ export const tokens: TokenRow[] = [T1, T2, T3].map((address, i) => ({
   hook: ADDR,
   lpTokenId: BigInt(i + 1),
   feeBps: 300,
+  donationAsset: 0,
   metadataUri: `bzz://meta-${i}`,
   createdAt: BigInt(1000 + i * 10),
   createdBlock: BigInt(100 + i),
@@ -82,7 +84,22 @@ export const ballotSizes: Record<Hex, BallotSizeSettings> = {
 };
 /** T1 focuses on hunger and children in Africa and Asia. */
 export const focus = { [T1]: { categoryMask: (1n << 2n) | (1n << 3n), regionMask: 0b11 } } as Record<Hex, { categoryMask: bigint; regionMask: number }>;
-export const clock: EpochClock = { epochZeroStart: EPOCH_ZERO, epochLength: WEEK };
+/** The default schedule: one weekly segment, voting open the whole epoch. */
+export const schedule: EpochSegment[] = [...singleSegmentSchedule(EPOCH_ZERO)];
+export const MIN = 60n;
+/**
+ * A schedule that changed in epoch 5: weekly through epoch 5, then from epoch 6 (start `EPOCH_ZERO + 6
+ * weeks`) 45 minute epochs with a 15 minute voting window (30 minutes of trading).
+ */
+export const shortSchedule: EpochSegment[] = [
+  ...applyScheduleChange(singleSegmentSchedule(EPOCH_ZERO), {
+    startEpoch: 6n,
+    startTime: EPOCH_ZERO + 6n * WEEK,
+    length: 45n * MIN,
+    votingWindow: 15n * MIN,
+    holdWindow: 45n * MIN,
+  }),
+];
 
 export const polls: PollRow[] = [
   {
@@ -286,8 +303,18 @@ export const activity: ActivityItem[] = [
 );
 
 /** In-memory Repo that applies the same cursor and tie rules as the SQL implementation. */
-export function fixtureRepo(items: ActivityItem[] = activity): Repo {
+export function fixtureRepo(
+  items: ActivityItem[] = activity,
+  opts: { schedule?: EpochSegment[]; timing?: TimingSettingRow[] } = {},
+): Repo {
+  const sched = opts.schedule ?? schedule;
   return {
+    async getEpochSchedule() {
+      return sched;
+    },
+    async getTimingSettings() {
+      return opts.timing ?? [];
+    },
     async listTokens({ before, limit }) {
       return [...tokens]
         .sort((a, b) =>
@@ -310,7 +337,7 @@ export function fixtureRepo(items: ActivityItem[] = activity): Repo {
         textRecords: textRecords[address] ?? [],
         shortlist: shortlists[address] ?? null,
         focus: focus[address] ?? null,
-        clock,
+        schedule: sched,
         ballotSize: ballotSizes[address] ?? { cap: null, choice: null, choiceEffectiveFrom: null },
       };
     },
@@ -351,7 +378,7 @@ export function fixtureRepo(items: ActivityItem[] = activity): Repo {
         options: epochOptions[`${token}:${n}`] ?? [],
         optionOrgIds: epochOptionOrgIds[`${token}:${n}`] ?? [],
         poll: polls.find((p) => p.governor === epoch.governor && p.token === token && p.scope === n) ?? null,
-        clock,
+        schedule: sched,
         causePool: attributions
           .filter((a) => a.token === token && a.epoch === n)
           .sort((a, b) => (a.accrualEpoch < b.accrualEpoch ? -1 : 1)),

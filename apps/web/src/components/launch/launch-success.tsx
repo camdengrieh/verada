@@ -21,6 +21,7 @@ export function LaunchSuccess({
   txHash,
   live,
   rotation,
+  donationAsset = "usdc",
   onAgain,
 }: {
   name: string;
@@ -30,6 +31,7 @@ export function LaunchSuccess({
   txHash?: string;
   live: boolean;
   rotation?: string;
+  donationAsset?: "usdc" | "eth";
   onAgain(): void;
 }) {
   const config = useAppConfig();
@@ -59,6 +61,7 @@ export function LaunchSuccess({
             ${symbol} · {ens}
           </span>
           <ModeBadge giving={live ? { mode: "live", cadence: (rotation ?? "24h") as LiveCadence } : { mode: "weekly" }} long />
+          <span className="text-ink-soft">Donations paid in {donationAsset === "eth" ? "ETH" : "USDC"}</span>
         </p>
         {!token ? <p className="m-0 text-sm text-ink-soft">The transaction confirmed, but the token address could not be read from the receipt. Find the coin on the home page.</p> : null}
       </div>

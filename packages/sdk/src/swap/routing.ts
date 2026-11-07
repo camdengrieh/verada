@@ -2,14 +2,17 @@
  * Route finding. A Varada token trades against its quote asset only, so a user paying in another
  * asset needs a path of existing Uniswap v4 pools: user asset -> (hub pools) -> quote asset -> token.
  *
- * What is searched: v4 pools only, without hooks, in the configured fee tiers, among the nodes
- * {user asset, destination, hubs, extra hubs}; ETH (native, address zero) and WETH are separate
- * nodes joined by a free wrap / unwrap edge. Uniswap v3 and v2 liquidity is NOT searched.
+ * What is searched, among the nodes {user asset, destination, hubs, extra hubs}: Uniswap v4 pools without
+ * hooks in the configured fee tiers, Uniswap v3 pools in the four standard fee tiers and Uniswap v2 pairs
+ * (each venue can be switched off with `venues`). ETH (native, address zero) and WETH are separate
+ * nodes joined by a free wrap / unwrap edge; v3 and v2 trade WETH. A route may mix venues.
  */
 import { getAddress, type Address } from "viem";
-import { DEFAULT_ENVIRONMENT, DEFAULT_FEE_TIERS, DEFAULT_HUBS, MAX_ROUTE_POOL_HOPS } from "./constants.js";
+import { DEFAULT_ENVIRONMENT, DEFAULT_FEE_TIERS, DEFAULT_HUBS, DEFAULT_VENUES, MAX_ROUTE_POOL_HOPS, ONDO_FEE_TIERS } from "./constants.js";
+import { isOndoToken } from "../ondo.js";
 import { buildPoolKey, poolIdOf, readPoolStates, type ReadClient } from "./pool.js";
 import { NATIVE_CURRENCY, type PoolKey, type PoolState, type Route, type RouteStep, type SwapAsset, type SwapEnvironment } from "./types.js";
+import { candidatePairs, discoverV2Pairs, discoverV3Pools, stepVenue, type VenueConfig } from "./venues.js";
 
 export interface RoutingConfig {
   env?: SwapEnvironment;
@@ -18,6 +21,8 @@ export interface RoutingConfig {
   /** More nodes to search through, e.g. allowlisted Ondo quote assets. */
   extraHubs?: readonly SwapAsset[];
   feeTiers?: readonly { fee: number; tickSpacing: number }[];
+  /** Added for pairs with an Ondo token. Default {@link ONDO_FEE_TIERS}; [] searches `feeTiers` only. */
+  ondoFeeTiers?: readonly { fee: number; tickSpacing: number }[];
   /** Most pool hops (the wrap / unwrap edge is free). Default 3. */
   maxHops?: number;
   /** Pools kept per asset pair, deepest first. Default 2. */
@@ -26,9 +31,11 @@ export interface RoutingConfig {
   maxCandidates?: number;
   /** Candidates (best estimate first) that are sent to the quoter. Default 4. */
   quoteTop?: number;
+  /** Venues to search. Default: v4, v3 and v2. */
+  venues?: VenueConfig;
 }
 
-type ResolvedRouting = Required<Omit<RoutingConfig, "extraHubs">> & { extraHubs: readonly SwapAsset[] };
+type ResolvedRouting = Required<Omit<RoutingConfig, "extraHubs" | "venues">> & { extraHubs: readonly SwapAsset[]; venues: Required<VenueConfig> };
 
 export function resolveRoutingConfig(cfg: RoutingConfig = {}): ResolvedRouting {
   return {
@@ -36,10 +43,12 @@ export function resolveRoutingConfig(cfg: RoutingConfig = {}): ResolvedRouting {
     hubs: cfg.hubs ?? DEFAULT_HUBS,
     extraHubs: cfg.extraHubs ?? [],
     feeTiers: cfg.feeTiers ?? DEFAULT_FEE_TIERS,
+    ondoFeeTiers: cfg.ondoFeeTiers ?? ONDO_FEE_TIERS,
     maxHops: Math.min(cfg.maxHops ?? MAX_ROUTE_POOL_HOPS, MAX_ROUTE_POOL_HOPS),
     poolsPerPair: cfg.poolsPerPair ?? 2,
-    maxCandidates: cfg.maxCandidates ?? 10,
+    maxCandidates: cfg.maxCandidates ?? 16,
     quoteTop: cfg.quoteTop ?? 4,
+    venues: { ...DEFAULT_VENUES, ...cfg.venues },
   };
 }
 
@@ -58,7 +67,14 @@ export function routingNodes(cfg: RoutingConfig, endpoints: readonly Address[]):
  * include a core node are generated: the satellites (a user's Ondo token, the quote asset, registry
  * assets) connect to the hubs, not to each other, which keeps the number of reads linear in them.
  */
-export function candidatePoolKeys(nodes: readonly Address[], feeTiers: readonly { fee: number; tickSpacing: number }[] = DEFAULT_FEE_TIERS, core?: readonly Address[]): PoolKey[] {
+export function candidatePoolKeys(
+  nodes: readonly Address[],
+  feeTiers: readonly { fee: number; tickSpacing: number }[] = DEFAULT_FEE_TIERS,
+  core?: readonly Address[],
+  /** Added (deduplicated) for pairs that include an Ondo token; pass [] to turn off. */
+  ondoFeeTiers: readonly { fee: number; tickSpacing: number }[] = ONDO_FEE_TIERS,
+): PoolKey[] {
+  const ondoTiers = ondoFeeTiers.filter((o) => !feeTiers.some((t) => t.fee === o.fee && t.tickSpacing === o.tickSpacing));
   const coreSet = core ? new Set(core.map(key)) : null;
   const keys: PoolKey[] = [];
   for (let i = 0; i < nodes.length; i++) {
@@ -66,7 +82,8 @@ export function candidatePoolKeys(nodes: readonly Address[], feeTiers: readonly 
       const a = nodes[i]!;
       const b = nodes[j]!;
       if (coreSet && !coreSet.has(key(a)) && !coreSet.has(key(b))) continue;
-      for (const t of feeTiers) keys.push(buildPoolKey({ currencyA: a, currencyB: b, fee: t.fee, tickSpacing: t.tickSpacing }));
+      const tiers = ondoTiers.length > 0 && (isOndoToken(a) || isOndoToken(b)) ? [...feeTiers, ...ondoTiers] : feeTiers;
+      for (const t of tiers) keys.push(buildPoolKey({ currencyA: a, currencyB: b, fee: t.fee, tickSpacing: t.tickSpacing }));
     }
   }
   return keys;
@@ -85,9 +102,11 @@ export function clearDiscoveryCache(): void {
 }
 
 /**
- * Finds which candidate pools exist (initialized, with liquidity) via `StateView`, in one batched
- * read: pools between hubs, and between each other node and the hubs. Also reads the `extra` pool keys (the
- * Varada token's own pool). Cached for 10 s per node set.
+ * Finds which candidate pools exist (initialized, with liquidity), in batched reads: v4 pools through
+ * `StateView`, v3 pools through the factory then `slot0` / `liquidity`, v2 pairs through the factory then
+ * `getReserves`; pools between hubs, and between each other node and the hubs. Also reads the `extra` pool keys (the
+ * Varada token's own pool). Cached for 10 s per node set. A failed v3 / v2 read means "no such pool"; a failed
+ * v4 read throws (`rpc-unavailable`).
  */
 export async function discoverPools(
   client: ReadClient,
@@ -97,12 +116,20 @@ export async function discoverPools(
   opts: { now?: number; bypassCache?: boolean } = {},
 ): Promise<PoolState[]> {
   const c = resolveRoutingConfig(cfg);
-  const keys = [...candidatePoolKeys(nodes, c.feeTiers, c.hubs.map((h) => h.address)), ...extra];
-  const cacheKey = keys.map((k) => poolIdOf(k)).join(",") + c.env.stateView;
+  const core = c.hubs.map((h) => h.address);
+  const keys = [...(c.venues.v4 ? candidatePoolKeys(nodes, c.feeTiers, core, c.ondoFeeTiers) : []), ...extra];
+  const v = c.venues;
+  const cacheKey = keys.map((k) => poolIdOf(k)).join(",") + c.env.stateView + (v.v3 ? "+v3" : "") + (v.v2 ? "+v2" : "") + nodes.map((n) => n.toLowerCase()).join(",");
   const now = opts.now ?? Date.now();
   const hit = discoveryCache.get(cacheKey);
   if (hit && !opts.bypassCache && now - hit.at < DISCOVERY_TTL_MS) return hit.states;
-  const states = (await readPoolStates(client, keys, c.env)).filter((s) => s.initialized && s.liquidity > 0n);
+  const pairs = v.v3 || v.v2 ? candidatePairs(nodes, c.env.weth, core) : [];
+  const [v4, v3, v2] = await Promise.all([
+    readPoolStates(client, keys, c.env),
+    v.v3 ? discoverV3Pools(client, pairs, c.env) : [],
+    v.v2 ? discoverV2Pairs(client, pairs, c.env) : [],
+  ]);
+  const states = [...v4, ...v3, ...v2].filter((s) => s.initialized && s.liquidity > 0n);
   discoveryCache.set(cacheKey, { at: now, states });
   return states;
 }
@@ -113,6 +140,7 @@ function stepFor(state: PoolState, currencyIn: Address): RouteStep {
     kind: "pool",
     key: state.key,
     poolId: state.poolId,
+    ...(state.venue && state.venue !== "v4" ? { venue: state.venue, address: state.address } : {}),
     zeroForOne,
     currencyIn: getAddress(currencyIn),
     currencyOut: zeroForOne ? state.key.currency1 : state.key.currency0,
@@ -198,22 +226,29 @@ export function enumerateRoutes(
   return out.slice(0, maxCandidates);
 }
 
-/** Splits a route at wrap / unwrap steps into v4 segments (run as one `V4_SWAP` each) and conversions. */
+/**
+ * Splits a route at wrap / unwrap steps and at venue changes into segments: consecutive pool steps of one venue
+ * run as one `V4_SWAP` / `V3_SWAP_EXACT_*` / `V2_SWAP_EXACT_*` command; conversions are their own segments.
+ */
+type PoolStepOf = Extract<RouteStep, { kind: "pool" }>;
 export type RouteSegment =
-  | { kind: "v4"; steps: Extract<RouteStep, { kind: "pool" }>[]; currencyIn: Address; currencyOut: Address }
+  | { kind: "v4"; steps: PoolStepOf[]; currencyIn: Address; currencyOut: Address }
+  | { kind: "v3"; steps: PoolStepOf[]; currencyIn: Address; currencyOut: Address }
+  | { kind: "v2"; steps: PoolStepOf[]; currencyIn: Address; currencyOut: Address }
   | { kind: "wrap"; currencyIn: Address; currencyOut: Address }
   | { kind: "unwrap"; currencyIn: Address; currencyOut: Address };
 
 export function segmentRoute(route: Route): RouteSegment[] {
   const segments: RouteSegment[] = [];
-  let cur: Extract<RouteStep, { kind: "pool" }>[] = [];
+  let cur: PoolStepOf[] = [];
   const flush = () => {
     if (cur.length === 0) return;
-    segments.push({ kind: "v4", steps: cur, currencyIn: cur[0]!.currencyIn, currencyOut: cur[cur.length - 1]!.currencyOut });
+    segments.push({ kind: stepVenue(cur[0]!), steps: cur, currencyIn: cur[0]!.currencyIn, currencyOut: cur[cur.length - 1]!.currencyOut });
     cur = [];
   };
   for (const s of route.steps) {
     if (s.kind === "pool") {
+      if (cur.length > 0 && stepVenue(cur[0]!) !== stepVenue(s)) flush();
       cur.push(s);
     } else {
       flush();
@@ -222,6 +257,25 @@ export function segmentRoute(route: Route): RouteSegment[] {
   }
   flush();
   return segments;
+}
+
+/**
+ * Currencies of a route that really move as ERC-20 transfers (so an Ondo pause or blocklist applies): the two
+ * ends, every currency at a segment boundary (the router holds it between commands) and every currency of a
+ * v3 / v2 pool (those pools transfer each hop). A currency strictly inside a v4 segment is netted to zero by the
+ * pool manager and never moves.
+ */
+export function movingCurrencies(route: Route): Address[] {
+  const out = new Map<string, Address>();
+  const add = (a: Address) => out.set(key(a), a);
+  add(route.currencyIn);
+  add(route.currencyOut);
+  for (const seg of segmentRoute(route)) {
+    add(seg.currencyIn);
+    add(seg.currencyOut);
+    if (seg.kind === "v3" || seg.kind === "v2") for (const s of seg.steps) add(s.currencyOut);
+  }
+  return [...out.values()];
 }
 
 /** "ETH > USDC > NVDAon > $HARAMBE" style label for a route, using `symbolOf` for each address. */

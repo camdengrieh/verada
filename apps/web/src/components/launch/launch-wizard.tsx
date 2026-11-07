@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { parseEventLogs, zeroAddress, type Address } from "viem";
 import { useAccount, usePublicClient } from "wagmi";
@@ -11,12 +11,15 @@ import { BOTTOM_TAB_BAR_HEIGHT } from "@varada/ui/components/mobile/bottom-tab-b
 import { factoryAbi } from "@/lib/abis";
 import { chainLabelStatus } from "@/lib/chain-reads";
 import { loadCauses } from "@/lib/data";
+import { durationText } from "@/lib/epoch-timing";
+import { loadEpochClock } from "@/lib/governance";
 import { buildMetadataDocument, parseLaunchInput, randomSalt, type LaunchInput } from "@/lib/launch";
 import { ESTIMATE_METADATA_URI, launchCall } from "@/lib/launch-tx";
 import {
   canAdvance,
   firstInvalidStep,
   initialWizardState,
+  labelBlockedText,
   STEPS,
   toLaunchInput,
   validateStep,
@@ -25,7 +28,8 @@ import {
 import { PublisherClient } from "@/lib/publisher";
 import { findQuote } from "@/lib/quote-assets";
 import { useQuoteAssets } from "@/lib/use-quote-assets";
-import { useAppConfig, useDeps } from "@/components/providers";
+import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
+import { createAccountClient } from "@/lib/account-reads";
 import { errorText, useTx } from "@/components/use-tx";
 import { FeesStep } from "./fees-step";
 import { FocusStep } from "./focus-step";
@@ -45,7 +49,9 @@ export function LaunchWizard() {
   const deps = useDeps();
   const { address: account } = useAccount();
   const publicClient = usePublicClient({ chainId: config.chainId });
+  const rpc = usePrivateRpc();
   const tx = useTx();
+  const qc = useQueryClient();
 
   const [local, setLocal] = useState<WizardState>(() => initialWizardState(randomSalt()));
   const [index, setIndex] = useState(0);
@@ -54,7 +60,7 @@ export function LaunchWizard() {
   const [attempted, setAttempted] = useState<ReadonlySet<number>>(new Set());
   const [stage, setStage] = useState<"idle" | "metadata" | "wallet">("idle");
   const [launchError, setLaunchError] = useState<string>();
-  const [launchedAs, setLaunchedAs] = useState<{ name: string; symbol: string; label: string; live: boolean; rotation?: string }>();
+  const [launchedAs, setLaunchedAs] = useState<{ name: string; symbol: string; label: string; live: boolean; rotation?: string; donationAsset: "usdc" | "eth" }>();
 
   // ---- reads (public data only: nothing here is keyed by the visitor)
 
@@ -106,6 +112,16 @@ export function LaunchWizard() {
     retry: false,
     staleTime: 120_000,
   });
+
+  // The real epoch length, from the governor (owner-set): shown on the epoch pool so no length is promised here.
+  const epochClock = useQuery({
+    queryKey: ["epoch-clock", config.governorAddress],
+    queryFn: () => loadEpochClock(config, deps),
+    enabled: Boolean(config.governorAddress),
+    retry: false,
+    staleTime: 120_000,
+  });
+  const epochLength = epochClock.data ? durationText(epochClock.data.length) : undefined;
 
   const ws: WizardState = useMemo(
     () => ({
@@ -159,7 +175,8 @@ export function LaunchWizard() {
     queryKey: ["launch-estimate", factory, account, estimateKey],
     queryFn: async () => {
       const client = publicClient!;
-      const gas = await client.estimateContractGas({ ...call!, account: account! } as never);
+      // The estimate names the account as `from`: read it under the account's own isolation key (docs/PRIVACY.md).
+      const gas = await createAccountClient(rpc, account!).estimateContractGas({ ...call!, account: account! } as never);
       const gasPrice = await client.getGasPrice().catch(() => null);
       return { gas, gasPrice };
     },
@@ -195,6 +212,15 @@ export function LaunchWizard() {
     if (!parsed.ok) return setParseError(parsed.error);
     let metadataURI = parsed.params.metadataURI;
     try {
+      // The availability shown was read up to 15 s ago: ask the registry again before spending an upload and a signature.
+      const fresh = await chainLabelStatus(deps.chain(), config, parsed.params.label).catch(() => undefined);
+      if (fresh) {
+        qc.setQueryData(["label-status", config.profileRegistryAddress, parsed.params.label], fresh);
+        if (labelBlockedText(parsed.params.label, fresh, account)) {
+          setAttempted((a) => new Set(a).add(0));
+          return goTo(0);
+        }
+      }
       if (!metadataURI) {
         if (!config.publisherUrl) return setParseError("publisherUrl is not configured (config.json), so the metadata document cannot be stored. Set a metadata URI under Advanced on the Identity step.");
         const doc = buildMetadataDocument(parsed.params, ws.logoRef ?? "", ws.fields);
@@ -203,7 +229,7 @@ export function LaunchWizard() {
         metadataURI = (await new PublisherClient(config.publisherUrl).uploadMetadata(doc.doc)).uri;
       }
       setStage("wallet");
-      setLaunchedAs({ name: parsed.params.name, symbol: parsed.params.symbol, label: parsed.params.label, live: Boolean(parsed.live), rotation: ws.input.rotation });
+      setLaunchedAs({ name: parsed.params.name, symbol: parsed.params.symbol, label: parsed.params.label, live: Boolean(parsed.live), rotation: ws.input.rotation, donationAsset: ws.input.donationAsset ?? "usdc" });
       const c = launchCall(factory, parsed.params, metadataURI, parsed.live);
       await tx.send({ ...c, chainId: config.chainId } as never);
     } catch (e) {
@@ -234,7 +260,7 @@ export function LaunchWizard() {
   }
 
   const sending = stage !== "idle" || tx.isPending || Boolean(tx.hash && !tx.receipt && !tx.receiptError);
-  const txError = launchError ?? (tx.error ? errorText(tx.error) : tx.receiptError ? `Could not read the receipt: ${errorText(tx.receiptError)}` : tx.receipt?.status === "reverted" ? `The launch reverted (${tx.hash})` : undefined);
+  const txError = launchError ?? (tx.error ? errorText(tx.error) : tx.receiptError ? `Could not read the receipt: ${errorText(tx.receiptError)}` : tx.receipt?.status === "reverted" ? `The launch reverted (${tx.hash})${tx.revertReason ? `: ${tx.revertReason}` : ""}` : undefined);
   const causeName = causesQuery.data?.find((c) => c.causeId === local.input.initialCause?.toLowerCase())?.name;
 
   const steps = [
@@ -254,14 +280,14 @@ export function LaunchWizard() {
     },
     {
       ...STEPS[1],
-      content: <ModeStep {...stepProps(1)} causes={causesQuery.data} causesLoading={causesQuery.isLoading} causesFailed={Boolean(causesQuery.error)} liveReady={liveQuery.data} />,
+      content: <ModeStep {...stepProps(1)} causes={causesQuery.data} causesLoading={causesQuery.isLoading} causesFailed={Boolean(causesQuery.error)} liveReady={liveQuery.data} epochLength={epochLength} />,
     },
     {
       ...STEPS[2],
-      content: <PairStep {...stepProps(2)} assets={quotes.assets} loading={quotes.isLoading} failed={Boolean(quotes.error)} retry={quotes.refetch} />,
+      content: <PairStep {...stepProps(2)} assets={quotes.assets} loading={quotes.isLoading} marketsLoading={quotes.marketsLoading} failed={Boolean(quotes.error)} retry={quotes.refetch} />,
     },
     { ...STEPS[3], content: <FocusStep {...stepProps(3)} summary={summaryQuery.data} /> },
-    { ...STEPS[4], content: <FeesStep {...stepProps(4)} /> },
+    { ...STEPS[4], content: <FeesStep {...stepProps(4)} quoteDepthUsd={quote?.routeDepthUsd ?? null} /> },
     {
       ...STEPS[5],
       content: <ReviewStep state={ws} quote={quote} causeName={causeName} gas={gas} onEdit={goTo} parseError={parseError} txError={txError} onRerollSalt={rerollSalt} />,

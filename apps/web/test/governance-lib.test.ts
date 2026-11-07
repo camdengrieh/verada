@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  ballotIsLive,
   ballotMakeup,
+  canVote,
   causeLeaderboard,
   causeNameForSlug,
   donationTimeline,
@@ -98,6 +100,29 @@ describe("epoch status", () => {
     expect(epochStatus({ prepared: true, poll: poll({ closed: true, isFinal: true }) }, now).phase).toBe("tallied");
     expect(epochStatus({ prepared: true, poll: poll(), finalized: true }, now).phase).toBe("finalized");
   });
+
+  it("is in the trading phase until votingOpensAt, then open, then counting", () => {
+    const e = { prepared: true, poll: poll(), votingOpensAt: now + 600, end: now + 900 };
+    expect(epochStatus(e, now)).toMatchObject({ phase: "trading", label: expect.stringContaining("Trading") });
+    expect(epochStatus(e, now + 599).phase).toBe("trading");
+    expect(epochStatus(e, now + 600).phase).toBe("open");
+    expect(epochStatus(e, now + 899).phase).toBe("open");
+    expect(epochStatus(e, now + 900).phase).toBe("counting");
+    // An indexer without the schedule fields: voting is open from the start.
+    expect(epochStatus({ prepared: true, poll: poll(), end: now + 900 }, now).phase).toBe("open");
+    // An unprepared ballot stays unopened in trading (anyone can open it).
+    expect(epochStatus({ prepared: false, poll: null, votingOpensAt: now + 600, end: now + 900 }, now).phase).toBe("unopened");
+  });
+
+  it("only a voting-phase ballot can be voted in; a trading one is live but not votable", () => {
+    const trading = epochStatus({ prepared: true, poll: poll(), votingOpensAt: now + 600, end: now + 900 }, now);
+    const voting = epochStatus({ prepared: true, poll: poll(), votingOpensAt: now - 1, end: now + 900 }, now);
+    expect(canVote(trading, { optionCount: 3, hasVoted: false })).toBe(false);
+    expect(canVote(voting, { optionCount: 3, hasVoted: false })).toBe(true);
+    expect(ballotIsLive(trading)).toBe(true);
+    expect(ballotIsLive(voting)).toBe(true);
+    expect(ballotIsLive(epochStatus({ prepared: true, poll: poll(), end: now - 1 }, now))).toBe(false);
+  });
 });
 
 describe("tally results", () => {
@@ -129,10 +154,18 @@ describe("formatting", () => {
 });
 
 describe("clock and loaders", () => {
-  it("reads the current epoch and its week", async () => {
-    const readContract = async ({ functionName }: { functionName: string }) => (functionName === "currentEpoch" ? 5n : 1_000_000n);
+  it("reads the current epoch and its window from the governor's schedule (45 minutes: 30 trading, 15 voting)", async () => {
+    // Epoch 5 starts at 1_000_000 and ends at 1_002_700 (the next epoch's start), not a week later.
+    const readContract = async ({ functionName, args }: { functionName: string; args?: readonly unknown[] }) => {
+      const e = (args?.[0] ?? 0n) as bigint;
+      if (functionName === "currentEpoch") return 5n;
+      if (functionName === "epochStart") return 1_000_000n + (e - 5n) * 2_700n;
+      if (functionName === "votingOpensAt") return 1_001_800n;
+      if (functionName === "epochScheduleFor") return [2_700n, 900n, 2_700n];
+      throw new Error(`unexpected ${functionName}`);
+    };
     const clock = await loadEpochClock({ governorAddress: "0x00000000000000000000000000000000000000d1" }, { chain: () => ({ readContract }) as never });
-    expect(clock).toEqual({ epoch: 5n, start: 1_000_000, end: 1_604_800 });
+    expect(clock).toEqual({ epoch: 5n, start: 1_000_000, end: 1_002_700, votingOpensAt: 1_001_800, length: 2_700, votingWindow: 900 });
     await expect(loadEpochClock({}, { chain: () => ({}) as never })).rejects.toThrow(/Governor address/);
   });
 

@@ -21,7 +21,7 @@ import {CatalogBallotLib} from "./libraries/CatalogBallotLib.sol";
 contract CatalogBallotBuilder {
     using CatalogBallotLib for CatalogBallotLib.Ballot;
 
-    /// @notice Longest curation grace of a round, the weekly governor's `CURATION_GRACE`. Kept
+    /// @notice Longest curation grace of a round, the weekly governor's default `curationGrace`. Kept
     ///         for compatibility: the grace no longer lets a round skip published curations.
     uint256 public constant CURATION_GRACE = 6 hours;
 
@@ -84,7 +84,7 @@ contract CatalogBallotBuilder {
         governor = msg.sender;
     }
 
-    /// @notice Sets the curator registry and its weekly clock (`epochZeroStart`, `EPOCH_LENGTH`
+    /// @notice Sets the curator registry and its weekly clock (`epochZeroStart`, `epochLength`
     ///         of the epoch governor it follows). Once, by the governor.
     function setCurators(ICuratorRegistry curators_, uint256 zero, uint256 length) external {
         if (msg.sender != governor) revert NotGovernor();

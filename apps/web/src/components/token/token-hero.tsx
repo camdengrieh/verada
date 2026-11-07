@@ -23,6 +23,8 @@ import { REGIONS } from "@varada/sdk";
 export interface HeroStatsInput {
   /** Formatted price in the quote asset ("0.00004213 WETH"), or null before the first trade. */
   price: string | null;
+  /** Small print after the price: the price in the quote asset and any thin-liquidity or closed-market note. */
+  priceNote?: string;
   change24h: number | undefined;
   /** Market cap text in the quote asset, or null when price or supply is unknown. */
   marketCap: string | null;
@@ -125,6 +127,7 @@ export function TokenHero({
         siteHref={label && ensName ? ensLimoUrl(ensName) : undefined}
         art={<TokenLogo url={logoUrl} symbol={symbol} size={256} />}
         price={stats.price ?? "No trades yet"}
+        priceNote={stats.price ? stats.priceNote : undefined}
         change24h={stats.price ? stats.change24h : undefined}
         cause={main}
         causeRegions={regions}
@@ -156,9 +159,11 @@ export function TokenHero({
   );
 }
 
-export function TokenHeroSkeleton() {
+export function TokenHeroSkeleton({ title = "Loading token" }: { title?: string }) {
   return (
-    <div role="status" aria-label="Loading token" className="grid gap-6 rounded-[32px] border border-line bg-card p-5 @lg:grid-cols-[15rem_1fr] sm:p-7">
+    <div role="status" aria-label={title} className="grid gap-6 rounded-[32px] border border-line bg-card p-5 @lg:grid-cols-[15rem_1fr] sm:p-7">
+      {/* The page has no other heading until the token loads. */}
+      <h1 className="sr-only">{title}</h1>
       <Skeleton className="mx-auto aspect-square w-full max-w-[15rem] rounded-[28px]" />
       <div className="flex flex-col gap-4">
         <Skeleton className="h-6 w-48" />

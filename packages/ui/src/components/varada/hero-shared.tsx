@@ -8,7 +8,6 @@ import { motion, useMotionValue, useReducedMotion, useSpring, useTransform, type
 import { createContext, useContext, useEffect, useRef, type ComponentProps, type ReactNode, type RefObject } from "react";
 import { NumberTicker } from "@varada/ui/components/motion/number-ticker";
 import { Button, buttonVariants, type ButtonEffect } from "@varada/ui/components/ui/button";
-import { Divider } from "@varada/ui/components/ui/divider";
 import { cn } from "@varada/ui/lib/utils";
 import { DefaultLink, type LinkComponent } from "./shared";
 import { BrushUnderline, Wash, type WashBlob } from "./watercolour";
@@ -45,23 +44,21 @@ export function HeroStats({ stats, className, tone = "paper" }: { stats: HeroSta
       )}
     >
       {stats.map((s, i) => (
-        <div key={s.label} className="flex min-w-0 items-stretch gap-5">
-          {i > 0 ? <Divider orientation="vertical" className="hidden @lg:flex" /> : null}
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <dt className="flex items-center gap-1.5 text-xs font-semibold text-ink-muted">
-              {s.live ? (
-                <span aria-hidden="true" className="relative flex size-2">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-sage opacity-60 motion-reduce:hidden" />
-                  <span className="relative inline-flex size-2 rounded-full bg-sage" />
-                </span>
-              ) : null}
-              {s.label}
-              {s.live ? <span className="sr-only"> (live)</span> : null}
-            </dt>
-            <dd className="m-0 text-xl font-semibold text-ink @lg:text-2xl">
-              {typeof s.value === "number" ? <NumberTicker value={s.value} format={s.format} /> : <span className="num">{s.value}</span>}
-            </dd>
-          </div>
+        // A <dl> group holds only its <dt> and <dd>, so the hairline between stats is a border, not a divider element.
+        <div key={s.label} className={cn("flex min-w-0 flex-col gap-0.5", i > 0 && "@lg:border-l @lg:border-line @lg:pl-5")}>
+          <dt className="flex items-center gap-1.5 text-xs font-semibold text-ink-muted">
+            {s.live ? (
+              <span aria-hidden="true" className="relative flex size-2">
+                <span className="absolute inline-flex size-full animate-ping rounded-full bg-sage opacity-60 motion-reduce:hidden" />
+                <span className="relative inline-flex size-2 rounded-full bg-sage" />
+              </span>
+            ) : null}
+            {s.label}
+            {s.live ? <span className="sr-only"> (live)</span> : null}
+          </dt>
+          <dd className="m-0 text-xl font-semibold text-ink @lg:text-2xl">
+            {typeof s.value === "number" ? <NumberTicker value={s.value} format={s.format} /> : <span className="num">{s.value}</span>}
+          </dd>
         </div>
       ))}
     </dl>

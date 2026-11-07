@@ -9,6 +9,12 @@ export function generateStaticParams(): { label: string }[] {
   return AGENT_CATEGORIES.map((c) => ({ label: c.ensLabel }));
 }
 
+export async function generateMetadata({ params }: { params: Promise<{ label: string }> }) {
+  const { label } = await params;
+  const def = agentByLabel(label);
+  return { title: def ? `${def.label} curator agent` : "Curator agent" };
+}
+
 export default async function AgentLabelPage({ params }: { params: Promise<{ label: string }> }) {
   const { label } = await params;
   const def = agentByLabel(label);

@@ -97,7 +97,7 @@ function Row({ d, now, last, fresh, index, renderTx }: { d: Donation; now: numbe
         <p className="m-0 text-[13px] text-ink-soft">
           {CAUSE_SHORT_LABELS[d.cause]}
           {d.coin ? <> · from {d.coin}</> : null}
-          {d.via ? <> · {d.via === "pool" ? "weekly pool" : "live donation"}</> : null}
+          {d.via ? <> · {d.via === "pool" ? "epoch pool" : "live donation"}</> : null}
         </p>
         {renderTx ? (
           renderTx(d)

@@ -1,4 +1,4 @@
-import type { PeriodProposalState, RoundStatus } from "@varada/sdk";
+import type { EpochWindow, PeriodProposalState, RoundStatus } from "@varada/sdk";
 import type { Address, Hex } from "viem";
 
 /** `ITakeoverGovernor.State`, in enum order. */
@@ -32,9 +32,26 @@ export interface ProposalView {
   scheme: Address;
 }
 
+/**
+ * The epoch schedule in force now, read from the governor (never assumed): the current epoch's
+ * window (`epochStart`, `votingOpensAt`, `epochScheduleFor`) and the owner-set graces that decide
+ * how long an unfinished epoch keeps being worked on.
+ */
+export interface KeeperTiming {
+  /** Latest block timestamp, in seconds. */
+  now: bigint;
+  window: EpochWindow;
+  /** `EpochGovernor.tallyGrace`: after it an epoch without a final tally finalizes to the default cause. */
+  tallyGrace?: bigint;
+  /** `FeeVault.settleGrace`: after it fees still outside the vault stop holding up `settle`. Needs `FEE_VAULT_ADDRESS`. */
+  settleGrace?: bigint;
+}
+
 /** Contract reads the keeper bases every decision on. */
 export interface ChainReader {
   currentEpoch(): Promise<bigint>;
+  /** The schedule in force (see {@link KeeperTiming}); omitted: the keeper still works, it only cannot sanity-check its settings. */
+  timing?(): Promise<KeeperTiming>;
   /** `EpochGovernor.epochStart`, in seconds. */
   epochStart(epoch: bigint): Promise<bigint>;
   isRegistered(token: Address): Promise<boolean>;

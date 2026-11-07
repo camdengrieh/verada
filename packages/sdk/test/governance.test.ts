@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { EPOCH_LENGTH, epochStart } from "../src/epoch.js";
+import { epochStart, singleSegmentSchedule } from "../src/epoch.js";
 import {
   MAX_BALLOT_OPTIONS,
   WEIGHT_UNIT,
@@ -14,7 +14,8 @@ import {
   toWeightWhole,
 } from "../src/governance.js";
 
-const ZERO = 1_700_000_000n;
+const ZERO = singleSegmentSchedule(1_700_000_000n);
+const SHORT = singleSegmentSchedule(1_700_000_000n, 2_700n, 900n);
 
 describe("weights and snapshots", () => {
   it("counts whole tokens", () => {
@@ -27,7 +28,9 @@ describe("weights and snapshots", () => {
 
   it("snapshot is one second before the epoch start", () => {
     expect(epochSnapshot(3n, ZERO)).toBe(epochStart(3n, ZERO) - 1n);
-    expect(epochVotingEnd(3n, ZERO)).toBe(epochStart(3n, ZERO) + EPOCH_LENGTH);
+    expect(epochVotingEnd(3n, ZERO)).toBe(epochStart(3n, ZERO) + 604_800n);
+    expect(epochSnapshot(3n, SHORT)).toBe(1_700_000_000n + 3n * 2_700n - 1n);
+    expect(epochVotingEnd(3n, SHORT)).toBe(1_700_000_000n + 4n * 2_700n);
   });
 });
 

@@ -13,3 +13,4 @@ export * from "./ballot-prep.js";
 export * from "./swap/index.js";
 export * from "./hold-scan.js";
 export * from "./donation.js";
+export * from "./donation-asset.js";

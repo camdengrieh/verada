@@ -1,7 +1,7 @@
 # Varada Architecture
 
 Varada is a memecoin launchpad on Ethereum mainnet (chain id 1). Every token launches into a
-Uniswap v4 pool paired with an approved quote asset (WETH or an Ondo token), with single-sided
+Uniswap v4 pool paired with an approved quote asset (any ERC-20 the registry lists: WETH, other liquid crypto assets, or an Ondo token), with single-sided
 liquidity that is locked permanently. Trading fees are consolidated to USDC and split between the
 platform and a per-token cause pool. Each token chooses a cause focus at launch (categories such as
 hunger or endangered species, and regions such as Africa), and its holders vote weekly, with hidden
@@ -14,17 +14,22 @@ A token can instead launch in live mode: every swap's fee is converted to USDC i
 donated to the cause active at that moment, and holders rotate that cause by private vote on a
 period the creator picks (hourly to weekly); see [Live donation mode](#live-donation-mode).
 
+This page covers the contracts and the protocol rules. For the off-chain code (web app, component
+library, SDK swap engine, indexer API) and how to run it, see [OVERVIEW.md](OVERVIEW.md); for
+trading, [SWAP.md](SWAP.md); for what each part can see, [PRIVACY.md](PRIVACY.md).
+
 ## Repository layout
 
 | Path | Contents |
 |---|---|
 | `contracts/` | Foundry project (solc 0.8.26, cancun). Dependencies under `contracts/lib` as git submodules. |
-| `packages/sdk` | ABIs, addresses, viem helpers, fee math. |
+| `packages/sdk` | ABIs, addresses, viem helpers, fee and ballot math, ENS and Swarm helpers, the swap engine (`src/swap`, see [SWAP.md](SWAP.md)). |
 | `packages/endaoment-client` | Typed Endaoment organization search client. |
 | `packages/cause-catalog` | Harvests Endaoment orgs, classifies them by cause and region, and builds the catalogue Merkle tree (`varada-catalog` CLI). |
 | `packages/curator` | Curator agent tooling (`varada-curator` CLI): the ten agents and their rotation, report schema (`varada.curation/v1`), pick trees, calldata, and the 1Claw signer. |
 | `services/indexer` | Ponder indexer and API over protocol events, plus the x402 paid data routes. |
-| `apps/web` | Next.js app built as a static export (token list, launch, token page, causes, governance, curator agents). |
+| `apps/web` | Next.js app built as a static export (token list, launch, token page with trade ticket, trades and holders, causes, governance, curator agents). |
+| `packages/ui` | `@varada/ui`, the component library and design tokens used by the app (gallery at `/design`). |
 | `packages/publish` | Swarm upload, site feed updates and ENS contenthash tooling (dry-run by default). |
 | `packages/arkiv-registry` | Arkiv entity schemas, reconcile planning and client for the token mirror. |
 | `services/publisher` | Logo/metadata uploads to Swarm, signed curator report uploads, stamp watch, Arkiv mirror, the ballot and tally keeper, and a mainnet x402 facilitator (dormant: x402 no longer settles on mainnet). |
@@ -37,8 +42,8 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 |---|---|
 | `VaradaToken` | ERC20 with permit, burn and vote checkpoints (ERC20Votes with a timestamp clock; holders are self-delegated on first receipt). Fixed supply minted to the factory. Immutable creator and metadata URI. |
 | `VaradaFactory` | `deployToken`: deploys the token via CREATE2, registers its ENS label, logo and cause focus in the profile registry, initializes the v4 pool (token/quote, dynamic fee, Varada hook), mints single-sided liquidity through the position manager, sends the position NFT to the locker, and registers the token with the fee vault and governor. `deployLiveToken` runs the same launch on the live hook and registers the token with the live vault and rotation governor instead. |
-| `QuoteRegistry` | Owner-managed allowlist of quote assets. |
-| `FeeConsolidator` | Swaps collected fees into USDC through Uniswap v4 before the split. |
+| `QuoteRegistry` | Owner-managed allowlist of quote assets, each with a hookless v4 route (at most three hops) that ends in USDC. Any ERC-20 with a connected route qualifies; `Kind` is only a label. |
+| `FeeConsolidator` | Swaps collected fees into the token's donation asset (USDC or WETH) through Uniswap v4 before the split, and converts a WETH cause pool into USDC at Endaoment push time. See chapter 06. |
 | `TokenProfileRegistry` | Per-token profile: ENS label, controller and editor roles, text records, logo reference, suppression flag, and the cause focus (category and region masks, written once at launch). Factory-written at launch; the takeover governor may replace a controller. |
 | `VaradaResolver` | Stateless ENSIP-10 wildcard resolver for `varada.eth`: answers `addr`, `text`, `contenthash` for every `<label>.varada.eth` from the registry, and for `agent.varada.eth` and every `<label>.agent.varada.eth` from `CuratorRegistry`. |
 | `TakeoverGovernor` | Community takeover votes that replace a token's profile controller. |
@@ -52,8 +57,8 @@ period the creator picks (hourly to weekly); see [Live donation mode](#live-dona
 | `DonationDistributor` | After finalization, sends the epoch's cause funds to the winning cause's payout address. |
 | `CuratorRegistry` | One curator registration per cause category (ten agents run them, two each): ERC-8004 identity (owned by the registry), signer, vault, active flag and ENS label. Accepts each agent's weekly curations for the next epoch. |
 | `AgentVault` | Per-agent USDC donation vault. Only the agent's signer can give, only to unblocked catalogue orgs in the agent's own buckets, within a per-epoch cap. No withdrawal. |
-| `VaradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to USDC inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
-| `LiveDonationVault` | USDC ledger of live tokens: splits every conversion 10% platform / 90% cause, keeps the cause share per `(token, cause)` and pushes it to the cause's Endaoment org once the token's donation threshold is reached, or on `flush`. |
+| `VaradaLiveHook` | Uniswap v4 hook of live tokens. Takes the fee from every swap in the quote currency, converts it to the token's donation asset (USDC or WETH) inside the same swap and credits it to the cause active at that moment; a failed conversion holds the fee for a permissionless retry instead of reverting the swap. No owner. |
+| `LiveDonationVault` | USDC and WETH ledgers of live tokens (per token donation asset): splits every conversion 10% platform / 90% cause, keeps the cause share per `(token, cause)` and pushes it to the cause's Endaoment org once the token's donation threshold is reached, or on `flush`. |
 | `RotationGovernor` | Live tokens' rotation schedule (anchor-based, period chosen at launch, changeable by vote), the private rotation polls that pick the next cause, and the private yes/no polls that change the period. |
 | `IPrivateDonationAdapter` | Interface only; see Deferred work. |
 
@@ -222,8 +227,9 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   pages the owner. The web app's button runs the same plan and, with picks missing, sends nothing
   and explains the wait.
 - Voting weight is the holder's lowest vote checkpoint over a hold window ending one second
-  before the epoch start (`snapshotFor`), counted in whole tokens. The window is one epoch
-  (`HOLD_WINDOW`, 7 days, the same rule as a weekly rotation), so it is exactly the previous
+  before the epoch start (`snapshotFor`), counted in whole tokens. The window is the epoch's
+  `holdWindow` (owner-set per schedule segment, `epochScheduleFor`; one epoch, 7 days, by default,
+  the same rule as a weekly rotation), so by default it is exactly the previous
   epoch: tokens bought during an epoch count from the epoch after next, and a position held only
   around the public snapshot carries nothing (no buy-vote-sell, flash loans or one-block holds).
   In the epoch a token launches in, the regular snapshot predates the token, so its weights are
@@ -252,7 +258,7 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
 - Weekly payout. Every step from an ended week to its donation is permissionless: `closeEpoch`, the
   tally decryption plus `submitTally`, `finalizeEpoch`, `FeeVault.settle(token, epoch)` (which first
   brings the week's outstanding LP and consolidator fees in, reverts `FeesPending` until they are in
-  or `SETTLE_GRACE` (7 days) after the week's end, and `NothingToSettle` when the week's pool is
+  or `FeeVault.settleGrace()` (owner-set, 7 days by default) after the epoch's end, and `NothingToSettle` when the week's pool is
   empty, which means that week has no donation), then `DonationDistributor.distribute(token, epoch)`
   to the winning Endaoment org (`OrgNotActive` and `OrgAddressMismatch` need the owner or Endaoment
   to act). The SDK's `planDonation` (`packages/sdk/src/donation.ts`) picks the next step from chain
@@ -367,8 +373,10 @@ token, its ENS name, its profile, the locked single-sided liquidity, the takeove
 - Every credit is split once: `floor(gross * 1000 / 10000)` to the platform, the rest to the
   `(token, cause)` bucket. Credit never moves between causes; a cause rotated out keeps its bucket
   until it is paid.
-- Each token has a donation threshold in USDC (6 decimals, at most 1,000,000 USDC), chosen at
-  launch. When a bucket's credit reaches it, the vault pushes the whole bucket to the cause's
+- Each token has a donation asset (USDC or ETH held as WETH, chosen at launch, chapter 06) and a
+  donation threshold in that asset's units (USDC: 6 decimals, at most 1,000,000; ETH: at most
+  1,000 WETH), chosen at launch. An ETH bucket is converted to USDC through the consolidator right
+  before the Endaoment call (600k gas budget in a swap, otherwise deferred to `flush`). When a bucket's credit reaches it, the vault pushes the whole bucket to the cause's
   Endaoment org inside the same swap, through a gas-capped self call (`executePush`, 220k gas). A
   threshold of 0 pushes on every swap.
 - The UI should default to a nonzero threshold. A push inside a swap adds about 120k to 150k gas to

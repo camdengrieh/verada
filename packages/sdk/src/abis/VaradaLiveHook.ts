@@ -1683,6 +1683,12 @@ export const varadaLiveHookAbi = [
         "type": "bytes4",
         "indexed": false,
         "internalType": "bytes4"
+      },
+      {
+        "name": "asset",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DonationAsset"
       }
     ],
     "anonymous": false

@@ -4,6 +4,7 @@ import type { Log } from "../jobs/types.js";
 import { Backoff } from "./backoff.js";
 import { KeeperRevert, redact, type ChainReader, type ChainWriter, type KeeperAction, type RotationReader } from "./chain.js";
 import { CuratedPicksUnavailable, type BallotPreparer, type RoundPreparer } from "./ballot.js";
+import { checkTiming, type TimingSummary } from "./timing.js";
 import { checkDecryption, type PublicDecryptor } from "./decrypt.js";
 import type { DonationPlanner } from "./donate.js";
 import {
@@ -63,6 +64,11 @@ export interface KeeperDeps {
   dryRun: boolean;
   maxTxPerRun: number;
   lookbackEpochs: number;
+  /**
+   * `KEEPER_INTERVAL_SECONDS`, to check against the schedule's trading phase: warned about once
+   * per distinct schedule when too slow for it. Omitted: not checked.
+   */
+  intervalSeconds?: number;
   log: Log;
   backoff?: Backoff;
   /** Steps taken for one epoch or proposal per run (close, decrypt+submit, finalize). */
@@ -105,6 +111,8 @@ export interface ActivitySource {
 }
 
 export interface KeeperRunSummary {
+  /** The epoch schedule read from the governor this run; absent when it could not be read. */
+  timing?: TimingSummary;
   tokens: number;
   epochsChecked: number;
   ballotsChecked: number;
@@ -184,6 +192,9 @@ export function createKeeper(deps: KeeperDeps) {
   const maxLag = BigInt(deps.maxIndexerLagSeconds ?? 600);
   const now = deps.now ?? Date.now;
   let noFeeReaderLogged = false;
+  /** Schedule settings already warned about (see `checkTiming`), so a schedule is warned about once. */
+  const timingWarned = new Set<string>();
+  let timingReadFailed = false;
   /** Lowercase live tokens (registration is permanent). */
   const liveTokens = new Set<string>();
   /**
@@ -284,6 +295,23 @@ export function createKeeper(deps: KeeperDeps) {
       dryRun: deps.dryRun,
     };
     const stop = () => s.halted || s.capped;
+
+    // The schedule is read, never assumed: epochs can be anything from 5 minutes to 30 days.
+    if (deps.reader.timing) {
+      try {
+        const report = checkTiming(await deps.reader.timing(), { intervalSeconds: deps.intervalSeconds ?? 0, lookbackEpochs: deps.lookbackEpochs });
+        s.timing = report.summary;
+        timingReadFailed = false;
+        if (!timingWarned.has(report.key)) {
+          timingWarned.add(report.key);
+          deps.log("info", "keeper epoch schedule", { ...report.summary, intervalSeconds: deps.intervalSeconds, lookbackEpochs: deps.lookbackEpochs });
+          for (const w of report.warnings) deps.log("warn", w.msg, w.data);
+        }
+      } catch (err) {
+        if (!timingReadFailed) deps.log("warn", "keeper could not read the epoch schedule; continuing", { error: redact(err instanceof Error ? err.message : String(err)) });
+        timingReadFailed = true;
+      }
+    }
 
     /**
      * Records a failed step and backs the item off. Logged at `error` (alarmed on by infra), except

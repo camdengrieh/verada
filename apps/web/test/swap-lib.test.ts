@@ -165,6 +165,8 @@ describe("loadPoolMarket", () => {
     expect(m.trades24h).toBe(12);
     expect(m.reserves).not.toBeNull();
     expect(m.tvlUsd).toBeGreaterThan(0);
+    expect(m.depthQuote).toBeCloseTo(m.reserves!.quote, 9);
+    expect(m.depthUsd).toBeCloseTo(m.reserves!.quote * 2500, 6);
     expect(m.marketCapUsd).toBeCloseTo(1e9 * 5, -3);
     expect(m.source.stats).toBe("indexer");
   });

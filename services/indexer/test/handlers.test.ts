@@ -1,6 +1,6 @@
 import { keccak256 } from "viem";
 import { readFileSync } from "node:fs";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ballot,
   ballotSizeCap,
@@ -11,8 +11,8 @@ import {
   catalogVersion,
   donation,
   epoch,
-  epochClock,
   epochOption,
+  epochSchedule,
   feeAttribution,
   feeCollection,
   feeConsolidation,
@@ -27,6 +27,7 @@ import {
   takeoverVote,
   token,
   tokenBallotSize,
+  timingSetting,
   tokenFocus,
   tokenMarket,
   tokenProfile,
@@ -53,11 +54,16 @@ import {
   onEpochClosed,
   onEpochFinalized,
   onEpochOpened,
+  onEpochScheduleSet,
+  onLaunchSnapshotDelaySet,
   onLaunchSnapshotSet,
+  onCurationGraceSet,
   onNoVoteFallbackApplied,
   onOrgDeployed,
+  onSettleGraceSet,
   onShortlistScheduled,
   onShortlistSet,
+  onTallyGraceSet,
   onTallyTimeoutFallbackApplied,
   onVoteCast,
 } from "../src/handlers/governance";
@@ -105,7 +111,6 @@ const WEEK = 604_800;
 
 let h: ReturnType<typeof createFakeContext>;
 const block = (n: number, ts: number) => ({ number: BigInt(n), timestamp: BigInt(ts) });
-// biome-ignore lint/suspicious/noExplicitAny: test shim for event payloads
 const run = (fn: any, args: object, id = "e1", b = block(1, 100), address: string = GOV, t = tx) =>
   fn({ event: { args, block: b, transaction: t, id, log: { address } }, context: h.context });
 
@@ -129,7 +134,8 @@ const pkMap = () =>
       [tokenProfile, ["token"]],
       [tokenTextRecord, ["token", "key"]],
       [profileUpdate, ["id"]],
-      [epochClock, ["id"]],
+      [epochSchedule, ["startEpoch"]],
+      [timingSetting, ["id"]],
       [epochOption, ["token", "epoch", "index"]],
       [shortlist, ["token"]],
       [ballotSizeCap, ["id"]],
@@ -148,6 +154,32 @@ const reset = (readContract?: ReadContract) => {
 };
 
 beforeEach(() => reset());
+
+describe("TokenCreated donation asset", () => {
+  const args = { token: T1, creator: T2, pool: `0x${"22".repeat(32)}`, hook: T2, lpTokenId: 7n, feeBps: 300, metadataURI: "" };
+  afterEach(() => reset());
+
+  it("defaults to USDC when the factory has no donationAssetOf", async () => {
+    reset();
+    await run(onTokenCreated, args);
+    expect(h.rows(token)[0]).toMatchObject({ donationAsset: 0 });
+  });
+
+  it("reads the choice from the factory", async () => {
+    reset(async ({ functionName }) => {
+      if (functionName === "donationAssetOf") return 1;
+      throw new Error("execution reverted");
+    });
+    await run(onTokenCreated, args);
+    expect(h.rows(token)[0]).toMatchObject({ donationAsset: 1 });
+  });
+
+  it("prefers the event field when the event carries it", async () => {
+    reset();
+    await run(onTokenCreated, { ...args, donationAsset: 1 });
+    expect(h.rows(token)[0]).toMatchObject({ donationAsset: 1 });
+  });
+});
 
 describe("TokenCreated", () => {
   it("stores the token and ignores a replayed event", async () => {
@@ -183,7 +215,7 @@ describe("TokenCreated", () => {
     await run(onTokenRegistered, { token: T1, labelhash, label: "water", controller: T2, logoRef: logo }, "r1", block(1, 100), REGISTRY);
     await run(onLogoChanged, { token: T1, logoRef: logo }, "r2", block(1, 100), REGISTRY);
     await run(onTokenCreated, launch, "c1");
-    expect(calls.map((c) => c.split("@")[0]).sort()).toEqual(["name", "quoteAssetOf", "symbol"]);
+    expect(calls.map((c) => c.split("@")[0]).sort()).toEqual(["donationAssetOf", "name", "quoteAssetOf", "symbol"]);
     expect(h.rows(tokenMarket)).toEqual([expect.objectContaining({ token: T1, quote: QUOTE_WETH, tokenIsCurrency0: true })]);
     expect(h.rows(token)[0]).toMatchObject({
       name: "Clean Water",
@@ -474,13 +506,91 @@ describe("token profile registry", () => {
   });
 });
 
+describe("epoch schedule events", () => {
+  const zero = 2900 * WEEK;
+  const MIN = 60;
+  const seg = (startEpoch: bigint, startTime: number, length: number, votingWindow: number, holdWindow: number, setAt: number | null) => ({
+    startEpoch,
+    startTime: BigInt(startTime),
+    length: BigInt(length),
+    votingWindow: BigInt(votingWindow),
+    holdWindow: BigInt(holdWindow),
+    setAt: setAt === null ? null : BigInt(setAt),
+  });
+  const set = (a: bigint, t: number, len: number, vw: number, hw: number, id: string, ts: number) =>
+    run(onEpochScheduleSet, { startEpoch: a, startTime: BigInt(t), length: BigInt(len), votingWindow: BigInt(vw), holdWindow: BigInt(hw) }, id, block(5, ts));
+  beforeEach(() =>
+    reset(async ({ functionName }) => {
+      if (functionName === "epochZeroStart") return BigInt(zero);
+      throw new Error("execution reverted");
+    }),
+  );
+
+  it("re-anchors epoch zero before any token registered (a short first cycle)", async () => {
+    await set(0n, zero, 45 * MIN, 15 * MIN, 45 * MIN, "s1", zero + 100);
+    expect(h.rows(epochSchedule)).toEqual([seg(0n, zero, 45 * MIN, 15 * MIN, 45 * MIN, zero + 100)]);
+    // A second call before the first token replaces it again.
+    await set(0n, zero, 60 * MIN, 20 * MIN, 60 * MIN, "s2", zero + 200);
+    expect(h.rows(epochSchedule)).toEqual([seg(0n, zero, 60 * MIN, 20 * MIN, 60 * MIN, zero + 200)]);
+    // A later handler does not overwrite it with the constructor default.
+    await run(onVoteCast, { token: T1, epoch: 1n, voteRef: `0x${"01".repeat(32)}` }, "v", block(6, zero + 70 * MIN));
+    expect(h.rows(epochSchedule)).toHaveLength(1);
+    expect(h.rows(epochSchedule)[0]).toMatchObject({ length: BigInt(60 * MIN) });
+  });
+
+  it("adds a segment from the next epoch on top of the constructor default, and replaces a pending one", async () => {
+    // Changed during epoch 2 of the weekly default: applies from epoch 3.
+    await set(3n, zero + 3 * WEEK, 45 * MIN, 15 * MIN, 45 * MIN, "a", zero + 2 * WEEK + 5);
+    expect(h.rows(epochSchedule)).toEqual([
+      seg(0n, zero, WEEK, WEEK, WEEK, null),
+      seg(3n, zero + 3 * WEEK, 45 * MIN, 15 * MIN, 45 * MIN, zero + 2 * WEEK + 5),
+    ]);
+    // Changed again while still pending: the same start epoch, so it replaces.
+    await set(3n, zero + 3 * WEEK, 30 * MIN, 10 * MIN, 30 * MIN, "b", zero + 2 * WEEK + 50);
+    expect(h.rows(epochSchedule)).toHaveLength(2);
+    expect(h.rows(epochSchedule)[1]).toMatchObject({ length: BigInt(30 * MIN), votingWindow: BigInt(10 * MIN) });
+    // After it started, a change adds a third segment at the next epoch.
+    await set(5n, zero + 3 * WEEK + 60 * MIN, 45 * MIN, 15 * MIN, 45 * MIN, "c", zero + 3 * WEEK + 40 * MIN);
+    expect(h.rows(epochSchedule).map((r) => r.startEpoch)).toEqual([0n, 3n, 5n]);
+  });
+
+  it("keeps the schedule empty (no timing) when epochZeroStart cannot be read", async () => {
+    reset();
+    await run(onVoteCast, { token: T1, epoch: 3n, voteRef: `0x${"01".repeat(32)}` }, "v", block(6, zero + 3 * WEEK + 5));
+    expect(h.rows(epochSchedule)).toEqual([]);
+  });
+
+  it("stores the owner-set graces, last value wins", async () => {
+    await run(onTallyGraceSet, { grace: 600n }, "g1", block(1, 100));
+    await run(onTallyGraceSet, { grace: 900n }, "g2", block(2, 200));
+    await run(onLaunchSnapshotDelaySet, { delay: 300n }, "g3", block(3, 300));
+    await run(onCurationGraceSet, { grace: 400n }, "g4", block(4, 400));
+    await run(onSettleGraceSet, { grace: 500n }, "g5", block(5, 500), "0x00000000000000000000000000000000000000f1");
+    expect(h.rows(timingSetting).map((r) => [r.id, r.value, r.setAt])).toEqual([
+      ["tallyGrace", 900n, 200n],
+      ["launchSnapshotDelay", 300n, 300n],
+      ["curationGrace", 400n, 400n],
+      ["settleGrace", 500n, 500n],
+    ]);
+  });
+});
+
 describe("epoch lifecycle", () => {
   const C2 = `0x${"22".repeat(32)}` as const;
   // Epoch 3 of a governor whose epoch 0 started at week 2900.
   const zero = 2900 * WEEK;
   const inEpoch3 = zero + 3 * WEEK + 1234;
+  /** The default segment 0 the governor's constructor makes: weekly, voting open all epoch. */
+  const seg0 = { startEpoch: 0n, startTime: BigInt(zero), length: BigInt(WEEK), votingWindow: BigInt(WEEK), holdWindow: BigInt(WEEK), setAt: null };
+  // The governor's immutable `epochZeroStart` is read from the chain; nothing derives it from a week.
+  beforeEach(() =>
+    reset(async ({ functionName }) => {
+      if (functionName === "epochZeroStart") return BigInt(zero);
+      throw new Error("execution reverted");
+    }),
+  );
 
-  it("opens with frozen options, links the poll, records the clock, closes and falls back", async () => {
+  it("opens with frozen options, links the poll, records the schedule, closes and falls back", async () => {
     await run(onPollOpened, { governor: GOV, token: T1, scope: 3n, optionCount: 2 }, "p", block(10, inEpoch3), SCHEME);
     await run(onEpochOpened, { token: T1, epoch: 3n, options: [CAUSE, C2] }, "o", block(10, inEpoch3));
     expect(h.rows(epochOption)).toEqual([
@@ -496,9 +606,7 @@ describe("epoch lifecycle", () => {
       voterCount: 0,
       fallbackApplied: false,
     });
-    expect(h.rows(epochClock)).toEqual([
-      { id: "epoch_governor", epochZeroStart: BigInt(zero), epochLength: BigInt(WEEK) },
-    ]);
+    expect(h.rows(epochSchedule)).toEqual([seg0]);
     await run(onEpochClosed, { token: T1, epoch: 3n }, "c", block(11, zero + 4 * WEEK + 5));
     await run(onNoVoteFallbackApplied, { token: T1, epoch: 3n, causeId: CAUSE }, "n", block(12, zero + 4 * WEEK + 9));
     await run(onEpochFinalized, { token: T1, epoch: 3n, causeId: CAUSE }, "f", block(12, zero + 4 * WEEK + 9));
@@ -508,10 +616,10 @@ describe("epoch lifecycle", () => {
       fallbackApplied: true,
       winningCauseId: CAUSE,
     });
-    expect(h.rows(epochClock)).toHaveLength(1);
+    expect(h.rows(epochSchedule)).toHaveLength(1);
   });
 
-  it("stores the launch snapshot on the launch epoch and records the clock", async () => {
+  it("stores the launch snapshot on the launch epoch and anchors the schedule", async () => {
     const snapshot = BigInt(inEpoch3 + 86_400);
     await run(onLaunchSnapshotSet, { token: T1, epoch: 3n, snapshot }, "ls", block(10, inEpoch3));
     await run(onBallotPrepared, { token: T1, epoch: 3n, catalogVersion: 1, poolSize: 10n, pinned: 0, orgIds: [CAUSE, C2] }, "bp", block(11, inEpoch3 + 90_000));
@@ -521,16 +629,14 @@ describe("epoch lifecycle", () => {
       [4n, null, false],
     ]);
     expect(h.rows(epoch)[0]).toMatchObject({ voteCount: 0, opened: false, causeAttributed: 0n });
-    expect(h.rows(epochClock)).toEqual([
-      { id: "epoch_governor", epochZeroStart: BigInt(zero), epochLength: BigInt(WEEK) },
-    ]);
+    expect(h.rows(epochSchedule)).toEqual([seg0]);
   });
 
-  it("derives the clock from a vote and counts voters", async () => {
+  it("anchors the schedule on a vote and counts voters", async () => {
     await run(onVoteCast, { token: T1, epoch: 3n, voteRef: `0x${"01".repeat(32)}` }, "v1", block(10, inEpoch3));
     await run(onVoteCast, { token: T1, epoch: 3n, voteRef: `0x${"02".repeat(32)}` }, "v2", block(10, inEpoch3 + 60));
     expect(h.rows(epoch)[0]).toMatchObject({ voteCount: 2, voterCount: 2, opened: false });
-    expect(h.rows(epochClock)[0]).toMatchObject({ epochZeroStart: BigInt(zero) });
+    expect(h.rows(epochSchedule)).toEqual([seg0]);
   });
 
   it("uses the legacy shortlist events only until a scheduled one arrives", async () => {
@@ -589,7 +695,7 @@ describe("epoch lifecycle", () => {
     // EpochOpened right after does not duplicate the options.
     await run(onEpochOpened, { token: T1, epoch: 3n, options: opts }, "eo", block(20, zero + 3 * WEEK + 60));
     expect(h.rows(epochOption)).toHaveLength(2);
-    expect(h.rows(epochClock)).toHaveLength(1);
+    expect(h.rows(epochSchedule)).toHaveLength(1);
   });
 
   it("stores the protocol cap and each token's ballot size, and the size a ballot was prepared with", async () => {

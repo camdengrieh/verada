@@ -6,8 +6,16 @@ import { cn } from "@varada/ui/lib/utils";
  * Plain table parts. The wrapper scrolls sideways on narrow screens. Use `className="num text-right"` on numeric cells.
  */
 export function Table({ className, ...props }: ComponentProps<"table">) {
+  const label = props["aria-label"];
   return (
-    <div data-slot="table-container" className="relative w-full overflow-x-auto rounded-xl">
+    // The wrapper scrolls, so a keyboard user must be able to focus it to scroll it. A named table is also a region.
+    <div
+      data-slot="table-container"
+      tabIndex={0}
+      role={label ? "region" : undefined}
+      aria-label={label}
+      className="relative w-full overflow-x-auto rounded-xl outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+    >
       <table data-slot="table" className={cn("w-full caption-bottom border-collapse text-[15px]", className)} {...props} />
     </div>
   );

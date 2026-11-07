@@ -124,9 +124,9 @@ contract TakeoverGovernorTest is Test {
         assertEq(gov.FOR(), FOR);
         assertEq(gov.proposalCount(), 0);
         assertEq(gov.poolManager(), poolManager);
-        assertEq(gov.MIN_EXECUTION_WINDOW(), 2 days);
+        assertEq(gov.MIN_EXECUTION_WINDOW(), 5 minutes);
         assertEq(gov.MIN_QUORUM_BPS(), 50);
-        assertEq(gov.MIN_LOOKBACK(), 1 days);
+        assertEq(gov.MIN_LOOKBACK(), 5 minutes);
         assertEq(gov.MAX_LOOKBACK(), 90 days);
         ITakeoverGovernor.Params memory p = gov.params();
         assertEq(p.votingPeriod, 3 days);
@@ -181,22 +181,22 @@ contract TakeoverGovernorTest is Test {
         ITakeoverGovernor.Params memory q;
 
         q = P;
-        q.votingPeriod = 1 days - 1;
+        q.votingPeriod = 5 minutes - 1;
         vm.expectRevert(ITakeoverGovernor.InvalidParams.selector);
         gov.setParams(q);
         q.votingPeriod = 30 days + 1;
         vm.expectRevert(ITakeoverGovernor.InvalidParams.selector);
         gov.setParams(q);
-        q.votingPeriod = 1 days;
+        q.votingPeriod = 5 minutes;
         gov.setParams(q);
         q.votingPeriod = 30 days;
         gov.setParams(q);
 
         q = P;
-        q.executionWindow = 2 days - 1;
+        q.executionWindow = 5 minutes - 1;
         vm.expectRevert(ITakeoverGovernor.InvalidParams.selector);
         gov.setParams(q);
-        q.executionWindow = 2 days;
+        q.executionWindow = 5 minutes;
         gov.setParams(q);
         q.executionWindow = 30 days + 1;
         vm.expectRevert(ITakeoverGovernor.InvalidParams.selector);
@@ -221,13 +221,13 @@ contract TakeoverGovernorTest is Test {
         gov.setParams(q);
 
         q = P;
-        q.lookback = 1 days - 1;
+        q.lookback = 5 minutes - 1;
         vm.expectRevert(ITakeoverGovernor.InvalidParams.selector);
         gov.setParams(q);
         q.lookback = 90 days + 1;
         vm.expectRevert(ITakeoverGovernor.InvalidParams.selector);
         gov.setParams(q);
-        q.lookback = 1 days;
+        q.lookback = 5 minutes;
         gov.setParams(q);
         q.lookback = 90 days;
         gov.setParams(q);

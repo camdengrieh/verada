@@ -10,10 +10,13 @@
     "verify:export": "node scripts/verify-export.mjs",
     "e2e": "node scripts/e2e.mjs",
     "check:private-rpc": "node scripts/private-rpc-check.mjs",
+    "check:private-rpc-session": "node scripts/private-rpc-session.mjs",
+    "a11y": "node scripts/a11y.mjs",
     "build:verify": "pnpm run build && node scripts/verify-export.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:fork": "vitest run test/fork --no-file-parallelism"
   },
   "dependencies": {
     "@anon-rpc/browser-harness": "0.4.0",
@@ -42,9 +45,11 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^4",
+    "axe-core": "4.10.3",
     "eslint": "^9",
     "eslint-config-next": "^15",
     "jsdom": "^25.0.1",
+    "playwright-core": "1.49.1",
     "sharp": "^0.35.5",
     "typescript": "^5",
     "vite": "^5.4.21",

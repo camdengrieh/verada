@@ -6,6 +6,7 @@ import type { PriceCandle, PricePoint } from "@varada/ui/components/data/price-c
 import type { PressureWindow } from "@varada/ui/components/varada/buy-sell-pressure";
 import type { TradeItem } from "@varada/ui/components/varada/trade-feed";
 import type { VolumeBar } from "@varada/ui/components/varada/volume-bars";
+import type { UsdQuote } from "@varada/sdk";
 import type { ActivityItem, MarketHour, MarketSnapshot, MarketTrade } from "./indexer";
 
 export const HOUR = 3600;
@@ -147,7 +148,8 @@ export function percentChange(now: number, before: number | null | undefined): n
 
 /** Buy and sell counts over the last 6 hours, 24 hours and 7 days, for the pressure gauge. */
 /** Volumes are set only for a dollar quote: the gauge prints them as dollars. */
-export function pressureWindows(hourly: readonly MarketHour[], quoteDecimals: number | null, nowSec: number, usdQuote = false): PressureWindow[] {
+export function pressureWindows(hourly: readonly MarketHour[], quoteDecimals: number | null, nowSec: number, usdQuote: boolean | number = false): PressureWindow[] {
+  const perQuote = usdQuote === true ? 1 : usdQuote === false ? null : usdQuote;
   const spans: [string, number][] = [["6h", 6], ["24h", 24], ["7d", 168]];
   return spans.map(([key, hours]) => {
     const cutoff = nowSec - hours * HOUR;
@@ -163,9 +165,9 @@ export function pressureWindows(hourly: readonly MarketHour[], quoteDecimals: nu
       sellQuote += h.sellQuote;
     }
     const w: PressureWindow = { key, buys, sells };
-    if (usdQuote && quoteDecimals !== null) {
-      w.buyVolumeUsd = toUnits(buyQuote, quoteDecimals);
-      w.sellVolumeUsd = toUnits(sellQuote, quoteDecimals);
+    if (perQuote !== null && quoteDecimals !== null) {
+      w.buyVolumeUsd = toUnits(buyQuote, quoteDecimals) * perQuote;
+      w.sellVolumeUsd = toUnits(sellQuote, quoteDecimals) * perQuote;
     }
     return w;
   });
@@ -234,7 +236,19 @@ export function mine(trades: readonly MarketTrade[], account: string | undefined
  * Library rows for the trade tape. `usd` is only set when the quote is a USD stablecoin (the
  * quote amount is then the dollar value); other quotes show their own amounts.
  */
-export function tradeItems(trades: readonly MarketTrade[], opts: { tokenSymbol: string; quoteSymbol: string; quoteDecimals: number | null; usdQuote: boolean }): TradeItem[] {
+export function tradeItems(
+  trades: readonly MarketTrade[],
+  opts: {
+    tokenSymbol: string;
+    quoteSymbol: string;
+    quoteDecimals: number | null;
+    usdQuote: boolean;
+    /** The quote's USD price from the shared pricing layer; wins over `usdQuote`. */
+    usd?: UsdQuote | null;
+  },
+): TradeItem[] {
+  const perQuote = opts.usd?.priceUsd ?? (opts.usdQuote ? 1 : null);
+  const approx = opts.usd ? opts.usd.confidence !== "high" || Boolean(opts.usd.marketClosed) : false;
   return trades.map((t) => {
     const dec = t.quoteDecimals ?? opts.quoteDecimals ?? 0;
     const quoteAmount = toUnits(t.quoteAmount, dec);
@@ -246,7 +260,8 @@ export function tradeItems(trades: readonly MarketTrade[], opts: { tokenSymbol: 
       tokenSymbol: opts.tokenSymbol,
       quoteAmount,
       quoteSymbol: opts.quoteSymbol,
-      usd: opts.usdQuote ? quoteAmount : undefined,
+      usd: perQuote !== null ? quoteAmount * perQuote : undefined,
+      ...(perQuote !== null && approx ? { usdApprox: true } : {}),
       timestamp: t.timestamp,
       txHash: t.txHash as `0x${string}`,
     };
@@ -257,6 +272,12 @@ export function tradeItems(trades: readonly MarketTrade[], opts: { tokenSymbol: 
 export function formatQuotePrice(price: number, symbol: string): string {
   const opts: Intl.NumberFormatOptions = price >= 1 ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { minimumSignificantDigits: 2, maximumSignificantDigits: 4 };
   return `${price.toLocaleString("en-US", opts)} ${symbol}`;
+}
+
+/** A USD token price that keeps tiny prices readable: "$1.27", "$0.00004213"; "~" when the price is thin or may lag. */
+export function formatUsdPrice(price: number, approx = false): string {
+  const opts: Intl.NumberFormatOptions = price >= 1 ? { minimumFractionDigits: 2, maximumFractionDigits: 2 } : { minimumSignificantDigits: 2, maximumSignificantDigits: 4 };
+  return `${approx ? "~" : ""}$${price.toLocaleString("en-US", opts)}`;
 }
 
 /** Intl options for a price in the quote asset's units (no currency symbol). */

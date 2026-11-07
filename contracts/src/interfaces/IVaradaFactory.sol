@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {DonationAsset} from "./IDonationAsset.sol";
 import {RotationPeriod} from "./IRotationGovernor.sol";
 
 /// @title IVaradaFactory
@@ -16,7 +17,7 @@ interface IVaradaFactory {
     /// @param sniperDecaySeconds Seconds over which the surcharge decays to zero.
     /// @param startTick Initial pool tick at which single-sided liquidity begins.
     /// @param quoteAsset Asset the token is paired against; must be allowed by the QuoteRegistry
-    ///        (WETH or an Ondo token).
+    ///        (any registry-listed ERC-20, such as WETH, WBTC or an Ondo token).
     /// @param label ENS label registered for the token under the Varada parent name
     ///        (`<label>.varada.eth`): 3 to 63 bytes of `[a-z0-9-]`, no leading or trailing
     ///        hyphen, no `--` at positions 3 and 4; must not be taken or reserved for another
@@ -42,6 +43,9 @@ interface IVaradaFactory {
         bytes32 logoRef;
         uint64 categoryMask;
         uint16 regionMask;
+        /// @dev The asset fees consolidate into and the cause pool is kept in: USDC (default)
+        ///      or ETH (held as WETH, converted to USDC when pushed to Endaoment).
+        DonationAsset donationAsset;
     }
 
     /// @notice Emitted when a token is launched.
@@ -66,6 +70,9 @@ interface IVaradaFactory {
     error InvalidSniperFee(uint24 feeBps);
     error TokenAlreadyDeployed(address token);
     error QuoteAssetNotAllowed(address quoteAsset);
+    /// @notice The quote asset has no route into the chosen donation asset (or, for `Eth`, WETH
+    ///         has no route into USDC for the Endaoment push).
+    error DonationRouteMissing(address quoteAsset, DonationAsset donationAsset);
 
     /// @notice Live-donation launch parameters.
     /// @param initialCause Active CauseRegistry cause receiving the fees from launch.
@@ -132,6 +139,8 @@ interface IVaradaFactory {
 
     /// @notice Quote asset a launched token is paired against.
     function quoteAssetOf(address token) external view returns (address);
+
+    function donationAssetOf(address token) external view returns (DonationAsset);
 
     /// @notice Number of tokens launched.
     function tokenCount() external view returns (uint256);

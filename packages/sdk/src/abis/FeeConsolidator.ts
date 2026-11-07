@@ -60,19 +60,6 @@ export const feeConsolidatorAbi = [
   },
   {
     "type": "function",
-    "name": "BPS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "DEFAULT_IN_SWAP_DEVIATION_TICKS",
     "inputs": [],
     "outputs": [
@@ -112,32 +99,6 @@ export const feeConsolidatorAbi = [
   },
   {
     "type": "function",
-    "name": "MAX_HOP_FEE_BPS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "MAX_SLIPPAGE_CEILING_BPS",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
     "name": "MAX_TICK_SPAN",
     "inputs": [],
     "outputs": [
@@ -145,32 +106,6 @@ export const feeConsolidatorAbi = [
         "name": "",
         "type": "uint256",
         "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "REFERENCE_WINDOW",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint256",
-        "internalType": "uint256"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "TWAP_WINDOW",
-    "inputs": [],
-    "outputs": [
-      {
-        "name": "",
-        "type": "uint32",
-        "internalType": "uint32"
       }
     ],
     "stateMutability": "view"
@@ -256,6 +191,69 @@ export const feeConsolidatorAbi = [
         "name": "inSwap",
         "type": "bool",
         "internalType": "bool"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "convertClaimsTo",
+    "inputs": [
+      {
+        "name": "currency",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "inSwap",
+        "type": "bool",
+        "internalType": "bool"
+      },
+      {
+        "name": "da",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "out",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "convertDonation",
+    "inputs": [
+      {
+        "name": "amount",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "to",
+        "type": "address",
+        "internalType": "address"
       }
     ],
     "outputs": [
@@ -534,52 +532,6 @@ export const feeConsolidatorAbi = [
         "name": "",
         "type": "address",
         "internalType": "address"
-      }
-    ],
-    "stateMutability": "view"
-  },
-  {
-    "type": "function",
-    "name": "poolKeyOf",
-    "inputs": [
-      {
-        "name": "token",
-        "type": "address",
-        "internalType": "address"
-      }
-    ],
-    "outputs": [
-      {
-        "name": "",
-        "type": "tuple",
-        "internalType": "struct PoolKey",
-        "components": [
-          {
-            "name": "currency0",
-            "type": "address",
-            "internalType": "Currency"
-          },
-          {
-            "name": "currency1",
-            "type": "address",
-            "internalType": "Currency"
-          },
-          {
-            "name": "fee",
-            "type": "uint24",
-            "internalType": "uint24"
-          },
-          {
-            "name": "tickSpacing",
-            "type": "int24",
-            "internalType": "int24"
-          },
-          {
-            "name": "hooks",
-            "type": "address",
-            "internalType": "contract IHooks"
-          }
-        ]
       }
     ],
     "stateMutability": "view"
@@ -1164,6 +1116,31 @@ export const feeConsolidatorAbi = [
         "type": "bytes",
         "indexed": false,
         "internalType": "bytes"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DonationConverted",
+    "inputs": [
+      {
+        "name": "source",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "usdcOut",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
       }
     ],
     "anonymous": false
@@ -1759,6 +1736,11 @@ export const feeConsolidatorAbi = [
         "internalType": "address"
       }
     ]
+  },
+  {
+    "type": "error",
+    "name": "V3Unsupported",
+    "inputs": []
   },
   {
     "type": "error",

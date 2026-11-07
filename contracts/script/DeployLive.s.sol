@@ -168,6 +168,8 @@ contract DeployLive is Deploy {
         CauseRegistry(d.causeRegistry).setMaterializer(address(gov), true);
         vault.setHook(hookAddr);
         FeeConsolidator(payable(d.feeConsolidator)).setSource(hookAddr, true);
+        // The vault converts an ETH credit (WETH) into USDC for Endaoment.
+        FeeConsolidator(payable(d.feeConsolidator)).setSource(address(vault), true);
         _configureRotationVoting(ZamaVotingScheme(d.votingScheme), gov);
         VaradaFactory(d.factory).configureLiveMode(hookAddr, address(vault));
 

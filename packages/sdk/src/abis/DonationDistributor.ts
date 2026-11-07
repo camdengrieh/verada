@@ -254,6 +254,19 @@ export const donationDistributorAbi = [
   },
   {
     "type": "function",
+    "name": "reservedEth",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "setFeeVault",
     "inputs": [
       {
@@ -321,6 +334,18 @@ export const donationDistributorAbi = [
       },
       {
         "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "asset",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum DonationAsset"
+      },
+      {
+        "name": "usdcAmount",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"

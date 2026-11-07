@@ -42,10 +42,13 @@ export function LabelStatusLine({ name, label, status, loading, failed, account 
 }
 
 export function IdentityStep(props: StepProps & { labelLoading: boolean; labelFailed: boolean; onLogo: (ref: string | null) => void; onLogoBusy: (busy: boolean) => void; labelEdited: boolean; setLabelEdited: (v: boolean) => void }) {
-  const { state, err, touch, patch, setInput, labelLoading, labelFailed, onLogo, onLogoBusy, labelEdited, setLabelEdited } = props;
+  const { state, errors, err, touch, patch, setInput, labelLoading, labelFailed, onLogo, onLogoBusy, labelEdited, setLabelEdited } = props;
   const config = useAppConfig();
   const { input, fields } = state;
   const label = input.label.trim();
+  // A taken or reserved label is a registry fact, not a typo: show it while typing, not only after the field is left.
+  const registryBlocked = state.labelStatus?.kind === "taken" || state.labelStatus?.kind === "reserved";
+  const labelError = err("label") ?? (registryBlocked ? errors.label : undefined);
   const ensName = `${label || "your-label"}.${config.ensParentName}`;
   const setField = (key: keyof MetadataFields) => (e: { target: { value: string } }) => patch({ fields: { ...fields, [key]: e.target.value } });
 
@@ -79,7 +82,7 @@ export function IdentityStep(props: StepProps & { labelLoading: boolean; labelFa
         </Field>
       </div>
 
-      <Field invalid={!!err("label")} required>
+      <Field invalid={!!labelError} required>
         <FieldLabel>ENS name</FieldLabel>
         <InputGroup>
           <FieldControl>
@@ -99,7 +102,7 @@ export function IdentityStep(props: StepProps & { labelLoading: boolean; labelFa
           <InputAddon>.{config.ensParentName}</InputAddon>
         </InputGroup>
         <FieldHint>Your coin&rsquo;s address and page: {ensName}. It follows the ticker until you edit it.</FieldHint>
-        <FieldError>{err("label")}</FieldError>
+        <FieldError>{labelError}</FieldError>
         <div role="status" aria-live="polite">
           <LabelStatusLine name={ensName} label={label} status={state.labelStatus} loading={labelLoading} failed={labelFailed} account={state.account} />
         </div>

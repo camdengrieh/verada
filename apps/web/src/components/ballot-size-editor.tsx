@@ -56,9 +56,9 @@ export function BallotSizeEditor({ token, detail }: { token: Address; detail: To
       <div className="flex flex-col gap-1">
         <h2 className="m-0 font-display text-2xl font-semibold">Ballot size</h2>
         <p className="m-0 text-sm text-ink-soft">
-          How many charities each weekly ballot holds. The platform allows up to {cap}
-          {settings ? `; this token's ballot now holds up to ${settings.size}` : ""}. A change applies to this week&apos;s ballot if it has
-          not been prepared yet, and otherwise from next week.
+          How many charities each ballot holds. The platform allows up to {cap}
+          {settings ? `; this token's ballot now holds up to ${settings.size}` : ""}. A change applies to this epoch&apos;s ballot if it has
+          not been prepared yet, and otherwise from the next epoch.
         </p>
       </div>
       <Card className="p-5">

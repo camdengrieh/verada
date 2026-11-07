@@ -198,7 +198,7 @@ describe("DonationTimeline", () => {
     const items = screen.getAllByRole("listitem");
     expect(items[0]).toHaveTextContent("$1,241 to WWF");
     expect(items[0]).toHaveTextContent("from $HARAMBE · live donation");
-    expect(items[1]).toHaveTextContent("weekly pool");
+    expect(items[1]).toHaveTextContent("epoch pool");
     expect(within(items[0]!).getByRole("link", { name: /View transaction for \$1,241 to WWF/ })).toHaveAttribute("href", "https://etherscan.io/tx/0xabc");
     expect(within(items[0]!).getByText("5m ago").tagName).toBe("TIME");
     rerender(<DonationTimeline donations={[{ id: "c", org: "GiveDirectly", amount: 42, cause: "poverty", at: NOW }, ...donations]} now={NOW} />);

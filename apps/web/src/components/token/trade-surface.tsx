@@ -14,6 +14,7 @@ import type { TradingMetric } from "@varada/ui/components/varada/trading-metrics
 import type { CauseName } from "@varada/ui/components/varada/cause-icon";
 import { ConnectedTradePanel } from "@/components/swap";
 import { useAppConfig, useDeps } from "@/components/providers";
+import { usdNotes, USDC } from "@varada/sdk";
 import { usePoolMarket } from "@/hooks/use-swap-market";
 import { useSwapClients } from "@/hooks/use-swap-clients";
 import { resolveMarketToken } from "@/lib/swap/tokens";
@@ -63,12 +64,15 @@ export function useLiquidityMetric(token: string, symbol: string): TradingMetric
     retry: false,
     queryFn: () => resolveMarketToken({ chain: clients.chain, indexer: deps.indexer, cfg: config }, { address: token as Address, symbol }),
   });
-  const { market } = usePoolMarket(resolved.data ?? null);
+  const { market, quoteUsdQuote } = usePoolMarket(resolved.data ?? null);
   return useMemo(() => {
     if (!market) return [];
-    if (market.tvlUsd != null) return [{ key: "liquidity", label: "Liquidity", value: market.tvlUsd, format: { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 }, hint: "Pool value, both sides" }];
-    if (market.tvlQuote != null) return [{ key: "liquidity", label: `Liquidity (${market.quote.symbol})`, value: market.tvlQuote, format: { notation: "compact", maximumFractionDigits: 2 }, hint: "Pool value, both sides" }];
+    const hint = `${market.quote.symbol} held by the pool, which is what sells are paid from`;
+    const approx = Boolean(quoteUsdQuote && market.quote.address.toLowerCase() !== USDC.address.toLowerCase() && (quoteUsdQuote.confidence !== "high" || quoteUsdQuote.marketClosed));
+    const thin = approx ? `${hint}. ${usdNotes(quoteUsdQuote).join(" ")}` : hint;
+    if (market.depthUsd != null) return [{ key: "liquidity", label: "Liquidity", value: market.depthUsd, format: { style: "currency", currency: "USD", notation: "compact", maximumFractionDigits: 2 }, hint: thin, approx }];
+    if (market.depthQuote != null) return [{ key: "liquidity", label: `Liquidity (${market.quote.symbol})`, value: market.depthQuote, format: { notation: "compact", maximumFractionDigits: 2 }, hint }];
     return [];
-  }, [market]);
+  }, [market, quoteUsdQuote]);
 }
 

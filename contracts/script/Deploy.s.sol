@@ -14,6 +14,8 @@ import {CuratorRegistry} from "../src/CuratorRegistry.sol";
 import {DonationDistributor} from "../src/DonationDistributor.sol";
 import {EpochGovernor} from "../src/EpochGovernor.sol";
 import {FeeConsolidator, IConsolidatorRegistry} from "../src/FeeConsolidator.sol";
+import {FeeConsolidatorV3} from "../src/FeeConsolidatorV3.sol";
+import {IUniswapV3Factory} from "../src/interfaces/external/IUniswapV3.sol";
 import {FeeVault} from "../src/FeeVault.sol";
 import {QuoteRegistry} from "../src/QuoteRegistry.sol";
 import {TakeoverGovernor} from "../src/TakeoverGovernor.sol";
@@ -74,6 +76,8 @@ contract Deploy is Script {
     address internal constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
     /// @dev Endaoment's org fund factory on mainnet.
     address internal constant ENDAOMENT_FACTORY = 0x10fD9348136dCea154F752fe0B6dB45Fc298A589;
+    /// @dev Canonical Uniswap v3 factory on mainnet; the consolidator swaps registry v3 hops on its pools.
+    address internal constant UNISWAP_V3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     /// @dev Consolidator guards: slippage versus spot and spot versus reference, in bps and ticks.
     uint256 internal constant MAX_SLIPPAGE_BPS = 300;
     uint256 internal constant MAX_DEVIATION_TICKS = 1500;
@@ -216,14 +220,17 @@ contract Deploy is Script {
         );
         _expect("feeVault", vaultAddr, address(vault));
 
-        FeeConsolidator consolidator = new FeeConsolidator(
+        // The v3-capable consolidator: it deploys its own V3SwapExecutor in the constructor (a
+        // CREATE from the consolidator, so the deployer's nonce sequence and `_expect` are unchanged).
+        FeeConsolidator consolidator = new FeeConsolidatorV3(
             deployer,
             IPoolManager(POOL_MANAGER),
             IConsolidatorRegistry(address(quotes)),
             IFeeVault(address(vault)),
             WETH,
             MAX_SLIPPAGE_BPS,
-            MAX_DEVIATION_TICKS
+            MAX_DEVIATION_TICKS,
+            IUniswapV3Factory(UNISWAP_V3_FACTORY)
         );
         _expect("feeConsolidator", consolidatorAddr, address(consolidator));
 
@@ -277,18 +284,37 @@ contract Deploy is Script {
             POOL_MANAGER
         );
 
+        // Cycle timing (owner-settable later; see ConfigureTiming). Defaults are the first production
+        // test cycle: 30 minutes of trading then 15 minutes of voting (45 minute epoch, hold window =
+        // the trading phase). This MUST run before any token registers (the first call re-anchors
+        // epoch 0 only while none has) and before `setCuratorRegistry` below, which caches the epoch
+        // length. Set EPOCH_LENGTH_SECONDS / VOTING_WINDOW_SECONDS / HOLD_WINDOW_SECONDS to override
+        // (7 days / 7 days / 7 days are the contracts' own defaults).
+        governor.setEpochSchedule(
+            vm.envOr("EPOCH_LENGTH_SECONDS", uint256(45 minutes)),
+            vm.envOr("VOTING_WINDOW_SECONDS", uint256(15 minutes)),
+            vm.envOr("HOLD_WINDOW_SECONDS", uint256(30 minutes))
+        );
+        vault.setSettleGrace(vm.envOr("SETTLE_GRACE_SECONDS", uint256(45 minutes)));
+
         // Wiring.
         governor.setFactory(address(factory));
         governor.setCuratorRegistry(ICuratorRegistry(address(curators)));
         curators.setGovernor(IEpochGovernor(address(governor)));
         // `agent.<parent>` is the curator agents' namespace: no token may take the label.
         profiles.setReservation(keccak256("agent"), true, address(0));
+        // `org.<parent>` holds the charity names (SetupOrgNames, VaradaOrgResolver) and `names.<parent>`
+        // their Swarm-hosted CCIP data: no token may take either label.
+        profiles.setReservation(keccak256("org"), true, address(0));
+        profiles.setReservation(keccak256("names"), true, address(0));
         registry.setMaterializer(address(governor), true);
         distributor.setFeeVault(address(vault));
         vault.setConsolidator(address(consolidator));
         vault.setLpLocker(ILpLocker(address(locker)));
         consolidator.setHook(hookAddr);
         consolidator.setSource(address(locker), true);
+        // The distributor converts an ETH cause pool (WETH) into USDC for Endaoment.
+        consolidator.setSource(address(distributor), true);
         scheme.setGovernor(address(governor), true);
         scheme.setGovernor(address(takeover), true);
         profiles.setGovernor(address(takeover));

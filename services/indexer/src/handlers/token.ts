@@ -1,5 +1,6 @@
 import type { Context, Event } from "ponder:registry";
 import { token, tokenFocus, tokenMarket, tokenProfile } from "ponder:schema";
+import { DONATION_ASSET_ENUM, donationAssetOrDefault, donationAssetReadAbi, parseDonationAsset } from "@varada/sdk";
 import { VaradaFactoryAbi, VaradaTokenAbi } from "../abis";
 
 /** Reads `name()` or `symbol()` at the launch block; empty on any failure. */
@@ -13,6 +14,26 @@ async function readString(
     return typeof v === "string" ? v : "";
   } catch {
     return "";
+  }
+}
+
+/**
+ * The token's donation asset (0 USDC, 1 ETH): from the event when it carries one, else the
+ * factory's `donationAssetOf` at the launch block; USDC when neither answers (a pre-choice factory).
+ */
+async function readDonationAsset(context: Context<"Factory:TokenCreated">, a: { token: `0x${string}` } & Record<string, unknown>): Promise<number> {
+  const fromEvent = parseDonationAsset(a.donationAsset);
+  if (fromEvent !== null) return DONATION_ASSET_ENUM[fromEvent];
+  try {
+    const v = await context.client.readContract({
+      abi: donationAssetReadAbi,
+      address: context.contracts.Factory.address as `0x${string}`,
+      functionName: "donationAssetOf",
+      args: [a.token],
+    });
+    return DONATION_ASSET_ENUM[donationAssetOrDefault(v)];
+  } catch {
+    return 0;
   }
 }
 
@@ -30,6 +51,7 @@ export async function onTokenCreated({
     readString(context, a.token, "symbol"),
   ]);
   // The registry registers the token earlier in the same transaction.
+  const donationAsset = await readDonationAsset(context, a);
   const p = await context.db.find(tokenProfile, { token: a.token });
   const f = await context.db.find(tokenFocus, { token: a.token });
   await context.db
@@ -45,6 +67,7 @@ export async function onTokenCreated({
       createdAt: event.block.timestamp,
       createdBlock: event.block.number,
       txHash: event.transaction.hash,
+      donationAsset,
       name,
       symbol,
       label: p?.label ?? null,

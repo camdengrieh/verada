@@ -26,6 +26,8 @@ export interface TradingMetric {
   icon?: ReactNode;
   /** The lead metric (price): bigger, and two cells wide in the narrow grid. */
   lead?: boolean;
+  /** The value rests on a thin or lagging price: print it with a leading "~". */
+  approx?: boolean;
 }
 
 /** Price formatting that keeps tiny memecoin prices readable: $0.00004213, $1.27, $3,412.50. */
@@ -123,6 +125,7 @@ export function TradingMetricsBar({ metrics, narrow = "grid", animate = true, la
             {m.label}
           </dt>
           <dd className={cn("m-0 font-mono font-semibold leading-tight tracking-tight", m.lead ? "text-2xl" : "text-lg", m.tone === "cause" && "text-sage-ink")}>
+            {m.approx && m.value !== null ? <span aria-label="approximately">~</span> : null}
             {m.value === null ? (
               <span className="text-ink-muted" aria-label="Not available">–</span>
             ) : animate ? (

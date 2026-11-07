@@ -1,7 +1,8 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type FormEvent } from "react";
+import { durationText } from "@/lib/epoch-timing";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useAccount } from "wagmi";
 import { isAddress, type Address } from "viem";
 import { TAKEOVER_AGAINST, TAKEOVER_FOR } from "@varada/sdk";
@@ -13,6 +14,7 @@ import { Input } from "@varada/ui/components/ui/input";
 import { Skeleton } from "@varada/ui/components/ui/skeleton";
 import { TakeoverCard, type TakeoverStatus } from "@varada/ui/components/varada/takeover-card";
 import { useAppConfig, useDeps, usePrivateRpc } from "@/components/providers";
+import { useWalletGate } from "@/components/governance/use-wallet-gate";
 import { useCastBallot } from "@/components/use-cast-ballot";
 import { errorText, formatTime, sameAddress, shortAddress, TxStatus, useTx } from "@/components/use-tx";
 import { createAccountClient } from "@/lib/account-reads";
@@ -39,18 +41,28 @@ export function takeoverStateLabel(state: string): string {
   return STATE_LABELS[state] ?? state;
 }
 
-function formatDuration(seconds: number): string {
-  const unit = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-  if (seconds > 0 && seconds % 86400 === 0) return unit(seconds / 86400, "day");
-  if (seconds > 0 && seconds % 3600 === 0) return unit(seconds / 3600, "hour");
-  return `${seconds} s`;
-}
+/** The governor's own duration, as read ("3 days", "5 minutes", "1 hour 30 minutes"): the floors are now 5 minutes. */
+const formatDuration = durationText;
 
 /** `part / whole` as a percentage with two decimals, or null when `whole` is missing or zero. */
 export function shareOf(part: string, whole: string | undefined): string | null {
   if (!whole || !/^\d+$/.test(whole) || !/^\d+$/.test(part) || BigInt(whole) === 0n) return null;
   const bp = (BigInt(part) * 10_000n) / BigInt(whole);
   return `${bp / 100n}.${(bp % 100n).toString().padStart(2, "0")}%`;
+}
+
+/**
+ * Reads the proposal list (and the viewer's weight) again once one of this panel's transactions is
+ * confirmed, so a new proposal, a closed vote, an execution or a cast ballot shows without a reload.
+ */
+function useRefreshOnConfirm(token: Address, ...receipts: ({ status: string; transactionHash: string } | undefined)[]) {
+  const queryClient = useQueryClient();
+  const confirmed = receipts.map((r) => (r?.status === "success" ? r.transactionHash : "")).join(",");
+  useEffect(() => {
+    if (!confirmed.replace(/,/g, "")) return;
+    void queryClient.invalidateQueries({ queryKey: ["takeovers", token] });
+    void queryClient.invalidateQueries({ queryKey: ["takeover-account"] });
+  }, [confirmed, queryClient, token]);
 }
 
 /** Community takeover: replace the profile controller by a FOR/AGAINST vote of holders. */
@@ -128,8 +140,10 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
   const config = useAppConfig();
   const rpc = usePrivateRpc();
   const { address: account } = useAccount();
+  const gate = useWalletGate();
   const ballot = useCastBallot();
   const tx = useTx({ kind: "vote", confetti: "vote" });
+  useRefreshOnConfirm(token, tx.receipt, ballot.tx.receipt);
   const id = BigInt(p.proposalId);
 
   const accountClient = useMemo(() => (account ? createAccountClient(rpc, account) : null), [rpc, account]);
@@ -159,6 +173,22 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
   const pct = (w: string) => (total > 0n ? Number(((BigInt(w) * 10_000n) / total)) / 100 : undefined);
   const tallyKnown = p.tallied && circulating !== undefined && /^\d+$/.test(circulating) && BigInt(circulating) > 0n;
   const busy = ballot.phase === "scanning" || ballot.phase === "encrypting" || ballot.tx.isPending;
+  // Why the vote buttons are off, most basic reason first (voting that ended while the tally is
+  // pending cannot take a ballot either: the contract would revert it).
+  const disabledReason =
+    p.state === "Closing"
+      ? "Voting has ended. The tally is being counted."
+      : !account
+        ? "Connect a wallet to vote."
+        : gate.wrongChain
+          ? "Switch your wallet to Ethereum mainnet to vote."
+          : voted
+            ? "You have voted on this proposal."
+            : mine.data && mine.data.weight === 0n
+              ? "You held none of this token at the snapshot, so you have no weight in this vote."
+              : busy
+                ? "Your ballot is being sent."
+                : undefined;
 
   return (
     <div className="flex flex-col gap-3">
@@ -176,7 +206,7 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
         againstPct={p.tallied ? pct(p.againstWeight) : undefined}
         endsIn={p.end !== undefined && p.state === "Active" ? `ends in ${untilText(p.end, Date.now()) || "moments"}` : undefined}
         onVote={account ? (v) => void ballot.cast({ governor, token, scope: id, choice: v === "for" ? TAKEOVER_FOR : TAKEOVER_AGAINST, holdScan: { kind: "takeover", proposalId: id } }) : undefined}
-        disabledReason={!account ? "Connect a wallet to vote." : voted ? "You have voted on this proposal." : busy ? "Your ballot is being sent." : undefined}
+        disabledReason={disabledReason}
       />
       <dl className="m-0 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
         <div>
@@ -233,7 +263,13 @@ function ActiveProposal({ governor, token, proposal: p, quorumBps }: { governor:
         </p>
       )}
       {ballot.phase === "encrypting" && <p role="status" className="m-0 text-sm">Encrypting your ballot</p>}
-      {ballot.error && <p role="alert" className="m-0 text-sm text-destructive">{ballot.error}</p>}
+      {/* A wallet or contract error is the ballot transaction's own and TxStatus shows it; this line is for failures before a transaction (encrypting, no wallet). */}
+      {ballot.error && !ballot.tx.error && <p role="alert" className="m-0 text-sm text-destructive">{ballot.error}</p>}
+      {gate.wrongChain && (
+        <Button type="button" variant="outline" className="self-start" onClick={gate.switchToApp} disabled={gate.switching}>
+          Switch network
+        </Button>
+      )}
       <TxStatus tx={ballot.tx} label="Ballot" />
 
       <div className="flex flex-wrap gap-2">
@@ -268,6 +304,7 @@ function ProposeForm({ governor, token }: { governor: Address; token: Address })
   const rpc = usePrivateRpc();
   const { address: account } = useAccount();
   const tx = useTx();
+  useRefreshOnConfirm(token, tx.receipt);
   const [newController, setNewController] = useState("");
   const [error, setError] = useState<string>();
   const [scan, setScan] = useState<{ done: number; total: number } | null>(null);

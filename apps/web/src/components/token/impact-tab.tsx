@@ -18,6 +18,7 @@ import { errorText } from "@/components/use-tx";
 import type { TokenFeeTotals } from "@/lib/indexer";
 import { buildImpact, causeNameOfOrg, liveDonationRows, loadPoolDonations, poolFigures, shortId, usdcToUsd, type DonationRow, type LiveView } from "@/lib/token-data";
 import { usdText } from "@/lib/token-view";
+import { useDonationUnit } from "@/hooks/use-donation-unit";
 import { useNowSec } from "./market-section";
 
 const txUrl = (hash: string) => `https://etherscan.io/tx/${hash}`;
@@ -35,9 +36,12 @@ export interface ImpactTabProps {
   feeTotals: TokenFeeTotals | null | undefined;
   /** Current epoch and the previous one, for the "beat last epoch" goal of a weekly-pool token. */
   epoch: bigint | undefined;
+  /** The token's donation asset, which every amount here is in. */
+  donationAsset?: string;
 }
 
-export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabProps) {
+export function ImpactTab({ token, symbol, live, feeTotals, epoch, donationAsset }: ImpactTabProps) {
+  const { unit, symbol: assetSymbol } = useDonationUnit(donationAsset);
   const deps = useDeps();
   const donations = usePoolDonations(token, !live);
   const causes = useCauses();
@@ -65,9 +69,9 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabPr
     cause: causeNameOfOrg(catalog.data?.get(causeId)),
   });
   const impact = useMemo(
-    () => buildImpact(rows, meta, symbol, txUrl, live ? live.causes.filter((c) => c.credited > 0n).map((c) => ({ causeId: c.causeId, amount: c.credited })) : undefined),
+    () => buildImpact(rows, meta, symbol, txUrl, live ? live.causes.filter((c) => c.credited > 0n).map((c) => ({ causeId: c.causeId, amount: c.credited })) : undefined, unit),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, live, symbol, causes.data, catalog.data],
+    [rows, live, symbol, causes.data, catalog.data, unit],
   );
 
   if (!live && donations.isLoading) {
@@ -86,8 +90,8 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabPr
     );
   }
 
-  const raised = live ? usdcToUsd(live.totals.credited) : feeTotals ? usdcToUsd(BigInt(feeTotals.causeAmount)) : 0;
-  const paid = live ? usdcToUsd(live.totals.donated) : usdcToUsd(rows.reduce((s, r) => s + r.amount, 0n));
+  const raised = live ? usdcToUsd(live.totals.credited, unit) : feeTotals ? usdcToUsd(BigInt(feeTotals.causeAmount), unit) : 0;
+  const paid = live ? usdcToUsd(live.totals.donated, unit) : usdcToUsd(rows.reduce((s, r) => s + r.amount, 0n), unit);
   const hasMoney = raised > 0 || rows.length > 0;
 
   if (!hasMoney) {
@@ -98,7 +102,7 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabPr
           body={
             live
               ? "Every swap donates its cause share as it happens. The first trade starts the count, and each donation is listed here with its transaction."
-              : "Trading fees are collected in USDC and 90% goes to the cause pool, which holders vote to pay out each week. The first trade starts the count."
+              : `Trading fees are collected in ${assetSymbol} and 90% goes to the cause pool, which holders vote to pay out each epoch. The first trade starts the count.`
           }
         />
         <div className="mx-auto max-w-md px-4 pb-8">
@@ -109,11 +113,11 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabPr
   }
 
   const designated = live?.designatedCause?.toLowerCase();
-  const pendingHere = live ? usdcToUsd(live.causes.find((c) => c.causeId.toLowerCase() === designated)?.pending ?? 0n) : 0;
-  const goalLive = live && live.threshold && live.threshold > 0n ? { raised: pendingHere, goal: usdcToUsd(live.threshold), label: `Next donation to ${designated ? meta(designated).name : "the designated cause"}` } : null;
+  const pendingHere = live ? usdcToUsd(live.causes.find((c) => c.causeId.toLowerCase() === designated)?.pending ?? 0n, unit) : 0;
+  const goalLive = live && live.threshold && live.threshold > 0n ? { raised: pendingHere, goal: usdcToUsd(live.threshold, unit), label: `Next donation to ${designated ? meta(designated).name : "the designated cause"}` } : null;
   const goalPool =
     !live && current.data?.prev && current.data.prev.total > 0n
-      ? { raised: usdcToUsd(current.data.cur?.total ?? 0n), goal: usdcToUsd(current.data.prev.total), label: `Epoch ${epoch?.toString()} pool vs epoch ${(epoch! - 1n).toString()}` }
+      ? { raised: usdcToUsd(current.data.cur?.total ?? 0n, unit), goal: usdcToUsd(current.data.prev.total, unit), label: `Epoch ${epoch?.toString()} pool vs epoch ${(epoch! - 1n).toString()}` }
       : null;
   const goal = goalLive ?? goalPool;
 
@@ -127,7 +131,7 @@ export function ImpactTab({ token, symbol, live, feeTotals, epoch }: ImpactTabPr
           tone="sage"
           caption={
             <span>
-              {live ? `${usdText(paid)} donated, ${usdText(usdcToUsd(live.totals.pending))} credited and waiting for its donation.` : paid > 0 ? `${rows.length >= 100 ? "At least " : ""}${usdText(paid)} paid out so far to charities, after each week's vote.` : "Collected into the cause pool; paid out after each week's vote."}
+              {live ? `${usdText(paid)} donated, ${usdText(usdcToUsd(live.totals.pending, unit))} credited and waiting for its donation.` : paid > 0 ? `${rows.length >= 100 ? "At least " : ""}${usdText(paid)} paid out so far to charities, after each week's vote.` : "Collected into the cause pool; paid out after each week's vote."}
             </span>
           }
           latestTo={impact.timeline[0]?.org}

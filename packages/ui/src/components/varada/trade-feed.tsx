@@ -35,6 +35,8 @@ export interface TradeItem {
   quoteSymbol: string;
   /** Trade value in USD, when the quote has a price. */
   usd?: number;
+  /** The USD price is thin or may lag: print the value with a leading "~". */
+  usdApprox?: boolean;
   /** Cause share of this trade's fee, in USD. */
   causeUsd?: number;
   /** Unix seconds. */
@@ -178,7 +180,7 @@ function TradeRow({ trade, fresh, now, reduced }: { trade: TradeItem; fresh: boo
       </span>
       <span className={cn(CELL.value, "flex flex-col items-end gap-1 text-right")}>
         {trade.usd !== undefined ? (
-          <span className="num text-sm font-semibold text-ink">{formatUsd(trade.usd)}</span>
+          <span className="num text-sm font-semibold text-ink">{trade.usdApprox ? "~" : ""}{formatUsd(trade.usd)}</span>
         ) : (
           <span className="text-sm text-ink-muted">
             <span aria-hidden="true">—</span>
@@ -476,7 +478,7 @@ export function TradeTicker({ trades, limit = 10, duration = 45, label = "Latest
       {latest.map((t) => (
         <span key={t.id} className="inline-flex shrink-0 items-center gap-2 rounded-full border border-line bg-card py-1 pl-1 pr-3 text-[13px]">
           <TradeSideBadge side={t.side} className="rounded-full" />
-          <span className="num font-semibold text-ink">{t.usd !== undefined ? formatUsd(t.usd) : `${formatTokenAmount(t.quoteAmount)} ${t.quoteSymbol}`}</span>
+          <span className="num font-semibold text-ink">{t.usd !== undefined ? `${t.usdApprox ? "~" : ""}${formatUsd(t.usd)}` : `${formatTokenAmount(t.quoteAmount)} ${t.quoteSymbol}`}</span>
           <span className="text-ink-soft">{t.tokenSymbol}</span>
           <span className="text-ink-muted">· {t.trader.ens ?? shortenAddress(t.trader.address)}</span>
         </span>

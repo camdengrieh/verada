@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import {DonationAsset} from "./interfaces/IDonationAsset.sol";
 import {IDonationDistributor} from "./interfaces/IDonationDistributor.sol";
 import {IEpochGovernor} from "./interfaces/IEpochGovernor.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
@@ -24,7 +25,7 @@ import {ILpLocker} from "./interfaces/ILpLocker.sol";
 ///      result. Settling an epoch first brings in what is still outstanding for it: the LP
 ///      locker's fees are collected (they are split by time, so the epoch gets its share) and
 ///      the consolidator flushes every held balance with a part earned in or before the epoch.
-///      If either cannot complete, settlement reverts until `SETTLE_GRACE` after the epoch's
+///      If either cannot complete, settlement reverts until `settleGrace` after the epoch's
 ///      end, so whoever settles cannot push those fees into a later epoch by settling first.
 ///      Fees that still arrive after their epoch was settled (a route broken past the grace
 ///      period) go to the first unsettled epoch after it, so they are never stranded.
@@ -40,7 +41,15 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
     /// @inheritdoc IFeeVault
-    uint256 public constant SETTLE_GRACE = 7 days;
+    uint256 public settleGrace = 7 days;
+
+    /// @notice Shortest and longest `settleGrace`.
+    uint256 public constant MIN_SETTLE_GRACE = 5 minutes;
+    uint256 public constant MAX_SETTLE_GRACE = 30 days;
+
+    /// @notice `settleGrace` changed.
+    event SettleGraceSet(uint256 grace);
+    error SettleGraceOutOfRange(uint256 grace, uint256 min, uint256 max);
 
     error ZeroAddress();
     error NotFactory();
@@ -51,6 +60,7 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
     error LpLockerAlreadySet();
     error UnbackedDeposit(uint256 balance, uint256 required);
     error LengthMismatch();
+    error EthUnsupported();
 
     event ConsolidatorSet(address indexed consolidator);
     event LpLockerSet(address indexed lpLocker);
@@ -84,8 +94,16 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
 
     /// @notice Total tracked (platform plus all cause pools) in the settlement asset.
     uint256 public totalTracked;
+    /// @notice Total tracked in WETH (tokens whose donation asset is `Eth`).
+    uint256 public totalTrackedEth;
+
+    /// @notice WETH, learned from the consolidator when it is set (zero: `Eth` unsupported).
+    address public weth;
+    /// @dev Donation asset per token (default `Usdc`).
+    mapping(address token => DonationAsset asset) private _donationAsset;
 
     uint256 private _platformAccrued;
+    uint256 private _platformAccruedEth;
     /// @dev Unsettled cause pool per token, across all epochs.
     mapping(address token => uint256 amount) private _causePool;
     /// @dev Cause pool attributed to the epoch in which the fees were earned.
@@ -116,6 +134,10 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
         if (consolidator_ == address(0)) revert ZeroAddress();
         if (consolidator != address(0)) revert ConsolidatorAlreadySet();
         consolidator = consolidator_;
+        // Older consolidators have no `weth()`: `Eth` stays unsupported then.
+        (bool ok, bytes memory ret) =
+            consolidator_.staticcall(abi.encodeCall(IFeeConsolidator.weth, ()));
+        if (ok && ret.length == 32) weth = abi.decode(ret, (address));
         emit ConsolidatorSet(consolidator_);
     }
 
@@ -129,10 +151,33 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
 
     /// @inheritdoc IFeeVault
     function registerToken(address token) external {
+        _register(token, DonationAsset.Usdc);
+    }
+
+    /// @inheritdoc IFeeVault
+    function registerToken(address token, DonationAsset asset) external {
+        _register(token, asset);
+    }
+
+    function _register(address token, DonationAsset asset) private {
         if (msg.sender != factory) revert NotFactory();
         if (token == address(0)) revert ZeroAddress();
         if (isRegistered[token]) revert AlreadyRegistered(token);
+        if (asset == DonationAsset.Eth) {
+            if (weth == address(0)) revert EthUnsupported();
+            _donationAsset[token] = asset;
+        }
         isRegistered[token] = true;
+    }
+
+    /// @inheritdoc IFeeVault
+    function donationAssetOf(address token) public view returns (DonationAsset) {
+        return _donationAsset[token];
+    }
+
+    /// @dev The ERC20 a token's pools are held in.
+    function _assetOf(address token) private view returns (address) {
+        return _donationAsset[token] == DonationAsset.Eth ? weth : settlementAsset;
     }
 
     /// @notice Pure split of `amount` into platform and cause parts.
@@ -176,16 +221,24 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
         uint256 total = platformTotal + causeTotal;
         if (total == 0) return;
 
-        _platformAccrued += platformTotal;
         _causePool[token] += causeTotal;
-        uint256 tracked = totalTracked + total;
-        totalTracked = tracked;
+        address asset = _assetOf(token);
+        uint256 tracked;
+        if (asset == settlementAsset) {
+            _platformAccrued += platformTotal;
+            tracked = totalTracked + total;
+            totalTracked = tracked;
+        } else {
+            _platformAccruedEth += platformTotal;
+            tracked = totalTrackedEth + total;
+            totalTrackedEth = tracked;
+        }
 
         // The funds must already be here; never credit what was not delivered.
-        uint256 balance = IERC20(settlementAsset).balanceOf(address(this));
+        uint256 balance = IERC20(asset).balanceOf(address(this));
         if (balance < tracked) revert UnbackedDeposit(balance, tracked);
 
-        emit FeesCollected(token, platformTotal, causeTotal, settlementAsset);
+        emit FeesCollected(token, platformTotal, causeTotal, asset);
     }
 
     /// @inheritdoc IFeeVault
@@ -193,10 +246,26 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
         return _platformAccrued;
     }
 
+    /// @notice Platform share accrued in WETH.
+    function platformAccruedEth() external view returns (uint256) {
+        return _platformAccruedEth;
+    }
+
     /// @inheritdoc IFeeVault
     /// @dev Total unsettled across all epochs; see `causePoolOf` for a single epoch.
     function causePool(address token) external view returns (uint256) {
         return _causePool[token];
+    }
+
+    /// @notice Sets `settleGrace` (`MIN_SETTLE_GRACE..MAX_SETTLE_GRACE`). Owner only. Applies at
+    ///         once: it only decides when fees that are still outside the vault stop holding up
+    ///         an epoch's settlement (they then go to a later epoch, never stranded).
+    function setSettleGrace(uint256 grace) external onlyOwner {
+        if (grace < MIN_SETTLE_GRACE || grace > MAX_SETTLE_GRACE) {
+            revert SettleGraceOutOfRange(grace, MIN_SETTLE_GRACE, MAX_SETTLE_GRACE);
+        }
+        settleGrace = grace;
+        emit SettleGraceSet(grace);
     }
 
     /// @notice Cause pool of `token` attributed to `epoch` and not yet settled.
@@ -214,7 +283,7 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
 
         uint256 end = governor.epochStart(epoch + 1);
         // forge-lint: disable-next-line(block-timestamp)
-        if (!_bringIn(token, epoch, end) && block.timestamp < end + SETTLE_GRACE) {
+        if (!_bringIn(token, epoch, end) && block.timestamp < end + settleGrace) {
             revert FeesPending(token, epoch);
         }
 
@@ -223,12 +292,14 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
 
         _epochPool[token][epoch] = 0;
         _causePool[token] -= amount;
-        totalTracked -= amount;
+        address asset = _assetOf(token);
+        if (asset == settlementAsset) totalTracked -= amount;
+        else totalTrackedEth -= amount;
         settled[token][epoch] = true;
 
-        IERC20(settlementAsset).safeTransfer(distributor, amount);
+        IERC20(asset).safeTransfer(distributor, amount);
         IDonationDistributor(distributor).receiveFunds(token, epoch, amount);
-        emit Settled(token, epoch, settlementAsset, amount);
+        emit Settled(token, epoch, asset, amount);
     }
 
     /// @dev Collects the LP fees of `token` if the last collection is older than `end` (the end
@@ -260,14 +331,23 @@ contract FeeVault is IFeeVault, Ownable2Step, ReentrancyGuard {
 
     /// @inheritdoc IFeeVault
     /// @dev Permissionless: funds can only ever go to the platform treasury.
+    ///      Pays every asset with an accrued share (USDC, then WETH).
     function withdrawPlatform() external nonReentrant {
         uint256 amount = _platformAccrued;
-        if (amount == 0) revert NothingToWithdraw();
+        uint256 amountEth = _platformAccruedEth;
+        if (amount == 0 && amountEth == 0) revert NothingToWithdraw();
 
-        _platformAccrued = 0;
-        totalTracked -= amount;
-
-        IERC20(settlementAsset).safeTransfer(platformTreasury, amount);
-        emit PlatformWithdrawn(settlementAsset, platformTreasury, amount);
+        if (amount != 0) {
+            _platformAccrued = 0;
+            totalTracked -= amount;
+            IERC20(settlementAsset).safeTransfer(platformTreasury, amount);
+            emit PlatformWithdrawn(settlementAsset, platformTreasury, amount);
+        }
+        if (amountEth != 0) {
+            _platformAccruedEth = 0;
+            totalTrackedEth -= amountEth;
+            IERC20(weth).safeTransfer(platformTreasury, amountEth);
+            emit PlatformWithdrawn(weth, platformTreasury, amountEth);
+        }
     }
 }

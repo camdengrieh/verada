@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.26;
 
+import {DonationAsset} from "./IDonationAsset.sol";
+
 /// @title IVaradaLiveHook
 /// @notice Uniswap v4 hook of live-donation tokens. A fee (base fee plus the decaying launch
 ///         surcharge) is taken from every swap in the quote currency and converted to USDC inside
@@ -29,7 +31,7 @@ interface IVaradaLiveHook {
     );
     event PoolRegistered(address indexed token, address indexed quote, bytes32 indexed poolId);
     /// @notice A fee of `quoteAmount` was taken from a swap of `token` while `causeId` was active
-    ///         in `rotation`. `converted`: it became `usdcOut` USDC in the vault; otherwise it is
+    ///         in `rotation`. `converted`: it became `usdcOut` (units of the token's donation asset) in the vault; otherwise it is
     ///         held and `failure` is the 4-byte reason.
     event FeeTaken(
         address indexed token,
@@ -39,7 +41,8 @@ interface IVaradaLiveHook {
         uint256 quoteAmount,
         uint256 usdcOut,
         bool converted,
-        bytes4 failure
+        bytes4 failure,
+        DonationAsset asset
     );
     /// @notice `quoteIn` held for `(token, causeId)` was converted to `usdcOut` by `caller`.
     event HeldRetried(

@@ -15,17 +15,21 @@ import { ballotMix, causeName, useCauses, useEpochView } from "@/components/epoc
 import { useAppConfig, useDeps } from "@/components/providers";
 import { agentPath, agentsForFocus, listAgents } from "@/lib/agents";
 import type { TokenDetail, TokenFeeTotals } from "@/lib/indexer";
-import { causeNameOfOrg, poolFigures, usdcToUsd, type LiveView } from "@/lib/token-data";
+import { causeNameOfOrg, poolFigures, usdcToUsd, type DonationUnit, type LiveView, USDC_UNIT } from "@/lib/token-data";
+import { useDonationUnit } from "@/hooks/use-donation-unit";
 import { untilText, usdText } from "@/lib/token-view";
 import { shownOptionSources } from "@/components/epoch-panel";
 import { ballotOptions } from "@/lib/profile";
-import { useRel } from "@/components/nav";
+import { useSiteRel as useRel } from "@/components/governance/use-rel";
+import { EpochPhaseStrip } from "@/components/epoch-phase";
+import { timingOf, timingPhase } from "@/lib/epoch-timing";
 
-/** This week's cause pool: the amount so far, when voting closes and how the ballot is made up. */
+/** This epoch's cause pool: the amount so far, its phase and when it changes, and how the ballot is made up. */
 export function PoolSummary({ token, detail, onVote }: { token: Address; detail: TokenDetail; onVote: () => void }) {
   const config = useAppConfig();
   const view = useEpochView(token);
   const agents = useAgentsFor(detail);
+  const { unit } = useDonationUnit(detail.donationAsset);
   if (!config.governorAddress || !view.data) return null;
   const { epoch, detail: ed } = view.data;
   const pool = poolFigures(ed);
@@ -33,18 +37,30 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
 
   const { options, frozen } = ballotOptions({ prepared: Boolean(ed.prepared || ed.poll?.opened), epochOptions: ed.options, pinned: detail.shortlist });
   const mix = frozen ? ballotMix(shownOptionSources(true, options, ed)) : null;
+  // Phases come from the governor's schedule: trading until `votingOpensAt`, then voting until the end.
+  const timing = timingOf(ed)!;
+  const phase = timingPhase(timing, Date.now() / 1000);
   const closing = untilText(ed.end, Date.now());
+  const opening = phase === "trading" ? untilText(timing.votingOpensAt, Date.now()) : "";
+  const countdown = phase === "trading" ? `voting opens in ${opening || "moments"}` : closing ? `voting closes in ${closing}` : "voting closed";
   const curator = agents[0]?.ensName || undefined;
-  const voteLabel = ed.poll?.closed || !closing ? "See the result" : "Vote privately";
-  const common = { amount: usdText(usdcToUsd(pool.total)), attributed: usdText(usdcToUsd(pool.earned)), carriedForward: usdText(usdcToUsd(pool.carriedIn)) };
+  const voteLabel = ed.poll?.closed || phase === "ended" ? "See the result" : phase === "trading" ? "See the ballot" : "Vote privately";
+  const common = { amount: usdText(usdcToUsd(pool.total, unit)), attributed: usdText(usdcToUsd(pool.earned, unit)), carriedForward: usdText(usdcToUsd(pool.carriedIn, unit)) };
 
+  const strip = <EpochPhaseStrip timing={timing} epoch={epoch} onChange={() => void view.refetch()} />;
   if (mix) {
-    return <CausePoolCard epoch={Number(epoch)} countdown={closing ? `closes in ${closing}` : "voting closed"} {...common} ballot={mix} curator={curator} onVote={onVote} voteLabel={voteLabel} />;
+    return (
+      <div className="grid grid-cols-1 gap-3">
+        <CausePoolCard epoch={Number(epoch)} countdown={countdown} {...common} ballot={mix} curator={curator} onVote={onVote} voteLabel={voteLabel} />
+        {strip}
+      </div>
+    );
   }
   return (
+    <div className="grid grid-cols-1 gap-3">
     <PoolMeter
       epoch={Number(epoch)}
-      amount={usdcToUsd(pool.total)}
+      amount={usdcToUsd(pool.total, unit)}
       startsAt={ed.start * 1000}
       endsAt={ed.end * 1000}
       attributed={common.attributed}
@@ -54,11 +70,13 @@ export function PoolSummary({ token, detail, onVote }: { token: Address; detail:
       voteLabel={voteLabel === "Vote privately" && !frozen ? "See the ballot" : voteLabel}
       headingLevel={2}
     />
+    {strip}
+    </div>
   );
 }
 
 /** A live-donation token's rotation: who is being given to now and when it changes. */
-export function LiveSummary({ live }: { live: LiveView }) {
+export function LiveSummary({ live, unit = USDC_UNIT }: { live: LiveView; unit?: DonationUnit }) {
   const causes = useCauses();
   const ids = [live.designatedCause, live.nextCause?.causeId].filter((x): x is string => Boolean(x));
   const names = useCatalogNames(ids);
@@ -93,25 +111,29 @@ export function LiveSummary({ live }: { live: LiveView }) {
       <dl className="m-0 grid grid-cols-2 gap-3 border-t border-paper/20 pt-3 text-sm">
         <div>
           <dt className="text-paper/70">Donated</dt>
-          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.donated))}</dd>
+          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.donated, unit))}</dd>
         </div>
         <div>
           <dt className="text-paper/70">Waiting to go out</dt>
-          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.pending))}</dd>
+          <dd className="num m-0 text-lg font-semibold">{usdText(usdcToUsd(live.totals.pending, unit))}</dd>
         </div>
       </dl>
     </Card>
   );
 }
 
-export function FeeSplit({ feeTotals }: { feeTotals: TokenFeeTotals | null | undefined }) {
+export function FeeSplit({ feeTotals, unit = USDC_UNIT, symbol = "USDC", priced = true }: { feeTotals: TokenFeeTotals | null | undefined; unit?: DonationUnit; symbol?: string; priced?: boolean }) {
   return (
     <Card className="gap-3 p-5">
       <h2 className="m-0 font-sans text-base font-semibold">Where each trading fee goes</h2>
+      <p className="m-0 text-sm text-ink-soft">
+        Donations paid in {symbol}
+        {priced ? "" : ". The ETH price is unavailable, so dollar amounts are not shown."}
+      </p>
       <FeeSplitBar
         causeShare={90}
-        causeAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.causeAmount))) : undefined}
-        platformAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.platformAmount))) : undefined}
+        causeAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.causeAmount), unit)) : undefined}
+        platformAmount={feeTotals ? usdText(usdcToUsd(BigInt(feeTotals.platformAmount), unit)) : undefined}
       />
     </Card>
   );
@@ -125,7 +147,7 @@ function useAgentsFor(detail: TokenDetail) {
 
 /**
  * The curator agents whose cause is in the token's focus: each ranks charities for its cause every
- * week, and its picks can fill the ballot slots after the pins.
+ * epoch, and its picks can fill the ballot slots after the pins.
  */
 export function CuratedBy({ focus }: { focus: TokenDetail["focus"] }) {
   const config = useAppConfig();
@@ -142,7 +164,7 @@ export function CuratedBy({ focus }: { focus: TokenDetail["focus"] }) {
       {agents.data && matching.length === 0 && <p className="m-0 text-sm text-ink-soft">No curator agent covers this token&apos;s causes yet.</p>}
       {matching.length > 0 && (
         <>
-          <p className="m-0 text-sm text-ink-soft">Curator agents for this token&apos;s causes. Their weekly picks fill the ballot slots after the pinned causes.</p>
+          <p className="m-0 text-sm text-ink-soft">Curator agents for this token&apos;s causes. Their picks fill the ballot slots after the pinned causes.</p>
           <ul className="m-0 grid list-none gap-3 p-0">
             {matching.map((a) => (
               <li key={a.label}>

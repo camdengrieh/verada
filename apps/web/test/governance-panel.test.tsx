@@ -16,9 +16,13 @@ const baseConfig: AppConfig = { ...envDefaults(), indexerUrls: ["https://idx.exa
 let config: AppConfig = baseConfig;
 
 let cap: bigint | Error = 10n;
-const chainRead = vi.fn(async ({ functionName }: { functionName: string }) => {
+/** The platform clock's schedule: epoch 5 runs from an hour ago to tomorrow; voting opens at its start unless a test sets `opensAt`. */
+const clockSchedule = { opensAt: NOW - 3600 };
+const chainRead = vi.fn(async ({ functionName, args }: { functionName: string; args?: readonly unknown[] }) => {
   if (functionName === "currentEpoch") return 5n;
-  if (functionName === "epochStart") return BigInt(NOW - 3600);
+  if (functionName === "epochStart") return BigInt(args?.[0] === 6n ? NOW + 86_400 : NOW - 3600);
+  if (functionName === "votingOpensAt") return BigInt(clockSchedule.opensAt);
+  if (functionName === "epochScheduleFor") return [BigInt(90_000), BigInt(NOW + 86_400 - clockSchedule.opensAt), 90_000n];
   if (functionName === "ballotSizeCap") {
     if (cap instanceof Error) throw cap;
     return cap;
@@ -70,11 +74,12 @@ vi.mock("@/components/providers", () => ({
 }));
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: () => ({ readContract: accountRead }) }));
 vi.mock("@/components/connect-button", () => ({ ConnectButton: () => <button type="button">Connect wallet</button> }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: wallet.receipt, error: null }) }));
 vi.mock("wagmi", () => ({
   useAccount: () => ({ address: account.address, isConnected: Boolean(account.address), chainId: account.chainId }),
   useSwitchChain: () => ({ switchChain, isPending: false }),
   useWriteContract: () => ({ writeContractAsync, data: wallet.hash, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: wallet.receipt, error: null }),
 }));
 // Encryption is the Zama SDK's job (tested in ballot.test.ts); here it returns a fixed handle and proof.
 vi.mock("@/lib/ballot", async (orig) => ({
@@ -118,6 +123,7 @@ beforeEach(() => {
   for (const k of Object.keys(epochs)) delete epochs[k];
   history = { epoch: [], donation: [] };
   chainRead.mockClear();
+  clockSchedule.opensAt = NOW - 3600;
   accountRead.mockReset().mockImplementation(async ({ functionName }) => (functionName === "weightOf" ? 10n : false));
   writeContractAsync.mockClear();
   switchChain.mockClear();
@@ -138,11 +144,25 @@ describe("GovernancePanel header", () => {
     expect(screen.getByText(/up to the platform's ballot size \(at most 32 charities\)/)).toBeInTheDocument();
   });
 
-  it("shows the epoch clock with a countdown to the end of the epoch", async () => {
+  it("shows the epoch clock in its voting phase with a countdown to the end of the epoch", async () => {
     renderPanel();
-    const clock = await screen.findByRole("group", { name: /Epoch 5 closes in/ });
+    const clock = await screen.findByRole("group", { name: /Voting closes in/ });
     expect(clock).toBeInTheDocument();
-    expect(await screen.findByRole("region", { name: "Epoch clock" })).toHaveTextContent("Current epoch: 5");
+    const region = await screen.findByRole("region", { name: "Epoch clock" });
+    expect(region).toHaveTextContent("Current epoch: 5");
+    expect(region).toHaveTextContent("Voting");
+    expect(region).toHaveTextContent("Ballots are accepted for the whole epoch.");
+  });
+
+  it("shows the trading phase of a 45 minute cycle with a countdown to when voting opens", async () => {
+    // Epoch 5 started 10 minutes ago, lasts 45 minutes: voting opens in 20 minutes.
+    clockSchedule.opensAt = NOW + 1200;
+    renderPanel();
+    const strip = await screen.findByRole("group", { name: "Epoch 5 phase" });
+    expect(within(strip).getByText("Trading")).toBeInTheDocument();
+    expect(within(strip).getByText("Ballots are not accepted yet.")).toBeInTheDocument();
+    expect(within(strip).getByRole("group", { name: "Voting opens in" })).toBeInTheDocument();
+    expect(strip).toHaveTextContent("of trading, then");
   });
 
   it("says so when no governor is configured", async () => {
@@ -164,7 +184,7 @@ describe("token board and ballot", () => {
     const list = await screen.findByRole("list", { name: "Tokens" });
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(2);
-    await waitFor(() => expect(rows[0]).toHaveTextContent("Open"));
+    await waitFor(() => expect(rows[0]).toHaveTextContent("Voting"));
     expect(rows[0]).toHaveTextContent("2 ballots cast");
     expect(rows[1]).toHaveTextContent("Not opened");
     // The open token's ballot is selected without a click.
@@ -281,6 +301,21 @@ describe("token board and ballot", () => {
     expect(screen.queryByRole("radiogroup")).toBeNull();
   });
 
+  it("keeps the vote button off with a clear reason until voting opens (VotingNotOpen), and shows Trading", async () => {
+    const opens = NOW + 1200;
+    clockSchedule.opensAt = opens;
+    epochs[T1] = openEpoch({ votingOpensAt: opens });
+    account.address = VOTER;
+    renderPanel();
+    const list = await screen.findByRole("list", { name: "Tokens" });
+    await waitFor(() => expect(within(list).getAllByRole("listitem")[0]).toHaveTextContent("Trading"));
+    expect(await screen.findByText(/Voting is not open yet\. Ballots are accepted from/)).toBeInTheDocument();
+    const vote = await screen.findByRole("button", { name: /Vote for|Choose a charity to vote/ });
+    expect(vote).toBeDisabled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(writeContractAsync).not.toHaveBeenCalled();
+  });
+
   it("explains that voting is closed while the tally is counted", async () => {
     epochs[T1] = openEpoch({ end: NOW - 10 });
     account.address = VOTER;
@@ -334,7 +369,7 @@ describe("history", () => {
     expect(table).toHaveTextContent("Harambe (HAR)");
     expect(table).toHaveTextContent("$2,500");
     await waitFor(() => expect(within(section).getByText("Donations to winners")).toBeInTheDocument());
-    expect(within(section).getByText("Causes by USDC received")).toBeInTheDocument();
+    expect(within(section).getByText("Causes by value received")).toBeInTheDocument();
     expect(indexer.activity).toHaveBeenCalledWith(expect.objectContaining({ kind: "epoch" }));
     expect(indexer.activity).toHaveBeenCalledWith(expect.objectContaining({ kind: "donation" }));
   });

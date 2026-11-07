@@ -43,6 +43,14 @@ export interface CuratorStatus {
   nextEpochStart: string;
   /** Until the next epoch starts, from the latest block's timestamp (negative once it has started). */
   secondsUntilNextEpoch: bigint;
+  /**
+   * Length of the next epoch in seconds (`epochScheduleFor(nextEpoch)`): the whole time a curation
+   * for it has before it starts is at most the current epoch's length, which an owner-set schedule
+   * can make as short as minutes. Null on a governor without the schedule getters.
+   */
+  nextEpochLengthSeconds: bigint | null;
+  /** `votingOpensAt(nextEpoch)`, ISO 8601 UTC: ballots of the next epoch are accepted from then (null: see above). */
+  nextEpochVotingOpensAt: string | null;
   /** `CauseCatalog.latestVersion()` (0: no catalogue yet) and its root (null for version 0). */
   catalogVersion: number;
   catalogRoot: Hex | null;
@@ -103,10 +111,13 @@ export async function curatorStatus(reader: ChainReader, registry: Address, agen
     reader.getBlock(),
   ]);
   const next = current + 1n;
-  const [start, root] = await Promise.all([
+  const [start, root, schedule, opensAt] = await Promise.all([
     read(governor, epochGovernorAbi, "epochStart", [next]) as Promise<bigint>,
     // rootOf reverts for version 0.
     version === 0 ? Promise.resolve(null) : (read(catalog, causeCatalogAbi, "rootOf", [version]) as Promise<Hex>),
+    // Informational: a governor without the schedule getters (deployed before them) reports null.
+    (read(governor, epochGovernorAbi, "epochScheduleFor", [next]) as Promise<readonly [bigint, bigint, bigint]>).catch(() => null),
+    (read(governor, epochGovernorAbi, "votingOpensAt", [next]) as Promise<bigint>).catch(() => null),
   ]);
 
   const registered = a.vault !== zeroAddress;
@@ -142,6 +153,8 @@ export async function curatorStatus(reader: ChainReader, registry: Address, agen
     nextEpoch: next,
     nextEpochStart: iso(start),
     secondsUntilNextEpoch: start - block.timestamp,
+    nextEpochLengthSeconds: schedule ? schedule[0] : null,
+    nextEpochVotingOpensAt: opensAt === null ? null : iso(opensAt),
     catalogVersion: Number(version),
     catalogRoot: root,
     agent: { ...a, registered },

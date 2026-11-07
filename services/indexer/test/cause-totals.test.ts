@@ -9,7 +9,6 @@ import type { Repo } from "../src/api/types";
 
 declare global {
   interface Response {
-    // biome-ignore lint/suspicious/noExplicitAny: test convenience for JSON bodies
     json(): Promise<any>;
   }
 }
@@ -33,27 +32,27 @@ const [food, rhino, shelter] = catalog.orgs.map((o) => o.causeId as Hex);
 const unknown = `0x${"ab".repeat(32)}` as Hex;
 
 const weekly: CauseTotalRow[] = [
-  { causeId: food!, donated: 5_000_000n, donations: 1, tokens: 1 },
-  { causeId: rhino!, donated: 2_000_000n, donations: 2, tokens: 1 },
+  { causeId: food!, donated: 5_000_000n, donatedEth: 0n, donations: 1, tokens: 1 },
+  { causeId: rhino!, donated: 2_000_000n, donatedEth: 0n, donations: 2, tokens: 1 },
 ];
 const live: CauseTotalRow[] = [
-  { causeId: food!.toUpperCase().replace("0X", "0x") as Hex, donated: 1_000_000n, donations: 4, tokens: 2 },
-  { causeId: shelter!, donated: 9_000_000n, donations: 3, tokens: 1 },
-  { causeId: unknown, donated: 1n, donations: 1, tokens: 1 },
+  { causeId: food!.toUpperCase().replace("0X", "0x") as Hex, donated: 1_000_000n, donatedEth: 0n, donations: 4, tokens: 2 },
+  { causeId: shelter!, donated: 9_000_000n, donatedEth: 0n, donations: 3, tokens: 1 },
+  { causeId: unknown, donated: 1n, donatedEth: 0n, donations: 1, tokens: 1 },
 ];
 
 describe("cause totals", () => {
   it("merges weekly and live gifts per cause, case-insensitively", () => {
     const m = mergeCauseTotals(weekly, live);
     expect(m).toHaveLength(4);
-    expect(m.find((r) => r.causeId === food)).toMatchObject({ donated: 6_000_000n, donations: 5, tokens: 3 });
+    expect(m.find((r) => r.causeId === food)).toMatchObject({ donated: 6_000_000n, donatedEth: 0n, donations: 5, tokens: 3 });
   });
 
   it("ranks by donated with a stable tie-break", () => {
     const ranked = rankCauseTotals([
-      { causeId: "0x02" as Hex, donated: 5n, donations: 1, tokens: 1 },
-      { causeId: "0x01" as Hex, donated: 5n, donations: 1, tokens: 1 },
-      { causeId: "0x03" as Hex, donated: 9n, donations: 1, tokens: 1 },
+      { causeId: "0x02" as Hex, donated: 5n, donatedEth: 0n, donations: 1, tokens: 1 },
+      { causeId: "0x01" as Hex, donated: 5n, donatedEth: 0n, donations: 1, tokens: 1 },
+      { causeId: "0x03" as Hex, donated: 9n, donatedEth: 0n, donations: 1, tokens: 1 },
     ]);
     expect(ranked.map((r) => r.causeId)).toEqual(["0x03", "0x01", "0x02"]);
   });
@@ -64,6 +63,40 @@ describe("cause totals", () => {
     expect(by.find((c) => c.slug === "hunger")).toMatchObject({ donated: 6_000_000n, causes: 1 });
     expect(by.find((c) => c.slug === "homelessness")).toMatchObject({ donated: 9_000_000n });
     expect(by.reduce((n, c) => n + c.causes, 0)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("ETH-donation tokens", () => {
+  const eth = (causeId: Hex, wei: bigint): CauseTotalRow => ({ causeId, donated: 0n, donatedEth: wei, donations: 1, tokens: 1 });
+  const oneEth = 10n ** 18n;
+
+  it("keeps USDC and ETH sums in separate columns", () => {
+    const m = mergeCauseTotals(weekly, [eth(food!, oneEth)]);
+    expect(m.find((r) => r.causeId === food)).toMatchObject({ donated: 5_000_000n, donatedEth: oneEth, donations: 2 });
+  });
+
+  it("ranks by USD at the reference price", () => {
+    // 1 ETH at 2,500 USD beats 2,000 USD in USDC and loses to 3,000.
+    const rows: CauseTotalRow[] = [
+      { causeId: "0x01" as Hex, donated: 2_000_000_000n, donatedEth: 0n, donations: 1, tokens: 1 },
+      eth("0x02" as Hex, oneEth),
+      { causeId: "0x03" as Hex, donated: 3_000_000_000n, donatedEth: 0n, donations: 1, tokens: 1 },
+    ];
+    expect(rankCauseTotals(rows, 2500).map((r) => r.causeId)).toEqual(["0x03", "0x02", "0x01"]);
+    expect(rankCauseTotals(rows, 4000).map((r) => r.causeId)).toEqual(["0x02", "0x03", "0x01"]);
+  });
+
+  it("exposes donatedEth on the leaderboard", async () => {
+    const app = createApi({
+      repo: {} as Repo,
+      search: { search: async () => [] },
+      config: readApiConfig({}),
+      causeTotals: { totals: async () => [eth(food!, oneEth)] },
+      ethUsdReference: 3000,
+    });
+    const r = await (await app.request("/api/causes/leaderboard")).json();
+    expect(r).toMatchObject({ ethDecimals: 18, ethUsdReference: 3000, totals: { donated: "0", donatedEth: oneEth.toString() } });
+    expect(r.items[0]).toMatchObject({ donated: "0", donatedEth: oneEth.toString() });
   });
 });
 

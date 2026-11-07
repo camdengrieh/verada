@@ -18,7 +18,7 @@ export const GLOSSARY = {
   },
   epoch: {
     term: "Epoch",
-    definition: "One voting round. Holders vote privately during the epoch; when it ends the tally is opened and the pool pays out to the winning cause.",
+    definition: "One round of the pool. Trading comes first, then holders vote privately in the epoch's final voting window; when it ends the tally is opened and the pool pays out to the winning cause.",
   },
   fhe: {
     term: "FHE",

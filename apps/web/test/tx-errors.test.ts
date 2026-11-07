@@ -1,4 +1,6 @@
+import { ChainNotConfiguredError, ConnectorChainMismatchError } from "wagmi";
 import { describe, expect, it } from "vitest";
+import { toFunctionSelector } from "viem";
 import { friendlyTxError, isUserRejection, isWrongChain, revertName } from "@/lib/tx-errors";
 import { txUrl } from "@/lib/explorer";
 
@@ -17,12 +19,29 @@ describe("friendlyTxError", () => {
     expect(friendlyTxError(e)).toMatch(/different network/);
   });
 
+  it("recognises wagmi's own wrong-chain errors", () => {
+    const mismatch = new ConnectorChainMismatchError({ connectionChainId: 137, connectorChainId: 1 });
+    expect(isWrongChain(mismatch)).toBe(true);
+    expect(friendlyTxError(mismatch)).toMatch(/different network/);
+    // Wrapped the way a hook rethrows it.
+    expect(isWrongChain(Object.assign(new Error("write failed"), { cause: mismatch }))).toBe(true);
+    expect(isWrongChain(new ChainNotConfiguredError())).toBe(true);
+    expect(isWrongChain(new Error("rpc down"))).toBe(false);
+  });
+
   it("maps insufficient funds and contract reverts", () => {
     expect(friendlyTxError(Object.assign(new Error("x"), { name: "InsufficientFundsError" }))).toMatch(/enough ETH/);
     const viemStyle = { shortMessage: "reverted", cause: { data: { errorName: "AlreadyVoted" } } };
     expect(revertName(viemStyle)).toBe("AlreadyVoted");
     expect(friendlyTxError(viemStyle)).toMatch(/already voted/);
     expect(friendlyTxError(new Error('The contract function "castBallot" reverted with the following signature: ZeroWeight()'))).toMatch(/none of this token/);
+  });
+
+  it("names a revert viem could not decode instead of showing the raw message", () => {
+    const e = new Error('The contract function "castBallot" reverted with the following signature:\n0xb9688461\n\nUnable to decode signature');
+    expect(friendlyTxError(e)).toBe("The contract rejected the transaction (error 0xb9688461). Nothing was spent beyond gas.");
+    // A known custom error still wins.
+    expect(friendlyTxError({ shortMessage: "reverted", message: "reverted with the following signature: 0xdeadbeef", cause: { data: { errorName: "ZeroWeight" } } })).toMatch(/none of this token/);
   });
 
   it("leaves unknown errors alone", () => {
@@ -38,5 +57,15 @@ describe("txUrl", () => {
     expect(txUrl(31337, h)).toBeUndefined();
     expect(txUrl(1, "0x12")).toBeUndefined();
     expect(txUrl(1, undefined)).toBeUndefined();
+  });
+});
+
+describe("VotingNotOpen", () => {
+  it("is named from the error data even though the scheme's ABI cannot decode it", () => {
+    const selector = toFunctionSelector("VotingNotOpen(uint256,uint256)");
+    const raw = `${selector}${"00".repeat(64)}`;
+    expect(revertName({ shortMessage: "reverted", cause: { signature: selector } })).toBe("VotingNotOpen");
+    expect(revertName({ cause: { raw } })).toBe("VotingNotOpen");
+    expect(friendlyTxError({ shortMessage: "reverted", cause: { data: { errorName: "VotingNotOpen" } } })).toMatch(/Voting is not open yet/);
   });
 });

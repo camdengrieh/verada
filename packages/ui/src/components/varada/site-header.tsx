@@ -217,7 +217,7 @@ function SearchField({
         }}
         placeholder={search.placeholder ?? "Search coins, causes, label.varada.eth or 0x…"}
         aria-keyshortcuts={showHint ? "/" : undefined}
-        className="min-h-10 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none"
+        className="min-h-11 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-muted focus-visible:outline-none"
       />
       {showHint ? (
         <kbd aria-hidden="true" className="num rounded-md border border-line px-1.5 py-0.5 text-xs text-ink-muted">

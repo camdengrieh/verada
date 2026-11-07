@@ -20,7 +20,7 @@ const KNOWN: { match: RegExp; help: LaunchErrorHelp }[] = [
   { match: /QuoteAssetNotAllowed/i, help: { text: "The quote registry no longer allows that pair. Go back to Pair and choose another asset." } },
   { match: /PoolTooSmall/i, help: { text: "The chosen causes and regions hold fewer than two organizations in the latest catalogue. Widen the focus." } },
   { match: /InactiveCause/i, help: { text: "The first charity is not active in the cause registry. Go back to Giving and choose another." } },
-  { match: /LiveModeNotConfigured/i, help: { text: "Live donation is not enabled on this factory yet. Choose the weekly pool." } },
+  { match: /LiveModeNotConfigured/i, help: { text: "Live donation is not enabled on this factory yet. Choose the epoch pool." } },
   { match: /LiquidityTooLarge|InvalidStartTick/i, help: { text: "The starting market cap is outside what the pool can hold. Go back to Pair and change it." } },
   { match: /InvalidFee|InvalidSniperFee/i, help: { text: "The factory rejected the fee settings. Go back to Fees and check them." } },
   { match: /insufficient funds/i, help: { text: "Your wallet does not hold enough ETH for the gas." } },

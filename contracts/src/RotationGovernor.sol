@@ -115,9 +115,9 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
     uint8 public constant OPTION_FOR = 1;
 
     uint256 internal constant BPS = 10_000;
-    uint32 internal constant MIN_VOTING_PERIOD = 1 hours;
+    uint32 internal constant MIN_VOTING_PERIOD = 5 minutes;
     uint32 internal constant MAX_VOTING_PERIOD = 7 days;
-    uint32 internal constant MIN_EXECUTION_WINDOW = 1 hours;
+    uint32 internal constant MIN_EXECUTION_WINDOW = 5 minutes;
     uint32 internal constant MAX_EXECUTION_WINDOW = 14 days;
     uint32 internal constant MAX_COOLDOWN = 30 days;
     uint16 internal constant MIN_QUORUM_BPS = 100;
@@ -294,7 +294,7 @@ contract RotationGovernor is IRotationGovernor, IBallotGovernor, Ownable2Step {
         address clock = ICuratorClock(address(curators_)).governor();
         if (clock == address(0)) revert CuratorClockNotSet();
         uint256 zero = IEpochGovernor(clock).epochZeroStart();
-        uint256 length = IEpochGovernor(clock).EPOCH_LENGTH();
+        uint256 length = IEpochGovernor(clock).epochLength();
         if (length == 0) revert CuratorClockNotSet();
         curators = curators_;
         ballotBuilder.setCurators(curators_, zero, length);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { CATEGORIES, REGIONS } from "@varada/sdk";
+import { CATEGORIES, REGIONS, rankByDepth } from "@varada/sdk";
 import { Button } from "@varada/ui/components/ui/button";
 import { Input, InputAddon, InputGroup } from "@varada/ui/components/ui/input";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@varada/ui/components/ui/select";
@@ -83,6 +83,13 @@ export function SearchBox({ value, onApply }: { value: string; onApply(v: string
   );
 }
 
+/** Crypto pairs first, then the tokenized assets deepest pool first (liquidity from the on-chain route to USDC). */
+export function pairOrder<T extends Pick<AppQuoteAsset, "kind" | "symbol" | "routeDepthUsd">>(assets: readonly T[]): T[] {
+  const crypto = rankByDepth(assets.filter((a) => isCryptoKind(a.kind)), (a) => a.routeDepthUsd, (a) => a.symbol);
+  const other = rankByDepth(assets.filter((a) => !isCryptoKind(a.kind)), (a) => a.routeDepthUsd, (a) => a.symbol);
+  return [...crypto, ...other];
+}
+
 /** Pair, cause, region and mode filters: selects from 768px, a bottom sheet on phones. */
 export function Filters({ state, assets, onChange }: FiltersProps) {
   const [open, setOpen] = useState(false);
@@ -92,7 +99,7 @@ export function Filters({ state, assets, onChange }: FiltersProps) {
 
   const groups: FilterGroup[] = useMemo(
     () => [
-      { id: "pair", label: "Pair", type: "single", options: [{ value: ALL, label: "Any pair" }, ...assets.map((a) => ({ value: a.symbol, label: a.symbol }))] },
+      { id: "pair", label: "Pair", type: "single", options: [{ value: ALL, label: "Any pair" }, ...pairOrder(assets).map((a) => ({ value: a.symbol, label: a.symbol }))] },
       { id: "cause", label: "Cause", type: "single", options: [{ value: ALL, label: "Any cause" }, ...CATEGORIES.map((c) => ({ value: c.slug, label: c.label }))] },
       { id: "region", label: "Region", type: "single", options: [{ value: ALL, label: "Anywhere" }, ...REGIONS.map((r) => ({ value: r.slug, label: r.label }))] },
       {
@@ -101,7 +108,7 @@ export function Filters({ state, assets, onChange }: FiltersProps) {
         type: "single",
         options: [
           { value: ALL, label: "Any" },
-          { value: "weekly", label: "Weekly pool" },
+          { value: "weekly", label: "Epoch pool" },
           { value: "live", label: "Live donation" },
         ],
       },
@@ -154,7 +161,7 @@ export function Filters({ state, assets, onChange }: FiltersProps) {
         </FilterSelect>
         <FilterSelect label="Giving mode" value={state.mode ?? ALL} onValueChange={(v) => onChange({ mode: v === "weekly" || v === "live" ? v : null })}>
           <SelectItem value={ALL}>Any giving mode</SelectItem>
-          <SelectItem value="weekly">Weekly pool</SelectItem>
+          <SelectItem value="weekly">Epoch pool</SelectItem>
           <SelectItem value="live">Live donation</SelectItem>
         </FilterSelect>
         {count > 0 ? (

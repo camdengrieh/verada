@@ -12,6 +12,7 @@ import {VaradaToken} from "../../src/VaradaToken.sol";
 import {ICauseCatalog} from "../../src/interfaces/ICauseCatalog.sol";
 import {ICauseRegistry} from "../../src/interfaces/ICauseRegistry.sol";
 import {IDonationDistributor} from "../../src/interfaces/IDonationDistributor.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 import {IEpochGovernor} from "../../src/interfaces/IEpochGovernor.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IEndaomentOrg} from "../../src/interfaces/external/IEndaomentOrg.sol";
@@ -186,7 +187,7 @@ contract EndaomentDonationForkTest is BallotLog {
         uint256 treasuryBefore = IERC20(USDC).balanceOf(eRegistry.treasury());
 
         vm.expectEmit(true, true, true, true);
-        emit IDonationDistributor.Donated(token, 0, causeDeployed, ORG_DEPLOYED_ADDR, amount);
+        emit IDonationDistributor.Donated(token, 0, causeDeployed, ORG_DEPLOYED_ADDR, amount, DonationAsset.Usdc, amount);
         dist.distribute(token, 0);
 
         uint256 orgDelta = IERC20(USDC).balanceOf(ORG_DEPLOYED_ADDR) - orgBefore;

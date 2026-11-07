@@ -6,6 +6,7 @@ import { createBallotPreparer, createRoundPreparer, type BallotReader, type Roun
 import type { ChainReader, ChainWriter, FactoryLogReader, RotationReader } from "../keeper/chain.js";
 import { createZamaDecryptor, type PublicDecryptor } from "../keeper/decrypt.js";
 import { createDonationPlanner } from "../keeper/donate.js";
+import { Backoff } from "../keeper/backoff.js";
 import { createKeeper, type KeeperDeps } from "../keeper/keeper.js";
 import { createTokenSource } from "../keeper/tokens.js";
 import { createViemChain } from "../keeper/viem-chain.js";
@@ -169,6 +170,10 @@ export function createTallyKeeperJob(deps: TallyKeeperDeps): Job | null {
     dryRun: k.dryRun,
     maxTxPerRun: k.maxTxPerRun,
     lookbackEpochs: k.lookbackEpochs,
+    intervalSeconds: Math.round(k.intervalMs / 1000),
+    // A failed step is retried after the run interval at the soonest (at most 5 minutes), so a short
+    // epoch cycle is not stalled by the default 5 minute base.
+    backoff: new Backoff({ baseMs: Math.min(5 * 60_000, k.intervalMs) }),
     activity: indexer?.activeTokens
       ? { activeTokens: (e, t) => indexer.activeTokens!(e, t), indexedAt: indexer.indexedAt ? () => indexer.indexedAt!() : undefined }
       : undefined,
@@ -183,6 +188,7 @@ export function createTallyKeeperJob(deps: TallyKeeperDeps): Job | null {
     dryRun: k.dryRun,
     maxTxPerRun: k.maxTxPerRun,
     lookbackEpochs: k.lookbackEpochs,
+    intervalSeconds: Math.round(k.intervalMs / 1000),
     idleEpochs: k.idleEpochs,
     rotationRounds: rotation ? (rotation.rounds ? "prepare, close, finalize" : "close, finalize") : "off",
     donations: donation ? "settle, distribute" : "off",

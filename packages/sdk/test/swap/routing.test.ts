@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ETH, NATIVE_CURRENCY, USDC, USDT, WETH, describeRoute, enumerateRoutes, estimateRoute, rankRoutes, poolHops, segmentRoute, varadaPoolKey, candidatePoolKeys, routingNodes, DEFAULT_FEE_TIERS, poolIdOf, type PoolState } from "../../src/index.js";
+import { ETH, NATIVE_CURRENCY, USDC, USDT, WETH, describeRoute, enumerateRoutes, estimateRoute, rankRoutes, poolHops, segmentRoute, varadaPoolKey, candidatePoolKeys, routingNodes, DEFAULT_FEE_TIERS, ONDO_FEE_TIERS, ONDO_TOKENS, poolIdOf, type PoolState } from "../../src/index.js";
 import { HOOK, OTHER, TOKEN, fakePool } from "./helpers.js";
 
 const weth = WETH.address;
@@ -97,6 +97,23 @@ describe("segments, labels and candidates", () => {
     const ids = new Set(keys.map(poolIdOf));
     expect(ids.has(poolIdOf(candidatePoolKeys([OTHER, TOKEN])[0]!))).toBe(false); // no satellite / satellite pool
     expect(candidatePoolKeys(nodes)).toHaveLength(6 * DEFAULT_FEE_TIERS.length); // without a core: every pair
+  });
+
+  it("searches the extra Ondo tiers only for pairs with an Ondo token", () => {
+    const ondo = ONDO_TOKENS.TSLAon.address;
+    const withOndo = candidatePoolKeys([USDC.address, ondo]);
+    expect(withOndo).toHaveLength(DEFAULT_FEE_TIERS.length + ONDO_FEE_TIERS.length);
+    expect(withOndo.some((k) => k.fee === 49_900 && k.tickSpacing === 499)).toBe(true);
+    expect(new Set(withOndo.map(poolIdOf)).size).toBe(withOndo.length);
+    const plain = candidatePoolKeys([USDC.address, weth]);
+    expect(plain).toHaveLength(DEFAULT_FEE_TIERS.length);
+    expect(plain.some((k) => k.fee === 49_900)).toBe(false);
+    expect(candidatePoolKeys([USDC.address, ondo], DEFAULT_FEE_TIERS, undefined, [])).toHaveLength(DEFAULT_FEE_TIERS.length);
+  });
+
+  it("does not repeat a tier the caller already lists", () => {
+    const keys = candidatePoolKeys([USDC.address, ONDO_TOKENS.TSLAon.address], [{ fee: 50_000, tickSpacing: 500 }]);
+    expect(keys).toHaveLength(ONDO_FEE_TIERS.length);
   });
 
   it("builds the Varada pool key used by the engine", () => {

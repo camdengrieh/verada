@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { envDefaults, type AppConfig } from "@/lib/config";
 import { IndexerClient } from "@/lib/indexer";
 import { tickPrice } from "@/lib/token-market";
@@ -168,6 +168,15 @@ const accountRead = vi.fn(async ({ functionName }: { functionName: string }) => 
 const account = { address: undefined as string | undefined };
 const writeContract = vi.fn(async (_args: unknown) => "0x01");
 
+// The fixtures' epoch runs 1700000000..1700604800 (a fixed week): pin the clock a day into it so the
+// epoch is in its voting phase, as the epoch panel gates ballots on the governor's schedule.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"], now: new Date((1_700_000_000 + 86_400) * 1000) });
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
+
 vi.mock("@/components/providers", () => ({
   useAppConfig: () => config,
   useDeps: () => ({ indexer, chain: () => ({ readContract: chainRead }) }),
@@ -188,10 +197,12 @@ vi.mock("@varada/ui/components/data/price-chart", async (importOriginal) => {
   };
 });
 vi.mock("@/lib/account-reads", () => ({ createAccountClient: (_rpc: unknown, address: string) => ({ address, readContract: accountRead }) }));
+// Receipts are read through viem (wagmi's action throws on a reverted receipt); use-receipt.test.tsx covers the real hook.
+vi.mock("@/hooks/use-receipt", () => ({ useReceipt: () => ({ revertReason: undefined, refetch: () => {}, data: undefined, error: null }) }));
 vi.mock("wagmi", () => ({
-  useAccount: () => ({ address: account.address }),
+  useAccount: () => ({ address: account.address, chainId: 1, isConnected: Boolean(account.address) }),
+  useSwitchChain: () => ({ switchChain: vi.fn(), isPending: false }),
   useWriteContract: () => ({ writeContractAsync: writeContract, data: undefined, isPending: false, error: null, reset: vi.fn() }),
-  useWaitForTransactionReceipt: () => ({ data: undefined, error: null }),
 }));
 
 // The swap engine has its own tests: here the ticket is a stand-in that shows what the page hands it.
@@ -208,7 +219,7 @@ vi.mock("@/components/swap", () => ({
   },
 }));
 vi.mock("@/hooks/use-swap-market", () => ({
-  usePoolMarket: () => ({ market: { tvlUsd: 123_456, tvlQuote: 50, quote: { symbol: "WETH" } }, quoteUsd: 2400, loading: false, error: null, refresh: vi.fn() }),
+  usePoolMarket: () => ({ market: { tvlUsd: 9_000_000, tvlQuote: 3750, depthUsd: 123_456, depthQuote: 50, quote: { symbol: "WETH" } }, quoteUsd: 2400, loading: false, error: null, refresh: vi.fn() }),
   useUsdPrices: () => ({ data: new Map() }),
 }));
 const viewport = { wide: true };
@@ -234,7 +245,8 @@ function wrap(node: ReactNode) {
 }
 
 const openTab = (name: string) => fireEvent.mouseDown(screen.getByRole("tab", { name }));
-const heading = () => screen.findByRole("heading", { level: 1 });
+/** The token's own h1: the loading skeleton carries a placeholder h1 until the token is in. */
+const heading = () => screen.findByRole("heading", { level: 1, name: (n) => !/^(Loading token|Resolving )/.test(n) });
 
 describe("token page", () => {
   beforeEach(() => {
@@ -261,8 +273,8 @@ describe("token page", () => {
     // Focus: hunger in Africa, fixed at launch.
     expect(screen.getAllByText(/Hunger/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/Africa/).length).toBeGreaterThan(0);
-    // Weekly pool, the pool's quote asset from the market.
-    expect(screen.getAllByText(/Weekly pool/i).length).toBeGreaterThan(0);
+    // Epoch pool, the pool's quote asset from the market.
+    expect(screen.getAllByText(/Epoch pool/i).length).toBeGreaterThan(0);
     await waitFor(() => expect(screen.getAllByText(/WETH/).length).toBeGreaterThan(0));
   });
 
@@ -539,6 +551,24 @@ describe("token page", () => {
     expect(screen.queryByRole("tab", { name: "Manage" })).toBeNull();
   });
 
+  it("lists live gifts and trades on the Activity tab, naming the cause", async () => {
+    account.address = undefined;
+    fixtures["/api/catalog/causes"] = { items: [{ orgId: `0x${"b1".repeat(32)}`, causeId: CAUSE_B, ein: "100000002", name: "Beta Trust", country: "KEN", categories: ["hunger"], regions: ["africa"] }] };
+    fixtures["/api/activity"] = {
+      items: [
+        { id: "live_donation:l1", kind: "live_donation", token: TOKEN, timestamp: String(HOUR), txHash: `0x${"d2".repeat(32)}`, data: { causeId: CAUSE_B, org: "0x00000000000000000000000000000000000000a1", amount: "2500000", inSwap: true } },
+        { id: "trade:t1", kind: "trade", token: TOKEN, timestamp: String(HOUR - 60), txHash: `0x${"d3".repeat(32)}`, data: { side: "buy", trader: TRADER, quote: WETH, quoteAmount: "5000000000000000" } },
+      ],
+      nextCursor: null,
+    };
+    wrap(<TokenDetail />);
+    await heading();
+    openTab("Activity");
+    const list = await screen.findByRole("list", { name: "Activity" });
+    expect(await within(list).findByText("Donated to Beta Trust")).toBeInTheDocument();
+    expect(within(list).getByText("Bought $MCAT")).toBeInTheDocument();
+  });
+
   it("shows the manage tab to the controller: edit profile and pinned causes", async () => {
     account.address = CONTROLLER.toLowerCase();
     wrap(<TokenDetail />);
@@ -550,6 +580,9 @@ describe("token page", () => {
     const pinned = screen.getByRole("region", { name: "Pinned causes" });
     await waitFor(() => expect(within(pinned).getByRole("button", { name: "Unpin Alpha Fund" })).toBeInTheDocument());
     expect(within(pinned).getByRole("button", { name: "Unpin Beta Trust" })).toBeInTheDocument();
+    expect(within(pinned).getByRole("progressbar", { name: "Pinned" })).toHaveAttribute("aria-valuenow", "2");
+    expect(pinned).toHaveTextContent("2 of 8");
+    expect(pinned).toHaveTextContent("at most 32");
   });
 
   it("lets the controller choose the ballot size, with the gas hint", async () => {
@@ -595,7 +628,7 @@ describe("token page", () => {
     const curated = await screen.findByRole("region", { name: "Curated by" });
     const card = await within(curated).findByRole("region", { name: "hunger.agent.varada.eth" });
     // Relative: the same build is served from many hosts and under /bzz/<hash>/.
-    expect(within(card).getByRole("link", { name: "Read the weekly report" })).toHaveAttribute("href", "./agent/hunger/");
+    expect(within(card).getByRole("link", { name: "Read the weekly report" })).toHaveAttribute("href", "/agent/hunger/");
     expect(within(card)).toBeDefined();
     expect(card).toHaveTextContent("Paused");
     expect(within(curated).queryByText(/homeless\.agent/)).toBeNull();

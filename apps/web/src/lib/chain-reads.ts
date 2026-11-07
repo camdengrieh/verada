@@ -1,7 +1,7 @@
 /** Direct chain reads (viem), used when every indexer URL is unreachable. */
 import { createPublicClient, getAbiItem, zeroAddress, type Address, type Hex, type PublicClient } from "viem";
 import { mainnet } from "viem/chains";
-import { categorySlugs, causeIdOfOrg, effectiveBallotSize, getTokenAddressByLabel, getTokenTextRecord, isValidLabel, regionSlugs, TOKEN_TEXT_KEYS, tokenLabelhash } from "@varada/sdk";
+import { categorySlugs, causeIdOfOrg, effectiveBallotSize, getTokenAddressByLabel, getTokenTextRecord, isValidLabel, readEpochWindow, regionSlugs, TOKEN_TEXT_KEYS, tokenLabelhash } from "@varada/sdk";
 import {
   epochGovernorAbi,
   feeVaultAbi,
@@ -231,12 +231,13 @@ export async function chainEpochDetail(client: PublicClient, cfg: AppConfig, tok
   const governor = cfg.governorAddress;
   if (!governor) throw new Error("Governor address not configured");
   const g = { address: governor, abi: epochGovernorAbi } as const;
-  const [opened, closed, finalized, snapshot, start, voterCount, prepared, pool] = await Promise.all([
+  // Boundaries come from the governor's schedule (a segment list), never `start + 7 days`.
+  const [opened, closed, finalized, snapshot, window, voterCount, prepared, pool] = await Promise.all([
     client.readContract({ ...g, functionName: "isOpened", args: [token, epoch] }),
     client.readContract({ ...g, functionName: "isClosed", args: [token, epoch] }),
     client.readContract({ ...g, functionName: "isFinalized", args: [token, epoch] }),
     client.readContract({ ...g, functionName: "snapshotFor", args: [token, epoch] }),
-    client.readContract({ ...g, functionName: "epochStart", args: [epoch] }),
+    readEpochWindow(client, governor, epoch),
     client.readContract({ ...g, functionName: "voterCount", args: [token, epoch] }),
     client.readContract({ ...g, functionName: "isPrepared", args: [token, epoch] }),
     client.readContract({ ...g, functionName: "poolOf", args: [token, epoch] }),
@@ -246,7 +247,7 @@ export async function chainEpochDetail(client: PublicClient, cfg: AppConfig, tok
   let ballotUnavailable = false;
   if (prepared) {
     try {
-      options = await chainEpochOptions(client, cfg, token, epoch, start);
+      options = await chainEpochOptions(client, cfg, token, epoch, window.start);
     } catch {
       ballotUnavailable = true;
     }
@@ -277,8 +278,12 @@ export async function chainEpochDetail(client: PublicClient, cfg: AppConfig, tok
     options: [...options],
     poll,
     voterCount: Number(voterCount),
-    start: Number(start),
-    end: Number(start) + 604_800,
+    start: Number(window.start),
+    end: Number(window.end),
+    votingOpensAt: Number(window.votingOpensAt),
+    length: Number(window.length),
+    votingWindow: Number(window.votingWindow),
+    holdWindow: Number(window.holdWindow),
     snapshot: Number(snapshot),
     closed,
     finalized,

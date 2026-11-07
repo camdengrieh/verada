@@ -24,6 +24,7 @@ import {IEnsV2Registry, IUniversalResolver} from "../../src/interfaces/external/
 import {ContenthashLib} from "../../src/libraries/ContenthashLib.sol";
 import {DnsNameLib} from "../../src/libraries/DnsNameLib.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
+import {DonationAsset} from "src/interfaces/IDonationAsset.sol";
 
 /// @notice Mainnet-fork test of ENS resolution end to end: deploy with the real script, point
 ///         `varada.eth` (registered on ENSv2 by its real owner) at the Varada resolver, launch a
@@ -48,7 +49,7 @@ contract EnsResolutionForkTest is Test, Deploy {
     address internal tokenAddr;
     bytes32 internal tokenNode;
 
-    function setUp() public {
+    function setUp() public virtual {
         string memory rpc = vm.envOr("ETH_RPC_URL", string(""));
         if (bytes(rpc).length == 0) vm.skip(true);
         vm.createSelectFork(rpc);
@@ -99,7 +100,8 @@ contract EnsResolutionForkTest is Test, Deploy {
             label: "pepe",
             logoRef: bytes32(uint256(0xabc)),
             categoryMask: CatalogPublish.CATEGORIES,
-            regionMask: CatalogPublish.REGIONS
+            regionMask: CatalogPublish.REGIONS,
+            donationAsset: DonationAsset.Usdc
         });
         vm.prank(creator);
         (tokenAddr,) = VaradaFactory(d.factory).deployToken(p);

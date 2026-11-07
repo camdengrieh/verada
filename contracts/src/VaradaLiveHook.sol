@@ -17,6 +17,7 @@ import {IConsolidatorRegistry} from "./FeeConsolidator.sol";
 import {PoolInitGateHook} from "./hooks/access/PoolInitGateHook.sol";
 import {BaseHook} from "./hooks/base/BaseHook.sol";
 import {FeeConversionHook} from "./hooks/conversion/FeeConversionHook.sol";
+import {DonationAsset} from "./interfaces/IDonationAsset.sol";
 import {IFeeConsolidator} from "./interfaces/IFeeConsolidator.sol";
 import {ILiveDonationVault} from "./interfaces/ILiveDonationVault.sol";
 import {IRotationGovernor} from "./interfaces/IRotationGovernor.sol";
@@ -261,7 +262,7 @@ contract VaradaLiveHook is PoolInitGateHook, FeeConversionHook {
         address quote = _quoteOf(key, token);
         if (
             quote == usdc || !quoteRegistry.isAllowed(quote)
-                || quoteRegistry.routeOf(quote).length == 0
+                || !quoteRegistry.hasRouteTo(quote, _vault.donationAssetOf(token))
         ) revert IVaradaLiveHook.QuoteNotRoutable(quote);
         if (!_vault.isRegistered(token)) revert IVaradaLiveHook.TokenNotRegistered(token);
     }
@@ -379,7 +380,9 @@ contract VaradaLiveHook is PoolInitGateHook, FeeConversionHook {
             _convertOrHold(_bucketOf(token, causeId), Currency.wrap(quote), f);
         // A held fee was reported by `_onFeeHeld`.
         if (converted) {
-            emit IVaradaLiveHook.FeeTaken(token, causeId, rotation, quote, f, out, true, bytes4(0));
+            emit IVaradaLiveHook.FeeTaken(
+                token, causeId, rotation, quote, f, out, true, bytes4(0), _vault.donationAssetOf(token)
+            );
         }
         _clearCtx();
     }
@@ -392,8 +395,13 @@ contract VaradaLiveHook is PoolInitGateHook, FeeConversionHook {
         override
         returns (uint256)
     {
-        return consolidator.convertClaims(
-            Currency.unwrap(currency), amount, address(_vault), inSwap
+        (address token,,) = _ctx();
+        return consolidator.convertClaimsTo(
+            Currency.unwrap(currency),
+            amount,
+            address(_vault),
+            inSwap,
+            _vault.donationAssetOf(token)
         );
     }
 
@@ -429,7 +437,15 @@ contract VaradaLiveHook is PoolInitGateHook, FeeConversionHook {
     {
         (address token, bytes32 causeId, uint64 rotation) = _ctx();
         emit IVaradaLiveHook.FeeTaken(
-            token, causeId, rotation, Currency.unwrap(currency), amount, 0, false, reason
+            token,
+            causeId,
+            rotation,
+            Currency.unwrap(currency),
+            amount,
+            0,
+            false,
+            reason,
+            _vault.donationAssetOf(token)
         );
     }
 

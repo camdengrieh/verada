@@ -9,12 +9,14 @@ import { toFeedItem, toTickerItem, type ActivityContext } from "@/lib/activity";
 import type { ActivityItem, Stats } from "@/lib/indexer";
 import { platformTotals } from "@/lib/platform-stats";
 import { findQuote, type AppQuoteAsset } from "@/lib/quote-assets";
+import { useUsdQuotes } from "@/hooks/use-usd-quotes";
 import { useCauseLookup, useNow, useRel, useTokenSymbols, type LiveActivity } from "./hooks";
 
 /** Lookups the ticker and feed need, built from the activity itself. */
-function useActivityContext(items: readonly ActivityItem[], assets: readonly AppQuoteAsset[], nowSeconds: number): ActivityContext {
+export function useActivityContext(items: readonly ActivityItem[], assets: readonly AppQuoteAsset[], nowSeconds: number): ActivityContext {
+  const { quoteFor } = useUsdQuotes();
   const symbols = useTokenSymbols(useMemo(() => items.map((i) => i.token), [items]));
-  const causeOf = useCauseLookup(useMemo(() => items.filter((i) => i.kind === "donation").map((i) => (typeof i.data.causeId === "string" ? i.data.causeId : undefined)), [items]));
+  const causeOf = useCauseLookup(useMemo(() => items.filter((i) => i.kind === "donation" || i.kind === "live_donation").map((i) => (typeof i.data.causeId === "string" ? i.data.causeId : undefined)), [items]));
   return useMemo(
     () => ({
       symbolOf: (t) => (t ? symbols.get(t.toLowerCase()) || undefined : undefined),
@@ -22,10 +24,11 @@ function useActivityContext(items: readonly ActivityItem[], assets: readonly App
         const q = a ? findQuote(assets, a) : undefined;
         return q ? { symbol: q.symbol, decimals: q.decimals } : undefined;
       },
+      usdOf: (a) => (a ? quoteFor(a) : undefined),
       causeOf,
       nowSeconds,
     }),
-    [symbols, assets, causeOf, nowSeconds],
+    [symbols, assets, causeOf, nowSeconds, quoteFor],
   );
 }
 
@@ -89,7 +92,7 @@ export function LiveGiving({ live, stats, statsLoading, assets }: { live: LiveAc
           announce
           emptyText="No donations yet. The first one lands here the moment it settles."
           footer={
-            <a href={rel("governance/")} className="text-sm font-semibold text-sage-ink underline-offset-4 hover:underline">
+            <a href={rel("governance/")} className="inline-flex min-h-11 items-center text-sm font-semibold text-sage-ink underline-offset-4 hover:underline">
               See how causes are chosen
             </a>
           }

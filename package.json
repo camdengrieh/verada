@@ -8,6 +8,9 @@
     "test:contracts": "cd contracts && forge test",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "dev:up": "node tools/dev/up.mjs",
+    "dev:down": "node tools/dev/down.mjs",
+    "test:tools": "node --test tools/dev"
   }
 }

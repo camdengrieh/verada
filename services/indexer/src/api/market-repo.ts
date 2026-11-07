@@ -10,6 +10,10 @@ const { token, holder, holderStat, holderDay, tokenMarket, quoteAsset, trade, tr
 
 const collated = (expr: unknown) => sql`${expr} COLLATE "C"`;
 const lower = (a: string) => a.toLowerCase() as Hex;
+const HOUR = 3_600n;
+const DAY = 86_400n;
+/** `v` rounded down to a multiple of `unit` (never below 0). */
+const floorTo = (v: bigint, unit: bigint) => (v <= 0n ? 0n : v - (v % unit));
 
 /** `platform` lists contracts labelled "vault" for every token (fee vault, consolidator…). */
 export function createMarketRepo(platform: readonly string[] = []): MarketRepo {
@@ -22,14 +26,34 @@ export function createMarketRepo(platform: readonly string[] = []): MarketRepo {
       return { quote: m.quote, quoteDecimals: q?.decimals ?? null, tokenIsCurrency0: m.tokenIsCurrency0 };
     },
     async trades(t, q) {
-      const cursor = q.before
-        ? or(lt(trade.timestamp, q.before.t), and(eq(trade.timestamp, q.before.t), sql`${collated(trade.id)} < ${q.before.k}`))
-        : undefined;
+      // Chain order within a timestamp is (block, log index); the id (`<tx>-<logIndex>`) sorts "10"
+      // before "9", so it only breaks ties after those. The cursor carries (timestamp, id); the
+      // block and log index of its row come from the table. A cursor whose row is gone (a reorg)
+      // falls back to comparing ids within the timestamp.
+      let cursor: ReturnType<typeof or> | undefined;
+      if (q.before) {
+        const { t: ts, k } = q.before;
+        const [c] = await db
+          .select({ blockNumber: trade.blockNumber, logIndex: trade.logIndex })
+          .from(trade)
+          .where(and(eq(trade.token, t), eq(trade.id, k)))
+          .limit(1);
+        const sameTs = c
+          ? or(
+              lt(trade.blockNumber, c.blockNumber),
+              and(
+                eq(trade.blockNumber, c.blockNumber),
+                or(lt(trade.logIndex, c.logIndex), and(eq(trade.logIndex, c.logIndex), sql`${collated(trade.id)} < ${k}`)),
+              ),
+            )
+          : sql`${collated(trade.id)} < ${k}`;
+        cursor = or(lt(trade.timestamp, ts), and(eq(trade.timestamp, ts), sameTs));
+      }
       return db
         .select()
         .from(trade)
         .where(and(eq(trade.token, t), q.side ? eq(trade.side, q.side) : undefined, cursor))
-        .orderBy(desc(trade.timestamp), desc(collated(trade.id)))
+        .orderBy(desc(trade.timestamp), desc(trade.blockNumber), desc(trade.logIndex), desc(collated(trade.id)))
         .limit(q.limit);
     },
     async holderStat(t) {
@@ -45,7 +69,9 @@ export function createMarketRepo(platform: readonly string[] = []): MarketRepo {
         .limit(limit);
     },
     async buckets(t, supply, exclude) {
-      const floors = HOLDER_BUCKETS.map((b) => (b.divisor === null ? 0n : supply / b.divisor));
+      // A balance is in a band when balance * divisor >= supply, i.e. balance >= ceil(supply / divisor).
+      // Rounding the floor down instead would admit balances just under the share on small supplies.
+      const floors = HOLDER_BUCKETS.map((b) => (b.divisor === null ? 0n : (supply + b.divisor - 1n) / b.divisor));
       // Band index of each balance: the first floor it reaches. The floors are inlined (they are
       // bigints computed here) so the SELECT and GROUP BY expressions match exactly.
       const band = sql<number>`CASE ${sql.join(
@@ -77,14 +103,31 @@ export function createMarketRepo(platform: readonly string[] = []): MarketRepo {
       return Number(r?.n ?? 0);
     },
     async holderDays(t, since) {
-      return db
+      // The day that contains `since` is part of the window, and a quiet stretch carries the last
+      // count from before it, so the history never starts at 0 or goes missing.
+      const from = floorTo(since, DAY);
+      const rows: { day: bigint; holders: number }[] = await db
         .select({ day: holderDay.day, holders: holderDay.holders })
         .from(holderDay)
-        .where(and(eq(holderDay.token, t), gte(holderDay.day, since)))
+        .where(and(eq(holderDay.token, t), gte(holderDay.day, from)))
         .orderBy(holderDay.day);
+      if (rows[0]?.day !== from) {
+        const [prev] = await db
+          .select({ holders: holderDay.holders })
+          .from(holderDay)
+          .where(and(eq(holderDay.token, t), lt(holderDay.day, from)))
+          .orderBy(desc(holderDay.day))
+          .limit(1);
+        if (prev) rows.unshift({ day: from, holders: prev.holders });
+      }
+      return rows;
     },
     async hours(t, since) {
-      return db.select().from(tradeHour).where(and(eq(tradeHour.token, t), gte(tradeHour.hour, since))).orderBy(tradeHour.hour);
+      return db
+        .select()
+        .from(tradeHour)
+        .where(and(eq(tradeHour.token, t), gte(tradeHour.hour, floorTo(since, HOUR))))
+        .orderBy(tradeHour.hour);
     },
     async tradeStat(t) {
       const [s] = await db.select().from(tradeStat).where(eq(tradeStat.token, t)).limit(1);
