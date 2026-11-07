@@ -81,7 +81,7 @@ describe("CausesExplorer", () => {
     await waitFor(() => expect(within(section).getByText("Soup Coin")).toBeInTheDocument());
     expect(within(section).queryByText("Open Coin")).not.toBeInTheDocument();
     expect(within(section).queryByText("Shelter Coin")).not.toBeInTheDocument();
-    expect(within(section).getByRole("link", { name: "Every coin for hunger & famine on Discover" })).toHaveAttribute("href", "./?tab=cause&category=hunger");
+    expect(within(section).getByRole("link", { name: "Every coin for hunger & famine on Discover" })).toHaveAttribute("href", "/?tab=cause&category=hunger");
     const discover = fetchMock.mock.calls.map(([u]) => new URL(u as string)).find((u) => u.pathname === "/api/discover")!;
     expect(discover.searchParams.get("categories")).toBe("hunger");
   });

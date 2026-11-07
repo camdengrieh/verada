@@ -12,6 +12,7 @@ import {ContenthashLib} from "../../src/libraries/ContenthashLib.sol";
 import {DnsNameLib} from "../../src/libraries/DnsNameLib.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
 import {EnsResolutionForkTest} from "./EnsResolution.t.sol";
+import {DonationAsset} from "../../src/interfaces/IDonationAsset.sol";
 
 interface IUniversalResolverFind {
     function findResolver(bytes calldata name) external view returns (address, bytes32, uint256);
@@ -103,7 +104,8 @@ contract VaradaNamesV2ForkTest is EnsResolutionForkTest {
                 label: labels[i],
                 logoRef: bytes32(0),
                 categoryMask: CatalogPublish.CATEGORIES,
-                regionMask: CatalogPublish.REGIONS
+                regionMask: CatalogPublish.REGIONS,
+                donationAsset: DonationAsset.Usdc
             });
             vm.prank(creator);
             vm.expectRevert(

@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useAccount } from "wagmi";
 import { getAddress, isAddress, zeroAddress, type Address } from "viem";
 import { agentVaultAbi, curatorRegistryAbi } from "@varada/sdk/abis";
@@ -149,10 +149,12 @@ export function SplitDonate({ targets, credit, invalid }: { targets: readonly Sp
       : { kind: "donation", description: step ? `${usdcText(step.target.amount)} to ${step.target.name}` : undefined, confetti: plan && done === plan.steps.length - 1 ? "donation" : false },
   );
 
-  // A confirmed receipt for the step just sent moves the plan on.
+  // A confirmed receipt for the step just sent moves the plan on. A layout effect, so the step
+  // changes in the same commit as the receipt render: the receipt arrives asynchronously, and a
+  // click on the old step's button in between would resend it.
   const handled = useRef<string | undefined>(undefined);
   const { refetch: refetchFunds } = funds;
-  useEffect(() => {
+  useLayoutEffect(() => {
     const r = tx.receipt;
     if (!r || r.status !== "success" || r.transactionHash !== sentHash || handled.current === sentHash) return;
     handled.current = sentHash;
