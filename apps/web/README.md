@@ -121,7 +121,7 @@ Also accepted: `walletConnectProjectId` and `privateRpc` (`network`, `rpcUrls`, 
 | `profileRegistryAddress` | `PROFILE_REGISTRY_ADDRESS` | `TokenProfileRegistry`: label availability, profile fallback reads, profile edits |
 | `votingSchemeAddress` | `VOTING_SCHEME_ADDRESS` | `ZamaVotingScheme`: ballots are sent here (an opened poll's own scheme wins) |
 | `takeoverGovernorAddress` | `TAKEOVER_GOVERNOR_ADDRESS` | `TakeoverGovernor`: the takeover panel |
-| `donationDistributorAddress` | `DONATION_DISTRIBUTOR_ADDRESS` | `DonationDistributor`: with `vaultAddress` (the `FeeVault`) and `governorAddress`, the token page's "Send this week's donation" card; hidden when any is unset |
+| `donationDistributorAddress` | `DONATION_DISTRIBUTOR_ADDRESS` | `DonationDistributor`: with `vaultAddress` (the `FeeVault`) and `governorAddress`, the token page's "Send this epoch's donation" card; hidden when any is unset |
 | `zamaRelayerUrl` | `ZAMA_RELAYER_URL` | Optional relayer override; otherwise the SDK's preset for the chain |
 | (build time only) | `DEV_PLAIN_BALLOTS` | `true` sends plaintext ballots to the mock scheme. Development only; `config.json` cannot set it |
 
@@ -155,7 +155,7 @@ ships a local-development default (indexer on 42069, publisher on 42070).
 
 ## Launch flow
 
-`/launch/` is a six-step wizard (`components/launch/`, step rules in `lib/launch-steps.ts`): Identity, Giving (weekly pool, or live donation with a rotation period, a nonzero USDC donation threshold and a first charity that is active in the cause registry), Pair (quote registry allowlist; the start market cap is typed in quote units and becomes the factory's `startTick`, a multiple of 200), Causes (focus of at least two eligible catalogue entries), Fees and Review (gas estimate through the wagmi client, i.e. the private RPC). The numbered list below describes the calls it makes.
+`/launch/` is a six-step wizard (`components/launch/`, step rules in `lib/launch-steps.ts`): Identity, Giving (epoch pool, or live donation with a rotation period, a nonzero USDC donation threshold and a first charity that is active in the cause registry), Pair (quote registry allowlist; the start market cap is typed in quote units and becomes the factory's `startTick`, a multiple of 200), Causes (focus of at least two eligible catalogue entries), Fees and Review (gas estimate through the wagmi client, i.e. the private RPC). The numbered list below describes the calls it makes.
 
 1. Logo: the file input posts the image to `{publisherUrl}/uploads/logo` (multipart field `file`,
    PNG/JPEG/WebP, 2 MiB at most; the form prechecks size and type). The preview is a local object URL.

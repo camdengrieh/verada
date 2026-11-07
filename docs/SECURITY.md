@@ -59,7 +59,7 @@ that means. It does not claim more than the rest of this page shows.
 | Hard ceilings on tunable parameters | `FeeConsolidator.MAX_SLIPPAGE_CEILING_BPS` (2000) and `MAX_HOP_FEE_BPS` (1000); `VaradaFactory.MAX_FEE_BPS` (500); `LiveDonationVault.MAX_DONATION_THRESHOLD` | Caps bound a setting, not a logic bug. |
 | Price guards that fail closed | `FeeConsolidator._hop`: deviation from a reference or TWAP and a minimum output on every hop; tighter in-swap bounds | A bad reference seeded by the owner is still trusted. |
 | Held-fee retry | A failed conversion keeps the raw amount, emits `ConsolidationFailed` or `FeeTaken(converted = false)`, and anyone can call `retry`, `retryAmount` or `VaradaLiveHook.retryHeld` | Fees may stay held for a long time if a route stays broken. |
-| Settlement grace | `FeeVault.settle` waits up to `SETTLE_GRACE` (7 days) for outstanding fees, then pays what is there | Late fees roll into a later epoch. |
+| Settlement grace | `FeeVault.settle` waits up to `settleGrace` (owner-set, 7 days by default) for outstanding fees, then pays what is there | Late fees roll into a later epoch. |
 | No owner custody of donations | `LiveDonationVault`: the owner can only call `setHook` once; no pause, redirect or arbitrary rescue; `skim` pays only the platform treasury and never owed USDC. `FeeVault.withdrawPlatform` pays only the treasury | `FeeConsolidator.rescueExcess` lets the owner send balances **not owed to any token** (dust, accidental transfers) to any address. |
 | Two-step ownership | `Ownable2Step` on admin contracts such as `FeeConsolidator` and `QuoteRegistry`; hand-over to a multisig ([DEPLOYMENT.md](DEPLOYMENT.md)) | A multisig is operational, not enforced by the code. |
 | Stoppable automation | The keeper and curator agents are separate processes and can be stopped; `AgentVault.setPaused(true)` stops gifts and `setActive(false)` stops an agent ([agents/README.md](../agents/README.md)) | **The consolidator, fee vaults and hooks have no pause switch.** Stopping the keeper does not stop fee conversion, which is permissionless. |
@@ -133,8 +133,8 @@ All 14 findings are fixed.
 | The first ballot freezes the shortlist as it stands in that block | Fixed (`154bd93`, `7ac5ffe`): pin changes after preparation apply from the next epoch |
 | A buyer holds tokens across the epoch boundary for one block | Fixed in review 3 (`d59dd91`) |
 | The epoch snapshot time is known a week ahead | Fixed in review 3 (`d59dd91`) |
-| An epoch with ballots cannot finalize without a decrypted tally | Fixed (`7ac5ffe`): falls back to the default cause after `TALLY_GRACE` (14 days) |
-| A removed governor cannot close the polls it opened | Fixed (`7ac5ffe`): `closeEpoch` uses try/catch, then the `TALLY_GRACE` fallback |
+| An epoch with ballots cannot finalize without a decrypted tally | Fixed (`7ac5ffe`): falls back to the default cause after `tallyGrace` (14 days by default; since owner-set, see `docs/TIMING.md`) |
+| A removed governor cannot close the polls it opened | Fixed (`7ac5ffe`): `closeEpoch` uses try/catch, then the `tallyGrace` fallback |
 | Canceled takeover proposals start the full cooldown for everyone | Fixed (`7ac5ffe`): the cooldown is per proposer, from cancel time |
 | Dust hops at a pushed price drag the reference | Fixed, bounded (`8c3ab49`): the anchor is rate-limited |
 | `setMaxDeviationTicks` does not rescale `maxDriftTicks` | Fixed (`8c3ab49`) |

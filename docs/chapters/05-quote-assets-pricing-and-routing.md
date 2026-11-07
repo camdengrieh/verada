@@ -226,7 +226,7 @@ token, no liquidity, a price guard) the raw amount stays held, `ConsolidationFai
 call `retry(token, currency)`, or `retryAmount` for a balance too large for the pool. `FeeVault.settle(token,
 epoch)` first brings the epoch's fees in: it calls `collectFees` if the last collection is older than the epoch
 end, then `FeeConsolidator.flushThrough(token, epoch)`. If something earned in that epoch is still outside the
-vault, `settle` reverts `FeesPending` until `SETTLE_GRACE` (7 days) after the epoch end, then pays what is
+vault, `settle` reverts `FeesPending` until `settleGrace` (owner-set, 7 days by default) after the epoch end, then pays what is
 there. The USDC goes to the `DonationDistributor` once per epoch.
 
 **How v3 hops affect it (Design).** Weekly conversion is not inside a trader's swap, so it is the safer place
@@ -292,7 +292,7 @@ The liquidity survey (depth of each candidate quote asset against USDC and WETH 
 - **Owner trust.** The owner chooses listed assets and routes and seeds references. A wrong route, or a
   reference seeded at a manipulated price, can convert at a bad price inside the guards. A multisig and
   two-step ownership reduce this; they do not remove it.
-- **Thin RWA pools.** Fees can stay held for a long time. Weekly `settle` waits up to `SETTLE_GRACE` (7 days)
+- **Thin RWA pools.** Fees can stay held for a long time. `settle` waits up to `settleGrace` (7 days by default)
   and then pays what it has.
 - **Ondo token risk.** Pauses, blocklists and compliance checks are Ondo's. A paused or blocked path holds
   fees. Tokens with no feed have no second price source.

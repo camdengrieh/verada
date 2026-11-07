@@ -227,8 +227,9 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
   pages the owner. The web app's button runs the same plan and, with picks missing, sends nothing
   and explains the wait.
 - Voting weight is the holder's lowest vote checkpoint over a hold window ending one second
-  before the epoch start (`snapshotFor`), counted in whole tokens. The window is one epoch
-  (`HOLD_WINDOW`, 7 days, the same rule as a weekly rotation), so it is exactly the previous
+  before the epoch start (`snapshotFor`), counted in whole tokens. The window is the epoch's
+  `holdWindow` (owner-set per schedule segment, `epochScheduleFor`; one epoch, 7 days, by default,
+  the same rule as a weekly rotation), so by default it is exactly the previous
   epoch: tokens bought during an epoch count from the epoch after next, and a position held only
   around the public snapshot carries nothing (no buy-vote-sell, flash loans or one-block holds).
   In the epoch a token launches in, the regular snapshot predates the token, so its weights are
@@ -257,7 +258,7 @@ This is the weekly mode; the live counterpart is [Live rotation governance](#liv
 - Weekly payout. Every step from an ended week to its donation is permissionless: `closeEpoch`, the
   tally decryption plus `submitTally`, `finalizeEpoch`, `FeeVault.settle(token, epoch)` (which first
   brings the week's outstanding LP and consolidator fees in, reverts `FeesPending` until they are in
-  or `SETTLE_GRACE` (7 days) after the week's end, and `NothingToSettle` when the week's pool is
+  or `FeeVault.settleGrace()` (owner-set, 7 days by default) after the epoch's end, and `NothingToSettle` when the week's pool is
   empty, which means that week has no donation), then `DonationDistributor.distribute(token, epoch)`
   to the winning Endaoment org (`OrgNotActive` and `OrgAddressMismatch` need the owner or Endaoment
   to act). The SDK's `planDonation` (`packages/sdk/src/donation.ts`) picks the next step from chain
