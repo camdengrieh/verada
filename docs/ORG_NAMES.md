@@ -83,10 +83,28 @@ All on mainnet. Rehearse each step on a fork first.
    `test/fork/VaradaNamesV2.t.sol` rehearses exactly this order. For step 3, the varada.eth owner
    runs:
    ```sh
-   ORG_NAMES_ROOT=<namesRoot> ORG_GATEWAY_URLS='https://<host>/ccip/{sender}/{data}.json' \
-   ORG_L2_REGISTRY=<registry> ORG_L2_GATEWAY_URLS='https://<host>/l2/{sender}/{data}.json,https://optimism.gateway.unruggable.com' \
+   # Merkle fallback = static shards on Swarm, served at org.varada.eth.limo (the
+   # resolver's own contenthash for the namespace). Optimism gateways: our /l2 proxy first,
+   # then Unruggable; the script appends the Swarm l2-fallback.json as the last resort.
+   # Content-addressed Swarm gateway first (verified: application/json + CORS), then the
+   # stable org.varada.eth.limo URL. eth.limo's ENSv2 support is unconfirmed, and EIP-3668
+   # clients may stop at a 4xx, so nothing may depend on it until it is tested live.
+   REF=<swarm reference of the export>
+   ORG_GATEWAY_URLS="https://api.gateway.ethswarm.org/bzz/$REF/ccip/{data}.json,https://org.varada.eth.limo/ccip/{data}.json" \
+   ORG_L2_FALLBACK_URL="https://api.gateway.ethswarm.org/bzz/$REF/l2-fallback.json?d={data}" \
+   ORG_NAMES_ROOT=<namesRoot> ORG_NAMES_SHARD_BITS=12 \
+   ORG_NAMESPACE_CONTENTHASH=0xe40101fa011b20<swarm reference of the export> \
+   ORG_L2_REGISTRY=0xd032aF2A81936898b8B87b65840A934bA3E1Be40 \
+   ORG_L2_GATEWAY_URLS='https://<host>/l2/{sender}/{data}.json,https://optimism.gateway.unruggable.com' \
      forge script script/SetupOrgNames.s.sol --rpc-url $ETH_RPC_URL --broadcast --ledger
    ```
+   Each new build after that:
+   1. `varada-catalog export-ccip`, then upload to Swarm;
+   2. `setRoot(namesRoot, 12)`;
+   3. `setNamespaceContenthash(<new ref>)`;
+   4. `setGateways` and `setVerifier` with the new `<ref>` URLs.
+
+   The previous root stays valid in between.
    About 3.6M gas (fork-measured). Then restart the gateway with `ORG_RESOLVER=<resolver>`.
 6. **Each new build:**
    1. run `verify-addresses` and `build`

@@ -633,6 +633,37 @@ contract VaradaOrgResolverTest is CcipHarness {
         assertEq(resolver.l2Gateways()[0], "https://evil");
     }
 
+    function test_namespaceContenthashServesTheSwarmShards() public {
+        bytes memory ch = abi.encodePacked(hex"e40101fa011b20", bytes32(uint256(0xe0f2)));
+        address stranger = makeAddr("stranger");
+        vm.prank(stranger);
+        vm.expectRevert(
+            abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, stranger)
+        );
+        resolver.setNamespaceContenthash(ch);
+        vm.prank(owner);
+        resolver.setNamespaceContenthash(ch);
+        bytes32 nsNode = _node("org.varada.eth");
+        bytes memory r = resolver.resolve(
+            DnsNameLib.encode("org.varada.eth"),
+            abi.encodeCall(IContentHashResolver.contenthash, (nsNode))
+        );
+        assertEq(abi.decode(r, (bytes)), ch, "namespace answers the shard collection");
+        // Children and other names keep an empty contenthash.
+        bytes memory other = resolver.resolve(
+            DnsNameLib.encode("x.varada.eth"),
+            abi.encodeCall(IContentHashResolver.contenthash, (_node("x.varada.eth")))
+        );
+        assertEq(abi.decode(other, (bytes)).length, 0);
+        bytes memory child = _resolve(
+            "american-red-cross.org.varada.eth",
+            abi.encodeCall(
+                IContentHashResolver.contenthash, (_node("american-red-cross.org.varada.eth"))
+            )
+        );
+        assertEq(abi.decode(child, (bytes)).length, 0);
+    }
+
     function test_supportsExtendedResolver() public view {
         assertTrue(resolver.supportsInterface(type(IExtendedResolver).interfaceId));
         assertTrue(resolver.supportsInterface(0x01ffc9a7));
