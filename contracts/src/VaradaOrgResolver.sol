@@ -99,6 +99,10 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
     string[] internal _urls;
     /// @notice Prefix of the `url` text record; the label is appended.
     string public siteUrlPrefix;
+    /// @notice Contenthash of the namespace name itself (`org.varada.eth`): the Swarm collection of
+    ///         the static Merkle-fallback shards, so `https://org.varada.eth.limo/ccip/{data}.json`
+    ///         stays the gateway URL while each build is uploaded to a new reference.
+    bytes public namespaceContenthash;
 
     bytes32 internal immutable _namespaceDnsHash;
     uint256 internal immutable _namespaceDnsLength;
@@ -131,6 +135,7 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
     event RootUpdated(bytes32 indexed root, bytes32 indexed previousRoot);
     event GatewaysUpdated(string[] urls);
     event SiteUrlPrefixUpdated(string prefix);
+    event NamespaceContenthashUpdated(bytes contenthash);
 
     /// @param factory_ Endaoment OrgFundFactory.
     /// @param namespaceDnsName DNS wire format of the namespace, `\x03org\x06varada\x03eth\x00`.
@@ -180,6 +185,13 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
         _setGateways(urls_);
     }
 
+    /// @notice Points `org.varada.eth` at a new upload of the fallback shards (ENSIP-7 bytes, e.g.
+    ///         `0xe40101fa011b20 ++ <swarm reference>`). Publish order: `setRoot`, then this.
+    function setNamespaceContenthash(bytes calldata contenthash) external onlyOwner {
+        namespaceContenthash = contenthash;
+        emit NamespaceContenthashUpdated(contenthash);
+    }
+
     function setSiteUrlPrefix(string calldata prefix) external onlyOwner {
         siteUrlPrefix = prefix;
         emit SiteUrlPrefixUpdated(prefix);
@@ -210,7 +222,9 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
         (bool isChild, bytes calldata label) = _parse(name);
         if (!isChild) {
             Org memory none;
-            return _answer(none, "", data);
+            bool isNamespace =
+                name.length == _namespaceDnsLength && keccak256(name) == _namespaceDnsHash;
+            return _answer(none, "", data, isNamespace ? namespaceContenthash : bytes(""));
         }
         bytes32 labelhash = keccak256(label);
         bytes memory carry = abi.encode(labelhash, label, data);
@@ -271,7 +285,7 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
             org.ids[i] = id;
             if (id != bytes32(0)) org.addrs[i] = factory.computeOrgAddress(id);
         }
-        return _answer(org, label, data);
+        return _answer(org, label, data, "");
     }
 
     /// @notice The shard of `labelhash` in a tree built with `bits` shard bits.
@@ -315,7 +329,7 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
             org.exists = true;
             break;
         }
-        return _answer(org, label, data);
+        return _answer(org, label, data, "");
     }
 
     /// @notice Whether `proof` places shard `shard` with exactly `entries` under `root_`.
@@ -361,7 +375,7 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
         return (true, name[1:1 + len]);
     }
 
-    function _answer(Org memory org, bytes memory label, bytes memory data)
+    function _answer(Org memory org, bytes memory label, bytes memory data, bytes memory ch)
         internal
         view
         returns (bytes memory)
@@ -376,7 +390,7 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
             (, string memory key) = abi.decode(_args(data), (bytes32, string));
             return abi.encode(_text(org, label, key));
         }
-        if (selector == IContentHashResolver.contenthash.selector) return abi.encode(bytes(""));
+        if (selector == IContentHashResolver.contenthash.selector) return abi.encode(ch);
         if (selector == _MULTICALL) {
             bytes[] memory calls = abi.decode(_args(data), (bytes[]));
             bytes[] memory results = new bytes[](calls.length);
@@ -386,7 +400,7 @@ contract VaradaOrgResolver is IExtendedResolver, IERC165, Ownable2Step {
                     s == IAddrResolver.addr.selector || s == IAddressResolver.addr.selector
                         || s == ITextResolver.text.selector
                         || s == IContentHashResolver.contenthash.selector
-                ) results[i] = _answer(org, label, calls[i]);
+                ) results[i] = _answer(org, label, calls[i], ch);
             }
             return abi.encode(results);
         }

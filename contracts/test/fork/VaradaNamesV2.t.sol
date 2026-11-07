@@ -3,9 +3,12 @@ pragma solidity 0.8.26;
 
 import {SetupOrgNames} from "../../script/SetupOrgNames.s.sol";
 import {VaradaFactory} from "../../src/VaradaFactory.sol";
+import {VaradaOrgResolver} from "../../src/VaradaOrgResolver.sol";
 import {ITokenProfileRegistry} from "../../src/interfaces/ITokenProfileRegistry.sol";
 import {IVaradaFactory} from "../../src/interfaces/IVaradaFactory.sol";
+import {IContentHashResolver} from "../../src/interfaces/external/ens/IEnsResolverProfiles.sol";
 import {IEnsV2StandardRegistry} from "../../src/interfaces/external/ens/IEnsV2Subregistry.sol";
+import {ContenthashLib} from "../../src/libraries/ContenthashLib.sol";
 import {DnsNameLib} from "../../src/libraries/DnsNameLib.sol";
 import {CatalogPublish} from "../utils/CatalogFixture.sol";
 import {EnsResolutionForkTest} from "./EnsResolution.t.sol";
@@ -64,6 +67,24 @@ contract VaradaNamesV2ForkTest is EnsResolutionForkTest {
         assertEq(_found("org.varada.eth"), org.resolver);
         assertEq(_found("american-red-cross.org.varada.eth"), org.resolver);
         assertEq(_found("deeper.american-red-cross.org.varada.eth"), org.resolver);
+    }
+
+    function test_orgNamespaceContenthashThroughTheUniversalResolver() public {
+        bytes memory ch = abi.encodePacked(
+            hex"e40101fa011b20",
+            bytes32(0xe0f2e7be4e4377ea2af45ebfc270d4dceb8a488673f7a746efa412ceba9c0e49)
+        );
+        address nameOwner = ETH_REGISTRY.ownerOf(ETH_REGISTRY.getTokenId(PARENT_LABEL_ID));
+        vm.prank(nameOwner);
+        VaradaOrgResolver(org.resolver).setNamespaceContenthash(ch);
+        (bytes memory res, address used) = UNIVERSAL_RESOLVER.resolve(
+            DnsNameLib.encode("org.varada.eth"),
+            abi.encodeCall(IContentHashResolver.contenthash, (bytes32(0)))
+        );
+        assertEq(used, org.resolver);
+        assertEq(abi.decode(res, (bytes)), ch, "eth.limo serves the Swarm shards from here");
+        // varada.eth keeps the site.
+        assertEq(_contenthash("varada.eth"), ContenthashLib.swarm(SITE_REF));
     }
 
     function test_tokensCannotTakeTheReservedLabels() public {

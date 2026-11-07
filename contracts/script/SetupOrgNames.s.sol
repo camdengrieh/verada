@@ -25,7 +25,9 @@ import {console} from "forge-std/console.sol";
 ///         Every step checks state first and is skipped when already done, so reruns are safe.
 /// @dev Environment for `run()`:
 ///        ORG_NAMES_ROOT    names Merkle root (required when deploying the resolver)
-///        ORG_GATEWAY_URLS  comma-separated EIP-3668 URL templates (required when deploying)
+///        ORG_GATEWAY_URLS  comma-separated EIP-3668 URL templates for the Merkle fallback
+///                          (default https://org.varada.eth.limo/ccip/{data}.json, i.e. Swarm)
+///        ORG_NAMESPACE_CONTENTHASH  contenthash for org.varada.eth (ENSIP-7, Swarm) to set
 ///        ORG_SITE_PREFIX   prefix for the `url` text record (default https://varada.eth.limo/causes?org=)
 ///        ORG_NAMES_SHARD_BITS  shard bits the names root was built with (default 12, the
 ///                          catalogue's `namesShardBits`)
@@ -57,6 +59,11 @@ contract SetupOrgNames is Script {
     bytes internal constant NAMESPACE_DNS_NAME = hex"036f7267067661726164610365746800";
     /// @dev No per-charity page yet: the causes explorer, with the label as a hint for later pages.
     uint8 internal constant DEFAULT_SHARD_BITS = 12;
+    /// @dev The Merkle fallback served from Swarm through org.varada.eth's own contenthash.
+    string internal constant DEFAULT_MERKLE_URL = "https://org.varada.eth.limo/ccip/{data}.json";
+    /// @dev Last-resort Optimism "proof" (always 0x): a static file in the same Swarm collection.
+    string internal constant SWARM_L2_FALLBACK_URL =
+        "https://org.varada.eth.limo/l2-fallback.json?d={data}";
     string internal constant DEFAULT_SITE_PREFIX = "https://varada.eth.limo/causes?org=";
 
     /// @dev VerifiableFactory salts. The proxy address depends on the signer and the salt.
@@ -86,7 +93,10 @@ contract SetupOrgNames is Script {
             root = vm.envOr("ORG_NAMES_ROOT", bytes32(0));
             if (root == bytes32(0)) revert MissingEnv("ORG_NAMES_ROOT");
             urls = vm.envOr("ORG_GATEWAY_URLS", ",", new string[](0));
-            if (urls.length == 0) revert MissingEnv("ORG_GATEWAY_URLS");
+            if (urls.length == 0) {
+                urls = new string[](1);
+                urls[0] = DEFAULT_MERKLE_URL;
+            }
         }
         string memory prefix = vm.envOr("ORG_SITE_PREFIX", string(DEFAULT_SITE_PREFIX));
         address l2Registry = vm.envOr("ORG_L2_REGISTRY", address(0));
@@ -98,15 +108,35 @@ contract SetupOrgNames is Script {
             _l2UrlsEnv.push(l2Urls[i]);
         }
         uint8 bits = uint8(vm.envOr("ORG_NAMES_SHARD_BITS", uint256(DEFAULT_SHARD_BITS)));
-        return execute(signer, resolver, root, bits, urls, prefix, l2Registry);
+        Result memory r = execute(signer, resolver, root, bits, urls, prefix, l2Registry);
+        // Point org.varada.eth at the Swarm upload of the fallback shards (the Merkle URL above).
+        bytes memory ch = vm.envOr("ORG_NAMESPACE_CONTENTHASH", bytes(""));
+        if (
+            ch.length != 0
+                && keccak256(VaradaOrgResolver(r.resolver).namespaceContenthash()) != keccak256(ch)
+        ) {
+            vm.startBroadcast(signer);
+            VaradaOrgResolver(r.resolver).setNamespaceContenthash(ch);
+            vm.stopBroadcast();
+            console.log("org.varada.eth contenthash set");
+        }
+        return r;
     }
 
     /// @notice Unruggable Optimism gateways (ENS's reverse resolver lists the last two).
     /// @dev Set by `run()` from ORG_L2_GATEWAY_URLS.
     string[] internal _l2UrlsEnv;
 
-    function l2GatewayUrls() public view returns (string[] memory) {
-        return _l2UrlsEnv.length != 0 ? _l2UrlsEnv : opGatewayUrls();
+    /// @notice Optimism proof gateways in order: ORG_L2_GATEWAY_URLS (our /l2 proxy first), else
+    ///         the public Unruggable ones; the Swarm `l2-fallback.json` always comes last so a
+    ///         lookup reaches the Merkle fallback when every proof gateway is down.
+    function l2GatewayUrls() public view returns (string[] memory u) {
+        string[] memory head = _l2UrlsEnv.length != 0 ? _l2UrlsEnv : opGatewayUrls();
+        u = new string[](head.length + 1);
+        for (uint256 i; i < head.length; ++i) {
+            u[i] = head[i];
+        }
+        u[head.length] = SWARM_L2_FALLBACK_URL;
     }
 
     function opGatewayUrls() public pure returns (string[] memory u) {
