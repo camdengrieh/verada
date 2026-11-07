@@ -37,6 +37,27 @@ Setup: if `node_modules` is missing, run `pnpm install --frozen-lockfile`. Check
 5. **Do not edit code in this repository** (no changes to `packages/`, `services/`, `contracts/`, and no weakening of validation). The only files you write are under `/tmp/curation-<label>-<epoch>/` and `agents/curations/<label>/<epoch>/`.
 6. Do not make claims about an org that your sources do not support. No fundraising appeals or promises of impact.
 
+## Pre-launch mode (contracts not deployed yet)
+
+When `CURATOR_REGISTRY_ADDRESS` is **unset**, the contracts, publisher and indexer do not exist yet
+and this is a pre-launch run: the research, ranking and newsletter happen now, and the report is
+published and submitted later, once the chain is live. The routine prompt names the cause directly
+("run the curator skill for agent `<name>`, cause `<label>` (pre-launch)"). Differences from a
+normal run, everything else unchanged:
+
+- Skip step 0 (`due`) and step 1 (`status`). Use `epoch` = **0** and `catalogVersion` = **1** in
+  the template; both get re-stamped at publish time (only `build` is redone then).
+- Skip `donors` (no indexer): the newsletter has no "Biggest donors" section and `build` runs
+  without `--donors`.
+- Skip `publish`, `submit` and every gift. Never attempt them.
+- Working directory `/tmp/curation-<label>-prelaunch/`; audit files go to
+  `agents/curations/<label>/prelaunch/` (`report.json`, `built.json`, `run.json` with
+  `{ "prelaunch": true, "epoch": 0, "catalogVersion": 1, "catalogRoot", "errors" }`).
+- **No git commands at all** (no switch, commit or push): other runs share this checkout, and the
+  operator commits the files afterwards.
+- The final report lists the files, the per-region counts and weights, the top 3 picks per region
+  and every error or doubt, as in a normal run.
+
 ## 0. Due: is today a run day, and for which cause
 
 ```bash
