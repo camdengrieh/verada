@@ -253,6 +253,13 @@ cast call $EPOCH_GOVERNOR "epochStart(uint256)(uint256)" <n>   # unix start of e
 cast call $CAUSE_CATALOG  "latestVersion()(uint32)"            # --catalog-version
 ```
 
+## Hosting on 1Claw
+
+The agents can run on the one 1Claw runtime the Pro plan includes instead of as Claude routines:
+[`runtime/`](runtime/README.md) is an always-on container with the daily scheduler (one Claude
+Code run per due agent, with that agent's 1Claw key) and a public, stateless chat API for all
+twenty causes. Use one or the other for the schedule, not both.
+
 ## 4. Create the routines
 
 One routine per agent (ten), on the repository, daily at its cron time, with the prompt

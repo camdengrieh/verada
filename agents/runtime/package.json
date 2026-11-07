@@ -1,0 +1,26 @@
+{
+  "name": "varada-agent-runtime",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Varada curator agents on a 1Claw runtime: a daily scheduler that runs the due cause-pair agents with Claude Code, and a public chat API for every cause.",
+  "scripts": {
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "engines": { "node": ">=22" },
+  "dependencies": {
+    "@1claw/sdk": "0.63.3",
+    "@anthropic-ai/sdk": "1.6.0",
+    "@hono/node-server": "^1.19.5",
+    "hono": "^4.13.16",
+    "tsx": "^4.23.15",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}

@@ -1,0 +1,57 @@
+import Anthropic from "@anthropic-ai/sdk";
+import { serve } from "@hono/node-server";
+import { rateLimiter } from "./chat.js";
+import { readConfig } from "./config.js";
+import { contextCache, loadCauseContext } from "./context.js";
+import { apiKeys } from "./keys.js";
+import { cliSchedule, commandArgv, curatorPrompt, exec, fileState, recordAgents, runEnv, scheduler, type RunRecord } from "./scheduler.js";
+import { claudeAsker, createServer } from "./server.js";
+
+const cfg = readConfig();
+const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JSON.stringify({ t: new Date().toISOString(), msg, ...extra }));
+
+let lastRuns: RunRecord[] = [];
+let schedulerError: string | null = null;
+
+if (cfg.schedulerEnabled) {
+  const keyOf = apiKeys({ vaultId: cfg.ONECLAW_KEYS_VAULT_ID, baseUrl: cfg.ONECLAW_BASE_URL });
+  const s = scheduler({
+    repoDir: cfg.REPO_DIR,
+    schedule: () => cliSchedule(cfg.REPO_DIR, new Date()),
+    agents: () => recordAgents(cfg.REPO_DIR),
+    apiKey: keyOf,
+    run: (a, _cause, key) => {
+      const [cmd, args] = commandArgv(cfg.CURATOR_COMMAND, curatorPrompt(a.agent));
+      return exec(cmd, args, { cwd: cfg.REPO_DIR, env: runEnv(process.env, a, key), timeoutMs: cfg.CURATOR_TIMEOUT_MINUTES * 60_000 });
+    },
+    state: fileState(cfg.STATE_FILE),
+    now: () => new Date(),
+    log,
+  });
+  const tick = () =>
+    s
+      .tick()
+      .then((r) => {
+        if (r.length) lastRuns = r;
+        schedulerError = null;
+      })
+      .catch((e: unknown) => {
+        schedulerError = e instanceof Error ? e.message : String(e);
+        log("scheduler tick failed", { error: schedulerError });
+      });
+  void tick();
+  setInterval(tick, 5 * 60_000);
+  log("scheduler on", { repoDir: cfg.REPO_DIR });
+}
+
+const app = createServer({
+  context: contextCache((label) => loadCauseContext(cfg.INDEXER_URL, label), cfg.CONTEXT_TTL_SECONDS * 1000),
+  ask: claudeAsker(new Anthropic(), { model: cfg.CHAT_MODEL, effort: cfg.CHAT_EFFORT }),
+  allowedOrigins: cfg.allowedOrigins,
+  limit: rateLimiter(cfg.CHAT_RATE_PER_MINUTE, cfg.CHAT_RATE_PER_DAY),
+  scheduler: cfg.schedulerEnabled
+    ? () => ({ lastRuns: lastRuns.map((r) => ({ agent: r.agent, cause: r.cause, status: r.status, finishedAt: r.finishedAt })), error: schedulerError })
+    : undefined,
+});
+
+serve({ fetch: app.fetch, port: cfg.PORT }, (i) => log("listening", { port: i.port, model: cfg.CHAT_MODEL }));
