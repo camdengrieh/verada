@@ -72,9 +72,12 @@ Secrets live in the `varada-curators` vault as **secrets** (vault env vars do no
 container): `runtime/anthropic-api-key` and `runtime/github-token`. 1Claw rejects `env_public`
 keys that look sensitive, so the vault ids are passed as `RUNTIME_VAULT_ID` / `AGENTS_VAULT_ID`.
 
-**Chat runtime** (done 2026-11-07, id `ba1b4137-…`): template `claude-code`, preset `medium`,
-source repo `https://github.com/camdengrieh/verada`, startup command
-`git fetch --depth 1 origin agents/runtime && git checkout -q FETCH_HEAD && bash agents/runtime/start.sh`,
+**Chat runtime** (done 2026-11-07, id `f080f375-…`): template `node` (not `claude-code`: that
+template runs its own agent server on port 8000, the port Cloud Run probes, and it never came up
+without a vendor key), preset `medium`, no `source_repo` (the template's checkout is not the
+working directory of the startup command, and its automatic `npm install` cannot read a pnpm
+workspace), startup command
+`set -e; rm -rf /tmp/verada; git clone -q --depth 1 -b agents/runtime https://github.com/camdengrieh/verada /tmp/verada; exec bash /tmp/verada/agents/runtime/start.sh`,
 `expose_http: true`, `inbound_auth: public`, slug `varada-agents`
 (`https://varada-agents.run.1claw.co`), no `schedule` (always on, no hour cap), `env_public`
 `SCHEDULER_ENABLED=false`, `RUNTIME_VAULT_ID`, `CHAT_ALLOWED_ORIGINS`. Bound to the `relief` agent,
