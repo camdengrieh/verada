@@ -215,6 +215,13 @@ describe("config", () => {
     const c = readConfig({ INDEXER_URL: "https://ix.example/" });
     expect(c).toMatchObject({ INDEXER_URL: "https://ix.example", CHAT_MODEL: "claude-opus-5-5", CHAT_EFFORT: "low", schedulerEnabled: false, ports: [8000] });
     expect(readConfig({ PORT: "8080" }).ports).toEqual([8080, 8000]);
+    // The scheduler never runs where the HTTP endpoint is public: that container would hold every agent's key.
+    const pub = readConfig({ SCHEDULER_ENABLED: "true", INBOUND_AUTH: "public" });
+    expect(pub.schedulerEnabled).toBe(false);
+    expect(pub.schedulerBlocked).toMatch(/public/);
+    expect(readConfig({ SCHEDULER_ENABLED: "true", INBOUND_AUTH: "api_key" })).toMatchObject({ schedulerEnabled: true, schedulerBlocked: null });
+    expect(readConfig({ SCHEDULER_ENABLED: "true", INBOUND_AUTH: "public", ALLOW_SCHEDULER_ON_PUBLIC_RUNTIME: "true" }).schedulerEnabled).toBe(true);
+    expect(readConfig({ INBOUND_AUTH: "public" }).schedulerBlocked).toBeNull();
     expect(readConfig({ PORT: "8000" }).ports).toEqual([8000]);
     expect(readConfig({ USER_PORT: "9000" }).ports).toEqual([9000]);
     expect(c.allowedOrigins).toContain("https://varada.eth.limo");

@@ -1,7 +1,18 @@
 # Varada agent runtime (1Claw)
 
-One always-on container on the 1Claw runtime that Pro includes (small or medium, no hour cap). It
-does two jobs:
+One image, two jobs, **two separate runtimes**:
+
+| Runtime | Job | HTTP | Secrets it can read |
+|---|---|---|---|
+| `varada-agents` (the Pro included runtime) | public chat | `inbound_auth: public` | `runtime/anthropic-api-key` only |
+| `varada-scheduler` (a small add-on) | the curator scheduler | none (`expose_http: false`) | the agents' key vault + `runtime/**` |
+
+The scheduler reads every agent's signing key, so it never runs where HTTP is open to the public:
+an exploit of the chat server would otherwise reach all ten keys. The server enforces this
+(`INBOUND_AUTH=public`, set by 1Claw, blocks `SCHEDULER_ENABLED`; `/health` reports
+`scheduler.blocked`). Each agent's 1Claw guardrails and the on-chain caps (per-cause signer checks,
+`maxGivePerEpoch`, 5 transactions a day) bound what a stolen key could do, but the split keeps the
+keys off the public surface in the first place.
 
 1. **Scheduler.** Every 5 minutes it asks `varada-curator curators` for today's rotation. When an
    agent's daily time has come (06:00-10:30 UTC) and the rotation gives it a run today, it starts
@@ -57,23 +68,27 @@ vault id, other agents' keys and the chat settings. It gets exactly one agent's 
 
 ## Provisioning on 1Claw
 
-1. Secrets: add `ANTHROPIC_API_KEY` and `GITHUB_TOKEN` to the vault in the 1Claw dashboard. Never
-   paste them into a chat or a file.
-2. Bind the runtime to one of the ten agents and grant that agent read on `varada-curator-api-keys`.
-   Every agent's key is then readable inside this one container. That is inherent in running all
-   ten from one runtime; the on-chain limits (per-cause signer checks, `maxGivePerEpoch`) and
-   each agent's 1Claw guardrails still apply to every key.
-3. Create the runtime:
-   - template `claude-code`, preset `medium` (Claude Code plus the pnpm install need more than
-     512 MB);
-   - source repo `https://github.com/camdengrieh/verada`, branch `main`;
-   - startup command `bash agents/runtime/start.sh`;
-   - `expose_http: true`, `http_port: 8000`, `inbound_auth: public`, slug e.g. `varada-agents`
-     (served at `https://varada-agents.run.1claw.co`);
-   - no `schedule`: always on, since the included runtime has no hour cap;
-   - `env_public` with the plain variables above.
-4. Check `GET /health`, then a chat. Turn on `SCHEDULER_ENABLED` after the agents are registered on
-   chain and their 1Claw signing is on (`agents/README.md` §1-2).
+Secrets live in the `varada-curators` vault as **secrets** (vault env vars do not reach the
+container): `runtime/anthropic-api-key` and `runtime/github-token`. 1Claw rejects `env_public`
+keys that look sensitive, so the vault ids are passed as `RUNTIME_VAULT_ID` / `AGENTS_VAULT_ID`.
+
+**Chat runtime** (done 2026-11-07, id `ba1b4137-…`): template `claude-code`, preset `medium`,
+source repo `https://github.com/camdengrieh/verada`, startup command
+`git fetch --depth 1 origin agents/runtime && git checkout -q FETCH_HEAD && bash agents/runtime/start.sh`,
+`expose_http: true`, `inbound_auth: public`, slug `varada-agents`
+(`https://varada-agents.run.1claw.co`), no `schedule` (always on, no hour cap), `env_public`
+`SCHEDULER_ENABLED=false`, `RUNTIME_VAULT_ID`, `CHAT_ALLOWED_ORIGINS`. Bound to the `relief` agent,
+which has one policy: read on `runtime/**` in `varada-curators`. Nothing grants it the key vault.
+
+**Scheduler runtime** (to create once the agents are registered on chain and signing is on): the
+same template, source and startup command; `expose_http: false`; preset `small` is enough if Claude
+Code fits, else `medium`; `env_public` `SCHEDULER_ENABLED=true`, `RUNTIME_VAULT_ID`,
+`AGENTS_VAULT_ID`, and the curator variables. Bind it to a **child agent** of `relief` (children do
+not count against the plan's agent cap and cannot sign), and grant that child read on
+`agents/**` in `varada-curator-api-keys` and on `runtime/**` in `varada-curators`. A second runtime
+is a paid add-on on Pro.
+
+Check `GET /health` on the chat runtime (`chat: true`), then a chat.
 
 Local run: `cd agents/runtime && npm ci && INDEXER_URL=... ANTHROPIC_API_KEY=... npm start`.
 Tests: `npm test`.

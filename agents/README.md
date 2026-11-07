@@ -255,10 +255,12 @@ cast call $CAUSE_CATALOG  "latestVersion()(uint32)"            # --catalog-versi
 
 ## Hosting on 1Claw
 
-The agents can run on the one 1Claw runtime the Pro plan includes instead of as Claude routines:
-[`runtime/`](runtime/README.md) is an always-on container with the daily scheduler (one Claude
-Code run per due agent, with that agent's 1Claw key) and a public, stateless chat API for all
-twenty causes. Use one or the other for the schedule, not both.
+The agents can run on 1Claw runtimes instead of as Claude routines: [`runtime/`](runtime/README.md)
+is one image with two jobs on **two runtimes**. The public chat API for all twenty causes runs on
+the included runtime and can read only the Anthropic key. The daily scheduler (one Claude Code run
+per due agent, with that agent's 1Claw key) runs on a second runtime with no public HTTP, because it
+reads every agent's signing key; the server refuses to schedule on a public runtime. Use the
+runtime scheduler or the routines, not both.
 
 ## 4. Create the routines
 

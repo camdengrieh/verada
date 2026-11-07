@@ -12,6 +12,7 @@ const log = (msg: string, extra: Record<string, unknown> = {}) => console.log(JS
 
 const loaded = await loadRuntimeSecrets({ env: process.env, vaultId: cfg.RUNTIME_VAULT_ID, baseUrl: cfg.ONECLAW_BASE_URL });
 log("runtime secrets", { loaded, anthropicKey: Boolean(process.env.ANTHROPIC_API_KEY) });
+if (cfg.schedulerBlocked) log("scheduler blocked", { reason: cfg.schedulerBlocked });
 
 let lastRuns: RunRecord[] = [];
 let schedulerError: string | null = null;
@@ -55,7 +56,9 @@ const app = createServer({
   chatReady: () => Boolean(process.env.ANTHROPIC_API_KEY),
   scheduler: cfg.schedulerEnabled
     ? () => ({ lastRuns: lastRuns.map((r) => ({ agent: r.agent, cause: r.cause, status: r.status, finishedAt: r.finishedAt })), error: schedulerError })
-    : undefined,
+    : cfg.schedulerBlocked
+      ? () => ({ blocked: cfg.schedulerBlocked })
+      : undefined,
 });
 
 for (const port of cfg.ports) serve({ fetch: app.fetch, port }, (i) => log("listening", { port: i.port, model: cfg.CHAT_MODEL }));

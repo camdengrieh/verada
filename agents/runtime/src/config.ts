@@ -29,6 +29,15 @@ const Env = z.object({
   CONTEXT_TTL_SECONDS: z.coerce.number().int().min(10).default(600),
   /** Run the daily curator scheduler in this container. */
   SCHEDULER_ENABLED: z.enum(["true", "false"]).default("false"),
+  /** Set by 1Claw from the runtime's `inbound_auth` (`public`, `api_key`, `jwt`). */
+  INBOUND_AUTH: z.string().optional(),
+  /**
+   * The scheduler reads every agent's signing key. A runtime whose HTTP is open to the public
+   * (`inbound_auth: public`) must not hold them: an exploit of the chat server would reach all
+   * ten keys. The scheduler therefore stays off on a public runtime unless this is set, which is
+   * for a lab only.
+   */
+  ALLOW_SCHEDULER_ON_PUBLIC_RUNTIME: z.enum(["true", "false"]).default("false"),
   /** Repository checkout the curator skill runs in. */
   REPO_DIR: z.string().default(process.cwd()),
   /**
@@ -51,15 +60,20 @@ const Env = z.object({
   STATE_FILE: z.string().default("/tmp/varada-runtime-state.json"),
 });
 
-export type RuntimeConfig = z.infer<typeof Env> & { allowedOrigins: string[]; schedulerEnabled: boolean; ports: number[] };
+export type RuntimeConfig = z.infer<typeof Env> & { allowedOrigins: string[]; schedulerEnabled: boolean; schedulerBlocked: string | null; ports: number[] };
 
 export function readConfig(env: Record<string, string | undefined> = process.env): RuntimeConfig {
   const e = Env.parse(env);
+  const blocked =
+    e.INBOUND_AUTH === "public" && e.ALLOW_SCHEDULER_ON_PUBLIC_RUNTIME !== "true"
+      ? "scheduler refused: this runtime's HTTP is public (inbound_auth=public); run the scheduler on a non-public runtime"
+      : null;
   return {
     ...e,
     INDEXER_URL: e.INDEXER_URL?.replace(/\/+$/, ""),
     allowedOrigins: e.CHAT_ALLOWED_ORIGINS.split(",").map((s) => s.trim()).filter(Boolean),
-    schedulerEnabled: e.SCHEDULER_ENABLED === "true",
+    schedulerEnabled: e.SCHEDULER_ENABLED === "true" && !blocked,
+    schedulerBlocked: e.SCHEDULER_ENABLED === "true" ? blocked : null,
     ports: [...new Set([e.PORT, e.USER_PORT ?? e.HTTP_PORT].filter((p): p is number => p !== undefined))],
   };
 }
