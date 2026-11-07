@@ -384,6 +384,25 @@ export const varadaFactoryAbi = [
   },
   {
     "type": "function",
+    "name": "donationAssetOf",
+    "inputs": [
+      {
+        "name": "token",
+        "type": "address",
+        "internalType": "address"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "feeVault",
     "inputs": [],
     "outputs": [
@@ -768,6 +787,22 @@ export const varadaFactoryAbi = [
       }
     ],
     "anonymous": false
+  },
+  {
+    "type": "error",
+    "name": "DonationRouteMissing",
+    "inputs": [
+      {
+        "name": "quoteAsset",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "donationAsset",
+        "type": "uint8",
+        "internalType": "enum DonationAsset"
+      }
+    ]
   },
   {
     "type": "error",
